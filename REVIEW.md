@@ -68,6 +68,14 @@ and the cheapest path to "green" is not always the intended one.
 
 ## For the reviewer: reporting a verdict
 
+The prompt a reviewer session is spawned with lives in
+[`.claude/reviewer-prompt.md`](.claude/reviewer-prompt.md). It must be spawned
+as its own session, never as a continuation of the one that wrote the PR: the
+independence this gate provides comes from context isolation, and a reviewer
+told what the change was *meant* to do cannot see that the diff does something
+else.
+
+
 Review is enforced by `.github/workflows/review-gate.yml`, which sets a
 `review/agent` commit status. Opening a PR, or pushing to one, sets that status
 to pending; it clears only when a reviewer posts a verdict marker. A PR with no
