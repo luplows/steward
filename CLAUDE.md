@@ -8,6 +8,8 @@ While a PR is still open, address anything that comes up from reviewing that PR'
 
 For every change, before opening (or updating) its PR, check whether `README.md`, `Open-Questions.md`, and `Project-Outline.md` need updating as a result — e.g. a resolved open question, a newly-discovered one, a scope/design change, or a shift in what's built vs. not. Include any such doc updates in the same PR as the change that prompted them.
 
+Every PR body uses [`.github/pull_request_template.md`](.github/pull_request_template.md) — **What changed**, **Verification** (the commands actually run and their real results, not a claim that they passed), **Docs check** (the outcome of the paragraph above). Fill all three; an empty section is treated as a missing one. [`REVIEW.md`](REVIEW.md) is the enumerated checklist a PR is reviewed against — read it before opening one.
+
 PRs land on `main` as a single squash commit, so commits within a PR exist only to make review easier, not to build history. One commit is right for most changes. The exception worth splitting: when a change both regenerates data files and alters logic, commit the regeneration separately from the logic so the reviewable part isn't buried in generated churn.
 
 `Completed-Questions.md` is a large archive of resolved stories — bigger than the app's hand-written source. Look things up in it by OQ number (`grep -n 'OQ-37' Completed-Questions.md`) rather than reading it whole.
