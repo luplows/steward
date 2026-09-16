@@ -1,0 +1,122 @@
+name: Review gate
+
+# A merge gate for agent review (Open-Questions.md OQ-42), built so that no
+# part of it calls Claude. The reviewer agent supplies judgement and posts a
+# marker comment; this workflow supplies enforcement by setting a commit
+# status that branch protection can require. That split exists because the
+# Claude Code Action cannot currently authenticate here (see OQ-42), and
+# because commit statuses -- unlike PR reviews -- carry no self-approval
+# restriction, so a single-account project can still gate itself.
+#
+# Flow:
+#   1. A PR opens or gets a new commit -> `review/agent` goes pending, which
+#      blocks the merge once that context is required in branch protection.
+#   2. A reviewer agent reviews the head commit and comments with a marker:
+#        <!-- agent-review head=<full-40-char-sha> verdict=pass -->
+#        <!-- agent-review head=<full-40-char-sha> verdict=fail -->
+#   3. This workflow reads that marker and sets the status accordingly.
+#
+# Forgetting to run the reviewer leaves the status pending, so the PR simply
+# cannot merge. That is deliberate: the gate fails safe rather than silently
+# passing.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  statuses: write
+  pull-requests: read
+
+jobs:
+  # A new head commit always returns the gate to pending. That is what makes
+  # "no dismissal mechanism" a platform guarantee rather than a convention:
+  # a verdict cannot outlive the commit it was about.
+  pending:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark review pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          gh api -X POST "repos/${REPO}/statuses/${SHA}" \
+            -f state=pending \
+            -f context=review/agent \
+            -f description='Awaiting agent review'
+          echo "review/agent set pending on ${SHA}"
+
+  verdict:
+    # issue_comment fires for issues as well as PRs, so the pull_request
+    # check is load bearing, not decorative.
+    if: >-
+      github.event_name == 'issue_comment'
+      && github.event.issue.pull_request
+      && contains(github.event.comment.body, '<!-- agent-review')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply verdict from marker
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.issue.number }}
+          # Comment fields are passed as env and never interpolated into the
+          # script body. On a public repo a comment is attacker-controlled,
+          # and `${{ }}` inside run: would be a script-injection hole.
+          BODY: ${{ github.event.comment.body }}
+          ASSOC: ${{ github.event.comment.author_association }}
+          COMMENT_URL: ${{ github.event.comment.html_url }}
+        run: |
+          set -euo pipefail
+
+          # Anyone can comment on a public repo, so an unprivileged marker
+          # must not be able to clear the gate.
+          case "${ASSOC}" in
+            OWNER|MEMBER|COLLABORATOR) ;;
+            *)
+              echo "::notice title=Marker ignored::Author association '${ASSOC}' lacks write access; status untouched."
+              exit 0
+              ;;
+          esac
+
+          # Last well-formed marker wins, so a corrected verdict supersedes an
+          # earlier one in the same comment.
+          marker="$(printf '%s' "${BODY}" \
+            | grep -oE '<!--[[:space:]]*agent-review[[:space:]]+head=[0-9a-f]{40}[[:space:]]+verdict=(pass|fail)[[:space:]]*-->' \
+            | tail -1 || true)"
+
+          if [ -z "${marker}" ]; then
+            echo "::notice title=Marker ignored::No well-formed marker (needs a full 40-char head sha and verdict=pass|fail)."
+            exit 0
+          fi
+
+          marker_sha="$(printf '%s' "${marker}" | grep -oE 'head=[0-9a-f]{40}' | cut -d= -f2)"
+          verdict="$(printf '%s' "${marker}" | grep -oE 'verdict=(pass|fail)' | cut -d= -f2)"
+          head="$(gh pr view "${PR}" --repo "${REPO}" --json headRefOid --jq .headRefOid)"
+
+          # A verdict about an older commit says nothing about this one.
+          if [ "${marker_sha}" != "${head}" ]; then
+            echo "::notice title=Stale marker::Marker targets ${marker_sha} but head is ${head}; status left as it is."
+            exit 0
+          fi
+
+          if [ "${verdict}" = "pass" ]; then
+            state=success
+            description='Agent review passed'
+          else
+            state=failure
+            description='Agent review found blocking items'
+          fi
+
+          gh api -X POST "repos/${REPO}/statuses/${head}" \
+            -f state="${state}" \
+            -f context=review/agent \
+            -f description="${description}" \
+            -f target_url="${COMMENT_URL}"
+          echo "review/agent set ${state} on ${head}"
