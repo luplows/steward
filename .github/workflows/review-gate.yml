@@ -120,3 +120,14 @@ jobs:
             -f description="${description}" \
             -f target_url="${COMMENT_URL}"
           echo "review/agent set ${state} on ${head}"
+
+          # The status is already set above, so the gate does not depend on
+          # what this job's own conclusion is. Failing the job anyway is how
+          # the failure gets *noticed*: GitHub's built-in Actions failure
+          # notifications fire on a failed run, and a job that reported
+          # success while recording a blocking review would be silent exactly
+          # when someone needs to hear about it.
+          if [ "${state}" = "failure" ]; then
+            echo "::error title=Review blocked::Agent review found blocking items on ${head}. See ${COMMENT_URL}"
+            exit 1
+          fi

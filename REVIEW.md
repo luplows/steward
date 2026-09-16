@@ -99,3 +99,9 @@ silently ignored rather than obeyed:
 
 If a comment contains more than one well-formed marker, the last one wins, so a
 correction later in the same comment supersedes an earlier line.
+
+A `fail` verdict also fails the `Review gate` workflow run itself. The commit
+status is what blocks the merge; failing the run is what makes the block
+*noticeable*, since GitHub's built-in Actions failure notifications only fire on
+a failed run. A job reporting success while recording a blocking review would be
+silent exactly when someone needs to hear about it.
