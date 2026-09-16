@@ -65,3 +65,37 @@ and the cheapest path to "green" is not always the intended one.
 14. No local workaround is left in the diff. A path, config, or flag patched
     in order to get a check running locally must be reverted before pushing.
 15. Scope was not widened beyond the task the PR set out to do.
+
+## For the reviewer: reporting a verdict
+
+Review is enforced by `.github/workflows/review-gate.yml`, which sets a
+`review/agent` commit status. Opening a PR, or pushing to one, sets that status
+to pending; it clears only when a reviewer posts a verdict marker. A PR with no
+marker stays pending and cannot merge — forgetting to review fails safe.
+
+Post the findings as an ordinary PR comment, naming the `REVIEW.md` item number
+each one comes from, and end the comment with exactly one marker line:
+
+```
+<!-- agent-review head=<full-40-char-sha> verdict=pass -->
+<!-- agent-review head=<full-40-char-sha> verdict=fail -->
+```
+
+Four things the workflow enforces, so getting them wrong means the marker is
+silently ignored rather than obeyed:
+
+1. **`head` must be the full 40-character SHA of the commit reviewed**, not an
+   abbreviation. Get it with
+   `gh pr view <N> --repo <owner/repo> --json headRefOid --jq .headRefOid`.
+2. **That SHA must still be the PR's head.** A verdict about an earlier commit
+   says nothing about the current one, so a stale marker is ignored and the
+   status stays pending. Re-review after any new push.
+3. **`verdict=pass` only when no applicable item fails.** Anything else is
+   `fail`. There is no partial credit and no dismissal mechanism: the only way
+   past a `fail` is a commit that addresses it, which resets the gate to pending
+   and requires a fresh review.
+4. **The comment must come from an account with write access.** Anyone can
+   comment on a public repository; a marker from anyone else is ignored.
+
+If a comment contains more than one well-formed marker, the last one wins, so a
+correction later in the same comment supersedes an earlier line.
