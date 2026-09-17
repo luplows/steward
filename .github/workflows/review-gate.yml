@@ -14,7 +14,8 @@ name: Review gate
 #   2. A reviewer agent reviews the head commit and comments with a marker:
 #        <!-- agent-review head=<full-40-char-sha> verdict=pass -->
 #        <!-- agent-review head=<full-40-char-sha> verdict=fail -->
-#   3. This workflow reads that marker and sets the status accordingly.
+#   3. This workflow reads that marker and sets the status accordingly, whether
+#      the marker arrived with the comment or was edited into it later.
 #
 # Forgetting to run the reviewer leaves the status pending, so the PR simply
 # cannot merge. That is deliberate: the gate fails safe rather than silently
@@ -24,7 +25,14 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
   issue_comment:
-    types: [created]
+    # `edited` as well as `created`: a reviewer that posts its review and then
+    # edits the marker in afterwards would otherwise be ignored silently, and
+    # the PR would sit pending forever with a valid verdict visible on it. That
+    # reads as a broken gate rather than a missed marker, which is the worse of
+    # the two failure modes. It costs nothing in safety -- the write-access
+    # check and the current-head check below both still apply, and anyone who
+    # passes the first could already post a fresh comment saying anything.
+    types: [created, edited]
 
 permissions:
   contents: read
