@@ -41,6 +41,17 @@ resolved out of `Open-Questions.md` still land there. Stories completed out of `
 `stories/done/` instead and are not also copied into the archive — all three share one OQ number
 space, and numbers are still never reused or renumbered.
 
+## Design of record
+
+[`docs/agent-workflow-design.md`](docs/agent-workflow-design.md) is why this workflow is shaped as
+it is — the roles, the gate, what is deliberately excluded, and the platform facts each decision was
+made against. [`docs/migration-plan.md`](docs/migration-plan.md) is the phased sequence for building
+it and says where that has got to; [`docs/gap-analysis.md`](docs/gap-analysis.md) is the dated
+snapshot the design was written against, kept for the reasoning rather than the state.
+
+Read the design before proposing a change to how work flows through this repository. It resolves
+most "why not just…" questions, and several of its exclusions are deliberate rather than pending.
+
 ## Testing
 
 Correctness of the buy-order tool is high priority. CI (`.github/workflows/ci.yml`) runs lint, unit/component tests (Vitest, `npm test`), the build, and functional/E2E tests (Playwright, `npm run test:e2e`, in `e2e/`) on every PR, and is a required status check — a PR cannot merge until it's green. Add tests alongside any new logic, especially the buy-order scoring algorithm (see `Project-Outline.md`) — Vitest for component/unit behavior, Playwright for real user flows through the running app.
