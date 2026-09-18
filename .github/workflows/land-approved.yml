@@ -54,11 +54,13 @@ jobs:
           # outright. OQ-42 requires the PR that fixes the jam to stay
           # landable, "or it becomes a trap escapable only by admin merge", and
           # since nothing else merges PRs any more, a breaker with no exemption
-          # here would be exactly that trap. The two exemptions mirror
-          # review.yml's: an explicit `breaker-override` label, or a diff
-          # confined to .github/workflows/, which is where a fix to the gate
-          # itself would live. Neither bypasses review -- an exempt PR still
-          # needs review/agent success and green CI like any other.
+          # here would be exactly that trap. Two exemptions: an explicit
+          # `breaker-override` label, or a diff confined to .github/workflows/,
+          # which is where a fix to the gate itself would live. Neither
+          # bypasses review -- an exempt PR still needs review/agent success
+          # and green CI like any other. (These mirrored the now-deleted
+          # review.yml, which enforced the same pair on the review half; see
+          # Completed-Questions.md, OQ-42.)
           blocked_prs="$(gh api "repos/${REPO}/pulls?state=open&per_page=100" \
             --jq '[.[] | select([.labels[].name] | index("review-blocked"))] | length')"
           breaker_tripped=no
