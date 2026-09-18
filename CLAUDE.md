@@ -10,7 +10,7 @@ For every change, before opening (or updating) its PR, check whether `README.md`
 
 Every PR body uses [`.github/pull_request_template.md`](.github/pull_request_template.md) — **What changed**, **Verification** (the commands actually run and their real results, not a claim that they passed), **Docs check** (the outcome of the paragraph above). Fill all three; an empty section is treated as a missing one. [`REVIEW.md`](REVIEW.md) is the enumerated checklist a PR is reviewed against — read it before opening one.
 
-You do not merge your own PR, and neither does the reviewer. [`.github/workflows/land-approved.yml`](.github/workflows/land-approved.yml) runs on a schedule and lands the oldest open PR that is not a draft, carries no `review-blocked` label, reads `clean` (no conflict, every required check green), and has the `review/agent` commit status reading `success` on its current head SHA. One PR per run, then it stops — GitHub recomputes mergeability asynchronously, so a second merge in the same run would be decided on state read before the first one landed. The branch is deleted automatically; you could not delete it anyway, as the git proxy refuses ref deletion outright (HTTP 403).
+You do not merge your own PR, and neither does the reviewer. [`.github/workflows/land-approved.yml`](.github/workflows/land-approved.yml) runs on a schedule and lands the oldest open PR that is not a draft, carries no `review-blocked` label, reads `clean` (no conflict, every required check green), and has the `review/agent` commit status reading `success` on its current head SHA. One PR per run, then it stops — GitHub recomputes mergeability asynchronously, so a second merge in the same run would be decided on state read before the first one landed. The branch is deleted automatically, so you do not need to — and in a spawned container you could not, as the git proxy refuses ref deletion outright (HTTP 403).
 
 This is deliberate, not a convenience. Landing used to be the author's job, but a worker session finishes long before its verdict arrives, so the rule assigned the work to something that no longer existed — #92 sat merge-ready with nobody responsible for noticing.
 
@@ -21,6 +21,25 @@ While the `review-blocked` circuit breaker is tripped (see `Open-Questions.md`, 
 PRs land on `main` as a single squash commit, so commits within a PR exist only to make review easier, not to build history. One commit is right for most changes. The exception worth splitting: when a change both regenerates data files and alters logic, commit the regeneration separately from the logic so the reviewable part isn't buried in generated churn.
 
 `Completed-Questions.md` is a large archive of resolved stories — bigger than the app's hand-written source. Look things up in it by OQ number (`grep -n 'OQ-37' Completed-Questions.md`) rather than reading it whole.
+
+## Stories
+
+Work that is refined and ready to build lives in [`stories/`](stories/README.md), one file per
+story with enumerated acceptance criteria. That README holds the schema, the derived-status table,
+the ordering rule and the readiness test. A PR implementing a story moves its file to
+`stories/done/` as part of the same PR — [`REVIEW.md`](REVIEW.md) item 19 — and is reviewed against
+the story itself under items 16–18, not merely against its own description of what it did.
+
+[`Open-Questions.md`](Open-Questions.md) is the **idea backlog**: unrefined prose stories, several
+carrying open questions that are still open. **Nothing dispatches from it.** Refining an entry
+means moving it into `stories/` with acceptance criteria attached, which happens when it is next
+picked up rather than in one bulk migration — so the two coexist while it drains. It keeps its
+name because `Completed-Questions.md` and several workflow comments reference it by that name.
+
+`Completed-Questions.md` is unchanged: the historical archive, looked up by OQ number. Entries
+resolved out of `Open-Questions.md` still land there. Stories completed out of `stories/` land in
+`stories/done/` instead and are not also copied into the archive — all three share one OQ number
+space, and numbers are still never reused or renumbered.
 
 ## Testing
 

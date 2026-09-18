@@ -11,11 +11,20 @@ name: Review gate
 # Flow:
 #   1. A PR opens or gets a new commit -> `review/agent` goes pending, which
 #      blocks the merge once that context is required in branch protection.
-#   2. A reviewer agent reviews the head commit and comments with a marker:
+#   2. A reviewer agent reviews the head commit, and whoever ran it comments
+#      with a marker carrying the verdict:
 #        <!-- agent-review head=<full-40-char-sha> verdict=pass -->
-#        <!-- agent-review head=<full-40-char-sha> verdict=fail -->
+#        <!-- agent-review head=<full-40-char-sha> verdict=pass-with-observations -->
+#        <!-- agent-review head=<full-40-char-sha> verdict=block -->
 #   3. This workflow reads that marker and sets the status accordingly, whether
 #      the marker arrived with the comment or was edited into it later.
+#
+# `pass` and `pass-with-observations` both map to a `success` status -- the
+# distinction is what the review found, not whether it blocks -- and only
+# `block` maps to `failure`. See REVIEW.md, "The three verdicts", for why the
+# middle state exists. `fail` is still honoured as a deprecated spelling of
+# `block`, because a marker this workflow does not recognise is *ignored*,
+# which would leave a PR pending forever with a valid-looking verdict on it.
 #
 # Forgetting to run the reviewer leaves the status pending, so the PR simply
 # cannot merge. That is deliberate: the gate fails safe rather than silently
@@ -96,16 +105,16 @@ jobs:
           # Last well-formed marker wins, so a corrected verdict supersedes an
           # earlier one in the same comment.
           marker="$(printf '%s' "${BODY}" \
-            | grep -oE '<!--[[:space:]]*agent-review[[:space:]]+head=[0-9a-f]{40}[[:space:]]+verdict=(pass|fail)[[:space:]]*-->' \
+            | grep -oE '<!--[[:space:]]*agent-review[[:space:]]+head=[0-9a-f]{40}[[:space:]]+verdict=(pass-with-observations|pass|block|fail)[[:space:]]*-->' \
             | tail -1 || true)"
 
           if [ -z "${marker}" ]; then
-            echo "::notice title=Marker ignored::No well-formed marker (needs a full 40-char head sha and verdict=pass|fail)."
+            echo "::notice title=Marker ignored::No well-formed marker (needs a full 40-char head sha and verdict=pass|pass-with-observations|block)."
             exit 0
           fi
 
           marker_sha="$(printf '%s' "${marker}" | grep -oE 'head=[0-9a-f]{40}' | cut -d= -f2)"
-          verdict="$(printf '%s' "${marker}" | grep -oE 'verdict=(pass|fail)' | cut -d= -f2)"
+          verdict="$(printf '%s' "${marker}" | grep -oE 'verdict=(pass-with-observations|pass|block|fail)' | cut -d= -f2)"
           head="$(gh pr view "${PR}" --repo "${REPO}" --json headRefOid --jq .headRefOid)"
 
           # A verdict about an older commit says nothing about this one.
@@ -114,13 +123,22 @@ jobs:
             exit 0
           fi
 
-          if [ "${verdict}" = "pass" ]; then
-            state=success
-            description='Agent review passed'
-          else
-            state=failure
-            description='Agent review found blocking items'
-          fi
+          case "${verdict}" in
+            pass)
+              state=success
+              description='Agent review passed'
+              ;;
+            pass-with-observations)
+              state=success
+              description='Agent review passed with observations'
+              ;;
+            # `fail` is the deprecated spelling of `block`; see the note at the
+            # top of this file for why it is still honoured.
+            block|fail)
+              state=failure
+              description='Agent review found blocking items'
+              ;;
+          esac
 
           gh api -X POST "repos/${REPO}/statuses/${head}" \
             -f state="${state}" \
