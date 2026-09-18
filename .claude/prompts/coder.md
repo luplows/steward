@@ -123,8 +123,10 @@ on the PR with your reasoning instead of ignoring it.
 
 ## You do not merge
 
-A scheduled workflow lands PRs that are green, verdict-passed and conflict-free,
-oldest first, one per run. You do not merge your own, and neither does the
+A separate workflow lands PRs that are green, verdict-passed and conflict-free,
+oldest first, one per run. It runs when someone triggers it rather than on a
+schedule, so a merge-ready PR may sit for a while — that is expected, not a
+fault, and not yours to chase. You do not merge your own, and neither does the
 reviewer. Your job ends with the PR open and your work defensible.
 
 **Open the PR as a draft if you are not finished, and mark it ready when you

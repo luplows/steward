@@ -8,8 +8,8 @@ name: Land approved PRs
 # It exists because landing used to be the author's job, and a worker session
 # finishes long before its verdict arrives. That assigned the work to something
 # which no longer existed: #92 sat merge-ready with nobody responsible for
-# noticing, and #93 only landed because someone happened to ask. A schedule
-# depends on no session being alive.
+# noticing, and #93 only landed because someone happened to ask. Whatever runs
+# this must therefore not depend on any session being alive.
 #
 # One PR per run, oldest first. GitHub recomputes mergeability asynchronously,
 # so a second merge in the same run would be decided on `mergeable_state` read
@@ -17,12 +17,13 @@ name: Land approved PRs
 # recalculated yet. Stopping after one costs a few minutes and removes that
 # whole class of mistake. Oldest first so a PR cannot be starved by newer ones.
 #
-# Scheduled runs are best effort and GitHub delays them under load, so treat
-# the cadence as "within the hour" rather than every 15 minutes.
+# There is deliberately no `schedule:` trigger. It was `*/15`, and GitHub
+# delivered roughly one run every five hours -- about 5% of the configured
+# rate. That is the worst of both: too slow to rely on, yet automatic enough
+# that nobody notices when it stops. Landing is explicit until a trigger that
+# actually fires is chosen (OQ-50): `gh workflow run land-approved.yml`.
 
 on:
-  schedule:
-    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions:
