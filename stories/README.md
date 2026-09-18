@@ -39,11 +39,36 @@ story takes the next unused number — check all three places before picking one
 ```yaml
 id: OQ-49                  # matches the filename
 title: Read and rank the story queue
-tier: workflow             # foundational | dependent | anytime | workflow
+tier: next                 # fix | next | normal | later — priority, nothing else
+kind: workflow             # product | workflow — for reading; never read by the dispatcher
 depends_on: []             # [OQ-45] — not dispatched until those are in done/
 model: sonnet              # per-story escalation; the reviewer is never this model
 blocked: null              # null | "reason text"
 ```
+
+**`tier` is priority and nothing else**, highest first:
+
+| Tier | Means |
+|---|---|
+| `fix` | A defect or regression. Absolute priority. |
+| `next` | Deliberately prioritised ahead of the default. |
+| `normal` | The default. Most stories. |
+| `later` | Refined and dispatchable, but deliberately deferred. |
+
+**Dependencies are not a tier.** `depends_on` handles them mechanically and at the
+right granularity. An earlier vocabulary — `foundational | dependent | anytime |
+workflow` — mixed three axes: position in the dependency graph, absence of a
+dependency, and subject matter. A story can be both workflow and foundational, so
+forcing one value made the sort order arbitrary, and two of the four duplicated
+`depends_on` while being able to contradict it.
+
+**`kind` is for people, not the dispatcher.** It groups stories for reading —
+release-review assembly, or answering "how much of this batch was tooling."
+**Nothing in the dispatcher reads it, and nothing in the ordering may.** That is
+stated as a rule because a field that exists eventually attracts a sort: ordering
+by `kind` should be a visible violation of something written down rather than a
+natural-looking extension. Adding a value is cheap for the same reason.
+
 
 `blocked` is **the only stored state**, because it is the only thing that
 cannot be derived. Everything else about where a story stands is read from the
@@ -91,9 +116,13 @@ No status field, no status commits, nothing to sweep, nothing to drift.
 counting blocking verdicts recorded on the PR. Storing it would mean a commit
 per round, on a file that lives on `main` while the work lives on a branch.
 
-**Ordering** is by `tier`, then lowest id first. Deterministic, needs no
-ordering file, and cannot starve an old story. Re-prioritising is a one-field
-edit.
+**Ordering** is by `tier`, then lowest id first. Deterministic, needs no ordering
+file, and re-prioritising is a one-field edit.
+
+That does not starve a story *within* a tier, but a lower tier starves
+indefinitely while higher-tier work keeps arriving. The design calls for a
+starvation valve; until one exists, a story that has waited too long is promoted
+by editing its `tier`.
 
 ## The readiness test
 
