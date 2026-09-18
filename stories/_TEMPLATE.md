@@ -61,7 +61,15 @@ decided a thing, which file is the house style to match.
 
 ## Open questions
 
-*(must be empty to dispatch. A non-empty section makes the story `draft`, and
-the dispatcher skips it. Anything here is Session A's to resolve — writing it
-down and dispatching anyway is how the coder's guess becomes a permanent,
-unreviewed decision.)*
+<!--
+Must be empty to dispatch. Anything here beyond the marker below makes the
+story `draft`, and the dispatcher skips it. Anything here is Session A's to
+resolve — writing a question down and dispatching anyway is how the coder's
+guess becomes a permanent, unreviewed decision.
+
+When there is genuinely nothing outstanding, leave the marker rather than
+emptying the section: it says "considered, nothing open" rather than "nobody
+filled this in". HTML comments like this one do not count as content.
+-->
+
+*(none)*
