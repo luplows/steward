@@ -78,6 +78,19 @@ The evidence is not one-sided, which is why this is filed rather than built. See
 
 ## Open questions
 
+- **The evidence now points at a narrower defect than this story assumes.**
+  Across #109, #112 and #115 the reviewer blocked correctly and unprompted on
+  *code* defects — a deny rule shadowing its own allow rule, three tests named
+  for an AC and exercising none — and twice returned a clean `pass` whose
+  summary carried prose defects it placed below the finding threshold: a
+  citation attributed to the wrong document, a count that understated the
+  story's own premise, a code block granting push to `main`. The author fixed
+  every one of those immediately, which is the tell. So the pattern is not
+  *"won't block"* — it is **under-weighting prose, citation and documentation
+  errors relative to code defects.** If that holds up, AC-1's trigger list is
+  the wrong shape: it should name *what kind of wrongness* counts, not only
+  *where the wrongness is*. Test this against the replay in AC-6 before writing
+  the fix.
 - **Is the reviewer actually mis-calibrated, or was #109 an unrepresentative
   PR?** Round 5 returned a `block` that was specific, correct and unprompted —
   against a PR whose subject was the reviewer's own prompt. So the gate demonstrably

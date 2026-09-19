@@ -58,6 +58,12 @@ instruction.
 
 - The reviewer must keep running the project's test and lint commands, so the
   answer cannot be "remove `npm`/`node` from the allowlist".
+- **`GH_TOKEN=""` does not satisfy AC-3.** `gh` treats an empty value as absent
+  and falls back to the keyring, authenticating normally; only a non-empty value
+  overrides it. Both directions are verified against this repository. Deleting
+  the variables is what works, as `coderEnv` does. This is written down because
+  the empty string is the obvious first reach and it fails silently — the
+  reviewer would appear de-credentialed and be fully authenticated.
 
 ## Context
 

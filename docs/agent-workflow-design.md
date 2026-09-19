@@ -423,6 +423,23 @@ those paths can read a token that was never in the environment. This is the same
 reason `Bash(gh:*)` disappears from the coder's list entirely rather than being narrowed: there is
 no longer a legitimate use for it to allowlist.
 
+**What a spawn actually costs**, measured across the OQ-63 and OQ-66 hand-runs rather than guessed,
+so that `spawn.mjs` picks its budget and timeout from data:
+
+| Role | Model | Cost | Wall time |
+|---|---|---|---|
+| Coder, first pass on a fresh story | sonnet | $0.96 – $3.17 | 3 – 16 min |
+| Reviewer, full diff plus re-running the suite | opus | $0.95 – $1.38 | 1.8 – 2.7 min |
+
+Two things follow. The sketch's `6` and `3` are **generous** — no spawn here came close, and the one
+that ended early ended on a session limit rather than the budget. And a reviewer costs about what a
+cheap coder round does, so a second review is not the expensive part of a retry; the coder round is.
+A timeout wants to be well clear of 16 minutes, not tuned to the median.
+
+These are session observations from six spawns, recorded here because nothing in the repository
+captures them and a reviewer therefore cannot check them. Treat them as a starting point to be
+replaced once `spawn.mjs` records its own.
+
 The reviewer's list is the mirror image, and narrower on purpose: read-only `git` subcommands
 enumerated rather than `Bash(git:*)`, so `git push` is not in the allowlist *before* the
 `--disallowedTools` deny rule also removes it. Two barriers against the accidental path beats one.
@@ -839,6 +856,49 @@ shipped documentation instructing agents to do impossible things; both read perf
 *Known live defect:* `REVIEW.md` tells the reviewer to get the head SHA with `gh pr view`, while
 `.claude/reviewer-prompt.md` says there is no `gh` and gives the `git rev-parse` alternative. Moot
 once the reviewer runs locally, but the document of record is currently wrong.
+
+### A spawned session cannot edit `.claude/prompts/`
+
+**Claude Code refuses `Edit` and `Write` to `.claude/prompts/` from a spawned `claude -p` session**,
+as a sensitive path, with no approval surface to appeal to. Found when the OQ-63 coder tried to
+deliver its own story's AC-8 and could not; it read the refusal as a deliberate guard against a
+coder session rewriting its own spawn instructions, which is what it appears to be.
+
+**Scoped to what was actually observed.** The refusals seen were on
+`.claude/prompts/coder.md`, from a spawned session, for both `Edit` and `Write`. Whether the guard
+covers all of `.claude/` — `settings.json` especially, which would matter more — is untested and
+should not be assumed. Stating it wider than the evidence is the failure this whole section exists
+to record.
+
+The consequence is structural and easy to miss: **no coder can deliver a story that changes the
+prompts.** That is not a rare case here — OQ-51, OQ-64 and OQ-66 all touch `.claude/prompts/`, and
+OQ-63 did. A story whose acceptance criteria require prompt edits will be blocked on delivery no
+matter how well the coder performs.
+
+**An interactive session is not restricted the same way.** The same edits succeed from a session a
+person is attached to. So the restriction is a property of the *spawn*, not of the file, which is
+what makes the workaround legitimate rather than a bypass:
+
+> **The coder emits, the dispatcher writes.** The coder publishes the intended change as a diff in
+> its PR body; whatever spawned it applies that with `git apply` in a separate, attributed commit.
+> Used for the first time in #112, where the diff applied cleanly.
+
+That is the same division of labour the loop already uses twice — the reviewer returns a verdict and
+the runner records it, and under OQ-63 the coder emits a PR body and the dispatcher opens the PR.
+Prompt edits are the third instance, and `spawn.mjs` should treat it as one rather than as a special
+case.
+
+### `GH_TOKEN=""` does not remove a credential
+
+`gh` resolves an **empty** `GH_TOKEN` by falling back to the keyring, and overrides the keyring only
+when the variable holds a non-empty value. Verified both ways against this repository: a bogus
+non-empty token returns `HTTP 401`, while an empty one authenticates normally as the owner.
+
+So a spawn that tries to de-credential a session by setting the variable to empty string **still has
+a fully authenticated `gh`**, and nothing about it looks wrong. `coderEnv` avoids this by *deleting*
+the variables rather than blanking them, which is why it works. Whoever implements OQ-62 — the
+reviewer's half of the same problem — is the person most likely to reach for the empty string, which
+is why this is recorded here rather than only in a code comment.
 
 ### GitHub mechanics
 
