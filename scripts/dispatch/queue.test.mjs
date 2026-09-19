@@ -316,7 +316,14 @@ describe('OQ-49/AC-8: section boundaries ignore fenced code blocks', () => {
     const openQuestions = sections.get('Open questions')
 
     expect(openQuestions).toBeDefined()
-    expect(openQuestions).toContain('Where does assembly live')
+    // OQ-51 is a *live* fixture, deliberately: AC-8 names it because it is a
+    // real file whose fence shadows its own heading. That means its contents
+    // move as the story does -- it carried an open question until OQ-65 settled
+    // where prompt assembly lives, and now carries the empty marker. These
+    // assertions track its current state on purpose; if they fail because
+    // OQ-51 changed, update them rather than reaching for a synthetic file,
+    // because a synthetic one cannot go stale and so cannot catch this.
+    expect(openQuestions.trim()).toBe('*(none)*')
     // The fence contains a fake "## Open questions" line followed by a fake
     // "## What review is" line -- a scanner that isn't fence-aware would
     // treat the first as the section start and bleed the second (and
@@ -327,13 +334,21 @@ describe('OQ-49/AC-8: section boundaries ignore fenced code blocks', () => {
     expect(openQuestions).not.toContain('Out of scope')
   })
 
-  it('derives draft for the real reason (genuine open question), not the fence artefact', async () => {
+  it('derives ready from the real section, where a naive parser reads the fence and says draft', async () => {
     const fixturePath = path.join(repoRoot, 'stories', 'OQ-51-story-injection-boundary.md')
     const source = await readFile(fixturePath, 'utf8')
     const story = buildStory(fixturePath, source, false)
 
-    expect(story.openQuestionsEmpty).toBe(false)
-    expect(deriveStatus(story, new Set()).status).toBe('draft')
+    // Stronger than the `draft` this asserted while OQ-51 had an open question.
+    // Then both a naive and a fence-aware parser said `draft`, and only the
+    // section's *contents* told them apart. Now they disagree on the status
+    // itself: the fenced block is non-empty, so a scanner that starts at the
+    // fake heading derives `draft`, while reading the real section finds the
+    // marker and derives `ready`. This is the case AC-8 anticipated in as many
+    // words -- "would get `ready` wrong for a story arranged slightly
+    // differently" -- and OQ-51 is now arranged that way.
+    expect(story.openQuestionsEmpty).toBe(true)
+    expect(deriveStatus(story, new Set()).status).toBe('ready')
   })
 
   it('a `## ` line inside a fence does not itself start or end a section', () => {
