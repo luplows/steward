@@ -278,7 +278,9 @@ than relaxed.
 1. Session A writes a story. Open questions empty.
 2. Dispatcher picks the highest-tier, lowest-id ready story; creates a worktree and the branch
    `story/OQ-49-import-player-info`.
-3. Coder implements, tests green, opens a **draft** PR, marks it ready.
+3. Coder implements, tests green, pushes its branch, and emits the PR title/body and a
+   draft-or-ready decision in its report. Dispatcher opens the PR from that text, as a **draft**
+   if the coder said draft.
 4. CI passes.
 5. Dispatcher spawns the reviewer, which returns a structured verdict.
 6. Dispatcher posts `review/agent` = `success` on the head SHA.
@@ -365,15 +367,17 @@ orchestrating agent."
 Sketches, not literal — the prompts are rendered from files with the story injected.
 
 ```bash
-# Coder — can edit, inside its own worktree
+# Coder — can edit, inside its own worktree. Push is scoped to its own
+# branch; gh is neither allowlisted nor authenticated (OQ-63).
 claude -p "$(render .claude/prompts/coder.md OQ-49)" \
   --add-dir "$WORKTREE" \
   --model "$STORY_MODEL" --effort medium \
   --permission-mode acceptEdits \
   --permission-prompts none \
-  --allowedTools Read Write Edit Glob Grep TodoWrite \
-    "Bash(git:*)" "Bash(gh:*)" "Bash(npm:*)" "Bash(npx:*)" "Bash(node:*)" \
+  --allowedTools $(coderAllowedTools "$BRANCH") \
     $READ_ONLY_SHELL_UTILS \
+  --disallowedTools "Bash(gh:*)" \
+  --env "$(coderEnv)" \
   --max-budget-usd 6 \
   --output-format json
 
@@ -400,14 +404,37 @@ Three flags are load-bearing:
 - **`--allowedTools`** — what the session can actually do once prompting is off. This one is
   easy to leave out and the first hand-run of the loop did: `--permission-prompts none` plus
   `--permission-mode acceptEdits` covers file edits, and `.claude/settings.json` adds the
-  project's npm/npx commands and read-only git — but nothing that writes to the repository or
-  to GitHub, so `git commit`, `git push` and `gh pr create` are all silently **denied**. The
-  coder does the work, runs the suite green, and then cannot open a PR. The two flags are a
-  pair — the first decides that nothing may prompt, the second decides what does not need to.
+  project's npm/npx commands and read-only git — but nothing that writes to the repository, so
+  `git commit` and `git push` are silently **denied**. The coder does the work, runs the suite
+  green, and then cannot get its branch out. The two flags are a pair — the first decides that
+  nothing may prompt, the second decides what does not need to.
+
+**The coder no longer holds a GitHub API credential at all (OQ-63).** It pushes over `git`
+(authenticated separately, over SSH — untouched by anything below) and emits the PR title and body
+as the last thing in its report; whatever spawned it calls `gh pr create` with its own,
+differently-scoped credential. `gh` is not on the coder's allowlist, and `--env
+"$(coderEnv)"` (`scripts/dispatch/coder-env.mjs`) strips `GH_TOKEN`, `GITHUB_TOKEN` and
+`GH_ENTERPRISE_TOKEN` from its process environment and points `GH_CONFIG_DIR` at an empty
+directory, so nothing capable of setting a commit status, dispatching a workflow, or writing to a
+pull request is reachable — not through `gh` directly, not through `node -e` spawning `gh` or
+`curl` via `child_process`, and not through an `npm`/`npx` script doing either, because none of
+those paths can read a token that was never in the environment. This is the same shape as
+**credential minimalism** below, applied to the coder rather than the reviewer, and it is the
+reason `Bash(gh:*)` disappears from the coder's list entirely rather than being narrowed: there is
+no longer a legitimate use for it to allowlist.
 
 The reviewer's list is the mirror image, and narrower on purpose: read-only `git` subcommands
 enumerated rather than `Bash(git:*)`, so `git push` is not in the allowlist *before* the
 `--disallowedTools` deny rule also removes it. Two barriers against the accidental path beats one.
+
+The coder's `--disallowedTools` stops at `"Bash(gh:*)"` and does **not** also carry a blanket
+`"Bash(git push:*)"` the way the reviewer's does. Deny rules take precedence over allow rules, and
+that pattern is a prefix match against the scoped push patterns `coderAllowedTools` grants — added
+together they would deny the coder's own push, not just an unscoped one, defeating AC-5. The
+reviewer can afford the blanket deny as a second barrier because its allowlist never grants push to
+begin with, so there is nothing for the deny rule to shadow; the coder's does, so keeping both would
+break the one write the coder is meant to have. Scoping push to the assigned branch is
+`coderAllowedTools`'s job alone here.
 
 **That is defence in depth, not containment.** The same list grants `npm`, `npx` and `node`,
 because verifying the author's claims means running the suite — and those are arbitrary execution.
@@ -426,7 +453,7 @@ That is the same conclusion **credential minimalism** reaches below by a differe
 not built yet.
 
 That narrowness has its own cost, and it is not symmetric with the coder's. A hole in the
-**coder's** allowlist fails loudly and late — it cannot open its PR, and someone notices. A hole in
+**coder's** allowlist fails loudly and late — it cannot push its branch, and someone notices. A hole in
 the **reviewer's** fails *quietly*: a reviewer that cannot run `npm test` or `git merge-base` can
 still return a confident `pass`, having checked less than it thinks. The `git` verbs above are
 therefore a deliberately broad read-only set rather than a minimal one — not a complete one, since
@@ -461,6 +488,30 @@ re-read the whole.
 
 Removing the reviewer's need to post anything **deletes that section of the prompt** rather than
 rewording it. Applies equally to Session B, which writes stories, not statuses.
+
+**The coder cannot be given the same treatment, because it legitimately needs to push — but it can
+be given a narrower credential rather than the owner's own.** This was the more urgent of the two
+gaps (OQ-63, filed `tier: fix` where the reviewer's twin, OQ-62, is `normal`): the coder's *goal* is
+a landed PR, where the reviewer's prompt only ever tells it to post nothing and it gains nothing
+from a merge. With the owner's `repo`-scoped token, a coder holding `Bash(gh:*)` could set
+`review/agent` to `success` on its own head and then dispatch `land-approved.yml` — confirmed
+against this repository the same way the reviewer's gap was, by probing with deliberately invalid
+payloads and getting `422` (authorised, only validation failed) rather than `403` (denied). Both of
+the rules this workflow is built on — *you do not clear your own gate*, *triggering the sweep is
+the owner's* — were held by `CLAUDE.md`'s prose and nothing else.
+
+So the coder's credential is scoped rather than removed: `coderEnv`
+(`scripts/dispatch/coder-env.mjs`) hands it an environment with no `GH_TOKEN`, `GITHUB_TOKEN` or
+`GH_ENTERPRISE_TOKEN`, and a `GH_CONFIG_DIR` pointed at an empty directory — so `gh`, and anything
+that reaches the GitHub API the way `gh` does, has no credential capable of a commit status, a
+workflow dispatch, or a pull-request write, regardless of whether the call is made directly, from
+inside `node -e`, or from an `npm`/`npx` script. Push keeps working because it authenticates over
+SSH, which none of that touches. The coder still cannot open its own PR — that capability moves to
+whatever spawned it, which holds a *third*, separately-scoped credential (pull-request write, but
+neither commit-status nor workflow-dispatch), so the thing that opens the PR still cannot clear the
+gate or trigger the sweep either. "A coder session is trusted, not contained" — the wording this
+section carried while OQ-63 was open — is no longer true of the write path that mattered; see
+`REVIEW.md`, "For the coder: opening a PR".
 
 ### Watchdog
 
@@ -666,7 +717,8 @@ parallel dispatch arrives.
   of completed stories — Session B's input assembles itself.
 - Branch protection: `test` + `review/agent` required, `enforce_admins: true`, no force-push, no
   deletions. **Already configured correctly.**
-- Coder rebases before opening the PR; cap branch age rather than merging against a moved world.
+- Coder rebases before pushing for the dispatcher to open the PR from; cap branch age rather than
+  merging against a moved world.
 
 ### Rollback
 

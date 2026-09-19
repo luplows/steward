@@ -200,3 +200,42 @@ status is what blocks the merge; failing the run is what makes the block
 *noticeable*, since GitHub's built-in Actions failure notifications only fire on
 a failed run. A job reporting success while recording a blocking review would be
 silent exactly when someone needs to hear about it.
+
+## For the coder: opening a PR
+
+The prompt a coder session is spawned with lives in
+[`.claude/prompts/coder.md`](.claude/prompts/coder.md). A coder must push its
+own branch to get its work reviewed at all, which is a real difference from the
+reviewer — but pushing is not the same capability as clearing the gate the push
+feeds, and holding both was the gap OQ-63 closed: with the owner's `repo`-scoped
+token, a coder could set `review/agent` to `success` on its own head and then
+dispatch `land-approved.yml`, the two rules `CLAUDE.md` states and nothing but
+prose enforced.
+
+**The coder holds no credential capable of a commit status, a workflow
+dispatch, or a pull-request write.** `scripts/dispatch/coder-env.mjs`
+(`coderEnv`) strips `GH_TOKEN`, `GITHUB_TOKEN` and `GH_ENTERPRISE_TOKEN` from
+its process environment and redirects `GH_CONFIG_DIR` to an empty directory,
+so nothing reachable from the session — `gh` directly, `gh` spawned from inside
+`node -e` via `child_process`, or an `npm`/`npx` script doing either — can
+authenticate as anything more than a git push over SSH, which none of that
+touches. `gh` is also absent from `coderAllowedTools`, having no legitimate use
+left once the coder stops opening its own PR.
+
+**Opening the PR moves to whoever ran the coder.** The coder emits the PR title
+and body — the `pull_request_template.md` sections it always filled in — under
+`## PR title` and `## PR body` at the end of its final report, plus whether it
+should open as `draft` or `ready`. The runner creates the PR from that text
+with its own credential, one scoped to pull-request writes but, like the
+coder's, not to commit statuses or workflow dispatch — so the thing that opens
+the PR still cannot clear the gate or trigger the sweep. This is the same shape
+as "Recording a verdict" above: the party with the judgement (or, here, the
+text) is not the party with the credential.
+
+**Answering a review finding the coder disagrees with** no longer means
+replying on the PR — AC-3 of OQ-63 removes commenting from the coder's reach
+along with everything else. The coder states its reasoning in its final report
+instead, and the runner posts it as an ordinary PR comment, the same relay this
+section already uses for the verdict.
+
+
