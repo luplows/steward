@@ -46,14 +46,20 @@ one. The coder needs at least:
 
 ```
 Read Write Edit Glob Grep TodoWrite
-Bash(git:*) Bash(npm:*) Bash(npx:*) Bash(node:*)
+Bash(git status:*) Bash(git diff:*) Bash(git log:*) Bash(git show:*)
+Bash(git branch:*) Bash(git fetch:*) Bash(git add:*) Bash(git commit:*)
+Bash(git push origin HEAD:{{BRANCH}}) Bash(git push origin {{BRANCH}}:{{BRANCH}})
+Bash(npm:*) Bash(npx:*) Bash(node:*)
 ```
 
-— with `git push` scoped to the exact branch the invocation was spawned for
-(`Bash(git push origin HEAD:{{BRANCH}})`, not `Bash(git push:*)`) — plus the
-read-only shell utilities it uses to inspect the repository.
-`scripts/dispatch/coder-env.mjs` builds this list (`coderAllowedTools`) rather
-than leaving it to be retyped per spawn. An allowlist with a hole in it fails at
+— plus the read-only shell utilities it uses to inspect the repository.
+**Not `Bash(git:*)`.** That would permit `git push origin HEAD:main`, which is
+the one thing the scoping exists to prevent, and the coder has no use for it:
+the verbs above are the whole of what building, committing and pushing a branch
+requires. `scripts/dispatch/coder-env.mjs` builds this list
+(`coderAllowedTools`) rather than leaving it to be retyped per spawn, and that
+function is the authority — this block is a reader's summary of it and must not
+drift from it. An allowlist with a hole in it fails at
 the last step rather than the first, and denials are visible in the transcript
 rather than fatal, so a gap degrades into a route-around rather than a hang —
 but it still costs a run.
