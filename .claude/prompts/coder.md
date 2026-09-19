@@ -34,6 +34,44 @@ tells the coder what to do when it has a choice; the flag is what holds when it
 does not. Pair it with `--max-budget-usd`, which turns "how much can one runaway
 story cost" into a number chosen in advance rather than discovered afterwards.
 
+**That flag is only safe to use with an `--allowedTools` list wide enough to
+finish the job**, and the two have to be chosen together. `--permission-prompts
+none` denies anything that would prompt; `--permission-mode acceptEdits` covers
+file edits but nothing else; and `.claude/settings.json` allowlists the project's
+npm and npx commands plus read-only git — **nothing that writes to the repository
+or to GitHub**. So a spawn carrying just those two flags can run the test suite
+and then silently denies `git commit`, `git push` and `gh pr create`: the coder
+does the work, verifies it, and cannot open a PR. That looks like a model failure
+and is not one. The coder needs at least:
+
+```
+Read Write Edit Glob Grep TodoWrite
+Bash(git:*) Bash(gh:*) Bash(npm:*) Bash(npx:*) Bash(node:*)
+```
+
+plus the read-only shell utilities it uses to inspect the repository. An
+allowlist with a hole in it fails at the last step rather than the first, and
+denials are visible in the transcript rather than fatal, so a gap degrades into
+a route-around rather than a hang — but it still costs a run.
+
+**`Bash(gh:*)` is too broad, and "the blast radius is the coder's own branch" is
+false.** An earlier draft of this paragraph said exactly that. It is not: with
+the owner's `repo`-scoped token, `gh api` can set a commit status on any SHA and
+`gh api` can dispatch any workflow. Both were confirmed against this repository
+by probing with deliberately invalid payloads — authorisation passed and only
+validation failed, so no status was written and no workflow ran. That is the
+whole self-merge path: set `review/agent` to `success` on your own head, then
+dispatch `land-approved.yml`. The two rules this workflow is built on — *you do
+not clear your own gate* and *triggering the sweep is the owner's* — are
+currently held by this prose and nothing else.
+
+Narrowing the `gh` patterns does not fix it, because `Bash(node:*)` is also
+required and `node -e` reaches `child_process`. The fix is to stop handing the
+coder a GitHub credential at all: it pushes its branch, and whatever spawned it
+opens the PR, exactly as the dispatcher already records the reviewer's verdict.
+That is OQ-63. Until it lands a coder session is trusted, not contained — so
+grant the narrowest `gh` you can, and know what you are relying on.
+
 Read the assembled prompt end to end before sending it, as a stranger would. A
 prompt that gains a fix after every failed run can end up reading like an
 attack: one reviewer session correctly refused a task whose prompt had

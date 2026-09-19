@@ -98,11 +98,18 @@ told what the change was *meant* to do cannot see that the diff does something
 else.
 
 **The reviewer is given the story**, and that is not a contradiction of the
-paragraph above. What is withheld is the author's *account* of the change — its
-session, its summary, its reasoning. The *authored story* is a different thing:
-it is the standard the diff has to meet, and a reviewer that never sees it
-cannot check items 16–18 at all. It can only compare the diff to the PR body,
-which the same worker wrote.
+paragraph above. What is withheld is the author's *working context* — its
+session and transcript, its internal reasoning, and any commentary from whatever
+dispatched it. The *authored story* is a different thing: it is the standard the
+diff has to meet, and a reviewer that never sees it cannot check items 16–18 at
+all. It could only compare the diff to the PR body, which the same worker wrote.
+
+**The PR body is given too, as an exhibit rather than as testimony.** The
+reviewer is required to judge whether that account is honest, which is
+impossible without reading it — so `reviewer.md` injects it as `{{PR_BODY}}`
+rather than leaving the reviewer to fetch it. It is supplied for judging, never
+for believing: where the body and the diff disagree, the diff is what happened.
+Reading it after the findings are formed is what keeps it from framing them.
 
 Review is enforced by `.github/workflows/review-gate.yml`, which sets a
 `review/agent` commit status. Opening a PR, or pushing to one, sets that status
@@ -121,7 +128,7 @@ from, ending with exactly one marker line:
 <!-- agent-review head=<full-40-char-sha> verdict=block -->
 ```
 
-That split is deliberate: the reviewer holds no GitHub write access and posts
+That split is deliberate: the reviewer is handed no GitHub credential and posts
 nothing. It returns its verdict and findings, and the runner — a person today,
 the dispatcher once it exists — records them. A reviewer that had to post its
 own verdict needed credentials, and hunting for them is what turned the old

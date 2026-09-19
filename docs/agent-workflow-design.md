@@ -371,29 +371,87 @@ claude -p "$(render .claude/prompts/coder.md OQ-49)" \
   --model "$STORY_MODEL" --effort medium \
   --permission-mode acceptEdits \
   --permission-prompts none \
+  --allowedTools Read Write Edit Glob Grep TodoWrite \
+    "Bash(git:*)" "Bash(gh:*)" "Bash(npm:*)" "Bash(npx:*)" "Bash(node:*)" \
+    $READ_ONLY_SHELL_UTILS \
   --max-budget-usd 6 \
   --output-format json
 
-# Reviewer — structurally unable to write, holds no credentials
+# Reviewer — handed no credentials, denied the obvious write paths (see OQ-62)
 claude -p "$(render .claude/prompts/reviewer.md OQ-49 $PR)" \
   --model opus --effort high \
   --disallowedTools Edit Write NotebookEdit "Bash(git push:*)" "Bash(gh:*)" \
+  --allowedTools Read Glob Grep TodoWrite \
+    "Bash(git fetch:*)" "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" \
+    "Bash(git rev-parse:*)" "Bash(git merge-base:*)" "Bash(git grep:*)" \
+    "Bash(git cat-file:*)" "Bash(git ls-files:*)" "Bash(git status:*)" \
+    "Bash(git branch:*)" "Bash(npm:*)" "Bash(npx:*)" "Bash(node:*)" \
   --permission-prompts none \
   --max-budget-usd 3 \
   --output-format json
 ```
 
-Two flags are load-bearing:
+Three flags are load-bearing:
 
 - **`--permission-prompts none`** — anything that would prompt is denied rather than hanging.
   Directly answers the observed hang.
 - **`--max-budget-usd`** — a hard spend ceiling per invocation. Turns "how much can one runaway
   story cost" into a number chosen in advance.
+- **`--allowedTools`** — what the session can actually do once prompting is off. This one is
+  easy to leave out and the first hand-run of the loop did: `--permission-prompts none` plus
+  `--permission-mode acceptEdits` covers file edits, and `.claude/settings.json` adds the
+  project's npm/npx commands and read-only git — but nothing that writes to the repository or
+  to GitHub, so `git commit`, `git push` and `gh pr create` are all silently **denied**. The
+  coder does the work, runs the suite green, and then cannot open a PR. The two flags are a
+  pair — the first decides that nothing may prompt, the second decides what does not need to.
+
+The reviewer's list is the mirror image, and narrower on purpose: read-only `git` subcommands
+enumerated rather than `Bash(git:*)`, so `git push` is not in the allowlist *before* the
+`--disallowedTools` deny rule also removes it. Two barriers against the accidental path beats one.
+
+**That is defence in depth, not containment.** The same list grants `npm`, `npx` and `node`,
+because verifying the author's claims means running the suite — and those are arbitrary execution.
+`node -e` writes files despite `Edit`/`Write` being disallowed, and spawns `git push` despite the
+deny rule, which matches a command *prefix* that `node …` never trips. A reviewer session today is
+therefore **not** structurally unable to write; it is unwilling, because its prompt tells it to post
+nothing. Claiming otherwise — an earlier draft of this section said "two independent reasons it
+cannot push" — overstates the guarantee, and overstating a security property is worse than not
+having it, because it stops people looking.
+
+The tension is real rather than an oversight: **verification requires execution, and execution
+defeats structural write-prevention.** Closing it needs the capability removed rather than the
+command denied — a reviewer that runs with no SSH agent, no keyring access and no push-capable
+credential, so that `git push` fails for want of authorisation rather than for want of permission.
+That is the same conclusion **credential minimalism** reaches below by a different route, and it is
+not built yet.
+
+That narrowness has its own cost, and it is not symmetric with the coder's. A hole in the
+**coder's** allowlist fails loudly and late — it cannot open its PR, and someone notices. A hole in
+the **reviewer's** fails *quietly*: a reviewer that cannot run `npm test` or `git merge-base` can
+still return a confident `pass`, having checked less than it thinks. The `git` verbs above are
+therefore a deliberately broad read-only set rather than a minimal one — not a complete one, since
+`blame`, `rev-list`, `ls-tree`, `describe`, `remote`, `shortlog` and `config --get` are all
+plausible and none are listed. Calling it complete would be the same overstatement this section
+exists to correct. The rest of the list is not read-only at all, per the paragraph above.
+`reviewer.md` instructs the
+reviewer to treat a denied read-only command as a finding about its own invocation rather than
+something to work around. An enumerated allowlist has to be maintained; the alternative is a gate
+that silently reviews by reading.
 
 ### Credential minimalism
 
-**The reviewer holds no GitHub write access.** It returns a structured verdict on stdout; the
-dispatcher posts the status.
+**The reviewer is given no GitHub write access, and needs none.** It returns a structured verdict on
+stdout; the dispatcher posts the status.
+
+**"Given" is doing real work in that sentence.** Running locally, the reviewer runs as the owner,
+on a machine where an SSH key and a `gh` keyring token are reachable — and its allowlist must
+include `npm`/`node` so it can verify the author's claims, which is arbitrary execution. So it is
+not *denied* write access; it is *handed* none and told to post nothing, on a machine where the
+capability exists. That is a weaker property than the heading once implied, and the weaker version
+is the true one. What makes it hold in practice is that no part of the prompt asks the reviewer to
+post, so nothing pushes it toward looking — which is exactly the failure mode the paragraph below
+describes, arrived at from the other side. Genuinely removing the capability means a reviewer with
+no agent, no keyring and no push-capable credential; see the **invocation shape** section.
 
 This is not convenience. In the existing workflow the reviewer prompt accreted one fix per failed
 run — credential hunting after sessions could not post, "do not ask questions" after one hung —

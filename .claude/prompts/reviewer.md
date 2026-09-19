@@ -13,38 +13,85 @@ whatever spawns the session substitutes these placeholders and sends the result.
 | `{{HEAD_BRANCH}}` | its head branch, e.g. `story/OQ-49-read-story-queue` |
 | `{{HEAD_SHA}}` | the full 40-character SHA of the commit under review |
 | `{{STORY_ID}}` | the story's id, e.g. `OQ-49` |
-| `{{STORY_PATH}}` | the story file's path, e.g. `stories/OQ-49-read-story-queue.md` |
+| `{{STORY_PATH}}` | the story file's path **on the PR branch** — `stories/done/OQ-49-read-story-queue.md` once the PR has made item 19's move |
 | `{{STORY}}` | the entire contents of that file, verbatim |
+| `{{PR_BODY}}` | the pull request's description, verbatim |
+
+**Every placeholder in this table must appear in the prompt below**, and every
+placeholder below must appear in this table. Rendering is the only thing that
+reads either, so a row with no corresponding use is not a harmless leftover — it
+is a value the dispatcher computes and silently drops, and whether that is an
+error or a warning is a decision `render` has to make. `{{STORY_PATH}}` sat in
+this table unused until the first hand-run of the loop checked both directions.
 
 For a PR that implements no story — a bootstrap or workflow-only change —
 `{{STORY}}` renders as
 `*(none — this PR implements no story; items 16–19 do not apply.)*` and the
 other story placeholders render as `n/a`.
 
+**`{{PR_BODY}}` is injected rather than fetched.** The reviewer is required to
+judge the PR description (item 4 below, and `REVIEW.md`'s "Reading the PR body"),
+which for a long time it had no way to read: this prompt told it there was no
+`gh` and then told it to read the body, and the first hand-run of the loop only
+worked because the repository happened to be public and the invocation happened
+to allow `curl`. Injecting it keeps the reviewer hermetic — git and a checkout
+are all it *needs* — so nothing has to hand it a credential, it works on a
+private repository, and it sees exactly the text the dispatcher saw.
+
 **The reviewer receives the story.** That is not a contradiction of the context
-isolation this gate depends on. What is withheld is the author's *account* of
-the change — its session, its summary, its reasoning, and any commentary from
-whatever dispatched it. The *authored story* is a different thing: it is the
-standard the diff has to meet. A reviewer that never sees it can only compare
-the diff to the PR body, and the same worker wrote both, so a worker that
-misread the story produces a body describing what it actually built, a diff
-matching that body, and a review that cannot fail.
+isolation this gate depends on. What is withheld is the author's *working
+context* — its session and transcript, its internal reasoning, and any
+commentary from whatever dispatched it. The *authored story* is a different
+thing: it is the standard the diff has to meet. A reviewer that never sees it
+can only compare the diff to the PR body, and the same worker wrote both, so a
+worker that misread the story produces a body describing what it actually built,
+a diff matching that body, and a review that cannot fail.
+
+**The PR body is given too, but as an exhibit rather than as testimony.** It is
+the author's account, and the review's job includes deciding whether that
+account is honest — which is impossible without reading it. So it is supplied
+for judging, never for believing: where it and the diff disagree, the diff is
+what happened. Read it last, after the findings are formed, so it cannot frame
+them. That ordering is why item 4 sits where it does.
 
 **Spawn it as its own session**, never as a continuation of the one that wrote
 the PR, and on a **different model from the coder's** — context isolation
 decorrelates knowledge, not reasoning style.
 
-**The reviewer holds no GitHub write access and posts nothing.** It returns a
+**The reviewer is handed no GitHub credential and posts nothing.** It returns a
 verdict; whoever ran it records that verdict. Invoke it with `Edit`, `Write`,
-`NotebookEdit`, `Bash(git push:*)` and `Bash(gh:*)` disallowed — an invocation
-without those tools cannot violate the rule, and prose has no compiler.
+`NotebookEdit`, `Bash(git push:*)` and `Bash(gh:*)` disallowed.
 
-**Two further flags on that invocation are load-bearing.** Pass
+Those denials raise the floor rather than sealing it — see **defence in depth,
+not containment** below, which is the honest version of what they buy and why
+OQ-62 exists.
+
+**Three further flags on that invocation are load-bearing.** Pass
 `--permission-prompts none`, so anything that would prompt is *denied* rather
 than blocking a session nobody is attached to — a reviewer that stops to ask
 waits forever, and one did, for eight minutes. Pass `--max-budget-usd` as a hard
 ceiling on what a single review can cost, chosen in advance rather than
-discovered afterwards.
+discovered afterwards. Pass `--allowedTools` covering what review actually
+needs — reading the repository, read-only `git`, and the test and lint commands,
+since **Verify rather than accept** below requires re-running the author's
+claims. Denying prompts decides that nothing may ask; the allowlist decides what
+does not need to, and a reviewer that cannot run `npm test` silently reviews by
+reading. Enumerate the read-only `git` subcommands rather than granting
+`Bash(git:*)`, so `git push` is absent from the allowlist before the
+`--disallowedTools` deny rule also removes it.
+
+**That is defence in depth, not containment, and the difference matters.** The
+same list grants `npm`, `npx` and `node`, because **Verify rather than accept**
+requires running the suite — and those are arbitrary execution. `node -e` can
+write files despite `Edit`/`Write` being disallowed, and can spawn `git push`
+despite the deny rule, which matches a command *prefix* that `node …` never
+trips. Running locally the session is the owner, with an SSH key and a `gh`
+keyring token in reach. So the enumeration raises the floor against the
+accidental path; it does not make writing impossible, and nothing in this
+invocation does. What keeps the gate honest is that you **post nothing** — a
+rule you follow, not one the flags enforce. Treat that as a reason to hold to it
+more carefully, not less. Removing the capability rather than denying the
+command is OQ-62; until it lands, prose is the guarantee.
 
 That is also why this file has no credentials section. The previous version of
 this prompt accreted one fix per failed run — credential hunting after sessions
@@ -69,6 +116,19 @@ JSON verdict described at the end of this prompt; nothing else you write is read
 ## The story this PR is meant to implement
 
 {{STORY}}
+
+The story file is `{{STORY_PATH}}`. If the block above is a story, item 19
+requires this PR to have moved that file into `stories/done/`, so the path is
+itself part of what you check. If it says this PR implements no story, the path
+reads `n/a` and items 16–19 do not apply.
+
+## The pull request's own description
+
+Reproduced verbatim. This is the author's account of the change, and judging it
+is part of the review — see item 4 under **What to do**. You do not need to fetch
+it, and there is nothing to fetch it with.
+
+{{PR_BODY}}
 
 ## What review is
 
@@ -104,17 +164,24 @@ The rest of `REVIEW.md` — process, testing discipline, integrity — applies t
    `git diff origin/main...{{HEAD_BRANCH}}`. A two-dot diff shows commits that
    merely predate the branch as deletions it never made. That has produced a
    false accusation here before; use three dots.
-4. **Read the PR body.** `REVIEW.md`'s "Reading the PR body" section is not
-   optional — judge whether each of its three sections is *substantively*
-   filled. A heading with a placeholder comment, `N/A`, `tests pass` with no
-   command or result, or a restatement of the PR title all count as unfilled.
-   **The description is itself in scope**: after forming your findings from the
-   diff, check whether the body honestly describes the change. Prose that
-   oversells a diff is real signal.
+4. **Judge the PR body**, reproduced above. `REVIEW.md`'s "Reading the PR body"
+   section is not optional — judge whether each of its three sections is
+   *substantively* filled. A heading with a placeholder comment, `N/A`, `tests
+   pass` with no command or result, or a restatement of the PR title all count
+   as unfilled. **The description is itself in scope**: after forming your
+   findings from the diff, check whether the body honestly describes the change.
+   Prose that oversells a diff is real signal.
 
-There is no `gh` in this session and you have no write access, by design. `git`
-and reading the repository are all you need; a public repo requires no
-authentication to read.
+`gh` is denied to you and you need no write access: the story, the PR
+description and a checkout are all supplied. `git` and reading the repository
+are the whole of what review requires. If you find yourself wanting a
+credential, that is a sign the prompt is wrong rather than an instruction to go
+looking — say so in your summary and return `"verdict": null`.
+
+Do not read that as *"writing is impossible, so anything I can do is
+permitted."* Your allowlist includes `node` and `npm`, which can reach far more
+than the denied commands suggest. Posting nothing is a rule you keep, not a wall
+you are behind.
 
 ## Verify rather than accept
 
@@ -127,6 +194,16 @@ An unsupervised author optimizes for the success criterion, and the cheapest
 path to "green" is not always the intended one. Read with that in mind — not as
 suspicion of bad faith, but because "internally consistent" and "correct" look
 identical from inside.
+
+**If a read-only command you needed is denied, that is a finding about this
+invocation — report it, do not route around it.** Your allowlist is supposed to
+cover reading the repository, read-only `git`, and the test and lint commands. A
+gap in it is silent in a way the coder's is not: the coder that cannot push
+fails visibly, whereas you can return a confident `pass` having checked less
+than you think. Say in `summary` which command was refused and what you could
+not therefore verify, and drop the verdict to `pass-with-observations` — or to
+`null` if what you could not run was load-bearing enough that the review does
+not stand without it.
 
 ## Calibration
 

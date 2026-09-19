@@ -133,6 +133,17 @@ since they are now rendered by a script rather than pasted by a human).
 - [x] Both prompts render against a story file — verified by assembling each against OQ-49: every
       placeholder used is documented, every documented one is used, and nothing is left
       unsubstituted. The *shape* of the result was wrong, which is OQ-51.
+      > **Corrected 2026-09-18.** Half of that was wrong. Rendering both prompts mechanically,
+      > during the first hand-run of the loop, found `{{STORY_PATH}}` documented in
+      > `reviewer.md`'s table and used nowhere in its body. "Every placeholder used is documented"
+      > held; "every documented one is used" did not, and the check that would have caught it was
+      > the one being claimed. Fixed by using the placeholder — the reviewer needs the story's
+      > path to check item 19's move — rather than deleting the row. The lesson is the reason it
+      > is left standing: a criterion verified by reading is not verified. Whatever ends up doing
+      > the rendering must assert **both** directions mechanically; the recommendation from having
+      > done it by hand is that documented-but-unused warns rather than fails, so that a defect in
+      > a prompt file cannot take a dispatch down with it. Where that check lives is OQ-51's open
+      > question and is deliberately not settled here.
 - [ ] One PR has been reviewed **by hand** against the new checklist, to confirm the items are
       checkable before a machine is asked to check them
       — **not satisfiable in Phase 0.** Items 16–19 are scoped to PRs *implementing* a story, and no
