@@ -6,7 +6,8 @@
 
 > **Status: Phase 0 complete**, landed 2026-09-18 across
 > [#98](https://github.com/luplows/tower-workshop-paths/pull/98)–[#104](https://github.com/luplows/tower-workshop-paths/pull/104).
-> **Phase 1 — the dispatcher — is next**, and `stories/` holds the queue it will read.
+> **Phase 1 — the dispatcher — is under way.** Step 1, `queue.mjs`, is delivered (OQ-49; see the
+> note under [Order within Phase 1](#order-within-phase-1)). `github.mjs` (step 2) is next.
 >
 > The plan below is kept as it was written rather than rewritten as it is executed. What was
 > planned is worth being able to compare against what happened: the phases here are the intent,
@@ -173,6 +174,11 @@ Each step is independently useful, so a stall leaves something working.
 
 1. **`queue.mjs` + tests.** Read stories, derive status, honour `tier` / `depends_on` / `blocked`.
    Useful on its own: `node scripts/dispatch/queue.mjs` prints the queue.
+   > **Done**, as OQ-49. The [worked example](#worked-example) below is kept as it was written —
+   > the delivered story diverged from it (8 ACs, not 5; a fenced-code-block edge case found via
+   > OQ-51; `depends_on`/`blocked` folded into one `## Open questions`/`waiting` precedence order
+   > rather than separate ACs) — see `stories/done/OQ-49-read-story-queue.md` for what actually
+   > shipped.
 2. **`github.mjs` + tests.** Status posting, PR lookup, label application. Verify the posted status
    satisfies branch protection **before** anything depends on it.
 3. **`spawn.mjs` + tests.** `claude -p` with `--permission-prompts none`, `--max-budget-usd`,
