@@ -91,6 +91,37 @@ The evidence is not one-sided, which is why this is filed rather than built. See
   the wrong shape: it should name *what kind of wrongness* counts, not only
   *where the wrongness is*. Test this against the replay in AC-6 before writing
   the fix.
+
+  **None of the attributions in this paragraph are checkable from the
+  repository**, which is the same caveat the spawn-cost table in
+  `docs/agent-workflow-design.md` carries and this paragraph did not. The #112
+  half is corroborable from `ac0d30c`; everything else — which verdicts blocked,
+  what each summary placed below the threshold, that the author fixed them
+  immediately — lives in PR review comments, which git does not hold. A reviewer
+  cannot verify any of it, and this paragraph makes harder factual assertions
+  than the cost table does. Recorded per #116's round-2 verdict.
+
+- **OQ-51 is a fourth data point, and it cuts against the premise above.**
+  PR #117 ran four rounds on `render.mjs` in a deliberately blind loop — the
+  runner had independently confirmed one defect before spawning and withheld it,
+  to test the gate against known ground truth. Round 1 found that defect plus
+  three the runner had missed. Across the four rounds the gate blocked on a
+  substitution bug, a test that named an AC and exercised none of it, **a false
+  claim in the PR body (item 7, a prose defect)**, a heading-form escape and a
+  line-ending escape, then surfaced two more prose findings in the passing
+  round — one of them a factual error in a code comment written specifically to
+  preserve a lesson. Nothing was caught twice and no finding was wrong on
+  checking.
+
+  So a reviewer blocking on prose is not hypothetical; it happened on the first
+  round of the first story with real logic in it. That is one PR against three,
+  and the earlier three were docs-shaped changes where a prose defect is the
+  *only* kind available — which may be the actual confound rather than
+  under-weighting. Weigh this before building AC-1's trigger list, and note it
+  moves the question from *"does it block on prose"* to *"does the mix of defect
+  types in the diff predict what it blocks on"*. Unlike the attributions above,
+  this one **is** checkable: the four verdicts are marker comments on #117 at
+  known head SHAs.
 - **Is the reviewer actually mis-calibrated, or was #109 an unrepresentative
   PR?** Round 5 returned a `block` that was specific, correct and unprompted —
   against a PR whose subject was the reviewer's own prompt. So the gate demonstrably

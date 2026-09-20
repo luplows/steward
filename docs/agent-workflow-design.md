@@ -423,23 +423,6 @@ those paths can read a token that was never in the environment. This is the same
 reason `Bash(gh:*)` disappears from the coder's list entirely rather than being narrowed: there is
 no longer a legitimate use for it to allowlist.
 
-**What a spawn actually costs**, measured across the OQ-63 and OQ-66 hand-runs rather than guessed,
-so that `spawn.mjs` picks its budget and timeout from data:
-
-| Role | Model | Cost | Wall time |
-|---|---|---|---|
-| Coder, first pass on a fresh story | sonnet | $0.96 – $3.17 | 3 – 16 min |
-| Reviewer, full diff plus re-running the suite | opus | $0.95 – $1.38 | 1.8 – 2.7 min |
-
-Two things follow. The sketch's `6` and `3` are **generous** — no spawn here came close, and the one
-that ended early ended on a session limit rather than the budget. And a reviewer costs about what a
-cheap coder round does, so a second review is not the expensive part of a retry; the coder round is.
-A timeout wants to be well clear of 16 minutes, not tuned to the median.
-
-These are session observations from six spawns, recorded here because nothing in the repository
-captures them and a reviewer therefore cannot check them. Treat them as a starting point to be
-replaced once `spawn.mjs` records its own.
-
 The reviewer's list is the mirror image, and narrower on purpose: read-only `git` subcommands
 enumerated rather than `Bash(git:*)`, so `git push` is not in the allowlist *before* the
 `--disallowedTools` deny rule also removes it. Two barriers against the accidental path beats one.
@@ -481,6 +464,33 @@ exists to correct. The rest of the list is not read-only at all, per the paragra
 reviewer to treat a denied read-only command as a finding about its own invocation rather than
 something to work around. An enumerated allowlist has to be maintained; the alternative is a gate
 that silently reviews by reading.
+
+**What a spawn actually costs**, measured across the OQ-63, OQ-66 and OQ-51 hand-runs rather than
+guessed, so that `spawn.mjs` picks its budget and timeout from data:
+
+| Role | Model | Cost | Wall time |
+|---|---|---|---|
+| Coder, first pass on a fresh story | sonnet | $0.96 – $3.17 | 3 – 16 min |
+| Coder, retry round carrying findings | sonnet | $0.75 – $1.05 | 2.9 – 4.8 min |
+| Reviewer, full diff plus re-running the suite | opus | $0.95 – $1.88 | 1.8 – 4.8 min |
+
+Three things follow. The sketch's `6` and `3` are **generous** — no spawn has come close, and the
+one that ended early ended on a session limit rather than the budget. A **retry round is markedly
+cheaper than a first pass**, because the findings do the searching the coder would otherwise pay
+for, so the expensive spawn is the first one rather than the loop. And a reviewer costs about what a
+retry round does, so review is not the expensive half of a retry either. A timeout wants to be well
+clear of 16 minutes, not tuned to the median.
+
+**The reviewer range widened on contact with a real story.** These figures originally read
+$0.95 – $1.38 and 1.8 – 2.7 min, taken from two reviews of docs-shaped PRs. OQ-51's four rounds ran
+$1.24 – $1.88 and 3.0 – 4.8 min — every round outside the recorded wall-time range, and the top of
+the cost range. Reviewing a diff with real logic in it costs more than reviewing prose, which is
+obvious in hindsight and was not in the table. A timeout fitted to the original numbers would have
+cut off every round of that story.
+
+These are session observations, now from fourteen spawns, recorded here because nothing in the
+repository captures them and a reviewer therefore cannot check them. Treat them as a starting point
+to be replaced once `spawn.mjs` records its own.
 
 ### Credential minimalism
 

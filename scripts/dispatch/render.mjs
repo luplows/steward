@@ -16,12 +16,16 @@
  * forged marker line inside the content can pass as the real close. See
  * stories/done/OQ-51-story-injection-boundary.md.
  *
- * Round 1 handled ATX headings only. Round 2 added setext headings, which an
- * ATX-only check let straight through. Round 3 added CRLF line endings,
- * which the round-2 setext regex (anchored on `\n` alone) let straight
- * through. Each fix was correct for the case it addressed and each was
- * followed by a new hole -- the signature of a defence built by *enumerating*
- * the constructs to disarm, which is only ever as complete as the last thing
+ * The history this replaced is worth keeping straight, because the lesson is
+ * in the shape of it. Round 1 demoted ATX headings and handled nothing else.
+ * Round 3 added setext headings, which the ATX-only check let straight
+ * through. CRLF was never handled at all: round 3's setext regex was anchored
+ * on `\n` alone, so CRLF content defeated it silently, and round 4's rewrite
+ * is what closed that rather than a fourth enumeration step. (Round 2 was the
+ * `render()` re-scan and forged-marker fix and touched no heading logic.)
+ * Each fix was correct for the case it addressed and each was followed by a
+ * new hole -- the signature of a defence built by *enumerating* the
+ * constructs to disarm, which is only ever as complete as the last thing
  * someone thought of. Indentation replaces the enumeration: there is no
  * heading-recognizing step to be incomplete, because CommonMark never parses
  * the interior of an indented code block as anything but literal text. See

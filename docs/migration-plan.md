@@ -7,7 +7,16 @@
 > **Status: Phase 0 complete**, landed 2026-09-18 across
 > [#98](https://github.com/luplows/tower-workshop-paths/pull/98)–[#104](https://github.com/luplows/tower-workshop-paths/pull/104).
 > **Phase 1 — the dispatcher — is under way.** Step 1, `queue.mjs`, is delivered (OQ-49; see the
-> note under [Order within Phase 1](#order-within-phase-1)). `github.mjs` (step 2) is next.
+> note under [Order within Phase 1](#order-within-phase-1)). So is `render.mjs`
+> (OQ-51, [#117](https://github.com/luplows/tower-workshop-paths/pull/117)), which the shape below
+> does not list because prompt assembly was not separated out until OQ-51 took it. `spawn.mjs`
+> (OQ-65) is unblocked and reads `ready`; `github.mjs` and `dispatch.mjs` follow.
+>
+> **The loop has been run end to end by hand**, with a person acting as the dispatcher — OQ-63, and
+> then OQ-51. That is where most of what Phase 1 has learned came from, and it is a deliberate
+> substitute for building the dispatcher first and discovering its contract afterwards. OQ-51 was
+> much the longer: four coder rounds and four reviews, recorded as marker comments on
+> [#117](https://github.com/luplows/tower-workshop-paths/pull/117) at known head SHAs.
 >
 > The plan below is kept as it was written rather than rewritten as it is executed. What was
 > planned is worth being able to compare against what happened: the phases here are the intent,
@@ -142,8 +151,17 @@ since they are now rendered by a script rather than pasted by a human).
       > is left standing: a criterion verified by reading is not verified. Whatever ends up doing
       > the rendering must assert **both** directions mechanically; the recommendation from having
       > done it by hand is that documented-but-unused warns rather than fails, so that a defect in
-      > a prompt file cannot take a dispatch down with it. Where that check lives is OQ-51's open
-      > question and is deliberately not settled here.
+      > a prompt file cannot take a dispatch down with it. Where that check lives was OQ-51's open
+      > question and was deliberately not settled here.
+      >
+      > **Settled 2026-09-19 by OQ-51** ([#117](https://github.com/luplows/tower-workshop-paths/pull/117)).
+      > It lives in `checkPlaceholderContract` in `scripts/dispatch/render.mjs`, asserting both
+      > directions against the template text *before* injection, and warning rather than failing on
+      > documented-but-unused — exactly the recommendation above. Running it template-side rather
+      > than over the finished prompt is the part that was not obvious: injected content
+      > legitimately quotes placeholder syntax (OQ-63's PR body quoted `{{BRANCH}}` and
+      > `{{STORY_PATH}}`; OQ-51's own story quotes `{{PR_BODY}}`), so a check that scans the
+      > assembled output reads those as unsubstituted and refuses a valid prompt.
 - [ ] One PR has been reviewed **by hand** against the new checklist, to confirm the items are
       checkable before a machine is asked to check them
       — **not satisfiable in Phase 0.** Items 16–19 are scoped to PRs *implementing* a story, and no
