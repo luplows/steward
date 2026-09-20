@@ -91,11 +91,20 @@ pushes over `git`, exactly as before; it does not open the pull request itself.
 Instead it **emits the PR title and body** — the same `pull_request_template.md`
 sections it always filled in — as the last thing in its final report, under the
 headings `## PR title` and `## PR body`, plus whether the PR should open as
-`draft` or `ready`. Whatever spawned it reads that text and calls `gh pr create`
-with its own, separately-scoped credential — one that can write pull requests
-but, like the coder's, cannot set a commit status or dispatch a workflow. This
-mirrors the existing split where the reviewer returns a verdict and the runner
-records it (`REVIEW.md`, "For the coder: opening a PR").
+`draft` or `ready`. Whatever spawned it reads that text and opens the pull
+request with the owner's credential. This mirrors the existing split where the
+reviewer returns a verdict and the runner records it (`REVIEW.md`, "For the
+coder: opening a PR").
+
+This paragraph used to say the dispatcher held "its own, separately-scoped
+credential — one that can write pull requests but, like the coder's, cannot set a
+commit status or dispatch a workflow." That was not true and is not the plan:
+there is one credential in this project, and the dispatcher is a trusted user of
+it. What keeps the dispatcher from clearing a gate is that it does not decide the
+verdict — a separate credential-less session does — and that `review-gate.yml`,
+not the dispatcher, derives the `review/agent` status from the marker comment.
+See `docs/agent-workflow-design.md`, "Credential minimalism". **Nothing about
+your own situation changes: you hold no GitHub credential either way.**
 
 Read the assembled prompt end to end before sending it, as a stranger would. A
 prompt that gains a fix after every failed run can end up reading like an

@@ -534,11 +534,31 @@ that reaches the GitHub API the way `gh` does, has no credential capable of a co
 workflow dispatch, or a pull-request write, regardless of whether the call is made directly, from
 inside `node -e`, or from an `npm`/`npx` script. Push keeps working because it authenticates over
 SSH, which none of that touches. The coder still cannot open its own PR — that capability moves to
-whatever spawned it, which holds a *third*, separately-scoped credential (pull-request write, but
-neither commit-status nor workflow-dispatch), so the thing that opens the PR still cannot clear the
-gate or trigger the sweep either. "A coder session is trusted, not contained" — the wording this
-section carried while OQ-63 was open — is no longer true of the write path that mattered; see
-`REVIEW.md`, "For the coder: opening a PR".
+whatever spawned it. "A coder session is trusted, not contained" — the wording this section carried
+while OQ-63 was open — is no longer true of the write path that mattered; see `REVIEW.md`, "For the
+coder: opening a PR".
+
+**Corrected 2026-09-19, while writing OQ-68.** This paragraph used to claim the dispatcher holds a
+*third, separately-scoped credential* with pull-request write but neither commit-status nor
+workflow-dispatch, "so the thing that opens the PR still cannot clear the gate". That was never
+true, and it could not become true without contradicting Phase 1: a dispatcher has to record
+verdicts, and there is exactly one credential in this project — the owner's `repo`-scoped token.
+**The dispatcher is a trusted user of it, and that is the design rather than a gap.**
+
+What actually keeps the dispatcher from clearing its own gate is not credential scope, and saying
+it was obscured the real mechanism:
+
+- **The dispatcher does not decide the verdict.** It relays a judgement made by a separate session
+  that holds no credential at all. A credential split inside one trusted script buys nothing,
+  because the script holding both halves can always call both.
+- **`review/agent` is posted by `review-gate.yml`, not by the dispatcher** — the workflow reads the
+  marker comment and derives the status. So the dispatcher's output is a *comment*, and enforcement
+  is a GitHub Actions job it does not control. That split is the guarantee, and it already exists.
+- **Triggering `land-approved.yml` is the owner's**, enforced as a tested prohibition in OQ-68 and
+  OQ-48 rather than by scope on a token.
+
+A genuinely separated credential needs a second GitHub identity, which is item 10 of the open
+questions table below and is not built. Until it is, this section says what is true.
 
 ### Watchdog
 
