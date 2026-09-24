@@ -437,6 +437,12 @@ describe('READ_ONLY_SHELL_UTILS (OQ-67)', () => {
 
   const KNOWN_WRITERS = ['sed', 'sort', 'tee', 'find', 'xargs', 'dd', 'perl']
 
+  // Each test below makes over a hundred synchronous spawns. On Windows they
+  // take about 2 s alone, and Vitest's 5 s default was exceeded whenever
+  // another process-heavy test file ran alongside (found with OQ-65's tree-kill
+  // tests). The assertions are unaffected; only the time budget is.
+  const PROBE_TIMEOUT_MS = 30_000
+
   it.skipIf(!KNOWN_WRITERS.every(hasGnuUtility))(
     'OQ-67/AC-5 - control: the probes do catch sed, sort, tee, find, xargs, dd and perl, so a clean result below is not vacuous',
     () => {
@@ -444,6 +450,7 @@ describe('READ_ONLY_SHELL_UTILS (OQ-67)', () => {
         expect(writingProbes(utility), utility).not.toEqual([])
       }
     },
+    PROBE_TIMEOUT_MS,
   )
 
   it.skipIf(!listed.every(hasGnuUtility))(
@@ -453,6 +460,7 @@ describe('READ_ONLY_SHELL_UTILS (OQ-67)', () => {
         expect(writingProbes(utility), utility).toEqual([])
       }
     },
+    PROBE_TIMEOUT_MS,
   )
 })
 

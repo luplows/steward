@@ -59,7 +59,7 @@ only against one that happens not to.
         untouched on purpose and presents that as safe. After AC-2 it must say
         what keeps that storage out of reach.
       If the `coder.md` heading is reworded, update
-      `stories/OQ-65-spawn-sessions.md`, which cites it by name. Grep for
+      `stories/done/OQ-65-spawn-sessions.md`, which cites it by name. Grep for
       further copies before calling this done.
       The `coder.md` edits go through the emit-a-diff route, because a spawned
       coder cannot write to `.claude/prompts/`.
