@@ -109,6 +109,10 @@ jobs:
             # `clean` means mergeable, no conflict, and every *required* check
             # passing. `unknown` means GitHub has not finished computing it --
             # not a failure, just not an answer yet, so leave it for next run.
+            # Expect it straight after a merge, while GitHub recomputes other
+            # open PRs: a run triggered soon after the last merge can land
+            # nothing (2026-09-24: #125 skipped this way, landed on the
+            # next run). See agent-workflow-design.md, "GitHub mechanics".
             if [ "${mergeable_state}" != "clean" ]; then
               echo "PR #${pr}: mergeable_state=${mergeable_state}, skipping"
               continue

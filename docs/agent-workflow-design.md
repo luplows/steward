@@ -692,7 +692,11 @@ be kept essentially as-is:
   delivered it at roughly 5% of that rate, so the trigger was removed and landing is explicit
   (`gh workflow run land-approved.yml`) until a reliable one is chosen. See OQ-50.
 - **One PR per run.** `mergeable_state` is computed asynchronously, so a second merge in the same
-  pass decides on stale data.
+  pass decides on stale data. The same fact has a cost between runs: straight after a merge, other
+  open PRs can read `unknown` for a while, and the sweep skips `unknown` rather than guessing. A
+  run triggered soon after the previous merge can therefore land nothing even though a PR is ready.
+  That is safe, and it is why back-to-back manual runs sometimes need one more. See **GitHub
+  mechanics** below and OQ-50.
 - Oldest first, so nothing starves.
 - **Re-checks `review/agent` directly** rather than trusting `clean`, because a required check
   vanished from protection once. Prevention, not detection.
@@ -911,13 +915,19 @@ person is attached to. So the restriction is a property of the *spawn*, not of t
 what makes the workaround legitimate rather than a bypass:
 
 > **The coder emits, the dispatcher writes.** The coder publishes the intended change as a diff in
-> its PR body; whatever spawned it applies that with `git apply` in a separate, attributed commit.
-> Used for the first time in #112, where the diff applied cleanly.
+> its PR body, and whoever is running the loop applies it with `git apply`, by hand, in a separate,
+> attributed commit. For this relay the "dispatcher" in the name is always a person, never the
+> dispatcher script (see below). Used for the first time in #112, where the diff applied cleanly.
 
 That is the same division of labour the loop already uses twice — the reviewer returns a verdict and
 the runner records it, and under OQ-63 the coder emits a PR body and the dispatcher opens the PR.
-Prompt edits are the third instance, and `spawn.mjs` should treat it as one rather than as a special
-case.
+Prompt edits are the third instance, with one difference: **the dispatcher script does not automate
+this one**, whatever the principle's name suggests. OQ-70 considered applying the emitted diff
+automatically and rejected it on 2026-09-19. That would mean a script taking patch text from a PR
+body written by the agent under review and applying it to the one directory that agent is forbidden
+to touch, and the paths it would check come from the same untrusted patch. So a story that changes a
+prompt stays partly manual, permanently: whoever runs the loop applies the diff by hand, in a
+separate, attributed commit (OQ-70, AC-7b).
 
 ### `GH_TOKEN=""` does not remove a credential
 
@@ -937,6 +947,12 @@ is why this is recorded here rather than only in a code comment.
   failing/pending), `unstable` (only non-required), `dirty`, `behind`, `unknown`. The
   `blocked`/`unstable` split is the only way to tell from outside whether a check is required.
 - **Computed asynchronously** — never merge twice in one pass.
+- **Recomputed after a merge, so other open PRs can read `unknown` for a while.** Observed on
+  2026-09-24: #123 merged at 02:13:42Z, and a sweep run at 02:17:14Z
+  (run 35946602221) skipped #125 as `unknown`. The next run, 35947256705 at 02:26:30Z, found it
+  `clean` and landed it. That is one observation. How long the window lasts, and whether every open
+  PR is affected, has not been measured. A trigger that fires straight after a merge should expect
+  `unknown` rather than treat it as rare.
 - **Workflow trigger decides which branch a workflow runs from.** `pull_request` runs from the PR
   branch; `issue_comment`, `schedule`, `workflow_dispatch` run from the **default branch**, so they
   cannot be tested on the PR that introduces them. **Mitigation: move logic out of `run:` blocks
