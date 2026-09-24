@@ -466,7 +466,8 @@ something to work around. An enumerated allowlist has to be maintained; the alte
 that silently reviews by reading.
 
 **What a spawn actually costs**, measured across the OQ-63, OQ-66 and OQ-51 hand-runs rather than
-guessed, so that `spawn.mjs` picks its budget and timeout from data:
+guessed, so that the budget (`invocation.mjs`, OQ-74) and the timeout (`spawn.mjs`, OQ-65) are
+picked from data:
 
 | Role | Model | Cost | Wall time |
 |---|---|---|---|
@@ -490,7 +491,7 @@ cut off every round of that story.
 
 These are session observations, now from fourteen spawns, recorded here because nothing in the
 repository captures them and a reviewer therefore cannot check them. Treat them as a starting point
-to be replaced once `spawn.mjs` records its own.
+to be replaced once the spawn modules record their own.
 
 ### Credential minimalism
 

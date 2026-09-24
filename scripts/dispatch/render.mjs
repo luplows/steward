@@ -35,7 +35,7 @@
  *
  * Deliberately does not spawn anything, parse a verdict, or know about
  * budgets/timeouts -- assembling the prompt text is the whole of this
- * module's job. `scripts/dispatch/spawn.mjs` (OQ-65) is the caller.
+ * module's job. `scripts/dispatch/invocation.mjs` (OQ-74) is the caller.
  */
 
 import { randomBytes } from 'node:crypto'
@@ -170,7 +170,7 @@ export function checkPlaceholderContract(fileText) {
  * against `values`, a `{ PLACEHOLDER_NAME: string }` map. Callers that need
  * a value bounded as an injected block (a story, a PR body) pass the result
  * of `wrapInjectedBlock` for that key -- `render` itself does not decide
- * which placeholders need bounding, so a future one (`{{FINDINGS}}`, OQ-65's
+ * which placeholders need bounding, so a future one (`{{FINDINGS}}`, OQ-74's
  * Context) is covered by calling `wrapInjectedBlock` for it, not by editing
  * this function.
  *

@@ -10,7 +10,9 @@
 > note under [Order within Phase 1](#order-within-phase-1)). So is `render.mjs`
 > (OQ-51, [#117](https://github.com/luplows/tower-workshop-paths/pull/117)), which the shape below
 > does not list because prompt assembly was not separated out until OQ-51 took it. `spawn.mjs`
-> (OQ-65) is unblocked and reads `ready`; `github.mjs` and `dispatch.mjs` follow.
+> was split three ways on 2026-09-23: building the invocation (OQ-74), classifying the result
+> (OQ-75), and running the process and joining the three (OQ-65, which depends on the other two).
+> `github.mjs` (OQ-68) and `dispatch.mjs` follow.
 >
 > **The loop has been run end to end by hand**, with a person acting as the dispatcher — OQ-63, and
 > then OQ-51. That is where most of what Phase 1 has learned came from, and it is a deliberate

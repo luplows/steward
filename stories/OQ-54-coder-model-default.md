@@ -36,11 +36,11 @@ model is a one-line edit rather than an edit to every story file.
 ## Out of scope
 
 - **Spawn-time wiring.** This story ships `resolveModel` and its tests; the call
-  site lands with `spawn.mjs` in Phase 1 step 3, which must call the resolver
-  rather than reading the frontmatter field directly. Sequenced this way on
-  purpose: the resolver exists before any story can legally hold `model: null`,
-  so there is no window where the lint accepts a value the dispatcher cannot
-  resolve.
+  site lands with `invocation.mjs` (OQ-74), which builds `--model` and must
+  call the resolver rather than reading the frontmatter field directly.
+  Sequenced this way on purpose: the resolver exists before any story can
+  legally hold `model: null`, so there is no window where the lint accepts a
+  value the dispatcher cannot resolve.
 - **The reviewer's model.** It stays fixed at opus and is not read from story
   frontmatter — see Constraints.
 - A per-tier default. One default for all coder spawns; a story that needs
@@ -66,7 +66,8 @@ model is a one-line edit rather than an edit to every story file.
   that `model` be present, which is the hole this closes.
 - `docs/agent-workflow-design.md` — the model allocation table (sonnet baseline,
   per-story override) and the invocation sketch's `--model "$STORY_MODEL"`.
-- `docs/migration-plan.md`, Phase 1 step 3 — `spawn.mjs`, the future caller.
+- OQ-74 — `invocation.mjs`, the future caller (split out of Phase 1 step 3's
+  `spawn.mjs`).
 
 ## Open questions
 
