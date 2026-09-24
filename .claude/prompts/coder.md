@@ -167,6 +167,12 @@ hand-written source.
 - If the change alters appearance, say so in the PR body and follow
   `CLAUDE.md`'s screenshot-baseline rules. A regenerated baseline is never a
   silent side-effect of getting CI green.
+- **Tick each acceptance criterion you delivered** in the story file — `- [ ]`
+  becomes `- [x]` — and leave unticked any you did not, saying why in the PR
+  body. A tick is a claim your reviewer checks against items 16 and 17: an AC
+  ticked but not genuinely delivered is a finding, and so is one delivered but
+  left unticked. If a review finding shows a ticked AC is not delivered, your
+  fix either delivers it or unticks it.
 - **Move the story file to `stories/done/` as part of this PR**, with
   `git mv`. Completion is that move; it is item 19 and it shows in your diff.
 

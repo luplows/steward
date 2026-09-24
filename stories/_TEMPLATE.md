@@ -35,6 +35,10 @@ Each one is independently checkable by someone holding only this file and the
 diff. AC ids are referenced in test names — `test('OQ-NN/AC-2: ...')` — so
 they must be stable once the story is dispatched.
 
+Leave every box unticked. The PR that implements the story ticks each AC it
+delivered, and the reviewer checks those ticks — see "Acceptance criteria and
+tests" in stories/README.md.
+
 - [ ] **AC-1** — <observable behaviour, stated so that "is this true?" has a
       yes/no answer>
 - [ ] **AC-2** — <...>

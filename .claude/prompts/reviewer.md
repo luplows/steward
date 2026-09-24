@@ -154,6 +154,11 @@ Three sub-checks, which are `REVIEW.md` items 16–18:
 - **Containment** — nothing in the diff falls under **Out of scope**, and
   nothing implements a decision the story left open.
 
+The author ticks each AC it claims to have delivered in the story file, and the
+ticks show in the diff. Treat them as claims to check, not as evidence. An AC
+ticked but not genuinely delivered fails fidelity. One delivered but left
+unticked, or left unticked with no reason in the PR body, fails completeness.
+
 The rest of `REVIEW.md` — process, testing discipline, integrity — applies too.
 
 ## What to do

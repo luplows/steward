@@ -81,9 +81,14 @@ worker wrote both sides. These four check it against **the story**, which is the
 standard it was supposed to meet.
 
 16. **Completeness** — every acceptance criterion in the story is delivered.
-    Name any that are not.
+    Name any that are not. The PR ticks each AC it delivered in the story file
+    (`stories/README.md`, "Acceptance criteria and tests"). An AC left unticked
+    must be explained in the PR body, and an AC delivered but left unticked is
+    a finding here.
 17. **Fidelity** — each AC is genuinely satisfied, not merely named in a test.
-    A test named `OQ-49/AC-3` that does not exercise AC-3 fails this item.
+    A test named `OQ-49/AC-3` that does not exercise AC-3 fails this item. So
+    does a ticked AC: a tick is the author's claim, and one that is not
+    genuinely delivered fails this item as surely as a misnamed test.
 18. **Containment** — nothing in the diff falls under the story's
     **Out of scope**, and nothing implements a decision the story left open.
 19. The story file is moved to `stories/done/` in this PR.

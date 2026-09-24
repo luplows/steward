@@ -42,6 +42,8 @@ recalled — in story files, docs, commit messages, pull request bodies and revi
 - [`stories/`](stories/README.md) is the dispatchable queue. Its README defines the schema, status
   derivation, ordering and readiness test.
 - **Nothing dispatches from [`Open-Questions.md`](Open-Questions.md).** It is the idea backlog.
+- A pull request implementing a story ticks each acceptance criterion it delivered, in the story
+  file. See `stories/README.md`, "Acceptance criteria and tests".
 - A pull request implementing a story moves that story file to `stories/done/` in the same pull
   request, and is reviewed against the story.
 - Look things up in `Completed-Questions.md` by OQ number rather than reading it whole.

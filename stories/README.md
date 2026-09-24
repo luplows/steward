@@ -153,12 +153,28 @@ test('OQ-49/AC-4: ordering is by tier, then lowest id first', ...)
 Naming a test after an AC does not satisfy it — `REVIEW.md` item 17 exists
 precisely to catch a test named `OQ-49/AC-3` that does not exercise AC-3.
 
+**The PR that implements a story ticks each AC it delivered**, in the story
+file, as part of that PR — `- [ ]` becomes `- [x]`. A story is written with
+every box unticked, and nothing else ticks them. An AC left unticked is one the
+PR says it did not deliver, and the PR body says why.
+
+A tick is the author's claim, not evidence. It shows in the diff, and the
+reviewer checks it against items 16 and 17: an AC delivered but left unticked,
+or ticked but not genuinely delivered, is a finding. When a review finds a
+ticked AC undelivered, the fix commit either delivers it or unticks it.
+
+The rule applies from 2026-09-24. The stories already in `stories/done/` by
+then — OQ-49, OQ-51, OQ-63, OQ-67, OQ-74 and OQ-75 — were completed before it
+and are left as they are, so their unticked boxes say nothing about what was
+delivered. Their PRs and reviews are the record.
+
 ## Lifecycle
 
 1. A planning session writes the story here, or refines a backlog entry into
    one. **Open questions** must be empty before it can be dispatched.
 2. A coder branches `story/OQ-49-<slug>`, implements, and opens a PR.
-3. The PR **moves the story file to `stories/done/`** — `REVIEW.md` item 19.
+3. The PR **ticks each AC it delivered** — see above — and **moves the story
+   file to `stories/done/`** — `REVIEW.md` item 19.
    Completion is a `git mv` inside the story's own PR, visible in the diff and
    checkable by the reviewer, rather than a cut-and-paste into an 82 KB
    archive.
