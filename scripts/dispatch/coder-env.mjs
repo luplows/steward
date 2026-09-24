@@ -59,12 +59,55 @@ const READ_ONLY_GIT_TOOLS = [
 ]
 
 /**
- * The coder's `--allowedTools` list for one invocation. `branch` is the exact
- * branch that invocation was spawned to work on (the dispatcher already knows
- * it -- it created the worktree). Push is scoped to literal patterns naming
- * that branch, not `Bash(git push:*)`, so pushing to `main` or to any other
- * branch is refused at the tool-permission layer (AC-5) even though the
+ * The shell utilities a coder uses to inspect the repository (OQ-67 AC-4).
+ * Defined here rather than by each caller, because every hand-run of the loop
+ * invented its own set.
+ *
+ * Every entry must be unable to write in *any* mode, not merely in the way it
+ * is usually called (AC-5). That rules out utilities that are read-only by
+ * habit: `sed` (`-i`, and its `w` command), `sort` (`-o`), `uniq` (a second
+ * operand is an output file), `find` (`-delete`, `-exec`), `awk`, `tee`,
+ * `xargs` (runs its operands), `dd` (`of=`), and any interpreter (`perl`).
+ * The test asserts the property by probing each entry with write-shaped
+ * arguments rather than by comparing the list to a fixed one. Those probes
+ * are themselves a fixed set, so a new entry is only as safe as the probes
+ * are complete: check its write modes against them when adding it.
+ *
+ * Shell redirection (`cat f > g`) is out of this list's reach: it is a
+ * property of the shell, not of the utility, and applies equally to
+ * `git log > g`. The coder holds `Write` anyway; the point of "read-only"
+ * here is that the list does what its name says.
+ */
+export const READ_ONLY_SHELL_UTILS = [
+  'Bash(ls:*)',
+  'Bash(cat:*)',
+  'Bash(head:*)',
+  'Bash(tail:*)',
+  'Bash(wc:*)',
+  'Bash(grep:*)',
+  'Bash(diff:*)',
+  'Bash(cut:*)',
+  'Bash(pwd:*)',
+]
+
+/**
+ * The coder's `--allowedTools` list for one invocation, read-only shell
+ * utilities included. `branch` is the exact branch that invocation was
+ * spawned to work on (the dispatcher already knows it -- it created the
+ * worktree). Push is scoped to exact patterns naming that branch -- none of
+ * them ends in `:*` -- not `Bash(git push:*)`, so pushing to `main` or to any
+ * other branch is refused at the tool-permission layer (AC-5) even though the
  * underlying credential, being repo-wide, does not itself enforce that.
+ *
+ * Three spellings of the same push are granted (OQ-67 AC-2): the two refspec
+ * forms, and the plain `git push origin <branch>` that coders reach for
+ * first. Two of OQ-51's four rounds finished their work and were refused
+ * that third spelling. `branch` may not be `main`, since every one of these
+ * patterns would then name it.
+ *
+ * `git mv` is granted because `coder.md` requires the story file to be moved
+ * with it (`REVIEW.md` item 19). It rewrites the working tree and index only,
+ * the same reach `Write` and `git add` already have.
  *
  * `gh` is not included, in either form -- there is no longer a legitimate use
  * for it here (AC-6 moves PR creation to whatever spawned the coder), so
@@ -77,15 +120,21 @@ export function coderAllowedTools(branch) {
   if (!branch) {
     throw new Error('coderAllowedTools requires the branch, so push can be scoped to it')
   }
+  if (branch === 'main' || branch === 'refs/heads/main') {
+    throw new Error('coderAllowedTools refuses main: every push pattern it returns would name it')
+  }
 
   return [
     'Read', 'Write', 'Edit', 'Glob', 'Grep', 'TodoWrite',
     ...READ_ONLY_GIT_TOOLS,
     'Bash(git add:*)',
+    'Bash(git mv:*)',
     'Bash(git commit:*)',
     `Bash(git push origin HEAD:${branch})`,
     `Bash(git push origin ${branch}:${branch})`,
+    `Bash(git push origin ${branch})`,
     'Bash(npm:*)', 'Bash(npx:*)', 'Bash(node:*)',
+    ...READ_ONLY_SHELL_UTILS,
   ]
 }
 
@@ -98,9 +147,9 @@ export function coderAllowedTools(branch) {
  * Deliberately does *not* include `Bash(git push:*)`, unlike the reviewer's
  * equivalent list. Deny rules take precedence over allow rules, and that
  * pattern prefix-matches the scoped `Bash(git push origin HEAD:<branch>)` /
- * `Bash(git push origin <branch>:<branch>)` entries `coderAllowedTools`
- * grants -- applied together, the coder could not push at all, defeating
- * AC-5. The reviewer can carry the blanket deny because its allowlist never
+ * `Bash(git push origin <branch>:<branch>)` / `Bash(git push origin <branch>)`
+ * entries `coderAllowedTools` grants -- applied together, the coder could not
+ * push at all, defeating AC-5. The reviewer can carry the blanket deny because its allowlist never
  * grants push in the first place, so there is nothing for it to shadow; the
  * coder's allowlist does, so the deny has to stop short of it. Scoping push
  * to one branch is `coderAllowedTools`'s job, not this list's.

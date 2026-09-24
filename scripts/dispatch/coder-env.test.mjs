@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { execFileSync } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { coderAllowedTools, CODER_DISALLOWED_TOOLS, coderEnv } from './coder-env.mjs'
+import { fileURLToPath } from 'node:url'
+import {
+  coderAllowedTools,
+  CODER_DISALLOWED_TOOLS,
+  coderEnv,
+  READ_ONLY_SHELL_UTILS,
+} from './coder-env.mjs'
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
 function hasGh() {
   try {
@@ -208,5 +216,201 @@ describe('CODER_DISALLOWED_TOOLS', () => {
     for (const denied of CODER_DISALLOWED_TOOLS) {
       expect('Bash(git push origin HEAD:story/OQ-63-x)'.startsWith(denied.replace(/:\*$/, ':'))).toBe(false)
     }
+  })
+})
+
+// A model of how Claude Code matches a Bash permission rule against a
+// command: `Bash(prefix:*)` permits any command beginning with `prefix`, and
+// `Bash(cmd)` permits exactly `cmd`. This is the loosest reading of the prefix
+// form (no word boundary), so a "does not permit" assertion made with it
+// holds under any stricter reading too.
+function permits(tools, command) {
+  return tools.some((tool) => {
+    const match = tool.match(/^Bash\((.*)\)$/)
+    if (!match) return false
+    const rule = match[1]
+    return rule.endsWith(':*') ? command.startsWith(rule.slice(0, -2)) : command === rule
+  })
+}
+
+// The fenced allowlist block in coder.md, split into its entries with
+// {{BRANCH}} substituted. `Bash(...)` entries can contain spaces, so they are
+// matched whole before the plain tool names are split on whitespace.
+function coderMdAllowlist(branch) {
+  const text = readFileSync(path.join(REPO_ROOT, '.claude/prompts/coder.md'), 'utf8')
+  const match = text.match(/The coder needs at least:\r?\n\r?\n```\r?\n([\s\S]*?)```/)
+  if (!match) throw new Error("coder.md's allowlist block was not found where this test expects it")
+  const block = match[1].replaceAll('{{BRANCH}}', branch)
+  const bashEntries = [...block.matchAll(/Bash\([^)]*\)/g)].map((m) => m[0])
+  const plainEntries = block.replace(/Bash\([^)]*\)/g, ' ').split(/\s+/).filter(Boolean)
+  return [...plainEntries, ...bashEntries]
+}
+
+describe('coderAllowedTools (OQ-67)', () => {
+  const branch = 'story/OQ-67-coder-capability-gaps'
+
+  it('OQ-67/AC-1 - permits git mv, which coder.md requires for the story-file move', () => {
+    const tools = coderAllowedTools(branch)
+    expect(permits(tools, `git mv stories/OQ-67-coder-capability-gaps.md stories/done/OQ-67-coder-capability-gaps.md`)).toBe(true)
+  })
+
+  it('OQ-67/AC-2 - permits pushing the assigned branch by its plain name, alongside both refspec forms', () => {
+    const tools = coderAllowedTools(branch)
+    expect(permits(tools, `git push origin ${branch}`)).toBe(true)
+    expect(permits(tools, `git push origin HEAD:${branch}`)).toBe(true)
+    expect(permits(tools, `git push origin ${branch}:${branch}`)).toBe(true)
+  })
+
+  it('OQ-67/AC-2 - no returned pattern permits a push to main, or to any other ref', () => {
+    const tools = coderAllowedTools(branch)
+    const forbidden = [
+      'git push origin main',
+      'git push origin main:main',
+      'git push origin HEAD:main',
+      'git push origin HEAD:refs/heads/main',
+      `git push origin ${branch}:main`,
+      'git push origin :main',
+      'git push -f origin HEAD:main',
+      'git push origin HEAD',
+      'git push origin',
+      'git push',
+      'git push --all origin',
+      'git push --mirror origin',
+      `git push origin ${branch} main`,
+      `git push origin ${branch}-other`,
+      'git push origin HEAD:story/OQ-99-another-story',
+    ]
+    for (const command of forbidden) {
+      expect(permits(tools, command), command).toBe(false)
+    }
+  })
+
+  it('OQ-67/AC-2 - every push-granting pattern is exact, never a prefix wildcard', () => {
+    // The structural reason the list above holds for commands nobody thought
+    // to enumerate: an exact rule permits one command and nothing else.
+    const pushRules = coderAllowedTools(branch).filter((tool) => tool.startsWith('Bash(git push'))
+    expect(pushRules).toHaveLength(3)
+    for (const rule of pushRules) expect(rule.endsWith(':*)'), rule).toBe(false)
+  })
+
+  it('OQ-67/AC-2 - refuses main as the assigned branch, since every push pattern would then name it', () => {
+    expect(() => coderAllowedTools('main')).toThrow()
+    expect(() => coderAllowedTools('refs/heads/main')).toThrow()
+  })
+
+  it("OQ-67/AC-3 - every git verb in coder.md's allowlist block is permitted by coderAllowedTools", () => {
+    const tools = coderAllowedTools(branch)
+    const gitEntries = coderMdAllowlist(branch).filter((entry) => entry.startsWith('Bash(git '))
+    // A representative command per entry: the prefix itself for `:*` rules,
+    // the exact command otherwise.
+    const commands = gitEntries.map((entry) => entry.slice('Bash('.length, -1).replace(/:\*$/, ''))
+    const verbs = new Set(commands.map((command) => command.split(' ')[1]))
+    // Not vacuous: the block names the verbs whose absence caused OQ-67.
+    for (const verb of ['mv', 'push', 'commit', 'add']) expect(verbs).toContain(verb)
+    for (const command of commands) expect(permits(tools, command), command).toBe(true)
+  })
+})
+
+describe('READ_ONLY_SHELL_UTILS (OQ-67)', () => {
+  const utilityOf = (entry) => entry.match(/^Bash\(([a-z]+):\*\)$/)?.[1]
+
+  it('OQ-67/AC-4 - is an exported value that coderAllowedTools includes, so no caller supplies its own', () => {
+    expect(READ_ONLY_SHELL_UTILS.length).toBeGreaterThan(0)
+    const tools = coderAllowedTools('story/OQ-67-x')
+    for (const entry of READ_ONLY_SHELL_UTILS) expect(tools).toContain(entry)
+  })
+
+  it('OQ-67/AC-4 - every entry names one utility, with no arguments baked in', () => {
+    for (const entry of READ_ONLY_SHELL_UTILS) expect(utilityOf(entry), entry).toBeTruthy()
+  })
+
+  // Arguments that make some common utility write, each tried in a scratch
+  // directory holding one file. A utility that can write in any mode is
+  // expected to trip at least one of these; the control test below shows
+  // that the ones this list must exclude do. The probes are a fixed set, so
+  // the property is only as strong as they are: a writer added to the list
+  // needs a probe here before its absence proves anything. #122's review
+  // found xargs, dd and perl passing clean before their probes were added.
+  const WRITE_PROBES = [
+    ['-i', 's/a/b/', 'f'], // sed -i
+    ['--in-place', 's/a/b/', 'f'],
+    ['-n', 'w out', 'f'], // sed's w command writes without -i
+    ['-o', 'out', 'f'], // sort -o
+    ['--output=out', 'f'],
+    ['f', 'out'], // uniq: a second operand is an output file
+    ['out'], // tee
+    ['.', '-delete'], // find
+    ['.', '-exec', 'touch', 'made', ';'],
+    ['.', '-fprint', 'out'],
+    ['BEGIN { print 1 > "out" }'], // awk
+    ['touch', 'made'], // xargs: its operands are a command to run
+    ['of=out'], // dd
+    ['-i', '-pe', 's/a/b/', 'f'], // perl -i
+    ['-e', 'open(F, ">out")'], // perl -e, and any other interpreter
+  ]
+
+  function snapshot(dir) {
+    return JSON.stringify(
+      readdirSync(dir, { withFileTypes: true })
+        .map((e) => [e.name, e.isFile() ? readFileSync(path.join(dir, e.name), 'utf8') : '<dir>'])
+        .sort(),
+    )
+  }
+
+  // The probe arguments that made `utility` change its directory, or [].
+  function writingProbes(utility) {
+    const tripped = []
+    for (const args of WRITE_PROBES) {
+      const dir = mkdtempSync(path.join(tmpdir(), 'oq67-probe-'))
+      try {
+        writeFileSync(path.join(dir, 'f'), 'a\nb\n')
+        const before = snapshot(dir)
+        spawnSync(utility, args, { cwd: dir, input: 'a\n', timeout: 5000, stdio: 'pipe' })
+        if (snapshot(dir) !== before) tripped.push(args.join(' '))
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    }
+    return tripped
+  }
+
+  // GNU-style `--version` distinguishes the POSIX utilities these probes are
+  // written for from same-named Windows ones (`sort.exe`, `find.exe`), which
+  // take different arguments and would make the probes meaningless.
+  const hasGnuUtility = (utility) => spawnSync(utility, ['--version'], { stdio: 'pipe' }).status === 0
+  const listed = READ_ONLY_SHELL_UTILS.map(utilityOf)
+
+  const KNOWN_WRITERS = ['sed', 'sort', 'tee', 'find', 'xargs', 'dd', 'perl']
+
+  it.skipIf(!KNOWN_WRITERS.every(hasGnuUtility))(
+    'OQ-67/AC-5 - control: the probes do catch sed, sort, tee, find, xargs, dd and perl, so a clean result below is not vacuous',
+    () => {
+      for (const utility of KNOWN_WRITERS) {
+        expect(writingProbes(utility), utility).not.toEqual([])
+      }
+    },
+  )
+
+  it.skipIf(!listed.every(hasGnuUtility))(
+    'OQ-67/AC-5 - no entry can write: each is probed with write-shaped arguments and changes nothing',
+    () => {
+      for (const utility of listed) {
+        expect(writingProbes(utility), utility).toEqual([])
+      }
+    },
+  )
+})
+
+describe("coder.md's allowlist block (OQ-67)", () => {
+  it('OQ-67/AC-6 - lists exactly what coderAllowedTools returns, no more and no fewer', () => {
+    const branch = 'story/OQ-67-coder-capability-gaps'
+    const documented = coderMdAllowlist(branch)
+    const returned = coderAllowedTools(branch)
+    expect([...documented].sort()).toEqual([...returned].sort())
+  })
+
+  it("OQ-67/AC-6 - the design doc's invocation sketch no longer references an undefined $READ_ONLY_SHELL_UTILS", () => {
+    const design = readFileSync(path.join(REPO_ROOT, 'docs/agent-workflow-design.md'), 'utf8')
+    expect(design).not.toContain('$READ_ONLY_SHELL_UTILS')
   })
 })

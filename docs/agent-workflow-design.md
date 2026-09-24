@@ -368,14 +368,14 @@ Sketches, not literal — the prompts are rendered from files with the story inj
 
 ```bash
 # Coder — can edit, inside its own worktree. Push is scoped to its own
-# branch; gh is neither allowlisted nor authenticated (OQ-63).
+# branch; gh is neither allowlisted nor authenticated (OQ-63). The allowlist,
+# read-only shell utilities included, is coderAllowedTools's alone (OQ-67).
 claude -p "$(render .claude/prompts/coder.md OQ-49)" \
   --add-dir "$WORKTREE" \
   --model "$STORY_MODEL" --effort medium \
   --permission-mode acceptEdits \
   --permission-prompts none \
   --allowedTools $(coderAllowedTools "$BRANCH") \
-    $READ_ONLY_SHELL_UTILS \
   --disallowedTools "Bash(gh:*)" \
   --env "$(coderEnv)" \
   --max-budget-usd 6 \
