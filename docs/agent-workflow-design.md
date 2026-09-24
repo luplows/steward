@@ -385,15 +385,20 @@ claude -p "$(render .claude/prompts/coder.md OQ-49)" \
 claude -p "$(render .claude/prompts/reviewer.md OQ-49 $PR)" \
   --model opus --effort high \
   --disallowedTools Edit Write NotebookEdit "Bash(git push:*)" "Bash(gh:*)" \
-  --allowedTools Read Glob Grep TodoWrite \
-    "Bash(git fetch:*)" "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" \
-    "Bash(git rev-parse:*)" "Bash(git merge-base:*)" "Bash(git grep:*)" \
-    "Bash(git cat-file:*)" "Bash(git ls-files:*)" "Bash(git status:*)" \
-    "Bash(git branch:*)" "Bash(npm:*)" "Bash(npx:*)" "Bash(node:*)" \
+  --allowedTools $(reviewerAllowedTools) \
   --permission-prompts none \
   --max-budget-usd 3 \
   --output-format json
 ```
+
+Both argument lists, both allowlists, the coder's environment and the rendered prompt are built by
+`scripts/dispatch/invocation.mjs` (`buildInvocation`), which starts nothing (OQ-74). The prompt is
+returned separately and never becomes an argument. `reviewerAllowedTools()` is the reviewer's
+allowlist: the read-only `git` verbs and `Read Glob Grep TodoWrite`, `npm`/`npx`/`node`, and
+`READ_ONLY_SHELL_UTILS` imported from `coder-env.mjs`, with no `git push` and no `gh`. Each list is
+complete on its own, because `permissions.allow` in `.claude/settings.json` is ignored when the
+workspace is not trusted. Untrusted values (`STORY`, `PR_BODY`, a retry's findings) are bounded with
+`wrapInjectedBlock` by placeholder name: everything not declared a trusted inline token is wrapped.
 
 Three flags are load-bearing:
 

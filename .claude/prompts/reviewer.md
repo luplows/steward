@@ -78,7 +78,14 @@ claims. Denying prompts decides that nothing may ask; the allowlist decides what
 does not need to, and a reviewer that cannot run `npm test` silently reviews by
 reading. Enumerate the read-only `git` subcommands rather than granting
 `Bash(git:*)`, so `git push` is absent from the allowlist before the
-`--disallowedTools` deny rule also removes it.
+`--disallowedTools` deny rule also removes it. The list is built by
+`reviewerAllowedTools()` in `scripts/dispatch/invocation.mjs`, which is the
+authority; this prose summarises it. It includes the read-only shell utilities in
+`READ_ONLY_SHELL_UTILS` (`ls cat head tail wc grep diff cut pwd`), so
+pipelines such as `npm test | tail` are permitted. `sed` and `sort` are absent
+because they can write. The list is passed on the command line in full, not
+left to `.claude/settings.json`, whose allowances are ignored without warning
+when the workspace is not trusted.
 
 **That is defence in depth, not containment, and the difference matters.** The
 same list grants `npm`, `npx` and `node`, because **Verify rather than accept**
