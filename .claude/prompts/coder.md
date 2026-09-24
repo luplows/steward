@@ -97,11 +97,13 @@ The coder still needs a way to get its branch out and its work reviewed. It
 pushes over `git`, exactly as before; it does not open the pull request itself.
 Instead it **emits the PR title and body** — the same `pull_request_template.md`
 sections it always filled in — as the last thing in its final report, under the
-headings `## PR title` and `## PR body`, plus whether the PR should open as
-`draft` or `ready`. Whatever spawned it reads that text and opens the pull
-request with the owner's credential. This mirrors the existing split where the
-reviewer returns a verdict and the runner records it (`REVIEW.md`, "For the
-coder: opening a PR").
+headings `## PR title` and `## PR body`, followed by `## Open as` and a line
+that is only `draft` or `ready`. That ending is pinned in "You do not merge,
+and you do not open your own PR" below, because `scripts/dispatch/outcome.mjs`
+(`parsePrBlock`) parses it and rejects anything else. Whatever spawned it
+reads that text and opens the pull request with the owner's credential. This
+mirrors the existing split where the reviewer returns a verdict and the runner
+records it (`REVIEW.md`, "For the coder: opening a PR").
 
 This paragraph used to say the dispatcher held "its own, separately-scoped
 credential — one that can write pull requests but, like the coder's, cannot set a
@@ -216,17 +218,32 @@ fault, and not yours to chase. You do not merge your own, and neither does the
 reviewer. Your job ends with your branch pushed and a PR description ready for
 the runner to use.
 
-**Push your branch, then end your final report with `## PR title`, `## PR
-body` (the filled `pull_request_template.md` sections), and whether it should
-open as `draft` or `ready`.** Whoever ran you creates the PR from that text.
-Say `draft` if you are not finished; the sweep skips drafts, and nothing else
+**Push your branch, then end your final report with exactly this block, and
+put nothing after it:**
+
+```
+## PR title
+<one line>
+
+## PR body
+<the filled pull_request_template.md sections>
+
+## Open as
+draft
+```
+
+The last line is `draft` or `ready`, alone on its line. Whoever ran you
+creates the PR from that block, and a script reads it: a report that ends any
+other way (a sentence after `## Open as`, a head SHA below the block, `draft`
+worded as "Open as: draft") is rejected, and no PR is opened. Say `draft` if
+you are not finished; the sweep skips drafts, and nothing else
 distinguishes "passed review" from "done" — a `ready` PR that goes green will
 be landed whether or not you meant to add another commit.
 
 Do not idle waiting for a verdict. There is nothing for you to do when it
-arrives. Say in your final report that your branch is pushed and give its head
-SHA, so whoever opens the PR — and whoever later reviews it — can tell whether
-a later verdict is about the right commit.
+arrives. Say in your final report, **above** the block, that your branch is
+pushed and give its head SHA, so whoever opens the PR — and whoever later
+reviews it — can tell whether a later verdict is about the right commit.
 
 ## When you cannot proceed: write and exit
 
@@ -241,11 +258,11 @@ decision that is properly the author's — take the escape route:
 1. Set `blocked:` in the frontmatter of `{{STORY_PATH}}` to the specific
    question. Not "unclear" — the actual question, in a sentence or two, such
    that someone could answer it without opening this session.
-2. Commit that, push the branch, and end your final report with `## PR title`,
-   `## PR body` (including the same question) and `draft` — whoever opens the
-   PR from that text opens it as a draft, which is what keeps the sweep from
-   landing it.
-3. Say the same thing in your final report, and stop.
+2. Commit that, push the branch, and end your final report with the block
+   above, with the same question in `## PR body` and `draft` under
+   `## Open as`. Whoever opens the PR from that text opens it as a draft,
+   which is what keeps the sweep from landing it.
+3. Say the same thing in your final report, above the block, and stop.
 
 Draft means the sweep will not land it, so this is safe to do at any point. A
 question written into a file is durable and someone will find it; a question
@@ -259,8 +276,8 @@ result as though it had been unambiguous.
 ## Reporting
 
 Fill all three sections of `.github/pull_request_template.md`, and emit them
-under `## PR title` / `## PR body` as described above rather than posting them
-anywhere yourself.
+under `## PR body` in the closing block described above rather than posting
+them anywhere yourself.
 
 In **Verification**, give the commands you actually ran and their real results.
 Be explicit about what you verified locally versus what CI verified. State the

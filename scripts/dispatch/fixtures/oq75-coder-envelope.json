@@ -1,0 +1,133 @@
+{
+  "duration_api_ms": 129892,
+  "stop_reason": "end_turn",
+  "session_id": "3043f13f-7843-4325-972d-9a8bffc85a48",
+  "total_cost_usd": 0.5987531999999999,
+  "usage": {
+    "input_tokens": 24,
+    "cache_creation_input_tokens": 69167,
+    "cache_read_input_tokens": 649361,
+    "output_tokens": 18768,
+    "output_tokens_details": {
+      "thinking_tokens": 1521
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 69167,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "not_available",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 1484,
+        "cache_read_input_tokens": 68680,
+        "cache_creation_input_tokens": 487,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 487
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard"
+  },
+  "modelUsage": {
+    "claude-haiku-4-5-20251001": {
+      "inputTokens": 4400,
+      "outputTokens": 17,
+      "cacheReadInputTokens": 0,
+      "cacheCreationInputTokens": 0,
+      "webSearchRequests": 0,
+      "costUSD": 0.004485,
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "thinkingTokens": 0,
+      "canonicalModel": "claude-haiku-4-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    },
+    "claude-sonnet-5": {
+      "inputTokens": 24,
+      "outputTokens": 18768,
+      "cacheReadInputTokens": 649361,
+      "cacheCreationInputTokens": 69167,
+      "webSearchRequests": 0,
+      "costUSD": 0.5942681999999999,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 1521,
+      "canonicalModel": "claude-sonnet-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [
+    {
+      "tool_name": "Bash",
+      "tool_use_id": "toolu_01Lu9Fudgsja3ovNNtyC5RbP",
+      "tool_input": {
+        "command": "cat > scripts/dispatch/outcome.mjs <<'EOF'\n/**\n * Turns the raw record of a finished coder or reviewer session into one\n * classification. Pure: it starts no process, builds no invocation and\n * perfo …[cut to 200 chars for the fixture]"
+      }
+    },
+    {
+      "tool_name": "Bash",
+      "tool_use_id": "toolu_0165Z3n677U1nK5krEgqPxuc",
+      "tool_input": {
+        "command": "git add -A scripts stories && git commit -q -m \"Classify how a coder or reviewer session ended, from what it left behind (OQ-75)\n\nCo-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>\" && git push - …[cut to 200 chars for the fixture]"
+      }
+    },
+    {
+      "tool_name": "Bash",
+      "tool_use_id": "toolu_01VDCf2Eu6TbQ4msfpgzKb3x",
+      "tool_input": {
+        "command": "git push -u origin story/OQ-75-classify-spawn-outcome"
+      }
+    }
+  ],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "extra_usage_disabled",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "is_error": false,
+  "num_turns": 16,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "OQ-75 is implemented and committed locally as `5380cf4b166bbeff7cfb0653e55cee9519b588f7`, but **I could not push it**. The harness denied `git push` for lack of an approval surface, so the branch is not on the remote and no PR can be opened until someone pushes it (`git push -u origin story/OQ-75-classify-spawn-outcome` from this worktree).\n\n## PR title\nClassify how a coder or reviewer session ended, from what it left behind (OQ-75)\n\n## PR body\n### What changed\n- Added `scripts/dispatch/outcome.mjs`, a pure module:\n  - It defines the raw session record: `role`, `exitCode`, `signal`, `stdout`, `stoppedFor` (`null`, `'timeout'` or `'stall'`).\n  - `classifySession` returns `{ outcome, reason, envelope, prText? }`. The outcome is one of `completed`, `budget-exhausted`, `timed-out`, `stalled`, `died` or `malformed-output`.\n  - `parsePrBlock` parses the coder's `## PR title` / `## PR body` / `draft`-or-`ready` block.\n  - `validateRawRecord` throws on a malformed record, matching the loud-failure style of `queue.mjs`.\n- `completed` needs positive evidence: `type: \"result\"`, `subtype: \"success\"`, `is_error: false`, `stop_reason: \"end_turn\"` and a string `result`. Anything else is not completed (AC-1).\n- The result carries no field about the branch or PR. The session-limit-after-PR case is classified as not completed, in the AC-2 test.\n- The `envelope` is the parsed JSON, untouched. A reviewer's verdict inside it is not interpreted (AC-4).\n- The module has no imports and no process, network or GitHub calls, and a test asserts both the export surface and the absence of those calls (AC-5).\n- Added `scripts/dispatch/outcome.test.mjs`, with tests named `OQ-75/AC-n ...`.\n- Moved the story to `stories/done/` with `git mv`.\n\n**Readings I chose:**\n- The story lists no exact rule for `budget-exhausted`. I took the CLI envelope `subtype: \"error_max_budget_usd\"`, and it wins over the exit code.\n- I read `stop_reason` as abnormal when it is anything other than `end_turn`.\n- The story doesn't fix the format of the draft/ready line. I read it as the last non-empty line of the report, `draft` or `ready`, optionally in backticks or bold. The last `## PR title` heading opens the block.\n- For coder records, `prText` is parsed whatever the outcome. It is text the coder wrote, not evidence that anything was pushed.\n- Timeout and stall are reported by the runner via `stoppedFor`, and they take precedence over exit code and signal.\n\n**Not done:** the story suggests using real envelopes from the OQ-63, OQ-66 and OQ-51 hand-runs where they can be recovered. I did not look for them, so every fixture is invented. The `error_max_budget_usd` subtype and the `end_turn` requirement are unchecked against real output. If a real success envelope has a null or different `stop_reason`, it would be classified `malformed-output`, which fails safe.\n\n### Verification\n- `npx vitest run scripts/dispatch` passed 112 tests in 4 files, including the new outcome tests. The `OQ-903-broken.md: missing frontmatter block` line in the output comes from an existing queue test.\n- `npm run lint` (oxlint) printed no findings, but I did not capture its exit code.\n- Not run: `npm run build` and `npm run test:e2e`. The change adds no app code or UI, and CI covers both.\n- Not run locally: `npx eslint`. The repo uses oxlint and has no ESLint config.\n\n### Docs check\n- `README.md`, `Project-Outline.md` and `Open-Questions.md` need no change. `grep` for `OQ-75` in them and in `docs/` and `stories/README.md` finds only `docs/migration-plan.md:14`, which describes OQ-75 as the story this PR delivers.\n- The story moved to `stories/done/`, so `Completed-Questions.md` is not touched.\n\n**Draft or ready:** ready\n\nBranch head is `5380cf4b166bbeff7cfb0653e55cee9519b588f7`, local only.",
+  "ttft_ms": 1413,
+  "type": "result",
+  "duration_ms": 142073,
+  "uuid": "b71f26d0-4dbc-40a2-b10e-3b9eebb778dd",
+  "ttft_stream_ms": 984,
+  "time_to_request_ms": 54,
+  "first_content_frame_ms": 984,
+  "queued_turn_count": 0,
+  "result_index": 0
+}

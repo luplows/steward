@@ -224,9 +224,11 @@ left once the coder stops opening its own PR.
 
 **Opening the PR moves to whoever ran the coder.** The coder emits the PR title
 and body — the `pull_request_template.md` sections it always filled in — under
-`## PR title` and `## PR body` at the end of its final report, plus whether it
-should open as `draft` or `ready`. The runner creates the PR from that text
-with its own credential, one scoped to pull-request writes but, like the
+`## PR title` and `## PR body` at the end of its final report, then
+`## Open as` and a line that is only `draft` or `ready`. Nothing may follow
+it, so that `parsePrBlock` in `scripts/dispatch/outcome.mjs` can read it;
+`coder.md` pins the exact block. The runner creates the PR from that text with
+its own credential, one scoped to pull-request writes but, like the
 coder's, not to commit statuses or workflow dispatch — so the thing that opens
 the PR still cannot clear the gate or trigger the sweep. This is the same shape
 as "Recording a verdict" above: the party with the judgement (or, here, the
