@@ -3,7 +3,7 @@ id: OQ-73
 title: Put the owner's stored GitHub token out of a coder session's reach
 tier: next
 kind: workflow
-depends_on: []
+depends_on: [OQ-84]
 model: sonnet
 blocked: null
 ---
@@ -32,10 +32,12 @@ only against one that happens not to.
       `https://github.com`, run non-interactively from inside the spawn, returns
       no password. The session's own `-c` override is what makes a global
       config setting insufficient on its own.
-- [ ] **AC-3** — The coder can still do its job. It pushes its assigned branch
-      over SSH, and `npm test`, `npm run lint` and `npm run build` still run.
-      This is demonstrated by a real push of a throwaway branch from inside the
-      spawn, not assumed.
+- [ ] **AC-3** — The coder can still do its job: it commits on its assigned
+      branch, and `npm test`, `npm run lint` and `npm run build` still run
+      inside the spawn. The coder does not push (OQ-84), so the push that must
+      still work is the dispatcher's. That is demonstrated, not assumed, by a
+      real push of a throwaway branch through OQ-84's push function, run from
+      outside the spawn after this story's change.
 - [ ] **AC-4** — The owner's own `gh`, as used by whatever spawns the coder,
       still authenticates afterwards. A fix that works by logging the machine
       out breaks the dispatcher, which needs that credential (see
@@ -116,8 +118,9 @@ Found on 2026-09-23 while setting up a second machine for the loop.
   not a deliverable, and is recorded here so AC-2 is not mistaken for already
   done.
 - **Candidate mechanism, not a requirement:** run spawns as a separate local
-  Windows account that has the SSH key needed to push and nothing in its
-  Credential Manager. That is also the shape the design doc names for the
+  Windows account with nothing in its Credential Manager. Since OQ-84 the
+  coder does not push, so that account needs no SSH key either; the dispatcher,
+  running as the owner, pushes. That is also the shape the design doc names for the
   reviewer ("a reviewer that runs with no SSH agent, no keyring access and no
   push-capable credential").
 - `scripts/dispatch/coder-env.mjs`: `coderEnv`

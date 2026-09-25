@@ -297,7 +297,8 @@ than relaxed.
    `story/OQ-49-import-player-info`.
 3. Coder implements, tests green, pushes its branch, and emits the PR title/body and a
    draft-or-ready decision in its report. Dispatcher opens the PR from that text, as a **draft**
-   if the coder said draft.
+   if the coder said draft. **Planned (OQ-84):** the coder only commits and the dispatcher pushes
+   the branch, so a model session has no write access to the remote.
 4. CI passes. **Planned (OQ-79, OQ-48):** the dispatcher waits for it before reviewing, so no
    review is spent on a head that cannot land.
 5. Dispatcher spawns the reviewer, which returns a structured verdict.
@@ -565,13 +566,19 @@ payloads and getting `422` (authorised, only validation failed) rather than `403
 the rules this workflow is built on — *you do not clear your own gate*, *triggering the sweep is
 the owner's* — were held by `CLAUDE.md`'s prose and nothing else.
 
+**Planned (OQ-84):** the coder no longer pushes. The dispatcher pushes its branch, and the coder's
+allowlist grants no `git push` and denies it outright. That removes the reason given above for
+treating the coder differently from the reviewer. What still reaches the owner's stored
+credentials from a coder session is OQ-73's.
+
 So the coder's credential is scoped rather than removed: `coderEnv`
 (`scripts/dispatch/coder-env.mjs`) hands it an environment with no `GH_TOKEN`, `GITHUB_TOKEN` or
 `GH_ENTERPRISE_TOKEN`, and a `GH_CONFIG_DIR` pointed at an empty directory — so `gh`, and anything
 that reaches the GitHub API the way `gh` does, has no credential capable of a commit status, a
 workflow dispatch, or a pull-request write, regardless of whether the call is made directly, from
 inside `node -e`, or from an `npm`/`npx` script. Push keeps working because it authenticates over
-SSH, which none of that touches. The coder still cannot open its own PR — that capability moves to
+SSH, which none of that touches (**Planned (OQ-84):** the push is the dispatcher's, not the
+coder's). The coder still cannot open its own PR — that capability moves to
 whatever spawned it. "A coder session is trusted, not contained" — the wording this section carried
 while OQ-63 was open — is no longer true of the write path that mattered; see `REVIEW.md`, "For the
 coder: opening a PR".
