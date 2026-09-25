@@ -289,7 +289,7 @@ than relaxed.
 ### Happy path
 
 1. Session A writes a story, with Open questions empty, and opens it as a pull request from the
-   owner's account. Today it is reviewed on request, and the owner triggers the sweep.
+   owner's account. Today it is reviewed on request, and the owner (or `land.mjs`) triggers the sweep.
    **Planned (OQ-83):** the loop reviews it against `REVIEW.md`'s story-PR items and lands it.
    **Planned (OQ-81, OQ-82):** only a pull request from an account with write access can land, and
    a coder's own pull request cannot change `stories/` beyond its own story.
@@ -304,10 +304,11 @@ than relaxed.
 5. Dispatcher spawns the reviewer, which returns a structured verdict.
 6. Dispatcher posts the verdict as a marker comment, and `review-gate.yml` derives
    `review/agent` = `success` on the head SHA from it.
-7. The landing sweep merges it (squash) once `mergeable_state` is `clean`. Today the owner
-   triggers the sweep. **Planned (OQ-50, OQ-48):** the dispatcher triggers it, and the next story
-   starts only once this one is merged or stopped, so every story is dispatched from a `main` that
-   includes the last.
+7. The landing sweep merges it (squash) once `mergeable_state` is `clean`. The owner
+   triggers the sweep, or runs `scripts/dispatch/land.mjs` (OQ-50), which waits until the PR is
+   landable, triggers it and waits for the merge. **Planned (OQ-48):** the loop calls `land.mjs`,
+   and the next story starts only once this one is merged or stopped, so every story is dispatched
+   from a `main` that includes the last.
 
 ### Failure paths
 
@@ -598,11 +599,11 @@ it was obscured the real mechanism:
 - **`review/agent` is posted by `review-gate.yml`, not by the dispatcher** — the workflow reads the
   marker comment and derives the status. So the dispatcher's output is a *comment*, and enforcement
   is a GitHub Actions job it does not control. That split is the guarantee, and it already exists.
-- **Triggering `land-approved.yml` is the owner's**, enforced as a tested prohibition in OQ-68 and
-  OQ-48 rather than by scope on a token. **Planned (OQ-50):** the dispatch loop also triggers it,
-  only through `land.mjs`. That module's own allowlist permits that one dispatch and no other
-  write, and neither `coder.mjs` nor `review.mjs` imports it. `github.mjs`'s prohibition stays as
-  it is.
+- **Triggering `land-approved.yml` is the owner's, or `land.mjs`'s when the dispatcher runs it;
+  no agent session does.** Enforced as a tested prohibition in OQ-68 and OQ-48 rather than by
+  scope on a token. `land.mjs` (OQ-50) is the one module that triggers it. Its own allowlist
+  permits that one dispatch (`main`, no inputs) and no other write, and neither `coder.mjs` nor
+  `review.mjs` imports it. `github.mjs`'s prohibition stays as it is.
 
 A genuinely separated credential needs a second GitHub identity, which is item 10 of the open
 questions table below and is not built. Until it is, this section says what is true.
@@ -736,9 +737,9 @@ be kept essentially as-is:
 - **Triggered independently of the work**, so it depends on no session being alive — a worker
   finishes long before its verdict arrives. This was a `*/15` schedule until 2026-09-18; GitHub
   delivered it at roughly 5% of that rate, so the trigger was removed and landing is explicit
-  (`gh workflow run land-approved.yml`) until a reliable one is chosen.
-  **Planned (OQ-50, OQ-48):** the dispatch loop triggers it through `land.mjs` once a PR is
-  landable, and re-triggers while the PR is still open. The loop never merges itself.
+  (`gh workflow run land-approved.yml`) until a reliable one was chosen. `land.mjs` (OQ-50) is
+  that trigger: it triggers the sweep once a PR is landable, and re-triggers while the PR is still
+  open. It never merges itself. **Planned (OQ-48):** the dispatch loop calls it.
 - **Planned (OQ-81):** it lands only pull requests whose author has write access (the same
   association set the gate honours for markers), because a landed `ready` story is work the loop
   will carry out.

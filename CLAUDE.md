@@ -20,9 +20,11 @@ Instructions only. Rationale, mechanism and history live in the files listed und
 - Do not delete the head branch. The sweep deletes it (see
   [`scripts/land/delete-merged-heads.mjs`](scripts/land/delete-merged-heads.mjs)); the repository's
   `delete_branch_on_merge` setting is not relied on.
-- Do not trigger [`land-approved.yml`](.github/workflows/land-approved.yml). That is the owner's. It
-  lands one eligible pull request per run, only when triggered, so a merge-ready pull request waits.
-  Its eligibility rules and the `review-blocked` circuit breaker are defined in that file.
+- Do not trigger [`land-approved.yml`](.github/workflows/land-approved.yml). Only the owner, or
+  [`scripts/dispatch/land.mjs`](scripts/dispatch/land.mjs) run by the dispatcher, may; no agent
+  session does. It lands one eligible pull request per run, only when triggered, so a merge-ready
+  pull request waits. Its eligibility rules and the `review-blocked` circuit breaker are defined in
+  that file.
 - Agent containers have no `gh` CLI: use the GitHub MCP tools where the session has them, otherwise
   `git` plus the REST API. A spawned session may have neither.
 

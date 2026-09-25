@@ -14,7 +14,8 @@
  * What this module deliberately does not do:
  *  - Write the `review/agent` commit status (AC-3). `.github/workflows/review-gate.yml`
  *    derives it from the marker comment `composeMarkerComment` produces.
- *  - Trigger any workflow. Only the owner triggers the landing sweep.
+ *  - Trigger any workflow. Only the owner, or `land.mjs` run by the dispatcher (OQ-50), triggers
+ *    the landing sweep, and `land.mjs` has its own allowlist.
  *  - Apply labels, count rounds, or decide what a verdict means (OQ-48).
  *  - Spawn sessions, render prompts, or read stories (AC-7).
  *
