@@ -72,13 +72,16 @@ than blocking a session nobody is attached to — a reviewer that stops to ask
 waits forever, and one did, for eight minutes. Pass `--max-budget-usd` as a hard
 ceiling on what a single review can cost, chosen in advance rather than
 discovered afterwards. Pass `--allowedTools` covering what review actually
-needs — reading the repository, read-only `git`, and the test and lint commands,
-since **Verify rather than accept** below requires re-running the author's
-claims. Denying prompts decides that nothing may ask; the allowlist decides what
-does not need to, and a reviewer that cannot run `npm test` silently reviews by
-reading. Enumerate the read-only `git` subcommands rather than granting
+needs — reading the repository, read-only `git`, `git merge-tree`, and the test
+and lint commands, since **Verify rather than accept** below requires re-running
+the author's claims. Denying prompts decides that nothing may ask; the allowlist
+decides what does not need to, and a reviewer that cannot run `npm test` silently
+reviews by reading. Enumerate the `git` subcommands rather than granting
 `Bash(git:*)`, so `git push` is absent from the allowlist before the
-`--disallowedTools` deny rule also removes it. The list is built by
+`--disallowedTools` deny rule also removes it. All of them are read-only except
+`git merge-tree`, which writes tree and blob objects that nothing references,
+moves no ref, and is there so the reviewer can check a claim that two branches
+merge cleanly. The list is built by
 `reviewerAllowedTools()` in `scripts/dispatch/invocation.mjs`, which is the
 authority; this prose summarises it. It includes the read-only shell utilities in
 `READ_ONLY_SHELL_UTILS` (`ls cat head tail wc grep diff cut pwd`), so
@@ -209,7 +212,10 @@ identical from inside.
 
 **If a read-only command you needed is denied, that is a finding about this
 invocation — report it, do not route around it.** Your allowlist is supposed to
-cover reading the repository, read-only `git`, and the test and lint commands. A
+cover reading the repository, read-only `git` (including `ls-remote` and
+`ls-tree`), `git merge-tree` for checking that branches merge, the read-only
+shell utilities `ls cat head tail wc grep diff cut pwd` (so a pipeline such as
+`npm test | tail` is allowed), and the test and lint commands. A
 gap in it is silent in a way the coder's is not: the coder that cannot push
 fails visibly, whereas you can return a confident `pass` having checked less
 than you think. Say in `summary` which command was refused and what you could

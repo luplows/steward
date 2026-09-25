@@ -39,12 +39,25 @@ const REVIEWER_GIT_TOOLS = [
   'Bash(git ls-files:*)',
   'Bash(git status:*)',
   'Bash(git branch:*)',
+  'Bash(git ls-remote:*)',
+  'Bash(git ls-tree:*)',
+]
+
+// The one reviewer `git` verb that writes, kept apart so the list above stays
+// honestly read-only. `git merge-tree --write-tree` adds tree and blob objects
+// to the shared object store. It moves no ref and touches no index or working
+// tree, and nothing references what it writes, so `git gc` eventually prunes
+// it. It is granted so the reviewer can check a claim that two branches merge
+// cleanly instead of leaving that to whoever ran it.
+const REVIEWER_GIT_OBJECT_WRITERS = [
+  'Bash(git merge-tree:*)',
 ]
 
 /**
- * The reviewer's `--allowedTools` list. Read-only `git` verbs are enumerated
- * rather than granting `Bash(git:*)`, so `git push` is absent from the list
- * before `REVIEWER_DISALLOWED_TOOLS` also removes it. `npm`, `npx` and `node`
+ * The reviewer's `--allowedTools` list. `git` verbs are enumerated rather than
+ * granting `Bash(git:*)`, so `git push` is absent from the list before
+ * `REVIEWER_DISALLOWED_TOOLS` also removes it. All are read-only except
+ * `git merge-tree`, which writes unreferenced objects (see above). `npm`, `npx` and `node`
  * are granted because verifying the author's claims means running the suite;
  * that is arbitrary execution, so this is defence in depth, not containment
  * (see reviewer.md). The read-only shell utilities are `coder-env.mjs`'s
@@ -55,6 +68,7 @@ export function reviewerAllowedTools() {
   return [
     'Read', 'Glob', 'Grep', 'TodoWrite',
     ...REVIEWER_GIT_TOOLS,
+    ...REVIEWER_GIT_OBJECT_WRITERS,
     'Bash(npm:*)', 'Bash(npx:*)', 'Bash(node:*)',
     ...READ_ONLY_SHELL_UTILS,
   ]
@@ -152,12 +166,19 @@ function donePath(storyPath) {
  * already exists, and that the emitted PR body replaces rather than appends.
  * It lives here rather than in coder.md because a coder cannot edit
  * `.claude/prompts/`. The findings are an injected block like any other.
+ *
+ * It names the exact push command, because the coder's allowlist permits only
+ * scoped forms (`coderAllowedTools`) and "push to the same branch" invited a
+ * bare `git push`, which is denied. That happened in #133's round 2.
  */
-export function retrySection({ round, roundsRemaining, findings }) {
+export function retrySection({ round, roundsRemaining, findings, branch }) {
   checkCount('round', round)
   checkCount('roundsRemaining', roundsRemaining)
   if (typeof findings !== 'string' || findings.trim() === '') {
     throw new Error('retry.findings must be a non-empty string')
+  }
+  if (typeof branch !== 'string' || branch === '') {
+    throw new Error('retrySection requires the branch, to name the push command')
   }
   return [
     '## This is a retry',
@@ -168,6 +189,7 @@ export function retrySection({ round, roundsRemaining, findings }) {
     '',
     '- Your branch already exists and already carries your earlier commits. Continue on it.',
     '- A pull request for that branch already exists. Do not try to open another; you cannot open one in any case. Push to the same branch and it updates.',
+    `- Push with exactly \`git push origin ${branch}\`. A bare \`git push\`, or \`git -C <path> push\`, is not on your allowlist and will be denied.`,
     '- The story file has already been moved to `stories/done/` on that branch. Do not move it again.',
     '- The `## PR body` you emit will **replace** the existing description, not be appended to it. Write it complete, covering the whole change so far, not only what this round changed.',
     '',
@@ -236,7 +258,7 @@ export function buildInvocation(options) {
   }
 
   let { text: prompt } = renderBounded(promptTemplate, values)
-  if (retry) prompt = `${prompt}\n\n${retrySection(retry)}\n`
+  if (retry) prompt = `${prompt}\n\n${retrySection({ ...retry, branch })}\n`
 
   return { args, env, prompt }
 }

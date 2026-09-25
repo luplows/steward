@@ -160,13 +160,19 @@ describe('OQ-74/AC-3: the reviewer allowlist', () => {
 
   it('includes READ_ONLY_SHELL_UTILS and the read-only git verbs, and grants no push and no gh', () => {
     for (const entry of READ_ONLY_SHELL_UTILS) expect(list).toContain(entry)
-    for (const verb of ['fetch', 'diff', 'log', 'show', 'rev-parse', 'merge-base', 'grep', 'cat-file', 'ls-files', 'status', 'branch']) {
+    for (const verb of ['fetch', 'diff', 'log', 'show', 'rev-parse', 'merge-base', 'grep', 'cat-file', 'ls-files', 'status', 'branch', 'ls-remote', 'ls-tree']) {
       expect(list, verb).toContain(`Bash(git ${verb}:*)`)
     }
     expect(list.filter((t) => /git push|git:\*|gh\b/.test(t))).toEqual([])
     for (const denied of ['Edit', 'Write', 'NotebookEdit', 'Bash(git push:*)', 'Bash(gh:*)']) {
       expect(REVIEWER_DISALLOWED_TOOLS).toContain(denied)
     }
+  })
+
+  it('grants git merge-tree, the one git verb in the list that writes, and it is documented as such', () => {
+    expect(list).toContain('Bash(git merge-tree:*)')
+    const source = readRepo('scripts/dispatch/invocation.mjs')
+    expect(source).toMatch(/const REVIEWER_GIT_OBJECT_WRITERS = \[\s*'Bash\(git merge-tree:\*\)',\s*\]/)
   })
 
   it('the constructed reviewer args are the function\'s list, with the shell utilities in them', () => {
@@ -285,10 +291,21 @@ describe('OQ-74/AC-5: a retry\'s prompt', () => {
     expect(buildInvocation(coderOptions).prompt).not.toContain('This is a retry')
   })
 
+  it('names the exact push command, and the coder\'s allowlist permits exactly that command', () => {
+    const command = `git push origin ${BRANCH}`
+    expect(prompt).toContain(`\`${command}\``)
+    expect(coderAllowedTools(BRANCH)).toContain(`Bash(${command})`)
+    // The forms the #133 round-2 coder tried, and was denied, are named as denied.
+    expect(prompt).toMatch(/bare `git push`, or `git -C <path> push`, is not on your allowlist/)
+    expect(coderAllowedTools(BRANCH)).not.toContain('Bash(git push)')
+  })
+
   it('rejects malformed retry input, and a retry for the reviewer', () => {
-    expect(() => retrySection({ ...retry, round: -1 })).toThrow(/round/)
-    expect(() => retrySection({ ...retry, roundsRemaining: 1.5 })).toThrow(/roundsRemaining/)
-    expect(() => retrySection({ ...retry, findings: '  ' })).toThrow(/findings/)
+    const withBranch = { ...retry, branch: BRANCH }
+    expect(() => retrySection({ ...withBranch, round: -1 })).toThrow(/round/)
+    expect(() => retrySection({ ...withBranch, roundsRemaining: 1.5 })).toThrow(/roundsRemaining/)
+    expect(() => retrySection({ ...withBranch, findings: '  ' })).toThrow(/findings/)
+    expect(() => retrySection(retry)).toThrow(/requires the branch/)
     expect(() => buildInvocation({ ...reviewerOptions, retry })).toThrow(/no retry/)
   })
 })

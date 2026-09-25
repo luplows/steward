@@ -394,8 +394,11 @@ claude -p "$(render .claude/prompts/reviewer.md OQ-49 $PR)" \
 Both argument lists, both allowlists, the coder's environment and the rendered prompt are built by
 `scripts/dispatch/invocation.mjs` (`buildInvocation`), which starts nothing (OQ-74). The prompt is
 returned separately and never becomes an argument. `reviewerAllowedTools()` is the reviewer's
-allowlist: the read-only `git` verbs and `Read Glob Grep TodoWrite`, `npm`/`npx`/`node`, and
-`READ_ONLY_SHELL_UTILS` imported from `coder-env.mjs`, with no `git push` and no `gh`. Each list is
+allowlist: the read-only `git` verbs plus `git merge-tree`, `Read Glob Grep TodoWrite`,
+`npm`/`npx`/`node`, and `READ_ONLY_SHELL_UTILS` imported from `coder-env.mjs`, with no `git push`
+and no `gh`. `git merge-tree` is the one `git` verb there that writes: it adds unreferenced tree
+and blob objects and moves no ref, and it is kept in its own list in `invocation.mjs` so that the
+rest stays read-only. Each list is
 complete on its own, because `permissions.allow` in `.claude/settings.json` is ignored when the
 workspace is not trusted. Untrusted values (`STORY`, `PR_BODY`, a retry's findings) are bounded with
 `wrapInjectedBlock` by placeholder name: everything not declared a trusted inline token is wrapped.
@@ -428,7 +431,7 @@ those paths can read a token that was never in the environment. This is the same
 reason `Bash(gh:*)` disappears from the coder's list entirely rather than being narrowed: there is
 no longer a legitimate use for it to allowlist.
 
-The reviewer's list is the mirror image, and narrower on purpose: read-only `git` subcommands
+The reviewer's list is the mirror image, and narrower on purpose: `git` subcommands
 enumerated rather than `Bash(git:*)`, so `git push` is not in the allowlist *before* the
 `--disallowedTools` deny rule also removes it. Two barriers against the accidental path beats one.
 
@@ -461,10 +464,13 @@ That narrowness has its own cost, and it is not symmetric with the coder's. A ho
 **coder's** allowlist fails loudly and late — it cannot push its branch, and someone notices. A hole in
 the **reviewer's** fails *quietly*: a reviewer that cannot run `npm test` or `git merge-base` can
 still return a confident `pass`, having checked less than it thinks. The `git` verbs above are
-therefore a deliberately broad read-only set rather than a minimal one — not a complete one, since
-`blame`, `rev-list`, `ls-tree`, `describe`, `remote`, `shortlog` and `config --get` are all
-plausible and none are listed. Calling it complete would be the same overstatement this section
-exists to correct. The rest of the list is not read-only at all, per the paragraph above.
+therefore a deliberately broad set rather than a minimal one — not a complete one, since `blame`,
+`rev-list`, `describe`, `remote`, `shortlog` and `config --get` are all plausible and none are
+listed. Calling it complete would be the same overstatement this section exists to correct. They
+are read-only except `git merge-tree`, which writes unreferenced objects (above). `ls-remote`,
+`ls-tree` and `merge-tree` were added on 2026-09-24, after reviewers were refused all three while
+checking branch listings and merge claims. The rest of the list is not read-only at all, per the
+paragraph above.
 `reviewer.md` instructs the
 reviewer to treat a denied read-only command as a finding about its own invocation rather than
 something to work around. An enumerated allowlist has to be maintained; the alternative is a gate
