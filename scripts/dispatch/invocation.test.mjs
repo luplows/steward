@@ -278,6 +278,8 @@ describe('OQ-74/AC-5: a retry\'s prompt', () => {
     expect(prompt).toMatch(/pull request for that branch already exists/)
     expect(prompt).toMatch(/already been moved to `stories\/done\/`/)
     expect(prompt).toMatch(/\*\*replace\*\* the existing description, not be appended/)
+    // #133's round-3 replacement body dropped Docs check, and review blocked on it.
+    expect(prompt).toMatch(/Keep all three sections of `\.github\/pull_request_template\.md` \(What changed, Verification, Docs check\)/)
     expect(prompt).toContain('Item 17')
     expect(prompt.indexOf('## This is a retry')).toBeGreaterThan(prompt.indexOf('## Reporting'))
   })

@@ -192,8 +192,16 @@ Getting these wrong means the marker is silently ignored rather than obeyed.
    says nothing about the current one, so a stale marker is ignored and the
    status stays pending. Re-review after any new push.
 3. **There is no partial credit and no dismissal mechanism.** The only way past
-   a `block` is a commit that addresses it, which resets the gate to pending
-   and requires a fresh review.
+   a `block` is to fix what it found and get a fresh review. A block on the
+   code is fixed by a commit that addresses it, which resets the gate to
+   pending. **A block on the PR description alone** (items 2, 3, 7 or 12, with
+   nothing in the diff to change) is fixed by editing the description, then
+   running a fresh review of the **same head** and recording its verdict. The
+   description is not part of the head, so a commit would change nothing it
+   found. Either way it is a new review, never a waved-through old one, and
+   **the block still counts toward the two-round bound** like any other: the
+   bound counts `block` verdicts and makes no exception for what they were
+   about. First used on #133, where round 2 blocked on a missing Docs check.
 4. **The comment must come from an account with write access.** Anyone can
    comment on a public repository; a marker from anyone else is ignored.
 

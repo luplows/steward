@@ -175,6 +175,15 @@ hand-written source.
   fix either delivers it or unticks it.
 - **Move the story file to `stories/done/` as part of this PR**, with
   `git mv`. Completion is that move; it is item 19 and it shows in your diff.
+- **You cannot edit anything under `.claude/prompts/`**, including this
+  prompt. Writes there are refused in a spawned session. That is expected and
+  is not a reason to block. When the story asks for such an edit, put it in
+  your PR body under a `### Proposed prompt edit` heading, as a unified diff
+  against the file as it is on your branch, in a `diff` code block, which
+  `git apply` will accept. Leave the AC that depends on it unticked and say so.
+  Whoever ran you applies the diff by hand in a separate commit and ticks the
+  AC. Everything else about the story, you finish as normal. A pending prompt
+  edit is not work left undone: if the rest is finished, say `ready`.
 
 ## Environment
 

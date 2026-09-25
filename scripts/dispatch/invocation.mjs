@@ -191,7 +191,7 @@ export function retrySection({ round, roundsRemaining, findings, branch }) {
     '- A pull request for that branch already exists. Do not try to open another; you cannot open one in any case. Push to the same branch and it updates.',
     `- Push with exactly \`git push origin ${branch}\`. A bare \`git push\`, or \`git -C <path> push\`, is not on your allowlist and will be denied.`,
     '- The story file has already been moved to `stories/done/` on that branch. Do not move it again.',
-    '- The `## PR body` you emit will **replace** the existing description, not be appended to it. Write it complete, covering the whole change so far, not only what this round changed.',
+    '- The `## PR body` you emit will **replace** the existing description, not be appended to it. Write it complete, covering the whole change so far, not only what this round changed. Keep all three sections of `.github/pull_request_template.md` (What changed, Verification, Docs check): a replacement that drops one is a missing section, and review blocks on it.',
     '',
     'The review findings to address are below. Fix the genuine ones with a new commit. If you believe one is wrong, say so under a `## Response to review` heading in your final report.',
     '',

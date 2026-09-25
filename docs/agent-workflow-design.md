@@ -930,6 +930,11 @@ what makes the workaround legitimate rather than a bypass:
 > attributed commit. For this relay the "dispatcher" in the name is always a person, never the
 > dispatcher script (see below). Used for the first time in #112, where the diff applied cleanly.
 
+Until 2026-09-24 only this document described the relay, and `coder.md` did not. The OQ-52 coder
+(#137) was refused its `coder.md` edit and, following its prompt, took the write-and-exit route and
+set `blocked:`. `coder.md` now tells the coder to put a prompt edit in its PR body as a diff under
+`### Proposed prompt edit`, to leave the dependent AC unticked, and to finish the rest as normal.
+
 That is the same division of labour the loop already uses twice — the reviewer returns a verdict and
 the runner records it, and under OQ-63 the coder emits a PR body and the dispatcher opens the PR.
 Prompt edits are the third instance, with one difference: **the dispatcher script does not automate

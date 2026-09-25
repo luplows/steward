@@ -247,8 +247,12 @@ gets switched off. Both are failures.
 | `null` | You are not in a position to review — see below. |
 
 There is no partial credit and no dismissal mechanism: the only way past a
-`block` is a commit that addresses it, which resets the gate to pending and
-requires a fresh review. A `block` also turns the gate's workflow run red. That
+`block` is to fix what it found and get a fresh review. For the code that means
+a commit, which resets the gate to pending. A block on the PR description alone
+is fixed by editing the description, followed by a fresh review of the same
+head (`REVIEW.md`, "What the workflow enforces", item 3). So a review of a head
+that has been reviewed before is normal. Judge the description as it stands
+now. A `block` also turns the gate's workflow run red. That
 is deliberate — it is what makes the block reach a human — not a bug for you to
 avoid triggering.
 
