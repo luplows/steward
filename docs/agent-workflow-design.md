@@ -8,6 +8,19 @@
 > adopts the mechanisms the existing repo got right, and revises three things the first draft got
 > wrong: the deployment model, the execution environment, and the nature of the dispatcher.
 
+> **Reading this document: goal state, marked.** This document records the design as decided,
+> including parts not yet built, so that anyone deciding what to build next works towards the goal
+> state. A passage that is decided but not built starts **Planned (OQ-n)**, naming the story or
+> stories that will build it. A decision is written here, marked, in the same pull request that
+> records it (usually the one that writes its story), so it reaches `main` when it is made. The
+> pull request that implements a story takes that story's id out of every marker that names it,
+> and corrects the passage wherever what was built differs. A marker naming several stories keeps
+> the others and stays until the last of them is built; only then does the marker go. Each such
+> story has an acceptance criterion saying so. The convention dates
+> from 2026-09-25. Passages written before then may describe unbuilt parts without a marker; the
+> migration plan tracks those. **Planned (OQ-61):** CI fails if a marker names a story that is
+> already in `stories/done/`.
+
 ---
 
 ## Purpose
@@ -276,22 +289,24 @@ than relaxed.
 ### Happy path
 
 1. Session A writes a story, with Open questions empty, and opens it as a pull request from the
-   owner's account. The loop reviews it against `REVIEW.md`'s story-PR items and lands it (OQ-83).
-   Only a pull request from an account with write access can land (OQ-81), and a coder's own pull
-   request cannot change `stories/` beyond its own story (OQ-82).
+   owner's account. Today it is reviewed on request, and the owner triggers the sweep.
+   **Planned (OQ-83):** the loop reviews it against `REVIEW.md`'s story-PR items and lands it.
+   **Planned (OQ-81, OQ-82):** only a pull request from an account with write access can land, and
+   a coder's own pull request cannot change `stories/` beyond its own story.
 2. Dispatcher picks the highest-tier, lowest-id ready story; creates a worktree and the branch
    `story/OQ-49-import-player-info`.
 3. Coder implements, tests green, pushes its branch, and emits the PR title/body and a
    draft-or-ready decision in its report. Dispatcher opens the PR from that text, as a **draft**
    if the coder said draft.
-4. CI passes. The dispatcher waits for it before reviewing, so no review is spent on a head that
-   cannot land (OQ-79, OQ-48).
+4. CI passes. **Planned (OQ-79, OQ-48):** the dispatcher waits for it before reviewing, so no
+   review is spent on a head that cannot land.
 5. Dispatcher spawns the reviewer, which returns a structured verdict.
 6. Dispatcher posts the verdict as a marker comment, and `review-gate.yml` derives
    `review/agent` = `success` on the head SHA from it.
-7. Dispatcher triggers the landing sweep (OQ-50), which merges it (squash) once `mergeable_state`
-   is `clean`. The next story starts only once this one is merged or stopped, so every story is
-   dispatched from a `main` that includes the last (OQ-48).
+7. The landing sweep merges it (squash) once `mergeable_state` is `clean`. Today the owner
+   triggers the sweep. **Planned (OQ-50, OQ-48):** the dispatcher triggers it, and the next story
+   starts only once this one is merged or stopped, so every story is dispatched from a `main` that
+   includes the last.
 
 ### Failure paths
 
@@ -300,8 +315,8 @@ The majority of the interesting behaviour.
 | Situation | Route |
 |---|---|
 | Reviewer returns `block` | Findings → coder respawned with story + findings. **Bounded**; OQ-48 sets the number. |
-| Still failing at the bound | `blocked:` set on the story by the dispatcher, `review-blocked` applied by `review-gate.yml`, human queue. Round count **derived from `block` verdicts on the PR**, not stored. |
-| CI red on the head | Failure output (OQ-79) → coder respawned on the same branch. Bounded separately (OQ-48's AC-6b), derived from the PR's failed CI runs; then `blocked:`, no label. Decided 2026-09-25. |
+| Still failing at the bound | Human queue. Round count **derived from `block` verdicts on the PR**, not stored. `review-blocked` is applied by hand today. **Planned (OQ-48):** the dispatcher sets `blocked:` on the story. **Planned (OQ-80):** `review-gate.yml` applies `review-blocked`. |
+| CI red on the head | **Planned (OQ-79, OQ-48):** failure output → coder respawned on the same branch. Bounded separately (OQ-48's AC-6b), derived from the PR's failed CI runs; then `blocked:`, no label. |
 | Story was wrong, not the code | `blocked:` set with the reason → Session A |
 | Coder hits ambiguity mid-story | `blocked:` + the specific question → Session A |
 | Branch stale | Rebase; if it fails, kick back rather than merge against a moved world |
@@ -332,10 +347,10 @@ the bound not existing. Deriving it means the count survives restarts, machine r
 dispatcher rewritten from scratch — it is a property of the PR, which is where the evidence lives
 anyway.
 
-The same derivation feeds the circuit breaker: when the bound is reached, the dispatcher sets
-`blocked:` on the story, and `review-gate.yml` applies `review-blocked`, because it sees every PR,
-including ones no dispatcher ran (OQ-80). That is what finally makes the breaker in
-`land-approved.yml` count a signal something reliably produces.
+The same derivation feeds the circuit breaker. **Planned (OQ-48, OQ-80):** when the bound is
+reached, the dispatcher sets `blocked:` on the story, and `review-gate.yml` applies
+`review-blocked`, because it sees every PR, including ones no dispatcher ran. That is what finally
+makes the breaker in `land-approved.yml` count a signal something reliably produces.
 
 ---
 
@@ -578,10 +593,10 @@ it was obscured the real mechanism:
   marker comment and derives the status. So the dispatcher's output is a *comment*, and enforcement
   is a GitHub Actions job it does not control. That split is the guarantee, and it already exists.
 - **Triggering `land-approved.yml` is the owner's**, enforced as a tested prohibition in OQ-68 and
-  OQ-48 rather than by scope on a token. Decided 2026-09-25: the dispatch loop will also trigger
-  it, only through `land.mjs` (OQ-50). That module's own allowlist permits that one dispatch and
-  no other write, and neither `coder.mjs` nor `review.mjs` imports it. `github.mjs`'s
-  prohibition stays as it is. Until OQ-50 lands, triggering it is the owner's alone.
+  OQ-48 rather than by scope on a token. **Planned (OQ-50):** the dispatch loop also triggers it,
+  only through `land.mjs`. That module's own allowlist permits that one dispatch and no other
+  write, and neither `coder.mjs` nor `review.mjs` imports it. `github.mjs`'s prohibition stays as
+  it is.
 
 A genuinely separated credential needs a second GitHub identity, which is item 10 of the open
 questions table below and is not built. Until it is, this section says what is true.
@@ -715,10 +730,12 @@ be kept essentially as-is:
 - **Triggered independently of the work**, so it depends on no session being alive — a worker
   finishes long before its verdict arrives. This was a `*/15` schedule until 2026-09-18; GitHub
   delivered it at roughly 5% of that rate, so the trigger was removed and landing is explicit
-  (`gh workflow run land-approved.yml`) until a reliable one is chosen. **Chosen 2026-09-25:** the
-  dispatch loop triggers it through `land.mjs` once a PR is landable, and re-triggers while the
-  PR is still open. The loop never merges itself (OQ-50, OQ-48). Until OQ-50 lands, it is
-  triggered by hand.
+  (`gh workflow run land-approved.yml`) until a reliable one is chosen.
+  **Planned (OQ-50, OQ-48):** the dispatch loop triggers it through `land.mjs` once a PR is
+  landable, and re-triggers while the PR is still open. The loop never merges itself.
+- **Planned (OQ-81):** it lands only pull requests whose author has write access (the same
+  association set the gate honours for markers), because a landed `ready` story is work the loop
+  will carry out.
 - **One PR per run.** `mergeable_state` is computed asynchronously, so a second merge in the same
   pass decides on stale data. The same fact has a cost between runs: straight after a merge, other
   open PRs can read `unknown` for a while, and the sweep skips `unknown` rather than guessing. A
@@ -733,10 +750,10 @@ be kept essentially as-is:
 - Circuit breaker at five `review-blocked` PRs, with exemptions for `breaker-override` and
   workflow-only diffs so a tripped breaker is not a trap.
 
-The one change: `review-blocked` must be **applied automatically** when a story reaches the round
-bound, by `review-gate.yml` (OQ-80), with the bound derived from the PR's own `block`
-verdicts rather than remembered.
 Today the label is applied by hand, so the breaker counts a signal nothing reliably produces.
+**Planned (OQ-80):** `review-blocked` is applied automatically when a story reaches the round
+bound, by `review-gate.yml`, with the bound derived from the PR's own `block` verdicts rather than
+remembered.
 
 ### Merge queue
 

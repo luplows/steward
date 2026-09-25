@@ -48,6 +48,9 @@ recalled — in story files, docs, commit messages, pull request bodies and revi
   file. See `stories/README.md`, "Acceptance criteria and tests".
 - A pull request implementing a story moves that story file to `stories/done/` in the same pull
   request, and is reviewed against the story.
+- Record a design decision in `docs/agent-workflow-design.md` in the pull request that makes it,
+  marked as not yet built. The story that builds it removes the mark. See that document's "Reading
+  this document" note.
 - Look things up in `Completed-Questions.md` by OQ number rather than reading it whole.
 
 ## Testing

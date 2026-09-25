@@ -118,6 +118,10 @@ code.
 24. **Consistency** — the story does not contradict or duplicate another
     story's ACs. Where it takes over part of another story, that story is
     edited in the same PR, and every reference to the moved part is updated.
+25. **Decisions recorded** — a design decision the story makes is written into
+    `docs/agent-workflow-design.md` in this PR, marked as that document's
+    "Reading this document" note says, and the story has an AC to resolve the
+    marker. A decision that exists only in a story is a finding.
 
 ## For the reviewer: reporting a verdict
 

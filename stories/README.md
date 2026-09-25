@@ -168,6 +168,11 @@ then — OQ-49, OQ-51, OQ-63, OQ-67, OQ-74 and OQ-75 — were completed before i
 and are left as they are, so their unticked boxes say nothing about what was
 delivered. Their PRs and reviews are the record.
 
+**A story whose decision is recorded in the design doc** carries an AC to
+resolve its `**Planned (OQ-n)**` markers there. The design doc's "Reading this
+document" note defines the markers, and the PR that writes the story records the
+decision, marked, so that the goal state reaches `main` when it is decided.
+
 ## Lifecycle
 
 1. A planning session writes the story here, or refines a backlog entry into
