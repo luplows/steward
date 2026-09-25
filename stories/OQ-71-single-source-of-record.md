@@ -36,12 +36,20 @@ me on the current version rather than a superseded copy of it.
       dispatch" — that claim is false, was corrected in the design doc and
       `coder.md` by #119, and survived in `REVIEW.md`, which both corrected
       passages then pointed readers at by name.
-- [ ] **AC-4** — **The retry bound and who applies `review-blocked`.** Authority:
-      `stories/OQ-48-loop-and-retry-bound.md` until it is implemented, then the
-      code it names. The design doc's "The one change: `review-blocked` must be
-      **applied by the dispatcher** when a story exhausts its **two rounds**" is
-      reconciled with OQ-48, which sets the bound at three and moves the label to
-      `review-gate.yml` — AC-6 there, and OQ-80, which took over its AC-6b.
+- [ ] **AC-4** — **The retry bound and who applies `review-blocked`.**
+      Authorities: OQ-48's AC-6 for the number of blocking verdicts, and OQ-80
+      for applying the label (OQ-80 took over what were OQ-48's AC-6b and AC-6c
+      on 2026-09-25), until each is implemented; after that, the code it names.
+      Every statement of the bound, or of who applies the label, links to its
+      authority or is marked as a restatement per AC-2. That includes
+      `docs/agent-workflow-design.md`, where #143 made the number point at OQ-48
+      but left the label restated: the "Failure paths" row "Still failing at the
+      bound" names `review-gate.yml` without OQ-80. A passage that names OQ-80 as
+      the story building it counts as a link. The marked restatements today are
+      `REVIEW.md` ("What the workflow enforces", item 3) and OQ-80's AC-1, which
+      OQ-80's Constraints mark. Historical records are exempt, because they
+      record what was true then: `Completed-Questions.md`, `stories/done/`,
+      OQ-48's Context, and the migration plan's "Overtaken" notes.
 - [ ] **AC-5** — **The circuit-breaker threshold and its exemptions.**
       Authority: `.github/workflows/land-approved.yml`. No document states the
       numeric threshold; each points at the workflow. A test asserts that, by

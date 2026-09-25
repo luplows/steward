@@ -284,6 +284,8 @@ selection is deterministic and needs no human or model judgment.
 - [ ] A story goes from `stories/` to merged with no human action between
 - [ ] A blocking verdict round-trips: findings → fix commit → re-review → pass
 - [ ] Two failed rounds produce `blocked:` plus the `review-blocked` label automatically
+      > **Overtaken.** The bound is three blocking verdicts (OQ-48), and `review-gate.yml`, not
+      > the dispatcher, applies the label (OQ-80). See step 6's note.
 - [ ] The bound still holds after killing and restarting the dispatcher mid-story — proving the
       count is derived rather than remembered
 
