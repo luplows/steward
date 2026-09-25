@@ -1,0 +1,86 @@
+2026-09-16T07:15:26.7125597Z 
+2026-09-16T07:15:26.7127179Z [31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+2026-09-16T07:15:26.7127832Z 
+2026-09-16T07:15:26.7129626Z [41m[1m FAIL [22m[49m src/index.css.test.js[2m > [22mindex.css dark palette[2m > [22mdeclares the same custom properties, with the same values, under prefers-color-scheme and under data-theme
+2026-09-16T07:15:26.7136005Z [31m[1mAssertionError[22m: expected { '--text': '#9ca3af', …(15) } to deeply equal { '--text': '#9ca3af', …(15) }[39m
+2026-09-16T07:15:26.7137214Z 
+2026-09-16T07:15:26.7138296Z [32m- Expected[39m
+2026-09-16T07:15:26.7139179Z [31m+ Received[39m
+2026-09-16T07:15:26.7139558Z 
+2026-09-16T07:15:26.7139948Z [33m@@ -1,7 +1,7 @@[39m
+2026-09-16T07:15:26.7140563Z [2m  {[22m
+2026-09-16T07:15:26.7141350Z [32m-   "--accent": "#c084fc",[39m
+2026-09-16T07:15:26.7142171Z [31m+   "--accent": "#c084fd",[39m
+2026-09-16T07:15:26.7143186Z [2m    "--accent-bg": "rgba(192, 132, 252, 0.15)",[22m
+2026-09-16T07:15:26.7144192Z [2m    "--accent-border": "rgba(192, 132, 252, 0.5)",[22m
+2026-09-16T07:15:26.7145184Z [2m    "--bg": "#16171d",[22m
+2026-09-16T07:15:26.7146020Z [2m    "--border": "#2e303a",[22m
+2026-09-16T07:15:26.7146746Z [2m    "--code-bg": "#1f2028",[22m
+2026-09-16T07:15:26.7147094Z 
+2026-09-16T07:15:26.7147550Z [36m [2m❯[22m src/index.css.test.js:[2m47:28[22m[39m
+2026-09-16T07:15:26.7172340Z     [90m 45|[39m
+2026-09-16T07:15:26.7176053Z     [90m 46|[39m     expect(Object.keys(mediaQueryBlock).length).toBeGreaterThan(0)
+2026-09-16T07:15:26.7177556Z     [90m 47|[39m     expect(dataThemeBlock).toEqual(mediaQueryBlock)
+2026-09-16T07:15:26.7178689Z     [90m   |[39m                            [31m^[39m
+2026-09-16T07:15:26.7179714Z     [90m 48|[39m   })
+2026-09-16T07:15:26.7180090Z 
+2026-09-16T07:15:26.7180581Z     [90m 49|[39m })
+2026-09-16T07:15:26.7181029Z 
+2026-09-16T07:15:26.7181559Z [31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+2026-09-16T07:15:26.7182085Z 
+2026-09-16T07:15:26.7185454Z [2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m27 passed[39m[22m[90m (28)[39m
+2026-09-16T07:15:26.7196816Z [2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m240 passed[39m[22m[90m (241)[39m
+2026-09-16T07:15:26.7198516Z [2m   Start at [22m 07:15:21
+2026-09-16T07:15:26.7200094Z [2m   Duration [22m 5.12s[2m (tests 52%, environment 19%, setup 9%, import 8%, worker 6%, transform 6%)[22m
+2026-09-16T07:15:26.7214110Z 
+2026-09-16T07:15:26.7234622Z 
+2026-09-16T07:15:26.7258267Z ##[error]AssertionError: expected { '--text': '#9ca3af', …(15) } to deeply equal { '--text': '#9ca3af', …(15) }
+
+- Expected
++ Received
+
+@@ -1,7 +1,7 @@
+  {
+-   "--accent": "#c084fc",
++   "--accent": "#c084fd",
+    "--accent-bg": "rgba(192, 132, 252, 0.15)",
+    "--accent-border": "rgba(192, 132, 252, 0.5)",
+    "--bg": "#16171d",
+    "--border": "#2e303a",
+    "--code-bg": "#1f2028",
+
+ ❯ src/index.css.test.js:47:28
+
+
+2026-09-16T07:15:26.7673043Z ##[error]Process completed with exit code 1.
+2026-09-16T07:15:26.7779172Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-09-16T07:15:26.7780456Z ##[group]Run actions/upload-artifact@v4
+2026-09-16T07:15:26.7780838Z with:
+2026-09-16T07:15:26.7781183Z   name: playwright-report
+2026-09-16T07:15:26.7781503Z   path: playwright-report/
+2026-09-16T07:15:26.7781900Z   retention-days: 7
+2026-09-16T07:15:26.7782213Z   if-no-files-found: warn
+2026-09-16T07:15:26.7782546Z   compression-level: 6
+2026-09-16T07:15:26.7782874Z   overwrite: false
+2026-09-16T07:15:26.7783246Z   include-hidden-files: false
+2026-09-16T07:15:26.7783592Z ##[endgroup]
+2026-09-16T07:15:26.9392774Z (node:2447) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-09-16T07:15:26.9394322Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-09-16T07:15:26.9412404Z ##[warning]No files were found with the provided path: playwright-report/. No artifacts will be uploaded.
+2026-09-16T07:15:26.9675257Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-09-16T07:15:26.9676575Z Post job cleanup.
+2026-09-16T07:15:27.0536726Z [command]/usr/bin/git version
+2026-09-16T07:15:27.0581190Z git version 2.55.0
+2026-09-16T07:15:27.0622100Z Temporarily overriding HOME='/home/runner/work/_temp/1a2635aa-6039-4356-ad63-d094660f53da' before making global git config changes
+2026-09-16T07:15:27.0623700Z Adding repository directory to the temporary git global config as a safe directory
+2026-09-16T07:15:27.0629911Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/tower-workshop-paths/tower-workshop-paths
+2026-09-16T07:15:27.0671519Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-09-16T07:15:27.0706250Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-09-16T07:15:27.0913253Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-09-16T07:15:27.0937292Z http.https://github.com/.extraheader
+2026-09-16T07:15:27.0947443Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-09-16T07:15:27.0978555Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-09-16T07:15:27.1189861Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-16T07:15:27.1220557Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-09-16T07:15:27.1557291Z Cleaning up orphan processes
+2026-09-16T07:15:27.1778419Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

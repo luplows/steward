@@ -1,0 +1,72 @@
+2026-09-16T06:48:32.6864746Z       - captured a stable screenshot
+2026-09-16T06:48:32.6865210Z       - 3424 pixels (ratio 0.02 of all image pixels) are different.
+2026-09-16T06:48:32.6865516Z 
+2026-09-16T06:48:32.6865523Z 
+2026-09-16T06:48:32.6865657Z       85 |
+2026-09-16T06:48:32.6866035Z       86 |       await settle(page)
+2026-09-16T06:48:32.6866510Z     > 87 |       await expect(page).toHaveScreenshot(`enhance-${name}.png`)
+2026-09-16T06:48:32.6867028Z          |                          ^
+2026-09-16T06:48:32.6867367Z       88 |     })
+2026-09-16T06:48:32.6867750Z       89 |   })
+2026-09-16T06:48:32.6868108Z       90 | }
+2026-09-16T06:48:32.6868662Z         at /home/runner/work/tower-workshop-paths/tower-workshop-paths/e2e/appearance.spec.js:87:26
+2026-09-16T06:48:32.6869107Z 
+2026-09-16T06:48:32.6869862Z     attachment #1: enhance-mobile (image/png) ──────────────────────────────────────────────────────
+2026-09-16T06:48:32.6870760Z     Expected: e2e/__screenshots__/enhance-mobile.png
+2026-09-16T06:48:32.6871944Z     Received: test-results/appearance-mobile-appearance-Enhance-screen-chromium-retry2/enhance-mobile-actual.png
+2026-09-16T06:48:32.6873478Z     Diff:     test-results/appearance-mobile-appearance-Enhance-screen-chromium-retry2/enhance-mobile-diff.png
+2026-09-16T06:48:32.6874868Z     ────────────────────────────────────────────────────────────────────────────────────────────────
+2026-09-16T06:48:32.6875490Z 
+2026-09-16T06:48:32.6876154Z     Error Context: test-results/appearance-mobile-appearance-Enhance-screen-chromium-retry2/error-context.md
+2026-09-16T06:48:32.6876965Z 
+2026-09-16T06:48:32.6877202Z   6 failed
+2026-09-16T06:48:32.6878157Z     [chromium] › e2e/appearance.spec.js:62:5 › desktop appearance › Upgrade screen ─────────────────
+2026-09-16T06:48:32.6879083Z     [chromium] › e2e/appearance.spec.js:69:5 › desktop appearance › Path screen ────────────────────
+2026-09-16T06:48:32.6880084Z     [chromium] › e2e/appearance.spec.js:82:5 › desktop appearance › Enhance screen ─────────────────
+2026-09-16T06:48:32.6881240Z     [chromium] › e2e/appearance.spec.js:62:5 › mobile appearance › Upgrade screen ──────────────────
+2026-09-16T06:48:32.6882520Z     [chromium] › e2e/appearance.spec.js:69:5 › mobile appearance › Path screen ─────────────────────
+2026-09-16T06:48:32.6883820Z     [chromium] › e2e/appearance.spec.js:82:5 › mobile appearance › Enhance screen ──────────────────
+2026-09-16T06:48:32.6884718Z   36 passed (28.9s)
+2026-09-16T06:48:32.7204808Z ##[error]Process completed with exit code 1.
+2026-09-16T06:48:32.7294785Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-09-16T06:48:32.7296143Z ##[group]Run actions/upload-artifact@v4
+2026-09-16T06:48:32.7296544Z with:
+2026-09-16T06:48:32.7296891Z   name: playwright-report
+2026-09-16T06:48:32.7297298Z   path: playwright-report/
+2026-09-16T06:48:32.7297636Z   retention-days: 7
+2026-09-16T06:48:32.7297943Z   if-no-files-found: warn
+2026-09-16T06:48:32.7298348Z   compression-level: 6
+2026-09-16T06:48:32.7298666Z   overwrite: false
+2026-09-16T06:48:32.7299026Z   include-hidden-files: false
+2026-09-16T06:48:32.7299367Z ##[endgroup]
+2026-09-16T06:48:32.8940143Z (node:4995) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-09-16T06:48:32.8941857Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-09-16T06:48:32.9241048Z With the provided path, there will be 49 files uploaded
+2026-09-16T06:48:32.9241951Z Artifact name is valid!
+2026-09-16T06:48:32.9242407Z Root directory input is valid!
+2026-09-16T06:48:33.2393310Z Beginning upload of artifact content to blob storage
+2026-09-16T06:48:33.4200464Z (node:4995) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-09-16T06:48:34.0103141Z Uploaded bytes 2140007
+2026-09-16T06:48:34.0708743Z Finished uploading artifact content to blob storage!
+2026-09-16T06:48:34.0710508Z SHA256 digest of uploaded artifact zip is 4b7e19241a0e3c6965f3967764993c77d20ac5328a9c581d0ce65363dc8bca73
+2026-09-16T06:48:34.0711582Z Finalizing artifact upload
+2026-09-16T06:48:34.3721121Z Artifact playwright-report.zip successfully finalized. Artifact ID 10433637862
+2026-09-16T06:48:34.3722364Z Artifact playwright-report has been successfully uploaded! Final size is 2140007 bytes. Artifact ID is 10433637862
+2026-09-16T06:48:34.3727054Z Artifact download URL: https://github.com/luplows/tower-workshop-paths/actions/runs/35065333598/artifacts/10433637862
+2026-09-16T06:48:34.3910119Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-09-16T06:48:34.3911387Z Post job cleanup.
+2026-09-16T06:48:34.4750866Z [command]/usr/bin/git version
+2026-09-16T06:48:34.4788146Z git version 2.55.0
+2026-09-16T06:48:34.4821450Z Temporarily overriding HOME='/home/runner/work/_temp/c4917e6b-98d4-4519-8a4d-c5c0f73cf29f' before making global git config changes
+2026-09-16T06:48:34.4822750Z Adding repository directory to the temporary git global config as a safe directory
+2026-09-16T06:48:34.4827727Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/tower-workshop-paths/tower-workshop-paths
+2026-09-16T06:48:34.4864097Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-09-16T06:48:34.4895013Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-09-16T06:48:34.5108067Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-09-16T06:48:34.5128138Z http.https://github.com/.extraheader
+2026-09-16T06:48:34.5138518Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-09-16T06:48:34.5170457Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-09-16T06:48:34.5373266Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-16T06:48:34.5404195Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-09-16T06:48:34.5751585Z Cleaning up orphan processes
+2026-09-16T06:48:34.6004540Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/setup-node@v4, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

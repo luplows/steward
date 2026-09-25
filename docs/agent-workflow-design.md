@@ -299,7 +299,7 @@ than relaxed.
    draft-or-ready decision in its report. The dispatcher pushes the branch (`pushBranch` in
    `scripts/dispatch/coder.mjs`), so a model session has no write access to the remote, then opens
    the PR from that text, as a **draft** if the coder said draft.
-4. CI passes. **Planned (OQ-79, OQ-48):** the dispatcher waits for it before reviewing, so no
+4. CI passes. **Planned (OQ-48):** the dispatcher waits for it before reviewing, so no
    review is spent on a head that cannot land.
 5. Dispatcher spawns the reviewer, which returns a structured verdict.
 6. Dispatcher posts the verdict as a marker comment, and `review-gate.yml` derives
@@ -318,7 +318,7 @@ The majority of the interesting behaviour.
 |---|---|
 | Reviewer returns `block` | Findings → coder respawned with story + findings. **Bounded**; OQ-48 sets the number. |
 | Still failing at the bound | Human queue. Round count **derived from `block` verdicts on the PR**, not stored. `review-blocked` is applied by hand today. **Planned (OQ-48):** the dispatcher sets `blocked:` on the story. **Planned (OQ-80):** `review-gate.yml` applies `review-blocked`. |
-| CI red on the head | **Planned (OQ-79, OQ-48):** failure output → coder respawned on the same branch. Bounded separately (OQ-48's AC-6b), derived from the PR's failed CI runs; then `blocked:`, no label. |
+| CI red on the head | **Planned (OQ-48):** failure output → coder respawned on the same branch. Bounded separately (OQ-48's AC-6b), derived from the PR's failed CI runs; then `blocked:`, no label. |
 | Story was wrong, not the code | `blocked:` set with the reason → Session A |
 | Coder hits ambiguity mid-story | `blocked:` + the specific question → Session A |
 | Branch stale | Rebase; if it fails, kick back rather than merge against a moved world |
