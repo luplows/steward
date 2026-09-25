@@ -122,7 +122,9 @@ export function buildArgs({ role, model, effort, maxBudgetUsd, branch }) {
 // placeholder (a `{{FINDINGS}}`) is bounded unless someone declares it
 // trusted, rather than unbounded unless someone remembers to wrap it.
 const TRUSTED_INLINE = {
-  STORY_ID: /^[A-Za-z0-9][A-Za-z0-9._-]*$/,
+  // `n/a` is what reviewer.md says the story placeholders render as for a PR
+  // that implements no story (OQ-69/AC-6b).
+  STORY_ID: /^(?:[A-Za-z0-9][A-Za-z0-9._-]*|n\/a)$/,
   STORY_PATH: /^[A-Za-z0-9][A-Za-z0-9._/-]*$/,
   BRANCH: /^[A-Za-z0-9][A-Za-z0-9._/-]*$/,
   HEAD_BRANCH: /^[A-Za-z0-9][A-Za-z0-9._/-]*$/,

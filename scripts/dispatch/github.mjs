@@ -123,6 +123,9 @@ export function buildListComments(repo, number, page = 1) {
 export function parsePullRequestState(json) {
   return {
     headSha: json.head.sha,
+    headRef: json.head.ref ?? null,
+    baseRef: json.base?.ref ?? null,
+    body: json.body ?? '',
     draft: json.draft === true,
     labels: (json.labels ?? []).map((label) => label.name),
     // `mergeable` is null while GitHub is still computing it; passed through as-is.
