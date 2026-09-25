@@ -7,9 +7,9 @@ import { readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { createContext, parseMarkerComment } from './github.mjs'
+import { createContext, parseComments, parseMarkerComment } from './github.mjs'
 import {
-  chooseReviewerModel, formatFindings, parseReviewerVerdict, resolveStory, reviewPullRequest,
+  chooseReviewerModel, formatFindings, HONOURED_ASSOCIATIONS, parseReviewerVerdict, resolveStory, reviewPullRequest,
 } from './review.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -113,7 +113,7 @@ beforeAll(() => {
     'scripts/dispatch/render.mjs': '// POISON-RENDERER',
     'stories/done/OQ-99-thing.md': STORY('sonnet'),
   }, [['stories/OQ-99-thing.md', 'stories/done/OQ-99-thing.md']])
-})
+}, 60_000) // OQ-78/AC-7: many git calls, which a loaded machine has pushed past the 10 s default.
 
 afterAll(() => rmSync(root, { recursive: true, force: true }))
 
@@ -176,11 +176,15 @@ function standIn(reply) {
   return { calls, sessionOptions: { run, executable: 'stand-in' } }
 }
 
-const review = (branch, { states, comments, body, reply, baseEnv = {}, repoDir } = {}) => {
+// The fixture checkouts have no package.json, so the real `npm ci` is replaced.
+const noInstall = async () => {}
+
+const review = (branch, { states, comments, body, reply, baseEnv = {}, repoDir, install = noInstall, rereview } = {}) => {
   const github = fakeGitHub({ branch, states: states ?? [shas[branch]], comments, body })
   const session = standIn(reply ?? verdictText(shas[branch]))
   const done = reviewPullRequest({
-    number: 7, ctx: github.ctx, repoDir: repoDir ?? dirtyClone(), baseEnv, sessionOptions: session.sessionOptions,
+    number: 7, ctx: github.ctx, repoDir: repoDir ?? dirtyClone(), baseEnv, install, rereview,
+    sessionOptions: session.sessionOptions,
   })
   return { done, github, session }
 }
@@ -227,7 +231,7 @@ describe('OQ-69/AC-1: one entry point runs the reviewer half', () => {
       record: { role, exitCode: 1, signal: null, stdout: '', stoppedFor: null }, pid: 1,
     })
     const result = await reviewPullRequest({
-      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, sessionOptions: { run, executable: 'stand-in' },
+      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, install: noInstall, sessionOptions: { run, executable: 'stand-in' },
     })
     expect(result.status).toBe('session-failed')
     expect(github.posted).toEqual([])
@@ -320,7 +324,7 @@ describe('OQ-69/AC-3: the verdict is recorded against the SHA the reviewer revie
     const github = fakeGitHub({ branch: 'story/OQ-99-thing', states: ['e'.repeat(40)] })
     const session = standIn(verdictText('e'.repeat(40)))
     const result = await reviewPullRequest({
-      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, sessionOptions: session.sessionOptions,
+      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, install: noInstall, sessionOptions: session.sessionOptions,
     })
     expect(result.status).toBe('head-moved')
     expect(session.calls).toEqual([])
@@ -450,7 +454,7 @@ describe('OQ-69/AC-8: a verdict already at the current head is not posted twice'
   it('OQ-69/AC-8: skips the review entirely when the head already carries a verdict', async () => {
     const head = shas['story/OQ-99-thing']
     const { done, session, github } = review('story/OQ-99-thing', {
-      comments: [{ id: 1, user: { login: 'owner' }, created_at: '2026-09-24T00:00:00Z', body: marker(head, 'block') }],
+      comments: [{ id: 1, user: { login: 'owner' }, author_association: 'OWNER', created_at: '2026-09-24T00:00:00Z', body: marker(head, 'block') }],
     })
     const result = await done
     expect(result).toMatchObject({ status: 'already-reviewed', headSha: head, existing: { commentId: 1, verdict: 'block' } })
@@ -460,7 +464,7 @@ describe('OQ-69/AC-8: a verdict already at the current head is not posted twice'
 
   it('OQ-69/AC-8: a verdict at an earlier head does not stop a review of the new one', async () => {
     const { done, github } = review('story/OQ-99-thing', {
-      comments: [{ id: 1, user: { login: 'owner' }, created_at: '2026-09-24T00:00:00Z', body: marker(shas['story/OQ-98-other']) }],
+      comments: [{ id: 1, user: { login: 'owner' }, author_association: 'OWNER', created_at: '2026-09-24T00:00:00Z', body: marker(shas['story/OQ-98-other']) }],
     })
     expect((await done).status).toBe('recorded')
     expect(github.posted).toHaveLength(1)
@@ -469,7 +473,7 @@ describe('OQ-69/AC-8: a verdict already at the current head is not posted twice'
   it('OQ-69/AC-8: marker-like text that is not well formed is not a verdict', async () => {
     const head = shas['story/OQ-99-thing']
     const { done } = review('story/OQ-99-thing', {
-      comments: [{ id: 1, user: { login: 'x' }, created_at: '2026-09-24T00:00:00Z', body: `<!-- agent-review head=${head.slice(0, 7)} verdict=pass -->` }],
+      comments: [{ id: 1, user: { login: 'x' }, author_association: 'OWNER', created_at: '2026-09-24T00:00:00Z', body: `<!-- agent-review head=${head.slice(0, 7)} verdict=pass -->` }],
     })
     expect((await done).status).toBe('recorded')
   })
@@ -483,16 +487,165 @@ describe('OQ-69/AC-8: a verdict already at the current head is not posted twice'
     github.ctx.send = async (request) => {
       const out = await post(request)
       if (request.method === 'POST') {
-        comments.push({ id: 555, user: { login: 'owner' }, created_at: '2026-09-24T00:00:00Z', body: request.body.body })
+        comments.push({ id: 555, user: { login: 'owner' }, author_association: 'OWNER', created_at: '2026-09-24T00:00:00Z', body: request.body.body })
       }
       return out
     }
     const session = standIn(verdictText(head))
-    const args = { number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, sessionOptions: session.sessionOptions }
+    const args = { number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, install: noInstall, sessionOptions: session.sessionOptions }
     expect((await reviewPullRequest(args)).status).toBe('recorded')
     expect((await reviewPullRequest(args)).status).toBe('already-reviewed')
     expect(github.posted).toHaveLength(1)
     expect(session.calls).toHaveLength(1)
+  })
+})
+
+const marker = (head, verdict) => `Done.\n\n<!-- agent-review head=${head} verdict=${verdict} -->`
+const comment = (id, head, verdict, association = 'OWNER') => ({
+  id, user: { login: 'someone' }, author_association: association, created_at: '2026-09-24T00:00:00Z', body: marker(head, verdict),
+})
+const HEAD = () => shas['story/OQ-99-thing']
+const credentialEnv = { GH_TOKEN: 'a', GITHUB_TOKEN: 'b', GH_ENTERPRISE_TOKEN: 'c', PATH: '/bin' }
+
+describe('OQ-78/AC-1 and AC-2: dependencies are installed before the reviewer, or the dispatch stops', () => {
+  it('OQ-78/AC-1: npm ci runs in the review checkout with the reviewer\'s credential-free environment', async () => {
+    const installs = []
+    const install = async (options) => {
+      installs.push({ ...options, head: git(options.cwd, 'rev-parse', 'HEAD') })
+    }
+    const { done, session } = review('story/OQ-99-thing', { install, baseEnv: credentialEnv })
+    await done
+    expect(installs).toHaveLength(1)
+    // The checkout at the head under review, which is the reviewer's cwd.
+    expect(installs[0].cwd).toBe(session.calls[0].cwd)
+    expect(installs[0].head).toBe(HEAD())
+    expect(installs[0].env).not.toHaveProperty('GH_TOKEN')
+    expect(installs[0].env).not.toHaveProperty('GITHUB_TOKEN')
+    expect(installs[0].env).not.toHaveProperty('GH_ENTERPRISE_TOKEN')
+    expect(installs[0].env.GH_CONFIG_DIR).toBeTruthy()
+    expect(installs[0].env.PATH).toBe('/bin')
+  })
+
+  it('OQ-78/AC-2: a failed install has its own status, spawns no reviewer, posts nothing, and is a CLI failure', async () => {
+    const { done, session, github } = review('story/OQ-99-thing', {
+      install: async () => { throw new Error('npm ci failed') },
+    })
+    const result = await done
+    expect(result).toMatchObject({ status: 'install-failed', reason: 'npm ci failed' })
+    expect(session.calls).toEqual([])
+    expect(github.posted).toEqual([])
+    // main() exits non-zero for every status outside NON_FAILURES.
+    const source = readFileSync(path.join(here, 'review.mjs'), 'utf8')
+    expect(source.match(/const NON_FAILURES = (\[[^\]]*\])/)[1]).not.toContain('install-failed')
+  })
+})
+
+describe('OQ-78/AC-3: only the gate\'s author associations make a marker a verdict', () => {
+  it('OQ-78/AC-3: review.mjs honours the same associations as review-gate.yml\'s case', () => {
+    const workflow = readFileSync(path.join(here, '..', '..', '.github', 'workflows', 'review-gate.yml'), 'utf8')
+    const step = workflow.slice(workflow.indexOf('name: Apply verdict from marker'))
+    const honoured = step.match(/case "\$\{ASSOC\}" in\s+([A-Z|]+)\)/)[1].split('|')
+    expect([...HONOURED_ASSOCIATIONS].sort()).toEqual([...honoured].sort())
+  })
+
+  it('OQ-78/AC-3: a marker from a non-writer is not a verdict and the review goes ahead', async () => {
+    for (const association of ['NONE', 'CONTRIBUTOR', 'FIRST_TIME_CONTRIBUTOR', null]) {
+      const { done, github } = review('story/OQ-99-thing', { comments: [comment(1, HEAD(), 'pass', association)] })
+      const result = await done
+      expect(result.status).toBe('recorded')
+      expect(github.posted).toHaveLength(1)
+    }
+  })
+
+  it('OQ-78/AC-3: parseComments carries the comment\'s author association', () => {
+    expect(parseComments([{ id: 1, user: { login: 'u' }, author_association: 'MEMBER', body: '' }])[0].authorAssociation).toBe('MEMBER')
+  })
+})
+
+describe('OQ-78/AC-4: the latest honoured marker at the head governs', () => {
+  it('OQ-78/AC-4: a block followed by a pass at the same head is a pass', async () => {
+    const { done, session } = review('story/OQ-99-thing', {
+      comments: [comment(1, HEAD(), 'block'), comment(2, HEAD(), 'pass')],
+    })
+    expect(await done).toMatchObject({ status: 'already-reviewed', existing: { commentId: 2, verdict: 'pass' } })
+    expect(session.calls).toEqual([])
+  })
+
+  it('OQ-78/AC-4: a later marker from a non-writer does not supersede an honoured one', async () => {
+    const { done } = review('story/OQ-99-thing', {
+      comments: [comment(1, HEAD(), 'block'), comment(2, HEAD(), 'pass', 'NONE')],
+    })
+    expect(await done).toMatchObject({ status: 'already-reviewed', existing: { commentId: 1, verdict: 'block' } })
+  })
+})
+
+describe('OQ-78/AC-5: --rereview reviews a head only over a block', () => {
+  it('OQ-78/AC-5: over a block, the review goes ahead and is recorded', async () => {
+    const { done, session, github } = review('story/OQ-99-thing', { rereview: true, comments: [comment(1, HEAD(), 'block')] })
+    expect((await done).status).toBe('recorded')
+    expect(session.calls).toHaveLength(1)
+    expect(github.posted).toHaveLength(1)
+  })
+
+  it('OQ-78/AC-5: over a pass, a pass-with-observations, or no verdict, it stops with its own status and posts nothing', async () => {
+    for (const comments of [
+      [comment(1, HEAD(), 'pass')],
+      [comment(1, HEAD(), 'pass-with-observations')],
+      [comment(1, HEAD(), 'block'), comment(2, HEAD(), 'pass')],
+      [],
+    ]) {
+      const { done, session, github } = review('story/OQ-99-thing', { rereview: true, comments })
+      const result = await done
+      expect(result.status).toBe('rereview-refused')
+      expect(session.calls).toEqual([])
+      expect(github.posted).toEqual([])
+    }
+  })
+
+  it('OQ-78/AC-5: without the option a block at the head still stops the review (OQ-69/AC-8)', async () => {
+    const { done } = review('story/OQ-99-thing', { comments: [comment(1, HEAD(), 'block')] })
+    expect((await done).status).toBe('already-reviewed')
+  })
+
+  it('OQ-78/AC-5: the usage line documents --rereview', () => {
+    expect(readFileSync(path.join(here, 'review.mjs'), 'utf8')).toMatch(/review\.mjs <pr-number> \[--repo owner\/name\] \[--rereview\]/)
+  })
+})
+
+describe('OQ-78/AC-6: a re-review still refuses to post over a marker that arrived during it', () => {
+  // The second read of the comments sees what the reviewer's run added.
+  function withArrival(comments, arrival) {
+    const github = fakeGitHub({ branch: 'story/OQ-99-thing', states: [HEAD()], comments })
+    const session = standIn(verdictText(HEAD()))
+    const send = github.ctx.send.bind(github.ctx)
+    github.ctx.send = async (request) => {
+      const out = await send(request)
+      if (request.method === 'GET' && /\/comments\?/.test(request.url) && session.calls.length > 0 && arrival) {
+        comments.push(arrival)
+      }
+      return out
+    }
+    return {
+      github,
+      done: reviewPullRequest({
+        number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, install: noInstall, rereview: true,
+        sessionOptions: session.sessionOptions,
+      }),
+    }
+  }
+
+  it('OQ-78/AC-6: a newer honoured marker at the head stops the post', async () => {
+    const { done, github } = withArrival([comment(1, HEAD(), 'block')], comment(2, HEAD(), 'pass'))
+    // The read that follows the session returns the arrival, since it is added after the read.
+    const result = await done
+    expect(result).toMatchObject({ status: 'already-reviewed', existing: { commentId: 2 } })
+    expect(github.posted).toEqual([])
+  })
+
+  it('OQ-78/AC-6: the overridden block on its own is not a race', async () => {
+    const { done, github } = withArrival([comment(1, HEAD(), 'block')], null)
+    expect((await done).status).toBe('recorded')
+    expect(github.posted).toHaveLength(1)
   })
 })
 

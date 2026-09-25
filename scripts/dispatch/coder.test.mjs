@@ -143,6 +143,8 @@ async function dispatch(world, behave, extra = {}) {
     promptTemplate: TEMPLATE,
     baseEnv: { PATH: '/bin', GH_TOKEN: 'secret', GITHUB_TOKEN: 'secret', GH_ENTERPRISE_TOKEN: 'secret' },
     sessionOptions: { executable: 'fake-claude', run: fake.run },
+    // The fixture worktree has no package.json, so the real `npm ci` is replaced.
+    install: async () => {},
     ...extra,
   })
   return { result, gh, fake }
@@ -462,6 +464,79 @@ describe('OQ-70/AC-9: the worktree is removed when the run finishes', () => {
     leaked(world, cwds)
     expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/story/OQ-98-first')).toBeTruthy()
     expect(readdirSync(tmpdir()).filter((n) => n.startsWith('tw-coder-') && cwds.some((c) => c.includes(n)))).toEqual([])
+  })
+})
+
+describe('OQ-78/AC-8 and AC-9: dependencies are installed before the coder, or the dispatch stops', () => {
+  it('OQ-78/AC-8: npm ci runs in the new worktree with the coder\'s credential-free environment, before the session', async () => {
+    const world = makeWorld()
+    const order = []
+    const installs = []
+    const install = async (options) => {
+      order.push('install')
+      installs.push({ ...options, branch: git(options.cwd, 'rev-parse', '--abbrev-ref', 'HEAD') })
+    }
+    const { fake } = await dispatch(world, ({ cwd }) => { order.push('session'); finishStory(cwd); return block() }, {
+      install, baseEnv: { PATH: '/bin', GH_TOKEN: 'a', GITHUB_TOKEN: 'b', GH_ENTERPRISE_TOKEN: 'c' },
+    })
+    expect(order).toEqual(['install', 'session'])
+    expect(installs).toHaveLength(1)
+    expect(installs[0].cwd).toBe(fake.calls[0].cwd)
+    expect(installs[0].cwd).not.toBe(world.repoDir)
+    expect(installs[0].branch).toBe('story/OQ-98-first')
+    for (const key of ['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN']) expect(installs[0].env).not.toHaveProperty(key)
+    expect(installs[0].env.GH_CONFIG_DIR).toBeTruthy()
+    expect(installs[0].env.PATH).toBe('/bin')
+  })
+
+  it('OQ-78/AC-9: a failed install has its own status, spawns no coder, opens no PR, and cleans up', async () => {
+    const world = makeWorld()
+    let installCwd
+    const { result, fake, gh } = await dispatch(world, () => { throw new Error('must not spawn') }, {
+      install: async ({ cwd }) => { installCwd = cwd; throw new Error('npm ci failed') },
+    })
+    expect(result).toMatchObject({ status: 'install-failed', storyId: 'OQ-98', reason: 'npm ci failed' })
+    expect(fake.calls).toHaveLength(0)
+    expect(pulls(gh)).toEqual([])
+    expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
+    expect(existsSync(installCwd)).toBe(false)
+    expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/story/OQ-98-first')).toBeNull()
+    // main() exits non-zero for every status outside NON_FAILURES.
+    expect(SOURCE.match(/const NON_FAILURES = (\[[^\]]*\])/)[1]).not.toContain('install-failed')
+  })
+})
+
+describe('OQ-78/AC-10: the story is chosen from the freshly fetched origin/main', () => {
+  it('OQ-78/AC-10: a story finished on origin but open in a stale checkout is not chosen, and nothing throws', async () => {
+    const world = makeWorld()
+    // OQ-98 lands in stories/done/ on the origin; the dispatcher's checkout is not updated.
+    mkdirSync(path.join(world.seed, 'stories', 'done'))
+    git(world.seed, 'mv', 'stories/OQ-98-first.md', 'stories/done/OQ-98-first.md')
+    git(world.seed, 'commit', '-q', '-m', 'OQ-98 done')
+    git(world.seed, 'push', '-q', 'origin', 'main')
+    expect(existsSync(path.join(world.repoDir, 'stories', 'OQ-98-first.md'))).toBe(true)
+
+    const { result } = await dispatch(world, ({ cwd }) => {
+      finishStory(cwd, { file: 'OQ-99-second.md' })
+      return block()
+    })
+    expect(result.status).toBe('opened')
+    expect(result.storyId).toBe('OQ-99')
+  })
+
+  it('OQ-78/AC-10: asking for the finished story by id is a status, not a throw out of readFileSync', async () => {
+    const world = makeWorld()
+    mkdirSync(path.join(world.seed, 'stories', 'done'))
+    git(world.seed, 'mv', 'stories/OQ-98-first.md', 'stories/done/OQ-98-first.md')
+    git(world.seed, 'commit', '-q', '-m', 'OQ-98 done')
+    git(world.seed, 'push', '-q', 'origin', 'main')
+    const { result, fake } = await dispatch(world, () => { throw new Error('must not spawn') }, { storyId: 'OQ-98' })
+    expect(result.status).toBe('not-ready')
+    expect(fake.calls).toHaveLength(0)
+  })
+
+  it('OQ-78/AC-10: the repoDir docstring no longer says its stories/ should be current', () => {
+    expect(SOURCE).not.toMatch(/should be\s+current/)
   })
 })
 

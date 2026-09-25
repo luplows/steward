@@ -202,6 +202,7 @@ export function parseComments(json) {
   return json.map((comment) => ({
     id: comment.id,
     author: comment.user?.login ?? null,
+    authorAssociation: comment.author_association ?? null,
     createdAt: comment.created_at,
     marker: parseMarkerComment(comment.body),
   }))

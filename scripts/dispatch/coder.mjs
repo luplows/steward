@@ -34,8 +34,10 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { coderEnv } from './coder-env.mjs'
 import { createContext, createPullRequest } from './github.mjs'
-import { dispatchable, loadQueue, parseFrontmatter } from './queue.mjs'
+import { installDependencies } from './install.mjs'
+import { buildStory, deriveStatus, dispatchable, isStoryFilename, orderStories, parseFrontmatter } from './queue.mjs'
 import { spawnSession } from './spawn.mjs'
 
 const execFileAsync = promisify(execFile)
@@ -63,6 +65,23 @@ async function gitOrNull(cwd, args) {
   } catch {
     return null
   }
+}
+
+/**
+ * The queue as it stands at `ref`, built with `queue.mjs`'s own parsing,
+ * status derivation and ordering. Only regular files count (`loadQueue` skips
+ * anything else, so a symlink named like a story is not one here either).
+ */
+async function loadQueueAt(repoDir, ref) {
+  const listing = await git(repoDir, ['ls-tree', ref, 'stories/', 'stories/done/'])
+  const built = []
+  for (const line of listing.split(/\r?\n/)) {
+    const m = line.match(/^(\d+) blob [0-9a-f]+\t(stories\/(?:done\/)?([^/]+))$/)
+    if (!m || !m[1].startsWith('100') || !isStoryFilename(m[3])) continue
+    built.push(buildStory(m[2], await git(repoDir, ['show', `${ref}:${m[2]}`]), m[2].startsWith('stories/done/')))
+  }
+  const doneIds = new Set(built.filter((story) => story.isDone).map((story) => story.id))
+  return orderStories(built.map((story) => ({ ...story, ...deriveStatus(story, doneIds) })))
 }
 
 /** The branch a story is worked on: `story/` plus its filename without `.md`. */
@@ -110,11 +129,13 @@ async function cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded }) {
  * Runs the coder half for the next ready story.
  *
  *   ctx            a `github.mjs` context (`createContext`)
- *   repoDir        the dispatcher's own checkout: the queue is read from it,
- *                  and the worktree is made from its object store. Its `stories/`
- *                  should be current; the story text the coder receives is read
- *                  from the worktree, i.e. from `origin/main`. Defaults to this
+ *   repoDir        the dispatcher's own checkout: its object store supplies the
+ *                  queue and the worktree, both taken from the freshly fetched
+ *                  `origin/main`, never from its working tree. Defaults to this
  *                  file's repo
+ *   install        `({ cwd, env })`, the dependency install run in the worktree
+ *                  before the coder starts; defaults to `npm ci`. It gets the
+ *                  coder's own credential-free environment
  *   storyId        run this story instead of the head of the queue. It must
  *                  still be `ready`; this is not a second ordering
  *   promptTemplate coder.md's text; defaults to the copy beside this file
@@ -129,10 +150,15 @@ async function cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded }) {
  */
 export async function dispatchCoder({
   ctx, repoDir = DISPATCHER_ROOT, storyId, promptTemplate, baseEnv = process.env, sessionOptions = {},
+  install = installDependencies,
 }) {
   const template = promptTemplate ?? readFileSync(CODER_PROMPT, 'utf8')
 
-  const queue = await loadQueue(repoDir)
+  // The queue is read from the tip just fetched, and the worktree is made from
+  // that same commit, so the story chosen is the story the coder is handed.
+  await git(repoDir, ['fetch', REMOTE, BASE])
+  const baseSha = (await git(repoDir, ['rev-parse', `${REMOTE}/${BASE}`])).trim()
+  const queue = await loadQueueAt(repoDir, baseSha)
   let chosen
   if (storyId) {
     chosen = queue.find((s) => s.id === storyId)
@@ -152,12 +178,10 @@ export async function dispatchCoder({
   if (await gitOrNull(repoDir, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])) {
     return { status: 'branch-exists', branch, reason: `${branch} already exists locally` }
   }
-  await git(repoDir, ['fetch', REMOTE, BASE])
   // An existing remote branch would make "it is on the remote" (AC-4) no evidence.
   if (await remoteTip(repoDir, branch)) {
     return { status: 'branch-exists', branch, reason: `${branch} already exists on ${REMOTE}` }
   }
-  const baseSha = (await git(repoDir, ['rev-parse', `${REMOTE}/${BASE}`])).trim()
 
   const scratch = await mkdtemp(path.join(tmpdir(), 'tw-coder-'))
   const tree = path.join(scratch, 'tree')
@@ -165,7 +189,7 @@ export async function dispatchCoder({
   try {
     // `--no-track`: a branch made from `origin/main` otherwise tracks it, and a
     // bare `git push` on it would aim at `main` (AC-2).
-    await git(repoDir, ['worktree', 'add', '--no-track', '-b', branch, tree, `${REMOTE}/${BASE}`])
+    await git(repoDir, ['worktree', 'add', '--no-track', '-b', branch, tree, baseSha])
     worktreeAdded = true
 
     const text = readFileSync(path.join(tree, storyPath), 'utf8')
@@ -174,6 +198,15 @@ export async function dispatchCoder({
 
     const ghConfigDir = path.join(scratch, 'gh-config')
     await mkdir(ghConfigDir)
+
+    // The install runs `package.json` scripts, so it gets the environment the
+    // coder session gets (what `spawnSession` derives from `baseEnv` and
+    // `emptyGhConfigDir`), never the dispatcher's own.
+    try {
+      await install({ cwd: tree, env: coderEnv(baseEnv, ghConfigDir) })
+    } catch (error) {
+      return { status: 'install-failed', storyId: chosen.id, branch, reason: error.message }
+    }
     const { classification } = await spawnSession({
       ...sessionOptions,
       role: 'coder',
@@ -240,6 +273,7 @@ export async function dispatchCoder({
 
 // --------------------------------------------------------------------- CLI
 
+// `install-failed` is deliberately absent: it is a failure.
 const NON_FAILURES = ['opened', 'nothing-ready']
 
 async function main(argv) {

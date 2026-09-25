@@ -22,7 +22,11 @@
  * outcome. Each is a distinct `status` on the result.
  *
  * Usage:
- *   node scripts/dispatch/review.mjs <pr-number> [--repo owner/name]
+ *   node scripts/dispatch/review.mjs <pr-number> [--repo owner/name] [--rereview]
+ *
+ * `--rereview` permits reviewing a head whose governing verdict is a `block`
+ * (`REVIEW.md`, "What the workflow enforces", item 3). Over any other verdict,
+ * or none, it stops.
  */
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
@@ -40,6 +44,7 @@ import {
   postComment,
   WRITABLE_VERDICTS,
 } from './github.mjs'
+import { installDependencies } from './install.mjs'
 import { ROLE_DEFAULTS } from './invocation.mjs'
 import { parseFrontmatter, STORY_FILENAME_RE } from './queue.mjs'
 import { spawnSession } from './spawn.mjs'
@@ -52,6 +57,11 @@ const REVIEWER_PROMPT = path.join(DISPATCHER_ROOT, '.claude', 'prompts', 'review
 
 const DEFAULT_REPO = 'luplows/tower-workshop-paths'
 const REMOTE = 'origin'
+
+// The author associations review-gate.yml's "Apply verdict from marker" step
+// honours. A restatement so the two read the same; a test compares it to the
+// workflow's `case` and fails on drift.
+export const HONOURED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR']
 const SHA_RE = /^[0-9a-f]{40}$/
 
 // reviewer.md, "For a PR that implements no story".
@@ -207,15 +217,22 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
  *   promptTemplate reviewer.md's text; defaults to the copy beside this file
  *   baseEnv        the environment to derive the session's from; defaults to
  *                  `process.env`, with every GitHub credential removed
+ *   rereview       review a head that already has a verdict, only when the
+ *                  governing verdict there is `block`
+ *   install        `({ cwd, env })`, the dependency install run in the checkout
+ *                  before the reviewer starts; defaults to `npm ci`. It gets the
+ *                  reviewer's own credential-free environment
  *   sessionOptions extra `spawnSession` options (executable, run, timeouts,
  *                  budget)
  *
  * Resolves `{ status, ... }`. `recorded` carries the comment id; every other
  * status means nothing was posted, and `reason` says why. `no-verdict` and
- * `already-reviewed` are not failures.
+ * `already-reviewed` are not failures; `install-failed` and `rereview-refused`
+ * are.
  */
 export async function reviewPullRequest({
   number, ctx, repoDir = DISPATCHER_ROOT, promptTemplate, baseEnv = process.env, sessionOptions = {},
+  rereview = false, install = installDependencies,
 }) {
   const template = promptTemplate ?? readFileSync(REVIEWER_PROMPT, 'utf8')
   const pr = await getPullRequestState(ctx, number)
@@ -224,7 +241,19 @@ export async function reviewPullRequest({
   }
 
   const existing = await verdictAt(ctx, number, pr.headSha)
-  if (existing) return { status: 'already-reviewed', headSha: pr.headSha, existing }
+  if (rereview) {
+    if (existing?.verdict !== 'block') {
+      return {
+        status: 'rereview-refused',
+        headSha: pr.headSha,
+        reason: existing
+          ? `the governing verdict at ${pr.headSha} is ${existing.verdict}; only a block can be re-reviewed at the same head`
+          : `there is no verdict at ${pr.headSha} to re-review`,
+      }
+    }
+  } else if (existing) {
+    return { status: 'already-reviewed', headSha: pr.headSha, existing }
+  }
 
   const scratch = await mkdtemp(path.join(tmpdir(), 'tw-review-'))
   const tree = path.join(scratch, 'tree')
@@ -272,6 +301,15 @@ export async function reviewPullRequest({
     // posts nothing (reviewer.md). `coderEnv` is what strips them.
     const ghConfigDir = path.join(scratch, 'gh-config')
     await mkdir(ghConfigDir)
+    const sessionEnv = coderEnv(baseEnv, ghConfigDir)
+
+    // A reviewer that cannot run `npm test` silently reviews by reading
+    // (reviewer.md), so a failed install stops the dispatch.
+    try {
+      await install({ cwd: tree, env: sessionEnv })
+    } catch (error) {
+      return { status: 'install-failed', reason: error.message }
+    }
     const { classification, output } = await spawnSession({
       ...sessionOptions,
       role: 'reviewer',
@@ -279,7 +317,7 @@ export async function reviewPullRequest({
       story,
       branch: pr.headRef,
       pr: { number, headSha: pr.headSha, body: pr.body },
-      baseEnv: coderEnv(baseEnv, ghConfigDir),
+      baseEnv: sessionEnv,
       model: chooseReviewerModel(story.model),
       cwd: tree,
     })
@@ -304,7 +342,11 @@ export async function reviewPullRequest({
       return { status: 'head-moved', reason: `the pull request moved to ${current.headSha} during the review of ${verdict.head}` }
     }
     const raced = await verdictAt(ctx, number, verdict.head)
-    if (raced) return { status: 'already-reviewed', headSha: verdict.head, existing: raced }
+    // Under a re-review the block being overridden is expected to be there; a
+    // different governing marker is one that arrived during the review.
+    if (raced && !(rereview && raced.commentId === existing.commentId)) {
+      return { status: 'already-reviewed', headSha: verdict.head, existing: raced }
+    }
 
     let body
     try {
@@ -321,10 +363,13 @@ export async function reviewPullRequest({
 }
 
 // The gate reads the marker, so an existing verdict is a well-formed marker at
-// this head in any comment. Malformed marker-like text is not a verdict.
+// this head in a comment whose author the gate honours. Malformed marker-like
+// text is not a verdict. The latest such comment governs, as the gate applies
+// each in turn.
 async function verdictAt(ctx, number, headSha) {
   const comments = await listPullRequestComments(ctx, number)
-  const found = comments.find((c) => c.marker.kind === 'marker' && c.marker.headSha === headSha)
+  const found = comments.findLast((c) =>
+    c.marker.kind === 'marker' && c.marker.headSha === headSha && HONOURED_ASSOCIATIONS.includes(c.authorAssociation))
   return found ? { commentId: found.id, author: found.author, verdict: found.marker.verdict } : null
 }
 
@@ -336,11 +381,14 @@ async function main(argv) {
   const args = [...argv]
   const repoAt = args.indexOf('--repo')
   const repo = repoAt === -1 ? DEFAULT_REPO : args.splice(repoAt, 2)[1]
+  const rereviewAt = args.indexOf('--rereview')
+  const rereview = rereviewAt !== -1
+  if (rereview) args.splice(rereviewAt, 1)
   const number = Number(args[0])
   if (args.length !== 1 || !Number.isInteger(number) || number <= 0) {
-    throw new Error('usage: node scripts/dispatch/review.mjs <pr-number> [--repo owner/name]')
+    throw new Error('usage: node scripts/dispatch/review.mjs <pr-number> [--repo owner/name] [--rereview]')
   }
-  const result = await reviewPullRequest({ number, ctx: createContext({ repo }) })
+  const result = await reviewPullRequest({ number, ctx: createContext({ repo }), rereview })
   console.log(JSON.stringify(result, null, 2))
   if (!NON_FAILURES.includes(result.status)) process.exitCode = 1
 }
