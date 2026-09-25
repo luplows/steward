@@ -197,8 +197,10 @@ section, this section is right.
   body; whoever spawned you opens the PR with a separate credential. See "You
   do not merge, and you do not open your own PR" below.
 - **Network egress is unrestricted.** `mytower.app` is reachable.
-- **Ref deletion works.** You still do not need to delete your branch — the
-  landing sweep does that when the PR merges.
+- **Ref deletion works**, but do not delete your branch. When the landing sweep
+  merges a PR it deletes the head branch as an explicit step
+  (`scripts/land/delete-merged-heads.mjs`). The repository's
+  `delete_branch_on_merge` setting is not relied on, because it does not fire.
 - You are in a checkout of this repository, already on `{{BRANCH}}` — a
   dedicated git worktree once the dispatcher makes them, an ordinary clone
   while this prompt is still rendered by hand. Either way the branch exists

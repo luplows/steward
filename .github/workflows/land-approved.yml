@@ -140,3 +140,22 @@ jobs:
           done
 
           echo "No PR ready to land."
+
+      # Deleting a merged PR's head branch is an explicit act of the sweep. The
+      # repository's `delete_branch_on_merge` setting is enabled and observably
+      # does not fire (OQ-52), so nothing may rely on it. This is cleanup and
+      # never a gate: it runs even when the step above landed nothing, and
+      # `continue-on-error` means it cannot fail the run or un-record a merge.
+      # It also sweeps branches already left behind by earlier merges. See
+      # scripts/land/delete-merged-heads.mjs for what it will and will not delete.
+      - name: Check out the cleanup script
+        if: always()
+        continue-on-error: true
+        uses: actions/checkout@v4
+      - name: Delete head branches of merged PRs
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: node scripts/land/delete-merged-heads.mjs
