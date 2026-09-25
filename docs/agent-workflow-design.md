@@ -367,11 +367,11 @@ orchestrating agent."
 Sketches, not literal — the prompts are rendered from files with the story injected.
 
 ```bash
-# Coder — can edit, inside its own worktree. Push is scoped to its own
+# Coder — can edit, inside its own worktree, which is the session's working
+# directory (spawn.mjs's required cwd; no --add-dir). Push is scoped to its own
 # branch; gh is neither allowlisted nor authenticated (OQ-63). The allowlist,
 # read-only shell utilities included, is coderAllowedTools's alone (OQ-67).
 claude -p "$(render .claude/prompts/coder.md OQ-49)" \
-  --add-dir "$WORKTREE" \
   --model "$STORY_MODEL" --effort medium \
   --permission-mode acceptEdits \
   --permission-prompts none \

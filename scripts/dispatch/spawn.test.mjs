@@ -2,7 +2,8 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { createHash } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import * as spawnModule from './spawn.mjs'
@@ -19,6 +20,7 @@ const NODE = process.execPath
 const run = (mode, arg, overrides = {}) => runSession({
   role: 'coder',
   executable: NODE,
+  cwd: repoRoot,
   args: arg === undefined ? [STAND_IN, mode] : [STAND_IN, mode, String(arg)],
   env: process.env,
   prompt: 'hello',
@@ -64,6 +66,7 @@ const CODER_OPTIONS = {
   promptTemplate: CODER_TEMPLATE,
   story: STORY,
   branch: 'story/OQ-65-spawn-sessions',
+  cwd: repoRoot,
   baseEnv: { PATH: '/usr/bin' },
   emptyGhConfigDir: '/tmp/empty-gh',
 }
@@ -258,5 +261,52 @@ describe('OQ-65/AC-7 no GitHub operation', () => {
       './invocation.mjs', './outcome.mjs', 'node:child_process', 'node:fs', 'node:path',
     ])
     expect(source).not.toMatch(/api\.github\.com|\bgh (pr|api|run)\b/)
+  })
+})
+
+describe('OQ-77/AC-1 runSession starts the process in the directory it is given', () => {
+  it('runs the stand-in in a directory other than the test\'s own', async () => {
+    const dir = realpathSync(mkdtempSync(path.join(tmpdir(), 'oq77-')))
+    try {
+      expect(dir).not.toBe(realpathSync(process.cwd()))
+      const { record } = await run('cwd', undefined, { cwd: dir })
+      expect(record.exitCode).toBe(0)
+      expect(realpathSync(record.stdout)).toBe(dir)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('throws before starting anything when cwd is missing', () => {
+    const spy = vi.fn()
+    expect(() => run('exit', 0, { cwd: undefined, spawnFn: spy })).toThrow(/requires a cwd/)
+    expect(() => run('exit', 0, { cwd: '', spawnFn: spy })).toThrow(/requires a cwd/)
+    expect(spy).not.toHaveBeenCalled()
+  })
+})
+
+describe('OQ-77/AC-2 spawnSession passes cwd to run unchanged', () => {
+  it('hands the same cwd to run', async () => {
+    const record = { role: 'coder', exitCode: 0, signal: null, stdout: '{}', stoppedFor: null }
+    const fakeRun = vi.fn().mockResolvedValue({ record, pid: 1 })
+    await spawnSession({ ...CODER_OPTIONS, cwd: '/some/worktree', executable: '/bin/claude.exe', run: fakeRun })
+    expect(fakeRun.mock.calls[0][0].cwd).toBe('/some/worktree')
+  })
+
+  it('throws before run is called when cwd is missing', async () => {
+    const fakeRun = vi.fn()
+    const { cwd: _omitted, ...withoutCwd } = CODER_OPTIONS
+    await expect(spawnSession({ ...withoutCwd, executable: '/bin/claude.exe', run: fakeRun }))
+      .rejects.toThrow(/requires a cwd/)
+    expect(fakeRun).not.toHaveBeenCalled()
+  })
+})
+
+describe('OQ-77/AC-3 a cwd that does not exist rejects', () => {
+  it('rejects rather than running anywhere else', async () => {
+    const spy = vi.fn()
+    await expect(run('cwd', undefined, { cwd: path.join(tmpdir(), 'oq77-no-such-dir'), spawnFn: spy }))
+      .rejects.toThrow(/cwd does not exist/)
+    expect(spy).not.toHaveBeenCalled()
   })
 })

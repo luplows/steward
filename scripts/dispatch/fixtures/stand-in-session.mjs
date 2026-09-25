@@ -1,6 +1,7 @@
 // A stand-in for `claude` used by spawn.test.mjs. Not claude, and does nothing
 // a real session does. The first argument picks the behaviour:
 //   echo          read all of stdin, print {"length", "sha256"} of it, exit 0
+//   cwd           print the working directory, exit 0
 //   exit <code>   print a line and exit with <code>
 //   sleep         read stdin, print nothing, and never finish
 //   chatty <ms>   print a line every <ms> forever
@@ -29,6 +30,8 @@ if (mode === 'echo') {
     length: input.toString('utf8').length,
     sha256: createHash('sha256').update(input).digest('hex'),
   }))
+} else if (mode === 'cwd') {
+  process.stdout.write(process.cwd())
 } else if (mode === 'exit') {
   process.stdout.write('stand-in output\n')
   process.exit(Number(arg))

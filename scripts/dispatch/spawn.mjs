@@ -119,6 +119,7 @@ function killTree(child, spawnFn) {
  *
  *   role        'coder' | 'reviewer', recorded on the raw record
  *   executable  path to a real executable; never resolved through a shell
+ *   cwd         directory the process runs in; required, and must exist
  *   args, env, prompt
  *   timeoutMs   hard limit on the whole session
  *   stallMs     terminate when no stdout or stderr arrives for this long
@@ -128,17 +129,25 @@ function killTree(child, spawnFn) {
  * record `outcome.mjs` defines, and is validated against it before returning.
  * When the session is stopped, its whole process tree has been killed and the
  * child has exited by the time this resolves. Rejects if the process cannot be
- * started.
+ * started, or if `cwd` does not exist.
  */
 export function runSession({
-  role, executable, args = [], env, prompt, timeoutMs, stallMs, spawnFn = spawn,
+  role, executable, cwd, args = [], env, prompt, timeoutMs, stallMs, spawnFn = spawn,
 }) {
+  // No default: the caller's own directory is what a session used to run in by
+  // accident (OQ-77).
+  if (typeof cwd !== 'string' || cwd === '') throw new Error('runSession requires a cwd')
   if (!(Number.isFinite(timeoutMs) && timeoutMs > 0)) throw new Error('runSession requires a positive timeoutMs')
   if (!(Number.isFinite(stallMs) && stallMs > 0)) throw new Error('runSession requires a positive stallMs')
   if (typeof prompt !== 'string') throw new Error('runSession requires a prompt string')
 
   return new Promise((resolve, reject) => {
+    if (!existsSync(cwd)) {
+      reject(new Error(`runSession cwd does not exist: ${cwd}`))
+      return
+    }
     const child = spawnFn(executable, args, {
+      cwd,
       env,
       shell: false,
       windowsHide: true,
@@ -219,6 +228,8 @@ export function runSession({
  * Takes `buildInvocation`'s options (role, promptTemplate, story, branch, pr,
  * retry, baseEnv, emptyGhConfigDir, model, effort, maxBudgetUsd) plus:
  *
+ *   cwd         the directory the session runs in; required, passed to
+ *               `run` unchanged
  *   executable  the binary to start; resolved by `resolveClaudeExecutable`
  *               when omitted
  *   timeoutMs, stallMs  default to `DEFAULT_TIMEOUT_MS`, `DEFAULT_STALL_MS`
@@ -229,10 +240,11 @@ export function runSession({
  * session emitted (`classification.envelope`), `record` is the raw record.
  */
 export async function spawnSession(options) {
-  const { timeoutMs = DEFAULT_TIMEOUT_MS, stallMs = DEFAULT_STALL_MS, run = runSession } = options
+  const { cwd, timeoutMs = DEFAULT_TIMEOUT_MS, stallMs = DEFAULT_STALL_MS, run = runSession } = options
+  if (typeof cwd !== 'string' || cwd === '') throw new Error('spawnSession requires a cwd')
   const executable = options.executable ?? resolveClaudeExecutable({ env: options.baseEnv ?? process.env })
   const { args, env, prompt } = buildInvocation(options)
-  const { record } = await run({ role: options.role, executable, args, env, prompt, timeoutMs, stallMs })
+  const { record } = await run({ role: options.role, executable, cwd, args, env, prompt, timeoutMs, stallMs })
   const classification = classifySession(record)
   return { classification, output: classification.envelope, record }
 }
