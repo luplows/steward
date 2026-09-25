@@ -218,7 +218,7 @@ cover reading the repository, read-only `git` (including `ls-remote` and
 `ls-tree`), `git merge-tree` for checking that branches merge, the read-only
 shell utilities `ls cat head tail wc grep diff cut pwd` (so a pipeline such as
 `npm test | tail` is allowed), and the test and lint commands. A
-gap in it is silent in a way the coder's is not: the coder that cannot push
+gap in it is silent in a way the coder's is not: the coder that cannot commit
 fails visibly, whereas you can return a confident `pass` having checked less
 than you think. Say in `summary` which command was refused and what you could
 not therefore verify, and drop the verdict to `pass-with-observations` — or to

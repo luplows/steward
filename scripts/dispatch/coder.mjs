@@ -2,8 +2,8 @@
 /**
  * Takes the next ready story from the queue to an open pull request (OQ-70):
  * pick it, create its branch and a dedicated worktree from the current
- * `origin/main`, spawn the coder there, check the branch really reached the
- * remote, and open the pull request from the block the coder emitted.
+ * `origin/main`, spawn the coder there, push the branch it committed, and open
+ * the pull request from the block the coder emitted.
  *
  * It joins existing modules and reimplements none of them: `queue.mjs` decides
  * which story, `spawn.mjs` runs the session (building the prompt, environment
@@ -19,9 +19,14 @@
  * dispatcher's own checkout and writes nothing outside its scratch directory
  * and the git worktree machinery.
  *
+ * The coder commits and the dispatcher pushes (OQ-84): `pushBranch` runs after a
+ * session that ended `completed`, so the session needs no write access to the
+ * remote. Every result returned after a session has run carries that session's
+ * output under `session`.
+ *
  * Every way this can stop short is a distinct `status` on the result, and each
- * leaves a state someone can see: a pushed branch with no pull request, or
- * nothing at all. It never opens a pull request with a description the coder
+ * leaves a state someone can see: a pushed branch with no pull request, a local
+ * branch holding the coder's commits, or nothing at all. It never opens a pull request with a description the coder
  * did not write.
  *
  * Usage:
@@ -113,6 +118,93 @@ export function findPromptChange(body) {
     if (m) files.add(m[1])
   }
   return { pending: true, files: [...files] }
+}
+
+const BRANCH_NAME = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/
+const SCREENSHOT_DIR = 'e2e/__screenshots__/'
+
+/**
+ * The arguments of the one push the dispatcher makes: `git push origin <branch>`.
+ * The branch must be a plain name, which is what keeps a forced form (a `+`
+ * refspec or an option), a refspec (`a:b`) or `main` from being constructible.
+ */
+export function pushArgs(branch) {
+  if (typeof branch !== 'string' || !BRANCH_NAME.test(branch) || branch.includes('..')) {
+    throw new Error(`pushArgs requires a plain branch name, got ${JSON.stringify(branch)}`)
+  }
+  if (branch === BASE || branch === `refs/heads/${BASE}`) throw new Error(`pushArgs refuses ${BASE}`)
+  return ['push', REMOTE, branch]
+}
+
+/**
+ * What `git status --porcelain -z` reports, split into changes that block a
+ * push and untracked screenshot baselines that do not (`CLAUDE.md` forbids
+ * committing one generated locally, so a coder that follows it leaves them).
+ */
+function classifyStatus(porcelainZ) {
+  const entries = porcelainZ.split('\0').filter((e) => e !== '')
+  const changes = []
+  const screenshots = []
+  for (let i = 0; i < entries.length; i++) {
+    const code = entries[i].slice(0, 2)
+    const file = entries[i].slice(3)
+    if (/[RC]/.test(code)) i++ // the next entry is the original path, not a change
+    if (code === '??' && file.startsWith(SCREENSHOT_DIR)) screenshots.push(file)
+    else changes.push(file)
+  }
+  return { changes, screenshots }
+}
+
+/**
+ * Pushes `branch` from the worktree `cwd`, and only when it holds a commit
+ * beyond `baseSha` and nothing else was left uncommitted. Never commits on the
+ * coder's behalf and never forces. `dispatchCoder` and the retry path share it.
+ *
+ * Resolves `{ status: 'pushed', headSha, screenshots }`, or a status that means
+ * nothing was pushed: `nothing-committed` and `uncommitted-changes` (each with
+ * `paths`, the uncommitted changes, empty when there are none),
+ * `push-failed` (with git's error as `reason`).
+ */
+export async function pushBranch({ cwd, branch, baseSha }) {
+  const args = pushArgs(branch)
+  const ahead = Number((await git(cwd, ['rev-list', '--count', `${baseSha}..refs/heads/${branch}`])).trim())
+  const { changes, screenshots } = classifyStatus(await git(cwd, ['status', '--porcelain', '-z', '--untracked-files=all']))
+  if (ahead === 0) {
+    // No commit wins over uncommitted changes, but the paths are still named:
+    // the worktree is removed after this, so the result is their only record.
+    const left = changes.length > 0 ? `; uncommitted changes: ${changes.join(', ')}` : ''
+    return { status: 'nothing-committed', paths: changes, screenshots, reason: `${branch} has no commit beyond ${BASE}${left}` }
+  }
+  if (changes.length > 0) {
+    return {
+      status: 'uncommitted-changes',
+      paths: changes,
+      screenshots,
+      reason: `the worktree has uncommitted changes: ${changes.join(', ')}`,
+    }
+  }
+  try {
+    await git(cwd, args)
+  } catch (error) {
+    const reason = String(error.stderr ?? '').trim() || error.message
+    return { status: 'push-failed', reason, screenshots }
+  }
+  const headSha = (await git(cwd, ['rev-parse', `refs/heads/${branch}`])).trim()
+  return { status: 'pushed', headSha, screenshots }
+}
+
+/** The parts of a session's JSON envelope the dispatcher keeps in its result. */
+function sessionSummary(classification, output) {
+  return {
+    outcome: classification.outcome,
+    report: typeof output?.result === 'string' ? output.result : null,
+    costUsd: output?.total_cost_usd ?? null,
+    turns: output?.num_turns ?? null,
+    refused: (output?.permission_denials ?? []).map((d) => ({
+      tool: d.tool_name,
+      command: typeof d.tool_input?.command === 'string' ? d.tool_input.command : JSON.stringify(d.tool_input ?? null),
+    })),
+  }
 }
 
 /** Removes the worktree, then the local branch when doing so loses nothing. */
@@ -207,7 +299,7 @@ export async function dispatchCoder({
     } catch (error) {
       return { status: 'install-failed', storyId: chosen.id, branch, reason: error.message }
     }
-    const { classification } = await spawnSession({
+    const { classification, output } = await spawnSession({
       ...sessionOptions,
       role: 'coder',
       promptTemplate: template,
@@ -218,17 +310,21 @@ export async function dispatchCoder({
       cwd: tree,
     })
 
-    // What the session says and what the remote holds are separate questions.
-    const pushedSha = await remoteTip(repoDir, branch)
-    const pushed = pushedSha !== null && pushedSha !== baseSha
-    const context = { storyId: chosen.id, branch, headSha: pushedSha }
+    const session = sessionSummary(classification, output)
+    const context = { storyId: chosen.id, branch, headSha: null, session }
 
     if (classification.outcome !== 'completed') {
-      return { status: 'session-failed', ...context, outcome: classification.outcome, reason: classification.reason, pushed }
+      // No push: a session that did not finish is not the dispatcher's to publish.
+      return { status: 'session-failed', ...context, outcome: classification.outcome, reason: classification.reason, pushed: false }
     }
-    if (!pushed) {
-      return { status: 'nothing-pushed', ...context, reason: `${branch} is not on ${REMOTE} with any commit of its own` }
+    const push = await pushBranch({ cwd: tree, branch, baseSha })
+    if (push.status !== 'pushed') {
+      const { status, ...rest } = push
+      return { status, ...context, ...rest }
     }
+    const pushedSha = push.headSha
+    context.headSha = pushedSha
+    if (push.screenshots.length > 0) context.untrackedScreenshots = push.screenshots
 
     const block = classification.prText
     if (block.status !== 'parsed') {

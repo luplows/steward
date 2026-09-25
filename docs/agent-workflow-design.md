@@ -295,10 +295,10 @@ than relaxed.
    a coder's own pull request cannot change `stories/` beyond its own story.
 2. Dispatcher picks the highest-tier, lowest-id ready story; creates a worktree and the branch
    `story/OQ-49-import-player-info`.
-3. Coder implements, tests green, pushes its branch, and emits the PR title/body and a
-   draft-or-ready decision in its report. Dispatcher opens the PR from that text, as a **draft**
-   if the coder said draft. **Planned (OQ-84):** the coder only commits and the dispatcher pushes
-   the branch, so a model session has no write access to the remote.
+3. Coder implements, tests green, commits, and emits the PR title/body and a
+   draft-or-ready decision in its report. The dispatcher pushes the branch (`pushBranch` in
+   `scripts/dispatch/coder.mjs`), so a model session has no write access to the remote, then opens
+   the PR from that text, as a **draft** if the coder said draft.
 4. CI passes. **Planned (OQ-79, OQ-48):** the dispatcher waits for it before reviewing, so no
    review is spent on a head that cannot land.
 5. Dispatcher spawns the reviewer, which returns a structured verdict.
@@ -395,15 +395,16 @@ Sketches, not literal — the prompts are rendered from files with the story inj
 
 ```bash
 # Coder — can edit, inside its own worktree, which is the session's working
-# directory (spawn.mjs's required cwd; no --add-dir). Push is scoped to its own
-# branch; gh is neither allowlisted nor authenticated (OQ-63). The allowlist,
-# read-only shell utilities included, is coderAllowedTools's alone (OQ-67).
+# directory (spawn.mjs's required cwd; no --add-dir). It commits and does not push
+# (the dispatcher pushes, OQ-84); gh is neither allowlisted nor authenticated
+# (OQ-63). The allowlist, read-only shell utilities included, is
+# coderAllowedTools's alone (OQ-67).
 claude -p "$(render .claude/prompts/coder.md OQ-49)" \
   --model "$STORY_MODEL" --effort medium \
   --permission-mode acceptEdits \
   --permission-prompts none \
   --allowedTools $(coderAllowedTools "$BRANCH") \
-  --disallowedTools "Bash(gh:*)" \
+  --disallowedTools "Bash(gh:*)" "Bash(git push:*)" \
   --env "$(coderEnv)" \
   --max-budget-usd 6 \
   --output-format json
@@ -440,14 +441,15 @@ Three flags are load-bearing:
   easy to leave out and the first hand-run of the loop did: `--permission-prompts none` plus
   `--permission-mode acceptEdits` covers file edits, and `.claude/settings.json` adds the
   project's npm/npx commands and read-only git — but nothing that writes to the repository, so
-  `git commit` and `git push` are silently **denied**. The coder does the work, runs the suite
-  green, and then cannot get its branch out. The two flags are a pair — the first decides that
+  `git commit` is silently **denied**. The coder does the work, runs the suite
+  green, and then cannot commit it. (`git push` was denied the same way until OQ-84 moved the push
+  to the dispatcher, which is why the coder's list now denies it on purpose.) The two flags are a pair — the first decides that
   nothing may prompt, the second decides what does not need to.
 
-**The coder no longer holds a GitHub API credential at all (OQ-63).** It pushes over `git`
-(authenticated separately, over SSH — untouched by anything below) and emits the PR title and body
-as the last thing in its report; whatever spawned it calls `gh pr create` with its own,
-differently-scoped credential. `gh` is not on the coder's allowlist, and `--env
+**The coder no longer holds a GitHub API credential at all (OQ-63).** It commits and emits the PR
+title and body as the last thing in its report; the dispatcher pushes the branch and opens the pull
+request with its own, differently-scoped credential. (The coder's reach of git's own SSH
+authentication is untouched by anything below; that is OQ-73's.) `gh` is not on the coder's allowlist, and `--env
 "$(coderEnv)"` (`scripts/dispatch/coder-env.mjs`) strips `GH_TOKEN`, `GITHUB_TOKEN` and
 `GH_ENTERPRISE_TOKEN` from its process environment and points `GH_CONFIG_DIR` at an empty
 directory, so nothing capable of setting a commit status, dispatching a workflow, or writing to a
@@ -462,14 +464,11 @@ The reviewer's list is the mirror image, and narrower on purpose: `git` subcomma
 enumerated rather than `Bash(git:*)`, so `git push` is not in the allowlist *before* the
 `--disallowedTools` deny rule also removes it. Two barriers against the accidental path beats one.
 
-The coder's `--disallowedTools` stops at `"Bash(gh:*)"` and does **not** also carry a blanket
-`"Bash(git push:*)"` the way the reviewer's does. Deny rules take precedence over allow rules, and
-that pattern is a prefix match against the scoped push patterns `coderAllowedTools` grants — added
-together they would deny the coder's own push, not just an unscoped one, defeating AC-5. The
-reviewer can afford the blanket deny as a second barrier because its allowlist never grants push to
-begin with, so there is nothing for the deny rule to shadow; the coder's does, so keeping both would
-break the one write the coder is meant to have. Scoping push to the assigned branch is
-`coderAllowedTools`'s job alone here.
+The coder's `--disallowedTools` carries the same blanket `"Bash(git push:*)"` as the reviewer's
+(`CODER_DISALLOWED_TOOLS` in `scripts/dispatch/coder-env.mjs`). Before OQ-84 it could not: the coder's
+allowlist granted scoped push patterns, and a deny rule takes precedence over an allow rule, so the
+deny would have shadowed them. The push is now the dispatcher's, `coderAllowedTools` grants none,
+and the deny is a second barrier with nothing to shadow.
 
 **That is defence in depth, not containment.** The same list grants `npm`, `npx` and `node`,
 because verifying the author's claims means running the suite — and those are arbitrary execution.
@@ -488,7 +487,7 @@ That is the same conclusion **credential minimalism** reaches below by a differe
 not built yet.
 
 That narrowness has its own cost, and it is not symmetric with the coder's. A hole in the
-**coder's** allowlist fails loudly and late — it cannot push its branch, and someone notices. A hole in
+**coder's** allowlist fails loudly and late — it cannot run a command it needs, and someone notices. A hole in
 the **reviewer's** fails *quietly*: a reviewer that cannot run `npm test` or `git merge-base` can
 still return a confident `pass`, having checked less than it thinks. The `git` verbs above are
 therefore a deliberately broad set rather than a minimal one — not a complete one, since `blame`,
@@ -555,8 +554,8 @@ re-read the whole.
 Removing the reviewer's need to post anything **deletes that section of the prompt** rather than
 rewording it. Applies equally to Session B, which writes stories, not statuses.
 
-**The coder cannot be given the same treatment, because it legitimately needs to push — but it can
-be given a narrower credential rather than the owner's own.** This was the more urgent of the two
+**The coder was first given a narrower credential rather than the same treatment, because it then
+needed to push (OQ-63); since OQ-84 the dispatcher pushes, and it does not.** This was the more urgent of the two
 gaps (OQ-63, filed `tier: fix` where the reviewer's twin, OQ-62, is `normal`): the coder's *goal* is
 a landed PR, where the reviewer's prompt only ever tells it to post nothing and it gains nothing
 from a merge. With the owner's `repo`-scoped token, a coder holding `Bash(gh:*)` could set
@@ -566,19 +565,19 @@ payloads and getting `422` (authorised, only validation failed) rather than `403
 the rules this workflow is built on — *you do not clear your own gate*, *triggering the sweep is
 the owner's* — were held by `CLAUDE.md`'s prose and nothing else.
 
-**Planned (OQ-84):** the coder no longer pushes. The dispatcher pushes its branch, and the coder's
-allowlist grants no `git push` and denies it outright. That removes the reason given above for
-treating the coder differently from the reviewer. What still reaches the owner's stored
-credentials from a coder session is OQ-73's.
+The coder no longer pushes (OQ-84). The dispatcher pushes its branch, and the coder's allowlist
+grants no `git push` and denies it outright. That removes the reason given above for treating the
+coder differently from the reviewer. What still reaches the owner's stored credentials from a
+coder session is OQ-73's.
 
-So the coder's credential is scoped rather than removed: `coderEnv`
+So the coder's GitHub credential is removed rather than scoped: `coderEnv`
 (`scripts/dispatch/coder-env.mjs`) hands it an environment with no `GH_TOKEN`, `GITHUB_TOKEN` or
 `GH_ENTERPRISE_TOKEN`, and a `GH_CONFIG_DIR` pointed at an empty directory — so `gh`, and anything
 that reaches the GitHub API the way `gh` does, has no credential capable of a commit status, a
 workflow dispatch, or a pull-request write, regardless of whether the call is made directly, from
-inside `node -e`, or from an `npm`/`npx` script. Push keeps working because it authenticates over
-SSH, which none of that touches (**Planned (OQ-84):** the push is the dispatcher's, not the
-coder's). The coder still cannot open its own PR — that capability moves to
+inside `node -e`, or from an `npm`/`npx` script. Git's own authentication over SSH is not touched
+by any of that, which is why the push is the dispatcher's rather than something the coder is
+trusted to do with it (OQ-84). The coder still cannot open its own PR — that capability moves to
 whatever spawned it. "A coder session is trusted, not contained" — the wording this section carried
 while OQ-63 was open — is no longer true of the write path that mattered; see `REVIEW.md`, "For the
 coder: opening a PR".
@@ -822,7 +821,7 @@ parallel dispatch arrives.
   of completed stories — Session B's input assembles itself.
 - Branch protection: `test` + `review/agent` required, `enforce_admins: true`, no force-push, no
   deletions. **Already configured correctly.**
-- Coder rebases before pushing for the dispatcher to open the PR from; cap branch age rather than
+- Coder rebases before committing for the dispatcher to push and open the PR from; cap branch age rather than
   merging against a moved world.
 
 ### Rollback

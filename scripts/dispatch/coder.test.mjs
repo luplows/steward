@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { coderAllowedTools } from './coder-env.mjs'
-import { branchFor, dispatchCoder, findPromptChange } from './coder.mjs'
+import { branchFor, dispatchCoder, findPromptChange, pushArgs } from './coder.mjs'
 import { createContext } from './github.mjs'
 
 // Each test builds a real origin and clones and runs a dozen git commands.
@@ -110,7 +110,7 @@ function fakeRun(behave) {
   return { run, calls }
 }
 
-/** What a coder that finishes does: move the story, commit, push its branch. */
+/** What a coder that finishes does: move the story and commit. It does not push (OQ-84). */
 function finishStory(cwd, { file = 'OQ-98-first.md', frontmatter = (s) => s } = {}) {
   const branch = git(cwd, 'rev-parse', '--abbrev-ref', 'HEAD')
   const dest = path.join(cwd, 'stories', 'done', file)
@@ -120,7 +120,6 @@ function finishStory(cwd, { file = 'OQ-98-first.md', frontmatter = (s) => s } = 
   writeFileSync(path.join(cwd, 'work.txt'), 'work')
   git(cwd, 'add', '.')
   git(cwd, 'commit', '-q', '-m', 'implement')
-  git(cwd, 'push', '-q', 'origin', `HEAD:${branch}`)
   return branch
 }
 
@@ -267,34 +266,238 @@ describe('OQ-70/AC-3: the coder\'s environment and allowlist', () => {
   })
 })
 
-describe('OQ-70/AC-4: nothing pushed, no pull request', () => {
-  it('OQ-70/AC-4: a session that reports success having pushed nothing gets no PR', async () => {
+describe('OQ-70/AC-4: no commit, no pull request', () => {
+  it('OQ-70/AC-4: a session that reports success having committed nothing gets no PR', async () => {
     const world = makeWorld()
-    const { result, gh } = await dispatch(world, () => block()) // a complete, correct block; no push
-    expect(result.status).toBe('nothing-pushed')
+    const { result, gh } = await dispatch(world, () => block()) // a complete, correct block; no commit
+    expect(result.status).toBe('nothing-committed')
     expect(pulls(gh)).toHaveLength(0)
     expect(remoteBranch(world, 'story/OQ-98-first')).toBeNull()
   })
 
-  it('OQ-70/AC-4: a branch pushed with no commit of its own is nothing pushed', async () => {
-    const world = makeWorld()
-    const { result, gh } = await dispatch(world, ({ cwd }) => {
-      git(cwd, 'push', '-q', 'origin', 'HEAD:story/OQ-98-first')
-      return block()
-    })
-    expect(result.status).toBe('nothing-pushed')
-    expect(pulls(gh)).toHaveLength(0)
-  })
-
-  it('OQ-70/AC-4: a session that reports failure having pushed gets no PR either, and says the branch is there', async () => {
+  it('OQ-70/AC-4, OQ-84/AC-3: a session that reports failure gets no push and no PR, and its commits stay on the local branch', async () => {
     const world = makeWorld()
     const { result, gh } = await dispatch(world, ({ cwd }) => {
       finishStory(cwd)
       return envelope(block(), { is_error: true })
     })
     expect(result.status).toBe('session-failed')
-    expect(result.pushed).toBe(true)
+    expect(result.pushed).toBe(false)
     expect(pulls(gh)).toHaveLength(0)
+    expect(remoteBranch(world, 'story/OQ-98-first')).toBeNull()
+    expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/story/OQ-98-first')).toBeTruthy()
+  })
+})
+
+describe('OQ-84/AC-1: the dispatcher pushes the branch, never forced', () => {
+  it('OQ-84/AC-1: a completed session with a commit is pushed by the dispatcher, then the PR opens', async () => {
+    const world = makeWorld()
+    const tips = []
+    const { result, gh } = await dispatch(world, ({ cwd }) => {
+      finishStory(cwd)
+      tips.push(git(cwd, 'rev-parse', 'HEAD'))
+      // The coder did not push: the remote has nothing until the session is over.
+      expect(remoteBranch(world, 'story/OQ-98-first')).toBeNull()
+      return block()
+    })
+    expect(result.status).toBe('opened')
+    expect(remoteBranch(world, 'story/OQ-98-first')).toBe(tips[0])
+    expect(result.headSha).toBe(tips[0])
+    expect(pulls(gh)).toHaveLength(1)
+  })
+
+  it('OQ-84/AC-1: the push is exactly `git push origin <branch>`, and no forced form can be constructed', () => {
+    expect(pushArgs('story/OQ-84-dispatcher-pushes')).toEqual(['push', 'origin', 'story/OQ-84-dispatcher-pushes'])
+    for (const bad of [
+      '+story/OQ-84-x', '-f', '--force', '-f story/x', 'story/x:story/x', 'HEAD:story/x', '+refs/heads/story/x',
+      'main', 'refs/heads/main', '', undefined, 'story/x --force', 'story/../x',
+    ]) {
+      expect(() => pushArgs(bad), String(bad)).toThrow()
+    }
+    // The only `git` call that names `push` is the one built by pushArgs (the
+    // `--force` in the worktree removal is not a push).
+    expect(SOURCE.match(/'push'/g)).toHaveLength(1)
+    expect(SOURCE).not.toMatch(/force-with-lease/)
+  })
+})
+
+describe('OQ-84/AC-3: what the session left decides the status', () => {
+  const remoteEmpty = (world) => expect(remoteBranch(world, 'story/OQ-98-first')).toBeNull()
+  const localKept = (world) => expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/story/OQ-98-first')).toBeTruthy()
+
+  it('OQ-84/AC-3: completed with no commit beyond the base is nothing-committed, and nothing is pushed', async () => {
+    const world = makeWorld()
+    const { result, gh } = await dispatch(world, () => block())
+    expect(result.status).toBe('nothing-committed')
+    expect(result.paths).toEqual([])
+    expect(pulls(gh)).toHaveLength(0)
+    remoteEmpty(world)
+  })
+
+  it('OQ-84/AC-3: no commit wins over uncommitted changes, and the uncommitted paths are still listed', async () => {
+    const world = makeWorld()
+    const { result, gh } = await dispatch(world, ({ cwd }) => {
+      writeFileSync(path.join(cwd, 'work.txt'), 'edited, never committed') // tracked, modified
+      writeFileSync(path.join(cwd, 'stray.txt'), 'never added') // untracked
+      return block()
+    })
+    expect(result.status).toBe('nothing-committed')
+    expect(result.paths.sort()).toEqual(['stray.txt', 'work.txt'])
+    expect(result.reason).toContain('stray.txt')
+    expect(pulls(gh)).toHaveLength(0)
+    remoteEmpty(world)
+  })
+
+  it('OQ-84/AC-3: an uncommitted change is uncommitted-changes, listing the paths; the dispatcher does not commit for the coder', async () => {
+    const world = makeWorld()
+    let tip
+    const { result, gh } = await dispatch(world, ({ cwd }) => {
+      finishStory(cwd)
+      tip = git(cwd, 'rev-parse', 'HEAD')
+      writeFileSync(path.join(cwd, 'work.txt'), 'edited after the commit') // tracked, modified
+      writeFileSync(path.join(cwd, 'stray.txt'), 'never added') // untracked
+      return block()
+    })
+    expect(result.status).toBe('uncommitted-changes')
+    expect(result.paths.sort()).toEqual(['stray.txt', 'work.txt'])
+    expect(pulls(gh)).toHaveLength(0)
+    remoteEmpty(world)
+    // Kept locally, at the coder's own commit: nothing was committed for it.
+    localKept(world)
+    expect(git(world.repoDir, 'rev-parse', 'refs/heads/story/OQ-98-first')).toBe(tip)
+  })
+
+  it('OQ-84/AC-3: a new screenshot baseline left untracked still pushes, and is listed, never pushed', async () => {
+    const world = makeWorld()
+    const { result } = await dispatch(world, ({ cwd }) => {
+      finishStory(cwd)
+      mkdirSync(path.join(cwd, 'e2e', '__screenshots__', 'flow.spec.ts'), { recursive: true })
+      writeFileSync(path.join(cwd, 'e2e', '__screenshots__', 'flow.spec.ts', 'new-baseline.png'), 'png')
+      return block()
+    })
+    expect(result.status).toBe('opened')
+    expect(result.untrackedScreenshots).toEqual(['e2e/__screenshots__/flow.spec.ts/new-baseline.png'])
+    expect(git(world.dir, '--git-dir', world.origin, 'ls-tree', '-r', '--name-only', 'story/OQ-98-first')).not.toContain('__screenshots__')
+  })
+
+  it('OQ-84/AC-3: any other untracked file stops the push, even beside a baseline', async () => {
+    const world = makeWorld()
+    const { result, gh } = await dispatch(world, ({ cwd }) => {
+      finishStory(cwd)
+      mkdirSync(path.join(cwd, 'e2e', '__screenshots__'), { recursive: true })
+      writeFileSync(path.join(cwd, 'e2e', '__screenshots__', 'new-baseline.png'), 'png')
+      writeFileSync(path.join(cwd, 'notes.txt'), 'forgotten')
+      return block()
+    })
+    expect(result.status).toBe('uncommitted-changes')
+    expect(result.paths).toEqual(['notes.txt'])
+    expect(result.screenshots).toEqual(['e2e/__screenshots__/new-baseline.png'])
+    expect(pulls(gh)).toHaveLength(0)
+    remoteEmpty(world)
+  })
+
+  it('OQ-84/AC-3: a tracked change under e2e/__screenshots__/ is not excepted', async () => {
+    const world = makeWorld()
+    const { result } = await dispatch(world, ({ cwd }) => {
+      mkdirSync(path.join(cwd, 'e2e', '__screenshots__'), { recursive: true })
+      writeFileSync(path.join(cwd, 'e2e', '__screenshots__', 'old.png'), 'v1')
+      finishStory(cwd)
+      writeFileSync(path.join(cwd, 'e2e', '__screenshots__', 'old.png'), 'v2')
+      return block()
+    })
+    expect(result.status).toBe('uncommitted-changes')
+    expect(result.paths).toEqual(['e2e/__screenshots__/old.png'])
+  })
+
+  it('OQ-84/AC-3: a rejected push is push-failed with git\'s error, the PR is not opened and the commits are kept', async () => {
+    const world = makeWorld()
+    // A pre-receive hook on the origin refuses every push.
+    const hook = path.join(world.origin, 'hooks', 'pre-receive')
+    writeFileSync(hook, '#!/bin/sh\necho "refused by test hook" >&2\nexit 1\n', { mode: 0o755 })
+    const { result, gh } = await dispatch(world, ({ cwd }) => { finishStory(cwd); return block() })
+    expect(result.status).toBe('push-failed')
+    expect(result.reason).toContain('refused by test hook')
+    expect(pulls(gh)).toHaveLength(0)
+    remoteEmpty(world)
+    localKept(world)
+  })
+
+  it('OQ-84/AC-3: a session that did not complete is not pushed', async () => {
+    const world = makeWorld()
+    const { result } = await dispatch(world, ({ cwd }) => { finishStory(cwd); return envelope('x', { is_error: true }) })
+    expect(result.status).toBe('session-failed')
+    remoteEmpty(world)
+  })
+})
+
+describe('OQ-84/AC-5: every result after a session carries its output', () => {
+  const full = (result) => envelope(result, {
+    total_cost_usd: 1.25,
+    num_turns: 9,
+    permission_denials: [
+      { tool_name: 'Bash', tool_use_id: 't1', tool_input: { command: 'git push origin HEAD' } },
+      { tool_name: 'Write', tool_use_id: 't2', tool_input: { file_path: '.claude/prompts/coder.md' } },
+    ],
+  })
+  const expectSession = (result, outcome, report) => {
+    expect(result.session).toEqual({
+      outcome,
+      report,
+      costUsd: 1.25,
+      turns: 9,
+      refused: [
+        { tool: 'Bash', command: 'git push origin HEAD' },
+        { tool: 'Write', command: JSON.stringify({ file_path: '.claude/prompts/coder.md' }) },
+      ],
+    })
+  }
+
+  it('OQ-84/AC-5: opened', async () => {
+    const report = block()
+    const { result } = await dispatch(makeWorld(), ({ cwd }) => { finishStory(cwd); return full(report) })
+    expect(result.status).toBe('opened')
+    expectSession(result, 'completed', report)
+  })
+
+  it('OQ-84/AC-5: nothing-committed', async () => {
+    const { result } = await dispatch(makeWorld(), () => full('did nothing'))
+    expect(result.status).toBe('nothing-committed')
+    expectSession(result, 'completed', 'did nothing')
+  })
+
+  it('OQ-84/AC-5: uncommitted-changes', async () => {
+    const { result } = await dispatch(makeWorld(), ({ cwd }) => {
+      finishStory(cwd)
+      writeFileSync(path.join(cwd, 'stray.txt'), 'x')
+      return full('left a file')
+    })
+    expect(result.status).toBe('uncommitted-changes')
+    expectSession(result, 'completed', 'left a file')
+  })
+
+  it('OQ-84/AC-5: push-failed', async () => {
+    const world = makeWorld()
+    writeFileSync(path.join(world.origin, 'hooks', 'pre-receive'), '#!/bin/sh\nexit 1\n', { mode: 0o755 })
+    const { result } = await dispatch(world, ({ cwd }) => { finishStory(cwd); return full('committed') })
+    expect(result.status).toBe('push-failed')
+    expectSession(result, 'completed', 'committed')
+  })
+
+  it('OQ-84/AC-5: session-failed', async () => {
+    const { result } = await dispatch(makeWorld(), () => full('x').replace('"is_error":false', '"is_error":true'))
+    expect(result.status).toBe('session-failed')
+    expectSession(result, result.session.outcome, 'x')
+    expect(result.session.outcome).not.toBe('completed')
+  })
+
+  it('OQ-84/AC-5: an invalid PR block', async () => {
+    const { result } = await dispatch(makeWorld(), ({ cwd }) => { finishStory(cwd); return full('no block here') })
+    expect(result.status).toBe('pr-block-invalid')
+    expectSession(result, 'completed', 'no block here')
+  })
+
+  it('OQ-84/AC-5: the CLI prints the result as JSON, so the session is printed with it', () => {
+    expect(SOURCE).toMatch(/console\.log\(JSON\.stringify\(result, null, 2\)\)/)
   })
 })
 
@@ -402,7 +605,6 @@ describe('OQ-70/AC-8: a blocked story is opened as a draft', () => {
       writeFileSync(file, readFileSync(file, 'utf8').replace('blocked: null', 'blocked: Which reading of AC-2?'))
       git(cwd, 'add', '.')
       git(cwd, 'commit', '-q', '-m', 'block')
-      git(cwd, 'push', '-q', 'origin', 'HEAD:story/OQ-98-first')
       return block('Blocked', 'ready')
     })
     expect(result.status).toBe('opened')

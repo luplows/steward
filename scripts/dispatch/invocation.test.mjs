@@ -130,7 +130,7 @@ describe('OQ-74/AC-2: the coder takes its env and allowlist from coder-env.mjs',
   it('--allowedTools is exactly coderAllowedTools(branch), and gh is disallowed', () => {
     const { args } = buildInvocation(coderOptions)
     expect(listAfter(args, '--allowedTools')).toEqual(coderAllowedTools(BRANCH))
-    expect(listAfter(args, '--disallowedTools')).toEqual(['Bash(gh:*)'])
+    expect(listAfter(args, '--disallowedTools')).toEqual(['Bash(gh:*)', 'Bash(git push:*)'])
   })
 
   it('refuses main, via coderAllowedTools', () => {
@@ -293,13 +293,15 @@ describe('OQ-74/AC-5: a retry\'s prompt', () => {
     expect(buildInvocation(coderOptions).prompt).not.toContain('This is a retry')
   })
 
-  it('names the exact push command, and the coder\'s allowlist permits exactly that command', () => {
-    const command = `git push origin ${BRANCH}`
-    expect(prompt).toContain(`\`${command}\``)
-    expect(coderAllowedTools(BRANCH)).toContain(`Bash(${command})`)
-    // The forms the #133 round-2 coder tried, and was denied, are named as denied.
-    expect(prompt).toMatch(/bare `git push`, or `git -C <path> push`, is not on your allowlist/)
-    expect(coderAllowedTools(BRANCH)).not.toContain('Bash(git push)')
+  it('OQ-84/AC-4 - the retry block says to commit and that the dispatcher pushes, and never names git push', () => {
+    // coder.md's own text about pushing is OQ-84/AC-6's, arriving as a prompt
+    // edit; what this story owns is the block `invocation.mjs` appends.
+    const block = prompt.slice(prompt.indexOf('## This is a retry'))
+    expect(block).toContain('## This is a retry')
+    expect(block).not.toMatch(/git push|git -C/i)
+    expect(block).toMatch(/Commit on `[^`]+`/)
+    expect(block).toMatch(/the dispatcher pushes/)
+    expect(retrySection({ ...retry, branch: BRANCH })).not.toMatch(/git push/i)
   })
 
   it('rejects malformed retry input, and a retry for the reviewer', () => {

@@ -170,21 +170,21 @@ describe('coderEnv', () => {
 })
 
 describe('coderAllowedTools', () => {
-  it('OQ-63/AC-5 - scopes push to the exact assigned branch, not a wildcard', () => {
-    const tools = coderAllowedTools('story/OQ-63-coder-write-capability')
-    expect(tools).toContain('Bash(git push origin HEAD:story/OQ-63-coder-write-capability)')
-    expect(tools).toContain('Bash(git push origin story/OQ-63-coder-write-capability:story/OQ-63-coder-write-capability)')
-    expect(tools).not.toContain('Bash(git push:*)')
+  it('OQ-84/AC-2 - no git push pattern is allowed, in any spelling', () => {
+    const tools = coderAllowedTools('story/OQ-84-dispatcher-pushes')
+    expect(tools.filter((tool) => /git\s+(?:-\S+\s+)*push/.test(tool))).toEqual([])
+    for (const command of [
+      'git push',
+      'git push origin story/OQ-84-dispatcher-pushes',
+      'git push -u origin story/OQ-84-dispatcher-pushes',
+      'git push origin HEAD:story/OQ-84-dispatcher-pushes',
+      'git push -f origin story/OQ-84-dispatcher-pushes',
+    ]) {
+      expect(permits(tools, command), command).toBe(false)
+    }
   })
 
-  it('OQ-63/AC-5 - a different branch gets a different scoped pattern, never a shared one', () => {
-    const a = coderAllowedTools('story/OQ-63-a')
-    const b = coderAllowedTools('story/OQ-63-b')
-    expect(a).not.toContain('Bash(git push origin HEAD:story/OQ-63-b)')
-    expect(b).not.toContain('Bash(git push origin HEAD:story/OQ-63-a)')
-  })
-
-  it('requires the branch, since an unscoped push pattern would defeat AC-5', () => {
+  it('requires the branch, so the dispatcher names the one it created', () => {
     expect(() => coderAllowedTools()).toThrow()
   })
 
@@ -206,16 +206,11 @@ describe('CODER_DISALLOWED_TOOLS', () => {
     expect(CODER_DISALLOWED_TOOLS).toContain('Bash(gh:*)')
   })
 
-  it('OQ-63/AC-5 - never denies git push outright, since that would shadow the allowlist\'s scoped push patterns and block the coder\'s own branch', () => {
-    // Deny rules take precedence over allow rules. `Bash(git push:*)` is a
-    // prefix match against `Bash(git push origin HEAD:<branch>)`, so if it
-    // were in this list, coderAllowedTools's scoped grant would be
-    // unreachable and AC-5 (the coder can push its own branch) would fail --
-    // regardless of what coderAllowedTools itself contains.
-    expect(CODER_DISALLOWED_TOOLS).not.toContain('Bash(git push:*)')
-    for (const denied of CODER_DISALLOWED_TOOLS) {
-      expect('Bash(git push origin HEAD:story/OQ-63-x)'.startsWith(denied.replace(/:\*$/, ':'))).toBe(false)
-    }
+  it('OQ-84/AC-2 - denies git push outright, as a second barrier behind the absent allow patterns', () => {
+    expect(CODER_DISALLOWED_TOOLS).toContain('Bash(git push:*)')
+    // Nothing the allowlist grants is shadowed by it, because it grants no push.
+    const tools = coderAllowedTools('story/OQ-84-x')
+    expect(tools.filter((tool) => tool.startsWith('Bash(git push'))).toEqual([])
   })
 })
 
@@ -254,22 +249,11 @@ describe('coderAllowedTools (OQ-67)', () => {
     expect(permits(tools, `git mv stories/OQ-67-coder-capability-gaps.md stories/done/OQ-67-coder-capability-gaps.md`)).toBe(true)
   })
 
-  it('OQ-67/AC-2 - permits pushing the assigned branch by its plain name, alongside both refspec forms', () => {
-    const tools = coderAllowedTools(branch)
-    expect(permits(tools, `git push origin ${branch}`)).toBe(true)
-    expect(permits(tools, `git push origin HEAD:${branch}`)).toBe(true)
-    expect(permits(tools, `git push origin ${branch}:${branch}`)).toBe(true)
-  })
-
-  it('permits the plain push with -u or --set-upstream, which the first spawned coder was refused (#127)', () => {
-    const tools = coderAllowedTools(branch)
-    expect(permits(tools, `git push -u origin ${branch}`)).toBe(true)
-    expect(permits(tools, `git push --set-upstream origin ${branch}`)).toBe(true)
-  })
-
-  it('OQ-67/AC-2 - no returned pattern permits a push to main, or to any other ref', () => {
+  it('OQ-84/AC-2 - no returned pattern permits a push to main, or to any other ref, or the coder\'s own branch', () => {
     const tools = coderAllowedTools(branch)
     const forbidden = [
+      `git push origin ${branch}`,
+      `git push -u origin ${branch}`,
       'git push origin main',
       'git push origin main:main',
       'git push origin HEAD:main',
@@ -303,52 +287,7 @@ describe('coderAllowedTools (OQ-67)', () => {
     }
   })
 
-  // Whether one push rule is safe, judged on the whole command rather than on
-  // where its last token points: exact (no `:*`), `git push`, then only the
-  // upstream-tracking flags, then `origin`, then exactly one refspec, and that
-  // refspec pushes this branch or HEAD to this branch and nothing else. Any
-  // other flag (-f, --force, --delete, --all, --mirror...) or a second refspec
-  // (`main <branch>`, `:main <branch>`) fails it.
-  function isSafePushRule(rule, assigned) {
-    const match = rule.match(/^Bash\((git push .*)\)$/)
-    if (!match || match[1].endsWith(':*')) return false
-    const tokens = match[1].split(' ')
-    let i = 2
-    while (tokens[i] === '-u' || tokens[i] === '--set-upstream') i++
-    if (tokens[i] !== 'origin') return false
-    const refspecs = tokens.slice(i + 1)
-    if (refspecs.length !== 1) return false
-    return [assigned, `HEAD:${assigned}`, `${assigned}:${assigned}`].includes(refspecs[0])
-  }
-
-  it('OQ-67/AC-2 - every push-granting pattern is exact and can push only this branch', () => {
-    // The structural reason the forbidden list above holds for commands nobody
-    // thought to enumerate, and what keeps a future spelling from widening
-    // push: each rule must pass isSafePushRule as a whole command.
-    const pushRules = coderAllowedTools(branch).filter((tool) => tool.startsWith('Bash(git push'))
-    expect(pushRules.length).toBeGreaterThan(0)
-    for (const rule of pushRules) expect(isSafePushRule(rule, branch), rule).toBe(true)
-  })
-
-  it('the push-rule check rejects the unsafe shapes #128\'s review found its first version accepted', () => {
-    // Not vacuous: each of these ends in the branch name, which is all the
-    // first version of the check looked at.
-    for (const rule of [
-      `Bash(git push origin main ${branch})`,
-      `Bash(git push origin :main ${branch})`,
-      `Bash(git push -f origin ${branch})`,
-      `Bash(git push --force origin HEAD:${branch})`,
-      `Bash(git push -u --force origin ${branch})`,
-      `Bash(git push --all origin ${branch})`,
-      `Bash(git push upstream ${branch})`,
-      `Bash(git push origin ${branch}:*)`,
-      `Bash(git push origin main:${branch})`,
-    ]) {
-      expect(isSafePushRule(rule, branch), rule).toBe(false)
-    }
-  })
-
-  it('OQ-67/AC-2 - refuses main as the assigned branch, since every push pattern would then name it', () => {
+  it('OQ-67/AC-2 - refuses main as the assigned branch', () => {
     expect(() => coderAllowedTools('main')).toThrow()
     expect(() => coderAllowedTools('refs/heads/main')).toThrow()
   })
@@ -361,7 +300,7 @@ describe('coderAllowedTools (OQ-67)', () => {
     const commands = gitEntries.map((entry) => entry.slice('Bash('.length, -1).replace(/:\*$/, ''))
     const verbs = new Set(commands.map((command) => command.split(' ')[1]))
     // Not vacuous: the block names the verbs whose absence caused OQ-67.
-    for (const verb of ['mv', 'push', 'commit', 'add']) expect(verbs).toContain(verb)
+    for (const verb of ['mv', 'commit', 'add']) expect(verbs).toContain(verb)
     for (const command of commands) expect(permits(tools, command), command).toBe(true)
   })
 })

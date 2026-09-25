@@ -169,9 +169,9 @@ function donePath(storyPath) {
  * It lives here rather than in coder.md because a coder cannot edit
  * `.claude/prompts/`. The findings are an injected block like any other.
  *
- * It names the exact push command, because the coder's allowlist permits only
- * scoped forms (`coderAllowedTools`) and "push to the same branch" invited a
- * bare `git push`, which is denied. That happened in #133's round 2.
+ * It tells the coder to commit and that the dispatcher pushes (OQ-84): the
+ * coder's allowlist grants no push (`coderAllowedTools`), and telling it to push
+ * invited a denied `git push`, as in #133's round 2.
  */
 export function retrySection({ round, roundsRemaining, findings, branch }) {
   checkCount('round', round)
@@ -180,7 +180,7 @@ export function retrySection({ round, roundsRemaining, findings, branch }) {
     throw new Error('retry.findings must be a non-empty string')
   }
   if (typeof branch !== 'string' || branch === '') {
-    throw new Error('retrySection requires the branch, to name the push command')
+    throw new Error('retrySection requires the branch, to name it in the commit instruction')
   }
   return [
     '## This is a retry',
@@ -190,8 +190,8 @@ export function retrySection({ round, roundsRemaining, findings, branch }) {
     'Your earlier work is not lost, and you are not starting over:',
     '',
     '- Your branch already exists and already carries your earlier commits. Continue on it.',
-    '- A pull request for that branch already exists. Do not try to open another; you cannot open one in any case. Push to the same branch and it updates.',
-    `- Push with exactly \`git push origin ${branch}\`. A bare \`git push\`, or \`git -C <path> push\`, is not on your allowlist and will be denied.`,
+    '- A pull request for that branch already exists. Do not try to open another; you cannot open one in any case. Commit on the existing branch and the pull request updates.',
+    `- Commit on \`${branch}\` and stop. Do not push: the dispatcher pushes the branch after your session ends, and pushing is denied to you.`,
     '- The story file has already been moved to `stories/done/` on that branch. Do not move it again.',
     '- The `## PR body` you emit will **replace** the existing description, not be appended to it. Write it complete, covering the whole change so far, not only what this round changed. Keep all three sections of `.github/pull_request_template.md` (What changed, Verification, Docs check): a replacement that drops one is a missing section, and review blocks on it.',
     '',

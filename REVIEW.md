@@ -249,13 +249,14 @@ silent exactly when someone needs to hear about it.
 ## For the coder: opening a PR
 
 The prompt a coder session is spawned with lives in
-[`.claude/prompts/coder.md`](.claude/prompts/coder.md). A coder must push its
-own branch to get its work reviewed at all, which is a real difference from the
-reviewer — but pushing is not the same capability as clearing the gate the push
-feeds, and holding both was the gap OQ-63 closed: with the owner's `repo`-scoped
-token, a coder could set `review/agent` to `success` on its own head and then
-dispatch `land-approved.yml`, the two rules `CLAUDE.md` states and nothing but
-prose enforced.
+[`.claude/prompts/coder.md`](.claude/prompts/coder.md). The coder commits and
+does not push: the dispatcher pushes its branch after the session
+(`pushBranch` in `scripts/dispatch/coder.mjs`), so a model session has no write
+access to the remote. Holding both a push and the means to clear the gate it
+feeds was the gap OQ-63 closed: with the owner's `repo`-scoped token, a coder
+could set `review/agent` to `success` on its own head and then dispatch
+`land-approved.yml`, the two rules `CLAUDE.md` states and nothing but prose
+enforced.
 
 **The coder holds no credential capable of a commit status, a workflow
 dispatch, or a pull-request write.** `scripts/dispatch/coder-env.mjs`
@@ -263,9 +264,9 @@ dispatch, or a pull-request write.** `scripts/dispatch/coder-env.mjs`
 its process environment and redirects `GH_CONFIG_DIR` to an empty directory,
 so nothing reachable from the session — `gh` directly, `gh` spawned from inside
 `node -e` via `child_process`, or an `npm`/`npx` script doing either — can
-authenticate as anything more than a git push over SSH, which none of that
-touches. `gh` is also absent from `coderAllowedTools`, having no legitimate use
-left once the coder stops opening its own PR.
+authenticate as anything more than git over SSH, which none of that touches
+(removing that is OQ-73's). `gh` is absent from `coderAllowedTools`, and
+`git push` is not allowed and is denied in `CODER_DISALLOWED_TOOLS`.
 
 **Opening the PR moves to whoever ran the coder.** The coder emits the PR title
 and body — the `pull_request_template.md` sections it always filled in — under

@@ -40,18 +40,15 @@ none` denies anything that would prompt; `--permission-mode acceptEdits` covers
 file edits but nothing else; and `.claude/settings.json` allowlists the project's
 npm and npx commands plus read-only git — **nothing that writes to the repository**.
 So a spawn carrying just those two flags can run the test suite and then
-silently denies `git commit` and `git push`: the coder does the work, verifies
-it, and cannot get its branch out. That looks like a model failure and is not
-one. The coder needs at least:
+silently denies `git commit`: the coder does the work, verifies
+it, and cannot commit it. That looks like a model failure and is not
+one. (`git push` is denied on purpose: the dispatcher pushes.) The coder needs at least:
 
 ```
 Read Write Edit Glob Grep TodoWrite
 Bash(git status:*) Bash(git diff:*) Bash(git log:*) Bash(git show:*)
 Bash(git branch:*) Bash(git fetch:*) Bash(git add:*) Bash(git mv:*)
 Bash(git commit:*)
-Bash(git push origin HEAD:{{BRANCH}}) Bash(git push origin {{BRANCH}}:{{BRANCH}})
-Bash(git push origin {{BRANCH}}) Bash(git push -u origin {{BRANCH}})
-Bash(git push --set-upstream origin {{BRANCH}})
 Bash(npm:*) Bash(npx:*) Bash(node:*)
 Bash(ls:*) Bash(cat:*) Bash(head:*) Bash(tail:*) Bash(wc:*) Bash(grep:*)
 Bash(diff:*) Bash(cut:*) Bash(pwd:*)
@@ -62,7 +59,7 @@ repository (`READ_ONLY_SHELL_UTILS`). None of them can write in any mode, which
 is why `sed`, `sort`, `find` and `awk` are absent.
 **Not `Bash(git:*)`.** That would permit `git push origin HEAD:main`, which is
 the one thing the scoping exists to prevent, and the coder has no use for it:
-the verbs above are the whole of what building, committing and pushing a branch
+the verbs above are the whole of what building and committing a branch
 requires. `scripts/dispatch/coder-env.mjs` builds this list
 (`coderAllowedTools`) rather than leaving it to be retyped per spawn, and that
 function is the authority — this block is a reader's summary of it and must not
@@ -91,11 +88,12 @@ denial, it is the absence of a usable credential.** `coderEnv` in
 already carries. That holds against `gh api` directly, against `node -e`
 spawning `gh` or `curl` through `child_process`, and against an `npm`/`npx`
 script doing either — none of them can conjure a token that was never in the
-environment to begin with, whichever command reads it. Push keeps working
-because it authenticates over SSH, which `coderEnv` never touches.
+environment to begin with, whichever command reads it. Git's own SSH
+authentication is left in place, but pushing is not yours to do: `git push` is
+denied, and the dispatcher pushes your branch after your session ends.
 
 The coder still needs a way to get its branch out and its work reviewed. It
-pushes over `git`, exactly as before; it does not open the pull request itself.
+commits, and the dispatcher pushes its branch; it does not open the pull request itself.
 Instead it **emits the PR title and body** — the same `pull_request_template.md`
 sections it always filled in — as the last thing in its final report, under the
 headings `## PR title` and `## PR body`, followed by `## Open as` and a line
@@ -193,8 +191,8 @@ section, this section is right.
 
 - **`gh` is not available to you, and no GitHub API credential is reachable
   from this session** — no `GH_TOKEN`, no `GITHUB_TOKEN`, no working `gh`
-  login. That is deliberate (OQ-63): you push your branch and emit the PR
-  body; whoever spawned you opens the PR with a separate credential. See "You
+  login. That is deliberate (OQ-63): you commit your work and emit the PR
+  body; the dispatcher pushes your branch and whoever spawned you opens the PR with a separate credential. See "You
   do not merge, and you do not open your own PR" below.
 - **Network egress is unrestricted.** `mytower.app` is reachable.
 - **Ref deletion works**, but do not delete your branch. When the landing sweep
@@ -233,10 +231,10 @@ A separate workflow lands PRs that are green, verdict-passed and conflict-free,
 oldest first, one per run. It runs when someone triggers it rather than on a
 schedule, so a merge-ready PR may sit for a while — that is expected, not a
 fault, and not yours to chase. You do not merge your own, and neither does the
-reviewer. Your job ends with your branch pushed and a PR description ready for
-the runner to use.
+reviewer. Your job ends with your work committed and a PR description ready for
+the runner to use. You do not push: the dispatcher does, after your session ends.
 
-**Push your branch, then end your final report with exactly this block, and
+**Commit your work, then end your final report with exactly this block, and
 put nothing after it:**
 
 ```
@@ -261,9 +259,9 @@ are plain lines, and a closing fence after `ready` or `draft` counts as
 something after the block, exactly as a sentence would.
 
 **Say `ready` when the work is done:** every acceptance criterion you ticked is
-delivered, the suite is green, and your branch is pushed. That is the normal
+delivered, the suite is green, and your work is committed. That is the normal
 case. **Say `draft` only when you stopped short**: you set `blocked:` (see
-"When you cannot proceed" below), your push failed, or you left work undone.
+"When you cannot proceed" below), you could not commit your work, or you left work undone.
 Say which in the PR body. Both directions cost something. The sweep skips
 drafts, so finished work opened as a draft waits until someone marks it ready.
 And nothing else distinguishes "passed review" from "done", so a `ready` PR
@@ -271,7 +269,7 @@ that goes green will be landed whether or not you meant to add another commit.
 
 Do not idle waiting for a verdict. There is nothing for you to do when it
 arrives. Say in your final report, **above** the block, that your branch is
-pushed and give its head SHA, so whoever opens the PR — and whoever later
+committed and give its head SHA, so whoever opens the PR — and whoever later
 reviews it — can tell whether a later verdict is about the right commit.
 
 ## When you cannot proceed: write and exit
@@ -287,7 +285,7 @@ decision that is properly the author's — take the escape route:
 1. Set `blocked:` in the frontmatter of `{{STORY_PATH}}` to the specific
    question. Not "unclear" — the actual question, in a sentence or two, such
    that someone could answer it without opening this session.
-2. Commit that, push the branch, and end your final report with the block
+2. Commit that, and end your final report with the block
    above, with the same question in `## PR body` and `draft` under
    `## Open as`. Whoever opens the PR from that text opens it as a draft,
    which is what keeps the sweep from landing it.

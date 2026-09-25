@@ -3,21 +3,19 @@
  * The coder's capability contract (OQ-63): what a coder invocation is
  * allowed to touch, and what its process environment carries.
  *
- * A coder must push its own branch, so it cannot simply be handed no GitHub
- * access the way the reviewer is (OQ-62). Instead its *credential* is
- * narrowed rather than its command surface: `coderEnv` strips anything that
- * would let `gh`, a `curl` invocation, or any other process reach GitHub's
- * write API (commit statuses, workflow dispatch, pull request writes), while
- * leaving git's own push authentication (SSH key / credential helper)
- * untouched. That is what makes the guarantee survive `node -e`, `npm`, and
- * `npx` reaching past the Bash tool's allowlist entirely (AC-4) -- it has
- * nothing to do with which command was used, only with whether a usable
- * credential exists in the environment that command inherits.
+ * The coder's *credential* is narrowed rather than its command surface:
+ * `coderEnv` strips anything that would let `gh`, a `curl` invocation, or any
+ * other process reach GitHub's write API (commit statuses, workflow dispatch,
+ * pull request writes). That is what makes the guarantee survive `node -e`,
+ * `npm`, and `npx` reaching past the Bash tool's allowlist entirely (AC-4) --
+ * it has nothing to do with which command was used, only with whether a usable
+ * credential exists in the environment that command inherits. Git's own
+ * authentication (SSH key / credential helper) is left in place here; the
+ * coder no longer needs it, and removing it is OQ-73's.
  *
- * `coderAllowedTools` is the separate, complementary layer: it scopes `git
- * push` to the one branch a given invocation was spawned for, which is a
- * property `coderEnv` alone can't provide (a credential valid for the repo is
- * valid for any branch in it).
+ * `coderAllowedTools` is the separate, complementary layer. The coder commits
+ * and the dispatcher pushes (OQ-84, `pushBranch` in `coder.mjs`), so no `git
+ * push` pattern is granted and `CODER_DISALLOWED_TOOLS` denies it outright.
  */
 
 // Environment variables that could hand a process a GitHub API credential.
@@ -34,9 +32,8 @@ const CREDENTIAL_ENV_VARS = ['GH_TOKEN', 'GITHUB_TOKEN', 'GH_ENTERPRISE_TOKEN']
  * found) at `emptyGhConfigDir` -- a directory the caller has verified is
  * empty of any host/token configuration, e.g. a fresh temp directory.
  *
- * Deliberately does not touch anything push authentication needs (SSH agent
- * socket, `GIT_SSH_COMMAND`, a credential helper's own storage): those are
- * how AC-5 keeps working once this runs.
+ * Deliberately does not touch git's own authentication (SSH agent socket,
+ * `GIT_SSH_COMMAND`, a credential helper's own storage); that is OQ-73's.
  */
 export function coderEnv(baseEnv, emptyGhConfigDir) {
   if (!emptyGhConfigDir) {
@@ -94,19 +91,9 @@ export const READ_ONLY_SHELL_UTILS = [
  * The coder's `--allowedTools` list for one invocation, read-only shell
  * utilities included. `branch` is the exact branch that invocation was
  * spawned to work on (the dispatcher already knows it -- it created the
- * worktree). Push is scoped to exact patterns naming that branch -- none of
- * them ends in `:*` -- not `Bash(git push:*)`, so pushing to `main` or to any
- * other branch is refused at the tool-permission layer (AC-5) even though the
- * underlying credential, being repo-wide, does not itself enforce that.
- *
- * Five spellings of the same push are granted: the two refspec forms; the
- * plain `git push origin <branch>` that coders reach for first (OQ-67 AC-2 --
- * two of OQ-51's four rounds finished their work and were refused it); and
- * that plain form with `-u` or `--set-upstream`, which the first spawned
- * coder to finish a story (#127) reached for and was refused. Each is exact,
- * so the flag is accepted only in that position and only with this branch.
- * `branch` may not be `main`, since every one of these patterns would then
- * name it.
+ * worktree). No `git push` is granted (OQ-84): the coder commits, and the
+ * dispatcher pushes the branch itself. Two coders were refused a push spelling
+ * and stopped on that alone (#140, #145). `branch` may still not be `main`.
  *
  * `git mv` is granted because `coder.md` requires the story file to be moved
  * with it (`REVIEW.md` item 19). It rewrites the working tree and index only,
@@ -121,10 +108,10 @@ export const READ_ONLY_SHELL_UTILS = [
  */
 export function coderAllowedTools(branch) {
   if (!branch) {
-    throw new Error('coderAllowedTools requires the branch, so push can be scoped to it')
+    throw new Error('coderAllowedTools requires the branch the coder is assigned')
   }
   if (branch === 'main' || branch === 'refs/heads/main') {
-    throw new Error('coderAllowedTools refuses main: every push pattern it returns would name it')
+    throw new Error('coderAllowedTools refuses main: a coder is never assigned main')
   }
 
   return [
@@ -133,11 +120,6 @@ export function coderAllowedTools(branch) {
     'Bash(git add:*)',
     'Bash(git mv:*)',
     'Bash(git commit:*)',
-    `Bash(git push origin HEAD:${branch})`,
-    `Bash(git push origin ${branch}:${branch})`,
-    `Bash(git push origin ${branch})`,
-    `Bash(git push -u origin ${branch})`,
-    `Bash(git push --set-upstream origin ${branch})`,
     'Bash(npm:*)', 'Bash(npx:*)', 'Bash(node:*)',
     ...READ_ONLY_SHELL_UTILS,
   ]
@@ -149,13 +131,7 @@ export function coderAllowedTools(branch) {
  * same way OQ-62 denies it to the reviewer -- see `coderEnv`'s doc comment
  * for why this alone would not satisfy AC-4.
  *
- * Deliberately does *not* include `Bash(git push:*)`, unlike the reviewer's
- * equivalent list. Deny rules take precedence over allow rules, and that
- * pattern prefix-matches every scoped `Bash(git push ... <branch>)` entry
- * `coderAllowedTools` grants -- applied together, the coder could not push at
- * all, defeating AC-5. The reviewer can carry the blanket deny because its
- * allowlist never grants push in the first place, so there is nothing for it
- * to shadow; the coder's allowlist does, so the deny has to stop short of it.
- * Scoping push to one branch is `coderAllowedTools`'s job, not this list's.
+ * `Bash(git push:*)` is denied as a second barrier, as the reviewer's list does
+ * (OQ-84): `coderAllowedTools` grants no push, so the deny shadows nothing.
  */
-export const CODER_DISALLOWED_TOOLS = ['Bash(gh:*)']
+export const CODER_DISALLOWED_TOOLS = ['Bash(gh:*)', 'Bash(git push:*)']
