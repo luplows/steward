@@ -13,7 +13,8 @@
 > was split three ways on 2026-09-23: building the invocation (OQ-74), classifying the result
 > (OQ-75), and running the process and joining the three (OQ-65, which depends on the other two).
 > `github.mjs` (OQ-68) is delivered, and so is `review.mjs` (OQ-69, step 4 below: the reviewer half
-> for one pull request); `dispatch.mjs` follows.
+> for one pull request) and `coder.mjs` (OQ-70, step 5 below: the coder half, from a ready story
+> to an open pull request); `dispatch.mjs` follows.
 >
 > **The loop has been run end to end by hand**, with a person acting as the dispatcher — OQ-63, and
 > then OQ-51. That is where most of what Phase 1 has learned came from, and it is a deliberate
