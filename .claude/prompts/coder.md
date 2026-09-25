@@ -236,16 +236,27 @@ put nothing after it:**
 <the filled pull_request_template.md sections>
 
 ## Open as
-draft
+<ready or draft>
 ```
 
-The last line is `draft` or `ready`, alone on its line. Whoever ran you
+The last line is `ready` or `draft`, alone on its line. Whoever ran you
 creates the PR from that block, and a script reads it: a report that ends any
 other way (a sentence after `## Open as`, a head SHA below the block, `draft`
-worded as "Open as: draft") is rejected, and no PR is opened. Say `draft` if
-you are not finished; the sweep skips drafts, and nothing else
-distinguishes "passed review" from "done" — a `ready` PR that goes green will
-be landed whether or not you meant to add another commit.
+worded as "Open as: draft") is rejected, and no PR is opened.
+
+**Do not wrap the block in a code fence.** The fence above only marks where
+the example starts and ends in this prompt. In your report, the three headings
+are plain lines, and a closing fence after `ready` or `draft` counts as
+something after the block, exactly as a sentence would.
+
+**Say `ready` when the work is done:** every acceptance criterion you ticked is
+delivered, the suite is green, and your branch is pushed. That is the normal
+case. **Say `draft` only when you stopped short**: you set `blocked:` (see
+"When you cannot proceed" below), your push failed, or you left work undone.
+Say which in the PR body. Both directions cost something. The sweep skips
+drafts, so finished work opened as a draft waits until someone marks it ready.
+And nothing else distinguishes "passed review" from "done", so a `ready` PR
+that goes green will be landed whether or not you meant to add another commit.
 
 Do not idle waiting for a verdict. There is nothing for you to do when it
 arrives. Say in your final report, **above** the block, that your branch is
