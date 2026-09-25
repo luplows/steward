@@ -225,6 +225,10 @@ Each step is independently useful, so a stall leaves something working.
    **The round count is derived by counting `block` verdicts on the PR, not stored anywhere.** That
    is what makes the bound survive a dispatcher restart; a bound that resets when a process dies is
    not a bound. It also answers OQ-48's own open question about where the count should live.
+   > **Overtaken.** On 2026-09-19 OQ-48 set the bound at three, not two, after OQ-51's hand-run
+   > went four rounds with each one finding something new. On 2026-09-25 the owner confirmed three.
+   > `review-blocked` is applied by `review-gate.yml` (OQ-80), not by the dispatcher. The same
+   > day, the loop was given landing (OQ-50) and red-CI retries (OQ-79); see OQ-48.
 
 ### Worked example
 

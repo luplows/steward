@@ -130,7 +130,9 @@ JSON verdict described at the end of this prompt; nothing else you write is read
 The story file is `{{STORY_PATH}}`. If the block above is a story, item 19
 requires this PR to have moved that file into `stories/done/`, so the path is
 itself part of what you check. If it says this PR implements no story, the path
-reads `n/a` and items 16–19 do not apply.
+reads `n/a` and items 16–19 do not apply. If such a PR adds or changes files
+under `stories/`, items 20–24 do: it is putting work into the queue that the
+loop will carry out unattended.
 
 ## The pull request's own description
 

@@ -41,7 +41,7 @@ me on the current version rather than a superseded copy of it.
       code it names. The design doc's "The one change: `review-blocked` must be
       **applied by the dispatcher** when a story exhausts its **two rounds**" is
       reconciled with OQ-48, which sets the bound at three and moves the label to
-      `review-gate.yml` — AC-6 and AC-6b there.
+      `review-gate.yml` — AC-6 there, and OQ-80, which took over its AC-6b.
 - [ ] **AC-5** — **The circuit-breaker threshold and its exemptions.**
       Authority: `.github/workflows/land-approved.yml`. No document states the
       numeric threshold; each points at the workflow. A test asserts that, by

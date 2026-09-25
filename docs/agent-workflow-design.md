@@ -275,16 +275,23 @@ than relaxed.
 
 ### Happy path
 
-1. Session A writes a story. Open questions empty.
+1. Session A writes a story, with Open questions empty, and opens it as a pull request from the
+   owner's account. The loop reviews it against `REVIEW.md`'s story-PR items and lands it (OQ-83).
+   Only a pull request from an account with write access can land (OQ-81), and a coder's own pull
+   request cannot change `stories/` beyond its own story (OQ-82).
 2. Dispatcher picks the highest-tier, lowest-id ready story; creates a worktree and the branch
    `story/OQ-49-import-player-info`.
 3. Coder implements, tests green, pushes its branch, and emits the PR title/body and a
    draft-or-ready decision in its report. Dispatcher opens the PR from that text, as a **draft**
    if the coder said draft.
-4. CI passes.
+4. CI passes. The dispatcher waits for it before reviewing, so no review is spent on a head that
+   cannot land (OQ-79, OQ-48).
 5. Dispatcher spawns the reviewer, which returns a structured verdict.
-6. Dispatcher posts `review/agent` = `success` on the head SHA.
-7. The landing sweep merges it (squash) once `mergeable_state` is `clean`.
+6. Dispatcher posts the verdict as a marker comment, and `review-gate.yml` derives
+   `review/agent` = `success` on the head SHA from it.
+7. Dispatcher triggers the landing sweep (OQ-50), which merges it (squash) once `mergeable_state`
+   is `clean`. The next story starts only once this one is merged or stopped, so every story is
+   dispatched from a `main` that includes the last (OQ-48).
 
 ### Failure paths
 
@@ -292,8 +299,9 @@ The majority of the interesting behaviour.
 
 | Situation | Route |
 |---|---|
-| Reviewer returns `block` | Findings → coder respawned with story + findings. **Max 2 rounds.** |
-| Still failing after 2 rounds | `blocked:` set on the story, `review-blocked` label applied, human queue. Round count **derived from `block` verdicts on the PR**, not stored. |
+| Reviewer returns `block` | Findings → coder respawned with story + findings. **Bounded**; OQ-48 sets the number. |
+| Still failing at the bound | `blocked:` set on the story by the dispatcher, `review-blocked` applied by `review-gate.yml`, human queue. Round count **derived from `block` verdicts on the PR**, not stored. |
+| CI red on the head | Failure output (OQ-79) → coder respawned on the same branch. Bounded separately (OQ-48's AC-6b), derived from the PR's failed CI runs; then `blocked:`, no label. Decided 2026-09-25. |
 | Story was wrong, not the code | `blocked:` set with the reason → Session A |
 | Coder hits ambiguity mid-story | `blocked:` + the specific question → Session A |
 | Branch stale | Rebase; if it fails, kick back rather than merge against a moved world |
@@ -306,9 +314,11 @@ coder's escape route is **write-and-exit**: set `blocked:` with the question, ex
 
 ### Retry is bounded, and the bound is derived
 
-Two rounds, then stop. Uncapped retries are how you get forty commits of an agent arguing with
-itself. A reviewer session is fresh each time and cannot know how many rounds preceded it, and a
-prose bound honoured by agents remembering is not a mechanism — that is the existing OQ-48.
+A fixed number of blocking verdicts, then stop. OQ-48 holds the number and the reasoning behind
+it; this section deliberately does not restate it. Uncapped retries are how you get forty commits
+of an agent arguing with itself. A reviewer session is fresh each time and cannot know how many
+rounds preceded it, and a prose bound honoured by agents remembering is not a mechanism — that is
+the existing OQ-48.
 
 **The round count is derived from the PR, not stored.** Each round leaves a durable trace: a
 findings comment and a `review/agent` status of `failure` on the head SHA it judged. Counting
@@ -322,8 +332,9 @@ the bound not existing. Deriving it means the count survives restarts, machine r
 dispatcher rewritten from scratch — it is a property of the PR, which is where the evidence lives
 anyway.
 
-The same derivation feeds the circuit breaker: on the second `block`, the dispatcher sets
-`blocked:` on the story and applies `review-blocked`, which is what finally makes the breaker in
+The same derivation feeds the circuit breaker: when the bound is reached, the dispatcher sets
+`blocked:` on the story, and `review-gate.yml` applies `review-blocked`, because it sees every PR,
+including ones no dispatcher ran (OQ-80). That is what finally makes the breaker in
 `land-approved.yml` count a signal something reliably produces.
 
 ---
@@ -507,7 +518,7 @@ to be replaced once the spawn modules record their own.
 ### Credential minimalism
 
 **The reviewer is given no GitHub write access, and needs none.** It returns a structured verdict on
-stdout; the dispatcher posts the status.
+stdout; the dispatcher posts it as a marker comment, and `review-gate.yml` derives the status.
 
 **"Given" is doing real work in that sentence.** Running locally, the reviewer runs as the owner,
 on a machine where an SSH key and a `gh` keyring token are reachable — and its allowlist must
@@ -567,7 +578,10 @@ it was obscured the real mechanism:
   marker comment and derives the status. So the dispatcher's output is a *comment*, and enforcement
   is a GitHub Actions job it does not control. That split is the guarantee, and it already exists.
 - **Triggering `land-approved.yml` is the owner's**, enforced as a tested prohibition in OQ-68 and
-  OQ-48 rather than by scope on a token.
+  OQ-48 rather than by scope on a token. Decided 2026-09-25: the dispatch loop will also trigger
+  it, only through `land.mjs` (OQ-50). That module's own allowlist permits that one dispatch and
+  no other write, and neither `coder.mjs` nor `review.mjs` imports it. `github.mjs`'s
+  prohibition stays as it is. Until OQ-50 lands, triggering it is the owner's alone.
 
 A genuinely separated credential needs a second GitHub identity, which is item 10 of the open
 questions table below and is not built. Until it is, this section says what is true.
@@ -701,7 +715,10 @@ be kept essentially as-is:
 - **Triggered independently of the work**, so it depends on no session being alive — a worker
   finishes long before its verdict arrives. This was a `*/15` schedule until 2026-09-18; GitHub
   delivered it at roughly 5% of that rate, so the trigger was removed and landing is explicit
-  (`gh workflow run land-approved.yml`) until a reliable one is chosen. See OQ-50.
+  (`gh workflow run land-approved.yml`) until a reliable one is chosen. **Chosen 2026-09-25:** the
+  dispatch loop triggers it through `land.mjs` once a PR is landable, and re-triggers while the
+  PR is still open. The loop never merges itself (OQ-50, OQ-48). Until OQ-50 lands, it is
+  triggered by hand.
 - **One PR per run.** `mergeable_state` is computed asynchronously, so a second merge in the same
   pass decides on stale data. The same fact has a cost between runs: straight after a merge, other
   open PRs can read `unknown` for a while, and the sweep skips `unknown` rather than guessing. A
@@ -716,8 +733,9 @@ be kept essentially as-is:
 - Circuit breaker at five `review-blocked` PRs, with exemptions for `breaker-override` and
   workflow-only diffs so a tripped breaker is not a trap.
 
-The one change: `review-blocked` must be **applied by the dispatcher** when a story exhausts its
-two rounds — the bound being derived from the PR's own `block` verdicts rather than remembered.
+The one change: `review-blocked` must be **applied automatically** when a story reaches the round
+bound, by `review-gate.yml` (OQ-80), with the bound derived from the PR's own `block`
+verdicts rather than remembered.
 Today the label is applied by hand, so the breaker counts a signal nothing reliably produces.
 
 ### Merge queue

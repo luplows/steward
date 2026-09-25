@@ -93,6 +93,32 @@ standard it was supposed to meet.
     **Out of scope**, and nothing implements a decision the story left open.
 19. The story file is moved to `stories/done/` in this PR.
 
+## PRs that add or change a story
+
+These apply to a PR that writes or edits files under `stories/` without
+implementing one: Session A's work. A story that lands `ready` is work the
+dispatch loop will carry out unattended, so it is reviewed as carefully as
+code.
+
+20. **Schema** — each added or changed story matches `stories/_TEMPLATE.md`:
+    the frontmatter keys, the six sections, and AC ids of the form `AC-N`
+    (or `AC-Nx`).
+21. **Readiness** — a story whose Open questions section is empty passes the
+    readiness test in `stories/README.md`: each AC can be checked by someone
+    holding only the story and a diff. An AC that could not fail is a finding.
+    A story that is not ready must say so, with its questions under Open
+    questions, which keeps it `draft`.
+22. **Claims** — every statement the story makes about the repository is true
+    at the PR's head: files, functions, line numbers, counts, behaviour, and
+    what another story says. Check each one (`CLAUDE.md`, "Claims about this
+    repository").
+23. **Stable ids** — a story that is already in flight (a `story/OQ-<n>-*`
+    branch exists on `origin`; check with `git ls-remote`) does not have its
+    AC ids renumbered. A new AC goes in with a letter suffix.
+24. **Consistency** — the story does not contradict or duplicate another
+    story's ACs. Where it takes over part of another story, that story is
+    edited in the same PR, and every reference to the moved part is updated.
+
 ## For the reviewer: reporting a verdict
 
 The prompt a reviewer session is spawned with lives in
@@ -199,9 +225,11 @@ Getting these wrong means the marker is silently ignored rather than obeyed.
    running a fresh review of the **same head** and recording its verdict. The
    description is not part of the head, so a commit would change nothing it
    found. Either way it is a new review, never a waved-through old one, and
-   **the block still counts toward the two-round bound** like any other: the
+   **the block still counts toward the round bound** like any other: the
    bound counts `block` verdicts and makes no exception for what they were
-   about. First used on #133, where round 2 blocked on a missing Docs check.
+   about. (The bound is three blocking verdicts. OQ-48 sets it; this is a
+   restatement for the reader and must not drift from it.) First used on
+   #133, where round 2 blocked on a missing Docs check.
 4. **The comment must come from an account with write access.** Anyone can
    comment on a public repository; a marker from anyone else is ignored.
 
