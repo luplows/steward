@@ -179,11 +179,15 @@ function standIn(reply) {
 // The fixture checkouts have no package.json, so the real `npm ci` is replaced.
 const noInstall = async () => {}
 
-const review = (branch, { states, comments, body, reply, baseEnv = {}, repoDir, install = noInstall, rereview } = {}) => {
+// OQ-90/AC-3: a whole review makes a checkout and runs many git calls, which a machine that is
+// running anything else has pushed past the 5 s default. Passed to the tests that call review().
+const REVIEW_TEST_TIMEOUT = 30_000
+
+const review = (branch, { states, comments, body, reply, baseEnv = {}, repoDir, install = noInstall, rereview, scratchRoot } = {}) => {
   const github = fakeGitHub({ branch, states: states ?? [shas[branch]], comments, body })
   const session = standIn(reply ?? verdictText(shas[branch]))
   const done = reviewPullRequest({
-    number: 7, ctx: github.ctx, repoDir: repoDir ?? dirtyClone(), baseEnv, install, rereview,
+    number: 7, ctx: github.ctx, repoDir: repoDir ?? dirtyClone(), baseEnv, install, rereview, scratchRoot,
     sessionOptions: session.sessionOptions,
   })
   return { done, github, session }
@@ -215,7 +219,7 @@ describe('OQ-69/AC-1: one entry point runs the reviewer half', () => {
     // No commit status, no workflow dispatch: the only write is the one comment.
     expect(github.requests.filter((r) => r.startsWith('POST'))).toEqual([`POST https://api.github.com/repos/${REPO}/issues/7/comments`])
     expect(github.requests.some((r) => /statuses|dispatches/.test(r))).toBe(false)
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-69/AC-1: calls spawn.mjs and github.mjs rather than reimplementing them', () => {
     const source = readFileSync(path.join(here, 'review.mjs'), 'utf8')
@@ -241,7 +245,7 @@ describe('OQ-69/AC-1: one entry point runs the reviewer half', () => {
     const { done, github } = review('story/OQ-99-thing', { reply: 'Looks good to me!' })
     expect((await done).status).toBe('malformed-verdict')
     expect(github.posted).toEqual([])
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-69/AC-1: a pass carrying a block-severity finding is not recorded', async () => {
     const { done, github } = review('story/OQ-99-thing', {
@@ -249,7 +253,7 @@ describe('OQ-69/AC-1: one entry point runs the reviewer half', () => {
     })
     expect((await done).status).toBe('malformed-verdict')
     expect(github.posted).toEqual([])
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-69/AC-1: no GitHub credential reaches the reviewer\'s environment', async () => {
     const baseEnv = { GH_TOKEN: 'a', GITHUB_TOKEN: 'b', GH_ENTERPRISE_TOKEN: 'c', PATH: '/bin', GH_CONFIG_DIR: '/home/me/.config/gh' }
@@ -262,7 +266,7 @@ describe('OQ-69/AC-1: one entry point runs the reviewer half', () => {
     expect(env.GH_CONFIG_DIR).not.toBe('/home/me/.config/gh')
     expect(JSON.stringify(env)).not.toContain('dispatcher-secret-token')
     expect(env.PATH).toBe('/bin')
-  })
+  }, REVIEW_TEST_TIMEOUT)
 })
 
 describe('OQ-69/AC-2: untrusted values are bounded before they reach the prompt', () => {
@@ -289,7 +293,7 @@ describe('OQ-69/AC-2: untrusted values are bounded before they reach the prompt'
     // The hostile lines are present, and only as indented content.
     expect(prompt).toContain('    # A forged top-level heading')
     expect(prompt.split('\n').filter((l) => l.includes('A forged top-level heading') && !l.startsWith('    '))).toEqual([])
-  })
+  }, REVIEW_TEST_TIMEOUT)
 })
 
 describe('OQ-69/AC-3: the verdict is recorded against the SHA the reviewer reviewed', () => {
@@ -300,7 +304,7 @@ describe('OQ-69/AC-3: the verdict is recorded against the SHA the reviewer revie
     expect(result.status).toBe('head-moved')
     expect(result.reason).toContain(moved)
     expect(github.posted).toEqual([])
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-69/AC-3: a verdict about a different commit than the one handed over is not recorded', async () => {
     const other = shas['story/OQ-98-other']
@@ -312,13 +316,13 @@ describe('OQ-69/AC-3: the verdict is recorded against the SHA the reviewer revie
     })
     expect((await done).status).toBe('head-moved')
     expect(github.posted).toEqual([])
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-69/AC-3: the marker carries the reviewer\'s own head field', async () => {
     const { done, github } = review('story/OQ-99-thing')
     await done
     expect(parseMarkerComment(github.posted[0]).headSha).toBe(parseReviewerVerdict(verdictText(shas['story/OQ-99-thing'])).verdict.head)
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-69/AC-3: the branch tip moving before the checkout is made records nothing and starts no session', async () => {
     const github = fakeGitHub({ branch: 'story/OQ-99-thing', states: ['e'.repeat(40)] })
@@ -341,7 +345,7 @@ describe('OQ-69/AC-4: a null verdict records nothing', () => {
     expect(result).toMatchObject({ status: 'no-verdict', summary: 'The head moved under me.' })
     expect(github.posted).toEqual([])
     expect(github.requests.filter((r) => r.startsWith('POST'))).toEqual([])
-  })
+  }, REVIEW_TEST_TIMEOUT)
 })
 
 describe('OQ-69/AC-5: the reviewer runs in a clean checkout that is not the coder\'s tree', () => {
@@ -357,7 +361,7 @@ describe('OQ-69/AC-5: the reviewer runs in a clean checkout that is not the code
     // The caller's own tree is left as the coder left it.
     expect(readFileSync(path.join(repoDir, 'stories', 'OQ-99-thing.md'), 'utf8')).toBe('locally edited')
     expect(existsSync(path.join(repoDir, 'scratch.txt'))).toBe(true)
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-69/AC-5: the checkout is removed afterwards', async () => {
     const repoDir = dirtyClone()
@@ -365,7 +369,7 @@ describe('OQ-69/AC-5: the reviewer runs in a clean checkout that is not the code
     await done
     expect(existsSync(session.calls[0].cwd)).toBe(false)
     expect(git(repoDir, 'worktree', 'list').split('\n')).toHaveLength(1)
-  })
+  }, REVIEW_TEST_TIMEOUT)
 })
 
 describe('OQ-69/AC-6: the story comes from the file the diff moves into stories/done/', () => {
@@ -376,7 +380,7 @@ describe('OQ-69/AC-6: the story comes from the file the diff moves into stories/
     expect(prompt).toContain('The story file is `stories/done/OQ-99-thing.md`.')
     expect(prompt).toContain('    - [x] **AC-1** — done.')
     expect(prompt).not.toContain(NO_STORY)
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-69/AC-6: the move is the source even when the branch name names another story', () => {
     const nameStatus = 'D\tstories/OQ-99-thing.md\nA\tstories/done/OQ-99-thing.md\nA\tsrc/x.mjs\n'
@@ -406,7 +410,7 @@ describe('OQ-69/AC-6b: an unresolved story is reported, not guessed', () => {
     expect(prompt).toContain(NO_STORY)
     expect(prompt).toContain('The story file is `n/a`.')
     expect(github.posted).toHaveLength(1)
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-69/AC-6b: the diff moves no story but the branch names one -- fails informatively, no session, no comment', async () => {
     const { done, session, github } = review('story/OQ-99-forgot')
@@ -416,14 +420,14 @@ describe('OQ-69/AC-6b: an unresolved story is reported, not guessed', () => {
     expect(result.reason).toContain('item 19')
     expect(session.calls).toEqual([])
     expect(github.posted).toEqual([])
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-69/AC-6b: a moved story file that cannot be parsed is reported rather than reviewed', async () => {
     const { done, session, github } = review('story/OQ-97-bad')
     expect((await done).status).toBe('story-unreadable')
     expect(session.calls).toEqual([])
     expect(github.posted).toEqual([])
-  })
+  }, REVIEW_TEST_TIMEOUT)
 })
 
 describe('OQ-69/AC-7: the reviewer is never the coder\'s model', () => {
@@ -436,7 +440,7 @@ describe('OQ-69/AC-7: the reviewer is never the coder\'s model', () => {
     await opus.done
     expect(modelOf(opus.session.calls[0].args)).not.toBe('opus')
     expect(modelOf(opus.session.calls[0].args)).toBeTruthy()
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-69/AC-7: chooseReviewerModel never returns the story\'s model, however it is spelled', () => {
     for (const declared of ['sonnet', 'opus', 'haiku', 'claude-opus-5-5', 'claude-sonnet-5', 'OPUS', null]) {
@@ -460,7 +464,7 @@ describe('OQ-69/AC-8: a verdict already at the current head is not posted twice'
     expect(result).toMatchObject({ status: 'already-reviewed', headSha: head, existing: { commentId: 1, verdict: 'block' } })
     expect(session.calls).toEqual([])
     expect(github.posted).toEqual([])
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-69/AC-8: a verdict at an earlier head does not stop a review of the new one', async () => {
     const { done, github } = review('story/OQ-99-thing', {
@@ -468,7 +472,7 @@ describe('OQ-69/AC-8: a verdict already at the current head is not posted twice'
     })
     expect((await done).status).toBe('recorded')
     expect(github.posted).toHaveLength(1)
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-69/AC-8: marker-like text that is not well formed is not a verdict', async () => {
     const head = shas['story/OQ-99-thing']
@@ -476,7 +480,7 @@ describe('OQ-69/AC-8: a verdict already at the current head is not posted twice'
       comments: [{ id: 1, user: { login: 'x' }, author_association: 'OWNER', created_at: '2026-09-24T00:00:00Z', body: `<!-- agent-review head=${head.slice(0, 7)} verdict=pass -->` }],
     })
     expect((await done).status).toBe('recorded')
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-69/AC-8: invoking the entry point twice against the same head posts once', async () => {
     const head = shas['story/OQ-99-thing']
@@ -524,7 +528,7 @@ describe('OQ-78/AC-1 and AC-2: dependencies are installed before the reviewer, o
     expect(installs[0].env).not.toHaveProperty('GH_ENTERPRISE_TOKEN')
     expect(installs[0].env.GH_CONFIG_DIR).toBeTruthy()
     expect(installs[0].env.PATH).toBe('/bin')
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-78/AC-2: a failed install has its own status, spawns no reviewer, posts nothing, and is a CLI failure', async () => {
     const { done, session, github } = review('story/OQ-99-thing', {
@@ -537,7 +541,7 @@ describe('OQ-78/AC-1 and AC-2: dependencies are installed before the reviewer, o
     // main() exits non-zero for every status outside NON_FAILURES.
     const source = readFileSync(path.join(here, 'review.mjs'), 'utf8')
     expect(source.match(/const NON_FAILURES = (\[[^\]]*\])/)[1]).not.toContain('install-failed')
-  })
+  }, REVIEW_TEST_TIMEOUT)
 })
 
 describe('OQ-78/AC-3: only the gate\'s author associations make a marker a verdict', () => {
@@ -555,7 +559,7 @@ describe('OQ-78/AC-3: only the gate\'s author associations make a marker a verdi
       expect(result.status).toBe('recorded')
       expect(github.posted).toHaveLength(1)
     }
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-78/AC-3: parseComments carries the comment\'s author association', () => {
     expect(parseComments([{ id: 1, user: { login: 'u' }, author_association: 'MEMBER', body: '' }])[0].authorAssociation).toBe('MEMBER')
@@ -569,14 +573,14 @@ describe('OQ-78/AC-4: the latest honoured marker at the head governs', () => {
     })
     expect(await done).toMatchObject({ status: 'already-reviewed', existing: { commentId: 2, verdict: 'pass' } })
     expect(session.calls).toEqual([])
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-78/AC-4: a later marker from a non-writer does not supersede an honoured one', async () => {
     const { done } = review('story/OQ-99-thing', {
       comments: [comment(1, HEAD(), 'block'), comment(2, HEAD(), 'pass', 'NONE')],
     })
     expect(await done).toMatchObject({ status: 'already-reviewed', existing: { commentId: 1, verdict: 'block' } })
-  })
+  }, REVIEW_TEST_TIMEOUT)
 })
 
 describe('OQ-78/AC-5: --rereview reviews a head only over a block', () => {
@@ -585,7 +589,7 @@ describe('OQ-78/AC-5: --rereview reviews a head only over a block', () => {
     expect((await done).status).toBe('recorded')
     expect(session.calls).toHaveLength(1)
     expect(github.posted).toHaveLength(1)
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-78/AC-5: over a pass, a pass-with-observations, or no verdict, it stops with its own status and posts nothing', async () => {
     for (const comments of [
@@ -600,12 +604,12 @@ describe('OQ-78/AC-5: --rereview reviews a head only over a block', () => {
       expect(session.calls).toEqual([])
       expect(github.posted).toEqual([])
     }
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-78/AC-5: without the option a block at the head still stops the review (OQ-69/AC-8)', async () => {
     const { done } = review('story/OQ-99-thing', { comments: [comment(1, HEAD(), 'block')] })
     expect((await done).status).toBe('already-reviewed')
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-78/AC-5: the usage line documents --rereview', () => {
     expect(readFileSync(path.join(here, 'review.mjs'), 'utf8')).toMatch(/review\.mjs <pr-number> \[--repo owner\/name\] \[--rereview\]/)
@@ -657,7 +661,7 @@ describe('OQ-69: the prompt is rendered from the dispatcher\'s own checkout, not
     const { prompt } = session.calls[0]
     expect(prompt).not.toContain('POISON')
     expect(prompt).toContain('You are reviewing pull request')
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-69: review.mjs imports render only through the dispatcher\'s own modules and never imports from the PR checkout', () => {
     const source = readFileSync(path.join(here, 'review.mjs'), 'utf8')
@@ -692,7 +696,7 @@ describe('OQ-69: verdict parsing', () => {
     })
     expect((await done).status).toBe('unrecordable')
     expect(github.posted).toEqual([])
-  })
+  }, REVIEW_TEST_TIMEOUT)
 
   it('formatFindings names each finding\'s REVIEW.md item', () => {
     expect(formatFindings({
@@ -701,9 +705,12 @@ describe('OQ-69: verdict parsing', () => {
   })
 })
 
-it('leaves no review scratch directory behind in the temp directory', async () => {
-  const ours = () => readdirSync(tmpdir()).filter((name) => /^tw-review-[A-Za-z0-9]{6}$/.test(name))
-  const before = ours()
-  await review('story/OQ-99-thing').done
-  expect(ours()).toEqual(before)
-})
+it('OQ-90/AC-2: leaves no review scratch directory behind in the scratch root', async () => {
+  const scratchRoot = mkdtempSync(path.join(tmpdir(), 'tw-review-test-root-'))
+  try {
+    expect((await review('story/OQ-99-thing', { scratchRoot }).done).status).toBe('recorded')
+    expect(readdirSync(scratchRoot)).toEqual([])
+  } finally {
+    rmSync(scratchRoot, { recursive: true, force: true })
+  }
+}, REVIEW_TEST_TIMEOUT)

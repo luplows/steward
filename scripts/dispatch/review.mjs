@@ -222,6 +222,8 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
  *   install        `({ cwd, env })`, the dependency install run in the checkout
  *                  before the reviewer starts; defaults to `npm ci`. It gets the
  *                  reviewer's own credential-free environment
+ *   scratchRoot    the directory the `tw-review-*` scratch directory is made in;
+ *                  defaults to `os.tmpdir()`. Not exposed by the CLI
  *   sessionOptions extra `spawnSession` options (executable, run, timeouts,
  *                  budget)
  *
@@ -232,7 +234,7 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
  */
 export async function reviewPullRequest({
   number, ctx, repoDir = DISPATCHER_ROOT, promptTemplate, baseEnv = process.env, sessionOptions = {},
-  rereview = false, install = installDependencies,
+  rereview = false, install = installDependencies, scratchRoot = tmpdir(),
 }) {
   const template = promptTemplate ?? readFileSync(REVIEWER_PROMPT, 'utf8')
   const pr = await getPullRequestState(ctx, number)
@@ -255,7 +257,7 @@ export async function reviewPullRequest({
     return { status: 'already-reviewed', headSha: pr.headSha, existing }
   }
 
-  const scratch = await mkdtemp(path.join(tmpdir(), 'tw-review-'))
+  const scratch = await mkdtemp(path.join(scratchRoot, 'tw-review-'))
   const tree = path.join(scratch, 'tree')
   let worktreeAdded = false
   try {
