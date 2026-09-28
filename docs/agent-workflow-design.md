@@ -990,9 +990,9 @@ Later if wanted: mutation testing, differential testing for refactors.
 
 ### Measuring
 
-Nothing currently aggregates verdicts. The data exists — every verdict is a commit status plus a
-comment. Add the third verdict state first, or the measurement is meaningless. Then a scheduled
-workflow can collect it. This is the existing OQ-47.
+OQ-47 built this as `scripts/report/review-verdicts.mjs`: a pure tally over the marker comments
+that already exist, run on demand rather than by a scheduled workflow — its story scoped out a
+logger, a dashboard, or storing the tally, since a second copy of the record could drift from it.
 
 ---
 

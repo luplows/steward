@@ -354,7 +354,6 @@ Independent of each other; pick by appetite.
   group-by of the granular view, identical input gives identical output.
 - **Escaped-defect tracking** — a frontmatter field on fix stories recording which gate should have
   caught it. The only measurement covering the whole system rather than one gate.
-- **Verdict aggregation** (the existing OQ-47), which needs the third verdict state from Phase 0.
 - **Boundary validation on Enhancement data** — the existing OQ-45.
 - **A second GitHub identity**, the only thing that fully closes self-marking.
 
