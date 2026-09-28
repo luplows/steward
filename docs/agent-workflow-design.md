@@ -485,8 +485,18 @@ workspace is not trusted. Untrusted values (`STORY`, `PR_BODY`, a retry's findin
 doing in reviews: a command repeated N times, a command's exit code, and sorted output. It runs only
 commands the reviewer's allowlist admits, without a shell. On Windows it starts `npm` and `npx` as
 `node` running npm's own CLI scripts, since they cannot start there without a shell; elsewhere it
-starts them by name. For anything else the reviewer runs one allowed command per call, or uses
+starts them by name. For anything else the reviewer runs the parts as separate commands, or uses
 `node -e`.
+
+**What a reviewer's shell command may do is wider than `reviewerAllowedTools()`.** Checked
+2026-09-28 with Claude Code 2.1.281, in a session with exactly the reviewer's arguments,
+environment and kind of working directory: of twelve command shapes, eleven ran. Among them were
+`sed -n 1p`, `ls | sort`, a `for` loop and `cd scripts && pwd`, none of which the allowlist names.
+Only `echo "exit=$?"` was refused. So the permission layer also admits commands it recognises as
+read-only, and refuses what it cannot confirm is safe, such as a `$?` expansion. This does not
+widen what the reviewer can write: `node` was already on the allowlist (see "defence in depth"
+below, and OQ-62). But it means the allowlist is a floor for reads, not a ceiling, and the
+behaviour belongs to the Claude Code version, so a change of version can change it.
 
 Three flags are load-bearing:
 
