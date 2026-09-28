@@ -1031,8 +1031,8 @@ is why this is recorded here rather than only in a code comment.
 - **`GITHUB_TOKEN` pushes do not trigger further workflows.**
 - **Converting a PR to draft is GraphQL only.** REST's "Update a pull request" takes `title`,
   `body`, `state`, `base` and `maintainer_can_modify`, with no `draft`; the GraphQL mutation
-  `convertPullRequestToDraft` does it (checked 2026-09-25). **Planned (OQ-87):** `github.mjs`
-  sends that one mutation, and its allowlist admits no other GraphQL.
+  `convertPullRequestToDraft` does it (checked 2026-09-25). `github.mjs`
+  sends that one mutation (`convertPullRequestToDraft`), and its allowlist admits no other GraphQL.
 - **Squash merges create a new commit**; leftover branches cannot be fast-forwarded afterwards.
 - **Branch protection is not readable** from agent sessions (403). It *is* readable locally as the
   owner.

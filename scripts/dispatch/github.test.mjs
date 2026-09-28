@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import * as github from './github.mjs'
 import {
+  buildConvertPullRequestToDraft,
   buildCreatePullRequest,
   buildGetPullRequestLabels,
   buildGetPullRequestState,
@@ -13,6 +14,7 @@ import {
   buildPostComment,
   buildReplacePullRequest,
   composeMarkerComment,
+  convertPullRequestToDraft,
   createContext,
   createPullRequest,
   getPullRequestLabels,
@@ -352,6 +354,7 @@ describe('OQ-68/AC-7: module surface', () => {
       [
         'WRITABLE_VERDICTS',
         'assertAllowedRequest',
+        'buildConvertPullRequestToDraft',
         'buildCreatePullRequest',
         'buildGetPullRequestLabels',
         'buildGetPullRequestState',
@@ -359,6 +362,7 @@ describe('OQ-68/AC-7: module surface', () => {
         'buildPostComment',
         'buildReplacePullRequest',
         'composeMarkerComment',
+        'convertPullRequestToDraft',
         'createContext',
         'createPullRequest',
         'getPullRequestLabels',
@@ -381,5 +385,99 @@ describe('OQ-68/AC-7: module surface', () => {
     for (const name of Object.keys(github)) {
       expect(name).not.toMatch(/spawn|prompt|render|story|stories|dispatch|workflow|status|label(?!s)|round/i)
     }
+  })
+})
+
+const GRAPHQL = 'https://api.github.com/graphql'
+const NODE_ID = 'PR_kwDOAbc123'
+
+describe('OQ-87/AC-1: converting a pull request to a draft', () => {
+  const ctxWith = (responses) => {
+    const fetch = fakeFetch(responses)
+    return { fetch, ctx: createContext({ repo: REPO, fetch, getToken: async () => 't' }) }
+  }
+
+  it('OQ-87/AC-1: a ready pull request is read, then converted with its node id', async () => {
+    const { fetch, ctx } = ctxWith([
+      { json: { number: 7, draft: false, node_id: NODE_ID, head: { sha: SHA } } },
+      { json: { data: { convertPullRequestToDraft: { pullRequest: { isDraft: true } } } } },
+    ])
+    expect(await convertPullRequestToDraft(ctx, 7)).toEqual({ draft: true, alreadyDraft: false })
+    expect(fetch.calls).toHaveLength(2)
+    expect(fetch.calls[0].url).toBe(`https://api.github.com/repos/${REPO}/pulls/7`)
+    expect(fetch.calls[0].init.method).toBe('GET')
+    expect(fetch.calls[1].url).toBe(GRAPHQL)
+    expect(JSON.parse(fetch.calls[1].init.body).variables).toEqual({ pullRequestId: NODE_ID })
+  })
+
+  it('OQ-87/AC-1: a pull request already a draft sends nothing more and says so', async () => {
+    const { fetch, ctx } = ctxWith([{ json: { number: 7, draft: true, node_id: NODE_ID } }])
+    expect(await convertPullRequestToDraft(ctx, 7)).toEqual({ draft: true, alreadyDraft: true })
+    expect(fetch.calls).toHaveLength(1)
+  })
+
+  it('OQ-87/AC-1: a GraphQL error response throws, and a missing draft state is not taken as success', async () => {
+    const errored = ctxWith([
+      { json: { draft: false, node_id: NODE_ID } },
+      { json: { errors: [{ message: 'Resource not accessible' }] } },
+    ])
+    await expect(convertPullRequestToDraft(errored.ctx, 7)).rejects.toThrow(/Resource not accessible/)
+    const empty = ctxWith([{ json: { draft: false, node_id: NODE_ID } }, { json: { data: null } }])
+    await expect(convertPullRequestToDraft(empty.ctx, 7)).rejects.toThrow(/unexpected response/)
+  })
+})
+
+describe('OQ-87/AC-2: exactly one GraphQL request is allowed', () => {
+  const allowed = () => buildConvertPullRequestToDraft(NODE_ID)
+  const refuse = async (request) => {
+    const fetch = fakeFetch([{ json: {} }])
+    const ctx = createContext({ repo: REPO, fetch, getToken: async () => 't' })
+    await expect(ctx.send(request)).rejects.toThrow(/refusing/)
+    expect(fetch.calls).toHaveLength(0)
+  }
+
+  it('OQ-87/AC-2: the one mutation, with only the node id, is admitted', async () => {
+    const fetch = fakeFetch([{ json: {} }])
+    const ctx = createContext({ repo: REPO, fetch, getToken: async () => 't' })
+    expect(allowed().url).toBe(GRAPHQL)
+    await ctx.send(allowed())
+    expect(fetch.calls).toHaveLength(1)
+  })
+
+  it('OQ-87/AC-2: markPullRequestReadyForReview and mergePullRequest are refused before the network', async () => {
+    for (const name of ['markPullRequestReadyForReview', 'mergePullRequest']) {
+      await refuse({
+        method: 'POST',
+        url: GRAPHQL,
+        body: {
+          query: `mutation($pullRequestId: ID!) { ${name}(input: { pullRequestId: $pullRequestId }) { pullRequest { isDraft } } }`,
+          variables: { pullRequestId: NODE_ID },
+        },
+      })
+    }
+  })
+
+  it('OQ-87/AC-2: any GraphQL query is refused before the network', async () => {
+    await refuse({ method: 'POST', url: GRAPHQL, body: { query: '{ viewer { login } }', variables: { pullRequestId: NODE_ID } } })
+    await refuse({ method: 'POST', url: GRAPHQL, body: { query: '{ viewer { login } }' } })
+  })
+
+  it('OQ-87/AC-2: a changed mutation text, an extra variable, an extra body key or a non-string id is refused', async () => {
+    const base = allowed()
+    await refuse({ ...base, body: { ...base.body, query: `${base.body.query} ` } })
+    await refuse({ ...base, body: { ...base.body, variables: { pullRequestId: NODE_ID, extra: 'x' } } })
+    await refuse({ ...base, body: { ...base.body, operationName: 'ConvertToDraft' } })
+    await refuse({ ...base, body: { ...base.body, variables: { pullRequestId: 7 } } })
+    await refuse({ ...base, body: { ...base.body, variables: {} } })
+    await refuse({ ...base, body: { query: base.body.query } })
+  })
+
+  it('OQ-87/AC-2: the allowed mutation sent to any other URL, or by any other method, is refused', async () => {
+    const base = allowed()
+    await refuse({ ...base, url: `${GRAPHQL}?x=1` })
+    await refuse({ ...base, url: 'https://evil.example/graphql' })
+    await refuse({ ...base, url: `https://api.github.com/repos/${REPO}/graphql` })
+    await refuse({ ...base, url: `https://api.github.com/repos/${REPO}/pulls/7` })
+    await refuse({ ...base, method: 'GET' })
   })
 })

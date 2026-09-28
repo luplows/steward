@@ -2,7 +2,9 @@
 /**
  * The GitHub operations the dispatch loop performs (OQ-68), and nothing else:
  * create a pull request, replace its title and body, post a comment, read its
- * state, read its labels, list its comments.
+ * state, read its labels, list its comments, and convert it to a draft (OQ-87).
+ * The conversion is GraphQL only, and is the one GraphQL request the allowlist
+ * admits: one mutation text, with the pull request's node id as its one variable.
  *
  * Shape (AC-2): every operation has a pure `build*` function that returns the
  * request that *would* be sent, and a pure `parse*` function for the response.
@@ -30,6 +32,12 @@ import { promisify } from 'node:util'
 const execFileAsync = promisify(execFile)
 
 const API = 'https://api.github.com'
+const GRAPHQL_URL = `${API}/graphql`
+
+// The one GraphQL request this module sends (OQ-87). `assertAllowedRequest`
+// admits a GraphQL body only if its `query` is this text, byte for byte.
+const CONVERT_TO_DRAFT_MUTATION =
+  'mutation ConvertToDraft($pullRequestId: ID!) { convertPullRequestToDraft(input: { pullRequestId: $pullRequestId }) { pullRequest { isDraft } } }'
 
 // The verdicts a marker may be *written* with. `fail` is deliberately absent (AC-4).
 export const WRITABLE_VERDICTS = ['pass', 'pass-with-observations', 'block']
@@ -115,6 +123,15 @@ export function buildListComments(repo, number, page = 1) {
   return {
     method: 'GET',
     url: `${repoPath(repo)}/issues/${requirePrNumber(number)}/comments?per_page=100&page=${page}`,
+  }
+}
+
+/** Request to convert the pull request with this node id to a draft (GraphQL). */
+export function buildConvertPullRequestToDraft(nodeId) {
+  return {
+    method: 'POST',
+    url: GRAPHQL_URL,
+    body: { query: CONVERT_TO_DRAFT_MUTATION, variables: { pullRequestId: requireString('nodeId', nodeId) } },
   }
 }
 
@@ -231,6 +248,23 @@ const ALLOWED = [
   ['GET', new RegExp(`^/issues/${PR}/comments\\?per_page=100&page=[1-9][0-9]*$`), null],
 ]
 
+// The only GraphQL request admitted: `buildConvertPullRequestToDraft`'s shape.
+function assertAllowedGraphql(request) {
+  const body = request.body
+  const isPlainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
+  const allowed =
+    request.method === 'POST' &&
+    isPlainObject(body) &&
+    Object.keys(body).length === 2 &&
+    body.query === CONVERT_TO_DRAFT_MUTATION &&
+    isPlainObject(body.variables) &&
+    Object.keys(body.variables).length === 1 &&
+    typeof body.variables.pullRequestId === 'string'
+  if (!allowed) {
+    throw new Error(`refusing a GraphQL request other than the one mutation this module sends: ${request.method} ${request.url}`)
+  }
+}
+
 /**
  * Throws unless `request` has the shape one of the six `build*` functions
  * produces for `repo`. `send` calls this before any network call, so the
@@ -239,6 +273,7 @@ const ALLOWED = [
 export function assertAllowedRequest(repo, request) {
   const prefix = repoPath(repo)
   const url = typeof request?.url === 'string' ? request.url : ''
+  if (url === GRAPHQL_URL) return assertAllowedGraphql(request)
   const rest = url.startsWith(`${prefix}/`) ? url.slice(prefix.length) : null
   const rule = rest && ALLOWED.find(([method, re]) => method === request.method && re.test(rest))
   if (!rule) {
@@ -297,6 +332,26 @@ export async function postComment(ctx, number, body) {
 
 export async function getPullRequestState(ctx, number) {
   return parsePullRequestState(await ctx.send(buildGetPullRequestState(ctx.repo, number)))
+}
+
+/**
+ * Converts a pull request to a draft. Reads it first (the module's existing GET);
+ * if it is already a draft nothing more is sent. Returns `{ draft, alreadyDraft }`,
+ * `draft` being the state the mutation reports.
+ */
+export async function convertPullRequestToDraft(ctx, number) {
+  const pr = await ctx.send(buildGetPullRequestState(ctx.repo, number))
+  if (pr.draft === true) return { draft: true, alreadyDraft: true }
+  if (typeof pr.node_id !== 'string' || pr.node_id === '') {
+    throw new Error(`pull request #${number} has no node_id in its response`)
+  }
+  const json = await ctx.send(buildConvertPullRequestToDraft(pr.node_id))
+  if (Array.isArray(json.errors) && json.errors.length > 0) {
+    throw new Error(`convert #${number} to draft failed: ${json.errors.map((e) => e.message).join('; ')}`)
+  }
+  const draft = json.data?.convertPullRequestToDraft?.pullRequest?.isDraft
+  if (typeof draft !== 'boolean') throw new Error(`convert #${number} to draft: unexpected response ${JSON.stringify(json)}`)
+  return { draft, alreadyDraft: false }
 }
 
 export async function getPullRequestLabels(ctx, number) {
