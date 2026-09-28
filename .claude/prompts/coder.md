@@ -228,7 +228,7 @@ whoever is running you posts it there on your behalf.
 ## You do not merge, and you do not open your own PR
 
 A separate workflow lands PRs that are green, verdict-passed and conflict-free,
-oldest first, one per run. It runs when someone triggers it rather than on a
+one per run. It runs when someone triggers it rather than on a
 schedule, so a merge-ready PR may sit for a while — that is expected, not a
 fault, and not yours to chase. You do not merge your own, and neither does the
 reviewer. Your job ends with your work committed and a PR description ready for

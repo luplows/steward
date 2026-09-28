@@ -666,7 +666,7 @@ it was obscured the real mechanism:
   Enforced as a tested prohibition in OQ-68 and OQ-48 rather than by scope on a token. For the
   dispatcher session it is a rule, not a mechanism (**The dispatcher session**, above). `land.mjs`
   (OQ-50) is the one module that triggers it. Its own allowlist permits that one dispatch (`main`,
-  no inputs) and no other write, and neither `coder.mjs` nor `review.mjs` imports it. `github.mjs`'s prohibition stays as it is.
+  with the one input `pr` naming its pull request) and no other write, and neither `coder.mjs` nor `review.mjs` imports it. `github.mjs`'s prohibition stays as it is.
 
 A genuinely separated credential needs a second GitHub identity, which is item 10 of the open
 questions table below and is not built. Until it is, this section says what is true.
@@ -813,15 +813,14 @@ be kept essentially as-is:
   run triggered soon after the previous merge can therefore land nothing even though a PR is ready.
   That is safe, and it is why back-to-back manual runs sometimes need one more. See **GitHub
   mechanics** below and OQ-50.
-- Oldest first, so nothing starves.
-- The sweep takes an optional `pr` input, and `land.mjs` always names its own
-  pull request in it. A run given a pull request considers only that one and lands nothing if it
-  is not landable, so `land.mjs` lands what it was called for and nothing else. Oldest first
-  applies to a run given no pull request, such as the owner's `gh workflow run`. Decided
-  2026-09-28: the loop decides which pull request is ready, and a sweep that lands a different one
-  spends `land.mjs`'s triggers, can stop a story that passed, and lands pull requests nobody asked
-  it to. The candidate choice moves into `scripts/land/select-candidates.mjs`, so it can be tested
-  without running the workflow.
+- **The named PR, or else the oldest.** The sweep takes an optional `pr` input, and `land.mjs`
+  always names its own pull request in it. A run given a pull request considers only that one and
+  lands nothing if it is not landable, so `land.mjs` lands what it was called for and nothing else.
+  A run given none, such as the owner's `gh workflow run`, lands the oldest landable one, so
+  nothing starves. Decided 2026-09-28: the loop decides which pull request is ready, and a sweep
+  that lands a different one spends `land.mjs`'s triggers, can stop a story that passed, and lands
+  pull requests nobody asked it to. The candidate choice is made in
+  `scripts/land/select-candidates.mjs`, which is tested without running the workflow.
 - **Re-checks `review/agent` directly** rather than trusting `clean`, because a required check
   vanished from protection once. Prevention, not detection.
 - **`--match-head-commit`**, which refuses the merge if anything was pushed between the check and
