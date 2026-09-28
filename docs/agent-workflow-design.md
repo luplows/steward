@@ -18,8 +18,8 @@
 > the others and stays until the last of them is built; only then does the marker go. Each such
 > story has an acceptance criterion saying so. The convention dates
 > from 2026-09-25. Passages written before then may describe unbuilt parts without a marker; the
-> migration plan tracks those. **Planned (OQ-61):** CI fails if a marker names a story that is
-> already in `stories/done/`.
+> migration plan tracks those. `scripts/lint-stories.mjs` fails CI if a marker names a story whose
+> file is already in `stories/done/`, or a numeric id with no story file at all.
 
 ---
 

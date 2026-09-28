@@ -26,7 +26,11 @@ export function isStoryFilename(name) {
 
 const REQUIRED_FRONTMATTER_FIELDS = ['id', 'title', 'tier', 'depends_on', 'blocked']
 
-const OPEN_QUESTIONS_MARKER = '*(none)*'
+// Matches any single italic parenthetical placeholder alone on the
+// section's stripped content -- `*(none)*`, `*(must be empty to dispatch)*`,
+// or any other `*(...)*` -- per the equivalence lint-stories.mjs's
+// isSectionEmpty (OQ-61/AC-6) establishes for section emptiness generally.
+const OPEN_QUESTIONS_PLACEHOLDER_RE = /^\*\(.*\)\*$/
 
 // Parses one YAML-ish scalar value from the right-hand side of `key: value`
 // in a story's frontmatter. The schema is fixed and small (see
@@ -152,16 +156,17 @@ export function parseSections(body) {
 
 /**
  * True when the section counts as empty per AC-7: its content, ignoring
- * HTML comments and whitespace, is exactly `*(none)*`. Throws when the
- * section holds nothing at all -- malformed, not empty, because it cannot be
- * told apart from one nobody filled in.
+ * HTML comments and whitespace, is a single italic parenthetical placeholder
+ * such as `*(none)*` or `*(must be empty to dispatch)*` (OQ-61/AC-6). Throws
+ * when the section holds nothing at all -- malformed, not empty, because it
+ * cannot be told apart from one nobody filled in.
  */
 export function isOpenQuestionsEmpty(sectionText) {
   const stripped = sectionText.replace(/<!--[\s\S]*?-->/g, '').trim()
   if (stripped === '') {
-    throw new Error("'Open questions' section is empty (no content and no *(none)* marker)")
+    throw new Error("'Open questions' section is empty (no content and no placeholder marker)")
   }
-  return stripped === OPEN_QUESTIONS_MARKER
+  return OPEN_QUESTIONS_PLACEHOLDER_RE.test(stripped)
 }
 
 /**

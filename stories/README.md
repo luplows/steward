@@ -87,14 +87,17 @@ first match wins, so the order of the rows is part of the definition:
 
 **What "empty" means**, because two readings of that word give opposite answers
 for the same file. A section is empty when its content — ignoring HTML comments
-and whitespace — is exactly the marker `*(none)*`.
+and whitespace — is a single italic parenthetical placeholder alone on its
+line: `*(none)*`, `*(must be empty to dispatch)*`, or any other `*(...)*`.
+Which placeholder text was used carries no meaning beyond "considered, nothing
+outstanding"; both forms are treated identically (OQ-61/AC-6).
 
 A section holding nothing at all is **malformed**, not empty. It cannot be told
 apart from one nobody has filled in, and a story is never silently defaulted —
-the same stance the schema takes on missing frontmatter. Writing `*(none)*` is
-the act of saying *"considered, nothing outstanding"*, and that act is what the
-status is derived from. Anything else in the section, including a single line,
-makes the story `draft`.
+the same stance the schema takes on missing frontmatter. Writing a placeholder
+is the act of saying *"considered, nothing outstanding"*, and that act is what
+the status is derived from. Anything else in the section, including a single
+line alongside the placeholder, makes the story `draft`.
 
 **From git and GitHub.** These refine `ready` once work has started, and need
 refs and PRs rather than files, so they belong to the dispatcher rather than to

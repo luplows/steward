@@ -277,6 +277,29 @@ describe('OQ-49/AC-7: what counts as an empty Open questions section', () => {
     expect(() => isOpenQuestionsEmpty('<!-- nobody filled this in -->\n')).toThrow(/empty/)
   })
 
+  it('OQ-61/AC-6: is empty for any *(...)* placeholder, not only *(none)*', () => {
+    expect(isOpenQuestionsEmpty('*(must be empty to dispatch)*')).toBe(true)
+  })
+
+  it('OQ-61/AC-6: a story whose Open questions holds only *(must be empty to dispatch)* derives ready, not draft', () => {
+    const source = [
+      '---',
+      'id: OQ-9001',
+      'title: A test story',
+      'tier: normal',
+      'depends_on: []',
+      'blocked: null',
+      '---',
+      '',
+      '## Open questions',
+      '',
+      '*(must be empty to dispatch)*',
+      '',
+    ].join('\n')
+    const story = buildStory('OQ-9001-fixture.md', source, false)
+    expect(deriveStatus(story, new Set()).status).toBe('ready')
+  })
+
   it("this story's own *(none)* marker derives ready, not draft (the failure AC-7 exists to prevent)", () => {
     // A literal copy of this story's own frontmatter and Open questions
     // section, so the test does not depend on where the file currently
