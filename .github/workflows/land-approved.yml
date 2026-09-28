@@ -11,11 +11,12 @@ name: Land approved PRs
 # noticing, and #93 only landed because someone happened to ask. Whatever runs
 # this must therefore not depend on any session being alive.
 #
-# One PR per run, oldest first. GitHub recomputes mergeability asynchronously,
+# One PR per run. Given a `pr` input, only that PR is considered, and if it does
+# not land the run lands nothing (OQ-93). Given none, oldest first. GitHub recomputes mergeability asynchronously,
 # so a second merge in the same run would be decided on `mergeable_state` read
 # before the first one landed -- it would still say `clean` because nothing had
 # recalculated yet. Stopping after one costs a few minutes and removes that
-# whole class of mistake. Oldest first so a PR cannot be starved by newer ones.
+# whole class of mistake. Oldest first, for a run given no PR, so a PR cannot be starved by newer ones.
 #
 # There is deliberately no `schedule:` trigger. It was `*/15`, and GitHub
 # delivered roughly one run every five hours -- about 5% of the configured
@@ -25,6 +26,12 @@ name: Land approved PRs
 
 on:
   workflow_dispatch:
+    inputs:
+      pr:
+        description: 'Pull request number to land, and only that one. Empty: the oldest landable.'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -40,10 +47,15 @@ jobs:
   land:
     runs-on: ubuntu-latest
     steps:
-      - name: Land the oldest ready PR
+      - name: Check out the candidate selection script
+        uses: actions/checkout@v4
+      - name: Land the oldest ready PR, or the one named
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          # Only through env, never interpolated into the script below;
+          # select-candidates.mjs validates it.
+          PR_INPUT: ${{ inputs.pr }}
         run: |
           set -euo pipefail
 
@@ -70,11 +82,14 @@ jobs:
             echo "::warning title=Circuit breaker tripped::${blocked_prs} open PRs carry review-blocked; landing only breaker-override or workflow-only PRs."
           fi
 
-          candidates="$(gh api "repos/${REPO}/pulls?state=open&sort=created&direction=asc&per_page=100" \
-            --jq '.[] | select(.draft | not) | select(.base.ref == "main") | .number')"
+          # Which PRs to try is scripts/land/select-candidates.mjs's decision. An
+          # invalid PR_INPUT makes it exit non-zero, and `set -e` ends the run here.
+          pulls="$(gh api "repos/${REPO}/pulls?state=open&sort=created&direction=asc&per_page=100" \
+            --jq '[.[] | {number, draft, base: {ref: .base.ref}}]')"
+          candidates="$(printf '%s' "${pulls}" | node scripts/land/select-candidates.mjs)"
 
           if [ -z "${candidates}" ]; then
-            echo "No open non-draft PRs against main."
+            echo "No open non-draft PR against main to try."
             exit 0
           fi
 
@@ -148,10 +163,6 @@ jobs:
       # `continue-on-error` means it cannot fail the run or un-record a merge.
       # It also sweeps branches already left behind by earlier merges. See
       # scripts/land/delete-merged-heads.mjs for what it will and will not delete.
-      - name: Check out the cleanup script
-        if: always()
-        continue-on-error: true
-        uses: actions/checkout@v4
       - name: Delete head branches of merged PRs
         if: always()
         continue-on-error: true

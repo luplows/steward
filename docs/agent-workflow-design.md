@@ -429,11 +429,6 @@ Why this is safe enough:
   dispatcher does (**Credential minimalism**, below), so nothing but the rule stops it triggering
   the sweep some other way. The rule names `land.mjs` because that module's own allowlist permits
   the one dispatch and no other write.
-- **The sweep lands the oldest landable pull request**, not the one `land.mjs` was run for
-  (`land-approved.yml`, "One PR per run, oldest first"). So before running it, the session checks
-  that no older open pull request is landable that it may not land, such as one waiting for the
-  owner's go-ahead. **Planned (OQ-93):** `land.mjs` names its pull request to the sweep, which then
-  considers only that one, and this check goes.
 
 The owner can require a go-ahead before the session lands particular pull requests, for example
 ones that change `CLAUDE.md`, `REVIEW.md`, `.github/`, `.claude/` or this document. That is an
@@ -819,7 +814,7 @@ be kept essentially as-is:
   That is safe, and it is why back-to-back manual runs sometimes need one more. See **GitHub
   mechanics** below and OQ-50.
 - Oldest first, so nothing starves.
-- **Planned (OQ-93):** the sweep takes an optional `pr` input, and `land.mjs` always names its own
+- The sweep takes an optional `pr` input, and `land.mjs` always names its own
   pull request in it. A run given a pull request considers only that one and lands nothing if it
   is not landable, so `land.mjs` lands what it was called for and nothing else. Oldest first
   applies to a run given no pull request, such as the owner's `gh workflow run`. Decided

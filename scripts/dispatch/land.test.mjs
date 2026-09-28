@@ -83,7 +83,7 @@ describe('OQ-50/AC-1: land.mjs waits for landable, triggers the sweep, waits for
     })
     const result = await w.run()
     expect(result).toMatchObject({ status: 'merged', pr: 7, headSha: SHA, triggers: 1 })
-    expect(w.dispatches).toEqual([{ method: 'POST', url: `${BASE}/actions/workflows/land-approved.yml/dispatches`, body: { ref: 'main' } }])
+    expect(w.dispatches).toEqual([{ method: 'POST', url: `${BASE}/actions/workflows/land-approved.yml/dispatches`, body: { ref: 'main', inputs: { pr: '7' } } }])
     w.cleanup()
   })
 
@@ -102,7 +102,7 @@ describe('OQ-50/AC-1: land.mjs waits for landable, triggers the sweep, waits for
   })
 
   it('never builds a merge request: no exported builder produces one and the allowlist refuses one', () => {
-    const built = [buildGetPullRequest(REPO, 7), buildGetCommitStatus(REPO, SHA), buildDispatchSweep(REPO)]
+    const built = [buildGetPullRequest(REPO, 7), buildGetCommitStatus(REPO, SHA), buildDispatchSweep(REPO, 7)]
     for (const request of built) {
       expect(request.method).not.toBe('PUT')
       expect(request.url).not.toMatch(/\/merge(\?|$)/)
@@ -217,6 +217,26 @@ describe('OQ-50/AC-3: unknown is waited through and the sweep is re-triggered', 
   })
 })
 
+describe('OQ-93/AC-4: land.mjs names its pull request on every trigger', () => {
+  it('builds the dispatch with the pull request number as the one input', () => {
+    expect(buildDispatchSweep(REPO, 7)).toEqual({
+      method: 'POST',
+      url: `${BASE}/actions/workflows/land-approved.yml/dispatches`,
+      body: { ref: 'main', inputs: { pr: '7' } },
+    })
+    expect(() => buildDispatchSweep(REPO)).toThrow(/positive integer/)
+  })
+
+  it('a run of landPullRequest({ number: 7 }) sends only dispatches naming 7', async () => {
+    const w = world({ pullAt: () => pull({ merged: false, state: 'open', mergeable_state: 'clean' }) })
+    const result = await w.run({ number: 7 })
+    expect(result.status).toBe('trigger-limit')
+    expect(w.dispatches.length).toBeGreaterThan(1)
+    for (const d of w.dispatches) expect(d.body).toEqual({ ref: 'main', inputs: { pr: '7' } })
+    w.cleanup()
+  })
+})
+
 describe('OQ-50/AC-4: land.mjs sends only the sweep dispatch', () => {
   const dispatchUrl = (wf) => `${BASE}/actions/workflows/${wf}/dispatches`
 
@@ -229,6 +249,15 @@ describe('OQ-50/AC-4: land.mjs sends only the sweep dispatch', () => {
       { method: 'POST', url: dispatchUrl('land-approved.yml'), body: { ref: 'other' } },
       { method: 'POST', url: dispatchUrl('land-approved.yml'), body: { ref: 'main', inputs: { x: '1' } } },
       { method: 'POST', url: dispatchUrl('land-approved.yml') },
+      { method: 'POST', url: dispatchUrl('land-approved.yml'), body: { ref: 'main' } },
+      { method: 'POST', url: dispatchUrl('land-approved.yml'), body: { ref: 'main', inputs: {} } },
+      { method: 'POST', url: dispatchUrl('land-approved.yml'), body: { ref: 'main', inputs: { pr: '7', x: '1' } } },
+      { method: 'POST', url: dispatchUrl('land-approved.yml'), body: { ref: 'main', inputs: { other: '7' } } },
+      { method: 'POST', url: dispatchUrl('land-approved.yml'), body: { ref: 'main', inputs: { pr: 'abc' } } },
+      { method: 'POST', url: dispatchUrl('land-approved.yml'), body: { ref: 'main', inputs: { pr: '07' } } },
+      { method: 'POST', url: dispatchUrl('land-approved.yml'), body: { ref: 'main', inputs: { pr: 7 } } },
+      { method: 'POST', url: dispatchUrl('land-approved.yml'), body: { ref: 'main', inputs: { pr: '7' }, extra: 1 } },
+      { method: 'POST', url: dispatchUrl('land-approved.yml'), body: { inputs: { pr: '7' } } },
       { method: 'POST', url: `${BASE}/statuses/${SHA}`, body: { state: 'success', context: 'review/agent' } },
       { method: 'POST', url: `${BASE}/issues/7/comments`, body: { body: 'x' } },
       { method: 'POST', url: `${BASE}/pulls`, body: { title: 'x' } },
@@ -247,14 +276,14 @@ describe('OQ-50/AC-4: land.mjs sends only the sweep dispatch', () => {
     const ctx = createLandContext({ repo: REPO, fetch: async () => { calls++; return { ok: true, status: 204, json: async () => ({}) } }, getToken: async () => 't' })
     await ctx.send(buildGetPullRequest(REPO, 7))
     await ctx.send(buildGetCommitStatus(REPO, SHA))
-    await ctx.send(buildDispatchSweep(REPO))
+    await ctx.send(buildDispatchSweep(REPO, 7))
     expect(calls).toBe(3)
   })
 
   it('github.mjs is unchanged in what it refuses: it still refuses the sweep dispatch', async () => {
     const { createContext } = await import('./github.mjs')
     const ctx = createContext({ repo: REPO, fetch: async () => { throw new Error('network') }, getToken: async () => 't' })
-    await expect(ctx.send(buildDispatchSweep(REPO))).rejects.toThrow(/refusing/)
+    await expect(ctx.send(buildDispatchSweep(REPO, 7))).rejects.toThrow(/refusing/)
   })
 
   it('neither coder.mjs nor review.mjs imports land.mjs', async () => {

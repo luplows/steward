@@ -30,11 +30,9 @@ Instructions only. Rationale, mechanism and history live in the files listed und
   - It runs `land.mjs` only for a pull request whose head has an honoured `pass` or
     `pass-with-observations` verdict and green CI. `land.mjs` re-checks both through `review/agent`
     and `mergeable_state`; its header defines landable.
-  - The sweep lands the **oldest** landable pull request, not the one `land.mjs` was run for.
-    Before running it, check that no older open pull request is landable that the session may not
-    land.
 - The sweep lands one eligible pull request per run, only when triggered, so a merge-ready pull
-  request waits. Its eligibility rules and the `review-blocked` circuit breaker are defined in
+  request waits. A run given a pull request (`land.mjs` always gives one) considers only that one;
+  a run given none lands the oldest. Its eligibility rules and the `review-blocked` circuit breaker are defined in
   `land-approved.yml`.
 - Agent containers have no `gh` CLI: use the GitHub MCP tools where the session has them, otherwise
   `git` plus the REST API. A spawned session may have neither.

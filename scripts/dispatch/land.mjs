@@ -3,7 +3,7 @@
  * Triggers the landing sweep once a pull request is landable, and waits for it
  * to merge (OQ-50). The sweep, `.github/workflows/land-approved.yml`, is the
  * only thing that merges; this module never does. Its one write is a
- * `workflow_dispatch` of that workflow on `main` with no inputs.
+ * `workflow_dispatch` of that workflow on `main`, whose one input names this pull request.
  *
  * Landable means: not a draft, no `review-blocked` label, `mergeable_state`
  * `clean`, and `review/agent` = `success` on the head SHA. The sweep re-checks
@@ -86,12 +86,12 @@ export function buildGetCommitStatus(repo, sha) {
   return { method: 'GET', url: `${repoPath(repo)}/commits/${sha}/status` }
 }
 
-/** The one write: dispatch the sweep on `main`, with no inputs. */
-export function buildDispatchSweep(repo) {
+/** The one write: dispatch the sweep on `main`, naming the one pull request it may land. */
+export function buildDispatchSweep(repo, number) {
   return {
     method: 'POST',
     url: `${repoPath(repo)}/actions/workflows/${WORKFLOW}/dispatches`,
-    body: { ref: 'main' },
+    body: { ref: 'main', inputs: { pr: String(requirePrNumber(number)) } },
   }
 }
 
@@ -109,9 +109,14 @@ export function assertAllowedRequest(repo, request) {
   if (!rest || !ALLOWED.some(([method, re]) => method === request.method && re.test(rest))) {
     throw new Error(`refusing a request outside the operations land.mjs performs: ${request?.method} ${url}`)
   }
-  const keys = request.body === undefined ? [] : Object.keys(request.body)
+  const body = request.body
+  const keys = body === undefined ? [] : Object.keys(body)
+  const inputKeys = body?.inputs && typeof body.inputs === 'object' ? Object.keys(body.inputs) : []
   const isDispatch = request.method === 'POST'
-  const ok = isDispatch ? keys.length === 1 && request.body.ref === 'main' : keys.length === 0
+  const ok = isDispatch
+    ? keys.length === 2 && keys.includes('ref') && keys.includes('inputs') && body.ref === 'main' &&
+      inputKeys.length === 1 && inputKeys[0] === 'pr' && typeof body.inputs.pr === 'string' && /^[1-9][0-9]*$/.test(body.inputs.pr)
+    : keys.length === 0
   if (!ok) throw new Error(`refusing a request with an unexpected body: ${request.method} ${url}`)
 }
 
@@ -228,7 +233,7 @@ export async function landPullRequest({
       times.landableAt ??= now()
       if (lastTriggerAt === null || now() - lastTriggerAt >= SWEEP_RUN_BOUND_MS) {
         if (triggers >= MAX_TRIGGERS) return finish('trigger-limit')
-        await ctx.send(buildDispatchSweep(ctx.repo))
+        await ctx.send(buildDispatchSweep(ctx.repo, number))
         triggers += 1
         lastTriggerAt = now()
         times.triggeredAt ??= lastTriggerAt
