@@ -162,6 +162,9 @@ function donePath(storyPath) {
   return storyPath.startsWith('stories/done/') ? storyPath : storyPath.replace(/^stories\//, 'stories/done/')
 }
 
+// Where a retry's findings came from: a blocking review, or a red CI run (OQ-79).
+export const RETRY_SOURCES = ['review', 'ci']
+
 /**
  * The section appended to a retry's prompt. It carries the contract a retry
  * previously depended on a person writing by hand: which round this is, what
@@ -173,7 +176,8 @@ function donePath(storyPath) {
  * coder's allowlist grants no push (`coderAllowedTools`), and telling it to push
  * invited a denied `git push`, as in #133's round 2.
  */
-export function retrySection({ round, roundsRemaining, findings, branch }) {
+export function retrySection({ round, roundsRemaining, findings, branch, source = 'review', storyMoved = true }) {
+  if (!RETRY_SOURCES.includes(source)) throw new Error(`retry.source must be one of ${RETRY_SOURCES.join(', ')}`)
   checkCount('round', round)
   checkCount('roundsRemaining', roundsRemaining)
   if (typeof findings !== 'string' || findings.trim() === '') {
@@ -192,10 +196,14 @@ export function retrySection({ round, roundsRemaining, findings, branch }) {
     '- Your branch already exists and already carries your earlier commits. Continue on it.',
     '- A pull request for that branch already exists. Do not try to open another; you cannot open one in any case. Commit on the existing branch and the pull request updates.',
     `- Commit on \`${branch}\` and stop. Do not push: the dispatcher pushes the branch after your session ends, and pushing is denied to you.`,
-    '- The story file has already been moved to `stories/done/` on that branch. Do not move it again.',
+    storyMoved
+      ? '- The story file has already been moved to `stories/done/` on that branch. Do not move it again.'
+      : '- The story file has not been moved to `stories/done/` on that branch yet. Move it there with `git mv` once the work is done, as the instructions above say.',
     '- The `## PR body` you emit will **replace** the existing description, not be appended to it. Write it complete, covering the whole change so far, not only what this round changed. Keep all three sections of `.github/pull_request_template.md` (What changed, Verification, Docs check): a replacement that drops one is a missing section, and review blocks on it.',
     '',
-    'The review findings to address are below. Fix the genuine ones with a new commit. If you believe one is wrong, say so under a `## Response to review` heading in your final report.',
+    source === 'ci'
+      ? 'CI failed on your branch. The CI failure output to address is below; no reviewer wrote it. Fix the genuine causes with a new commit. If you believe one is wrong, say so under a `## Response to review` heading in your final report.'
+      : 'The review findings to address are below. Fix the genuine ones with a new commit. If you believe one is wrong, say so under a `## Response to review` heading in your final report.',
     '',
     wrapInjectedBlock('FINDINGS', findings),
   ].join('\n')
@@ -209,7 +217,8 @@ export function retrySection({ round, roundsRemaining, findings, branch }) {
  *   story           { id, path, text, model }
  *   branch          coder: the branch it works on. reviewer: the PR's head branch
  *   pr              reviewer only: { number, headSha, body }
- *   retry           coder only, optional: { round, roundsRemaining, findings }
+ *   retry           coder only, optional: { round, roundsRemaining, findings, source, storyMoved }
+ *                   (`source` is 'review' or 'ci'; `storyMoved` is false when the story file is still under stories/)
  *   baseEnv         the environment to derive the process environment from
  *   emptyGhConfigDir  coder only: see `coderEnv`
  *   model, effort, maxBudgetUsd  optional overrides of `ROLE_DEFAULTS`
@@ -239,7 +248,7 @@ export function buildInvocation(options) {
     if (pr) throw new Error('a coder invocation takes no pr')
     values = {
       STORY_ID: story.id,
-      STORY_PATH: retry ? donePath(story.path) : story.path,
+      STORY_PATH: retry && retry.storyMoved !== false ? donePath(story.path) : story.path,
       STORY: story.text,
       BRANCH: branch,
     }

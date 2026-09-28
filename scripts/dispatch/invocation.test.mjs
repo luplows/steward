@@ -329,7 +329,7 @@ describe('OQ-74/AC-6: the prompt is not an argument', () => {
 describe('OQ-74/AC-7: the module starts nothing and reads nothing', () => {
   it('exports only pure builders and constants', () => {
     expect(Object.keys(invocationModule).sort()).toEqual([
-      'REVIEWER_DISALLOWED_TOOLS', 'ROLES', 'ROLE_DEFAULTS', 'buildArgs', 'buildInvocation',
+      'RETRY_SOURCES', 'REVIEWER_DISALLOWED_TOOLS', 'ROLES', 'ROLE_DEFAULTS', 'buildArgs', 'buildInvocation',
       'renderBounded', 'retrySection', 'reviewerAllowedTools',
     ])
   })

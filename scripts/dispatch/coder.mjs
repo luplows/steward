@@ -40,8 +40,9 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { coderEnv } from './coder-env.mjs'
-import { createContext, createPullRequest } from './github.mjs'
+import { buildGetPullRequestState, createContext, createPullRequest, parsePullRequestState, replacePullRequest } from './github.mjs'
 import { installDependencies } from './install.mjs'
+import { RETRY_SOURCES } from './invocation.mjs'
 import { buildStory, deriveStatus, dispatchable, isStoryFilename, orderStories, parseFrontmatter } from './queue.mjs'
 import { spawnSession } from './spawn.mjs'
 
@@ -367,13 +368,202 @@ export async function dispatchCoder({
   }
 }
 
+/**
+ * What the coder decided, read from the branch's committed tip in `cwd` (the
+ * pushed tip, when there was a push): the `blocked:` value of its story file,
+ * wherever the file then is. Changes nothing.
+ */
+async function readBlocked(cwd, branch, filename) {
+  for (const candidate of [`stories/done/${filename}`, `stories/${filename}`]) {
+    const source = await gitOrNull(cwd, ['show', `refs/heads/${branch}:${candidate}`])
+    if (source === null) continue
+    try {
+      return { blocked: parseFrontmatter(source, candidate).data.blocked ?? null }
+    } catch (error) {
+      return { blocked: null, unreadable: error.message }
+    }
+  }
+  return { blocked: null, unreadable: `${filename} is on neither stories/ nor stories/done/ at the tip of ${branch}` }
+}
+
+/**
+ * Sends a story's coder back to its own open pull request with the findings
+ * that stopped it (OQ-85). The coder runs in a fresh worktree of the story's
+ * existing branch at its tip on `origin`; the commits it makes are pushed with
+ * `pushBranch`, and the pull request's title and body are replaced with the
+ * ones it emitted. It opens no pull request and leaves the draft state alone.
+ *
+ *   ctx, repoDir, promptTemplate, baseEnv, sessionOptions, install
+ *                    as for `dispatchCoder`
+ *   storyId          the story
+ *   prNumber         its open pull request, whose head must be the story's branch
+ *   findings         the text to address (untrusted; injected as a bounded block)
+ *   source           'review' | 'ci'
+ *   round, roundsRemaining   passed in by the caller (OQ-48), never counted here
+ *
+ * Resolves `{ status, ... }`. Only `retried` (a commit was pushed and the body
+ * replaced) and `body-replaced` (no commit and nothing uncommitted, body
+ * replaced) mean the retry completed. Every other status means it did not:
+ * `pr-not-open`, `wrong-branch`, `branch-missing`, `local-branch-exists`
+ * (refusals, before anything is spawned), `install-failed`, `session-failed`,
+ * `nothing-committed`, `uncommitted-changes` (with `paths`), `push-failed`,
+ * `pr-block-invalid`, `story-unreadable`, `replace-failed`. Every result after a
+ * session carries `session`, and every one where the session completed carries
+ * `draft` (the coder's choice, or null with no valid block) and `blocked`.
+ */
+export async function retryStory({
+  ctx, repoDir = DISPATCHER_ROOT, storyId, prNumber, findings, source, round, roundsRemaining,
+  promptTemplate, baseEnv = process.env, sessionOptions = {}, install = installDependencies,
+}) {
+  if (!/^OQ-\d+$/.test(storyId ?? '')) throw new Error(`retryStory requires a story id, got ${JSON.stringify(storyId)}`)
+  if (!RETRY_SOURCES.includes(source)) throw new Error(`retryStory source must be one of ${RETRY_SOURCES.join(', ')}`)
+  const template = promptTemplate ?? readFileSync(CODER_PROMPT, 'utf8')
+
+  const json = await ctx.send(buildGetPullRequestState(ctx.repo, prNumber))
+  const pr = parsePullRequestState(json)
+  if (json.state !== 'open') {
+    return { status: 'pr-not-open', storyId, prNumber, reason: `pull request ${prNumber} is ${json.state}, not open` }
+  }
+  const branch = pr.headRef
+  if (typeof branch !== 'string' || !new RegExp(`^story/${storyId}-[A-Za-z0-9._-]+$`).test(branch)) {
+    return { status: 'wrong-branch', storyId, prNumber, reason: `pull request ${prNumber} has head ${JSON.stringify(branch)}, not a ${storyId} story branch` }
+  }
+  const filename = `${branch.slice('story/'.length)}.md`
+  const storyPath = `stories/${filename}`
+
+  if (await gitOrNull(repoDir, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])) {
+    return { status: 'local-branch-exists', storyId, branch, prNumber, reason: `${branch} already exists locally, and this checkout's copy is not the one to retry` }
+  }
+  if (!(await remoteTip(repoDir, branch))) {
+    return { status: 'branch-missing', storyId, branch, prNumber, reason: `${branch} is not on ${REMOTE}` }
+  }
+  await git(repoDir, ['fetch', REMOTE, `+refs/heads/${branch}:refs/remotes/${REMOTE}/${branch}`])
+  const baseSha = (await git(repoDir, ['rev-parse', `${REMOTE}/${branch}`])).trim()
+
+  const scratch = await mkdtemp(path.join(tmpdir(), 'tw-coder-'))
+  const tree = path.join(scratch, 'tree')
+  let worktreeAdded = false
+  try {
+    await git(repoDir, ['worktree', 'add', '--no-track', '-b', branch, tree, baseSha])
+    worktreeAdded = true
+
+    let moved = true
+    let storyFile = `stories/done/${filename}`
+    if (!existsSync(path.join(tree, storyFile))) {
+      moved = false
+      storyFile = storyPath
+    }
+    const text = readFileSync(path.join(tree, storyFile), 'utf8')
+    const { data } = parseFrontmatter(text, storyFile)
+    const story = { id: storyId, path: storyPath, text, model: data.model ?? null }
+
+    const ghConfigDir = path.join(scratch, 'gh-config')
+    await mkdir(ghConfigDir)
+    try {
+      await install({ cwd: tree, env: coderEnv(baseEnv, ghConfigDir) })
+    } catch (error) {
+      return { status: 'install-failed', storyId, branch, prNumber, reason: error.message }
+    }
+    const { classification, output } = await spawnSession({
+      ...sessionOptions,
+      role: 'coder',
+      promptTemplate: template,
+      story,
+      branch,
+      baseEnv,
+      emptyGhConfigDir: ghConfigDir,
+      cwd: tree,
+      retry: { round, roundsRemaining, findings, source, storyMoved: moved },
+    })
+
+    const session = sessionSummary(classification, output)
+    const context = { storyId, branch, prNumber, headSha: null, session }
+    if (classification.outcome !== 'completed') {
+      return { status: 'session-failed', ...context, outcome: classification.outcome, reason: classification.reason, pushed: false }
+    }
+    const block = classification.prText
+    context.draft = block.status === 'parsed' ? block.draft : null
+
+    const push = await pushBranch({ cwd: tree, branch, baseSha })
+    const decided = await readBlocked(tree, branch, filename)
+    context.blocked = decided.blocked
+    if (push.screenshots?.length > 0) context.untrackedScreenshots = push.screenshots
+
+    // Nothing to push is only "nothing" when nothing was left uncommitted, too.
+    const nothingToPush = push.status === 'nothing-committed' && push.paths.length === 0
+    if (push.status === 'nothing-committed' && !nothingToPush) {
+      return { status: 'uncommitted-changes', ...context, paths: push.paths, reason: push.reason }
+    }
+    if (push.status !== 'pushed' && !nothingToPush) {
+      const { status, screenshots: _screenshots, ...rest } = push
+      return { status, ...context, ...rest }
+    }
+    if (push.status === 'pushed') context.headSha = push.headSha
+
+    if (block.status !== 'parsed') {
+      return { status: nothingToPush ? 'nothing-committed' : 'pr-block-invalid', ...context, reason: block.reason }
+    }
+    if (decided.unreadable) return { status: 'story-unreadable', ...context, reason: decided.unreadable }
+    try {
+      await replacePullRequest(ctx, prNumber, { title: block.title, body: block.body })
+    } catch (error) {
+      return { status: 'replace-failed', ...context, reason: error.message }
+    }
+    const result = { status: nothingToPush ? 'body-replaced' : 'retried', ...context }
+    const promptChange = findPromptChange(block.body)
+    if (promptChange) result.promptChange = promptChange
+    return result
+  } finally {
+    await cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded })
+    await rm(scratch, { recursive: true, force: true })
+  }
+}
+
 // --------------------------------------------------------------------- CLI
 
 // `install-failed` is deliberately absent: it is a failure.
-const NON_FAILURES = ['opened', 'nothing-ready']
+const NON_FAILURES = ['opened', 'nothing-ready', 'retried', 'body-replaced']
+
+const USAGE = 'usage: node scripts/dispatch/coder.mjs [OQ-<n>] [--repo owner/name]\n' +
+  '       node scripts/dispatch/coder.mjs retry OQ-<n> --pr <number> --findings-file <path> --source review|ci --round <n> --remaining <n> [--repo owner/name]'
+
+function takeOption(args, name) {
+  const at = args.indexOf(name)
+  return at === -1 ? undefined : args.splice(at, 2)[1]
+}
+
+async function mainRetry(args, repo) {
+  const pr = takeOption(args, '--pr')
+  const file = takeOption(args, '--findings-file')
+  const source = takeOption(args, '--source')
+  const round = takeOption(args, '--round')
+  const remaining = takeOption(args, '--remaining')
+  const storyId = args.shift()
+  const number = (v) => (/^\d+$/.test(v ?? '') ? Number(v) : NaN)
+  if (args.length > 0 || !/^OQ-\d+$/.test(storyId ?? '') || !file || !RETRY_SOURCES.includes(source) ||
+      !Number.isInteger(number(pr)) || !Number.isInteger(number(round)) || !Number.isInteger(number(remaining))) {
+    throw new Error(USAGE)
+  }
+  const result = await retryStory({
+    ctx: createContext({ repo }),
+    storyId,
+    prNumber: number(pr),
+    findings: readFileSync(file, 'utf8'),
+    source,
+    round: number(round),
+    roundsRemaining: number(remaining),
+  })
+  console.log(JSON.stringify(result, null, 2))
+  if (!NON_FAILURES.includes(result.status)) process.exitCode = 1
+}
 
 async function main(argv) {
   const args = [...argv]
+  if (args[0] === 'retry') {
+    args.shift()
+    const repoAt = args.indexOf('--repo')
+    return mainRetry(args, repoAt === -1 ? DEFAULT_REPO : args.splice(repoAt, 2)[1])
+  }
   const repoAt = args.indexOf('--repo')
   const repo = repoAt === -1 ? DEFAULT_REPO : args.splice(repoAt, 2)[1]
   const storyId = args.shift()
