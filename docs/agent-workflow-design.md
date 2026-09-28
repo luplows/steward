@@ -481,7 +481,7 @@ complete on its own, because `permissions.allow` in `.claude/settings.json` is i
 workspace is not trusted. Untrusted values (`STORY`, `PR_BODY`, a retry's findings) are bounded with
 `wrapInjectedBlock` by placeholder name: everything not declared a trusted inline token is wrapped.
 
-**Planned (OQ-92):** `scripts/dispatch/review-tools.mjs` does the jobs that refused shell forms were
+`scripts/dispatch/review-tools.mjs` does the jobs that refused shell forms were
 doing in reviews: a command repeated N times, a command's exit code, and sorted output. It runs only
 commands the reviewer's allowlist admits, without a shell. On Windows it starts `npm` and `npx` as
 `node` running npm's own CLI scripts, since they cannot start there without a shell; elsewhere it
