@@ -275,6 +275,7 @@ describe('OQ-68/AC-5: listing comments parses markers in order', () => {
     ])
     expect(parsed.map((c) => c.id)).toEqual([1, 2, 3])
     expect(parsed[0].marker).toMatchObject({ kind: 'marker', headSha: SHA, verdict: 'block' })
+    expect(parsed[0].body).toBe(`r1\n<!-- agent-review head=${SHA} verdict=block -->`)
     expect(parsed[1].marker).toEqual({ kind: 'absent' })
     expect(parsed[2].marker).toMatchObject({ kind: 'marker', headSha: SHA2, verdict: 'pass' })
   })

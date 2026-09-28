@@ -104,6 +104,16 @@ describe('OQ-79/AC-1: waitForCi returns green, red or timed-out', () => {
     expect(result.jobNames).toEqual(['test'])
   })
 
+  it('OQ-48/AC-5: red carries the run\'s conclusion, so a cancelled run is told from a failure', async () => {
+    for (const conclusion of ['failure', 'cancelled', 'timed_out']) {
+      const { ctx } = fakeGithub({
+        runsBySha: { [SHA]: [run({ conclusion })] },
+        jobs: { 1: [] },
+      })
+      expect((await waitForCi(ctx, SHA)).conclusion).toBe(conclusion)
+    }
+  })
+
   it('timed-out when the run never finishes, after CI_WAIT_TIMEOUT_MS', async () => {
     let clock = 0
     const ctx = createCiContext({

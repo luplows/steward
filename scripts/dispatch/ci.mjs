@@ -229,10 +229,11 @@ async function failedJobsOf(ctx, run) {
 /**
  * Waits for the ci.yml run on `headSha` to finish, then returns
  *   { result: 'green' }
- *   { result: 'red', failedJobs: [{ name, steps, logExcerpt }], jobNames, findings }
+ *   { result: 'red', conclusion, failedJobs: [{ name, steps, logExcerpt }], jobNames, findings }
  *   { result: 'timed-out' }
  * The wait is bounded by `CI_WAIT_TIMEOUT_MS`. Anything but a `success`
- * conclusion is red.
+ * conclusion is red, and `conclusion` says which (`failure`, `cancelled`, ...):
+ * only a `failure` is something a retried coder can fix (OQ-48's AC-5).
  */
 export async function waitForCi(ctx, headSha, { timeoutMs = CI_WAIT_TIMEOUT_MS, pollMs = CI_POLL_INTERVAL_MS } = {}) {
   requireSha(headSha)
@@ -244,6 +245,7 @@ export async function waitForCi(ctx, headSha, { timeoutMs = CI_WAIT_TIMEOUT_MS, 
       const failedJobs = await failedJobsOf(ctx, run)
       return {
         result: 'red',
+        conclusion: run.conclusion,
         failedJobs,
         jobNames: failedJobs.map((job) => job.name),
         findings: composeCiFindings(headSha, run, failedJobs),

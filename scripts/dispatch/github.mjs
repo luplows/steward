@@ -222,6 +222,7 @@ export function parseComments(json) {
     author: comment.user?.login ?? null,
     authorAssociation: comment.author_association ?? null,
     createdAt: comment.created_at,
+    body: comment.body ?? '',
     marker: parseMarkerComment(comment.body),
   }))
 }
