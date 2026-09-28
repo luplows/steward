@@ -225,6 +225,17 @@ not therefore verify, and drop the verdict to `pass-with-observations` — or to
 `null` if what you could not run was load-bearing enough that the review does
 not stand without it.
 
+**Shell forms such as `|`, `for`, `$?` and `&&` are refused, so use
+`scripts/dispatch/review-tools.mjs` for the jobs they were doing.** For a
+repeated run, an exit code or sorted output, run
+`node scripts/dispatch/review-tools.mjs repeat <n> -- <command…>`,
+`… exit -- <command…>` or `… sorted [--unique] -- <command…>`. It runs only
+commands your allowlist admits, and exits 0 whenever it ran the command, so
+read the result from its output. For anything else, run one allowed command per
+call, use the Read, Grep and Glob tools, or use `node -e` when composition is
+genuinely needed. When a check could not be run, say so in the verdict, naming
+the check.
+
 ## Calibration
 
 A reviewer that passes everything is theatre; a reviewer that fails everything
