@@ -1051,3 +1051,119 @@ describe('OQ-85/AC-6: the coder\'s blocked: and draft are reported, and nothing 
     expect(invalid.result.session.report).toBe('no block')
   })
 })
+
+// ---------------------------------------------------------- OQ-91: the gaps
+
+describe('OQ-91/AC-1: a retry\'s branch is exactly its story\'s', () => {
+  it('OQ-91/AC-1: a head with the right id and the wrong slug is wrong-branch, with no worktree made and nothing spawned', async () => {
+    const world = makeWorld()
+    git(world.seed, 'push', '-q', 'origin', 'main:story/OQ-98-other-slug')
+    const { result, fake, gh } = await retry(world, () => { throw new Error('must not spawn') }, { github: { ref: 'story/OQ-98-other-slug' } })
+    expect(result.status).toBe('wrong-branch')
+    expect(fake.calls).toHaveLength(0)
+    expect(patches(gh)).toHaveLength(0)
+    expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
+  })
+
+  it('OQ-91/AC-1: a story file with a different id under the right name is wrong-branch', async () => {
+    const world = makeWorld()
+    git(world.seed, 'checkout', '-q', '-b', 'story/OQ-97-mismatch')
+    writeFileSync(path.join(world.seed, 'stories', 'OQ-97-mismatch.md'), story('OQ-96'))
+    git(world.seed, 'add', '.')
+    git(world.seed, 'commit', '-q', '-m', 'wrong id')
+    git(world.seed, 'push', '-q', 'origin', 'story/OQ-97-mismatch')
+    const { result, fake } = await retry(world, () => { throw new Error('must not spawn') }, { storyId: 'OQ-97', github: { ref: 'story/OQ-97-mismatch' } })
+    expect(result.status).toBe('wrong-branch')
+    expect(fake.calls).toHaveLength(0)
+  })
+
+  it('OQ-91/AC-1: a head absent from origin is still branch-missing, checked before the story file', async () => {
+    const { result } = await retry(makeWorld(), () => { throw new Error('must not spawn') }, { github: { ref: 'story/OQ-98-other-slug' } })
+    expect(result.status).toBe('branch-missing')
+  })
+
+  it('OQ-91/AC-1: the story file is found in stories/ as well as stories/done/', async () => {
+    const world = makeWorld()
+    git(world.seed, 'checkout', '-q', '-b', RETRY_BRANCH)
+    git(world.seed, 'commit', '-q', '--allow-empty', '-m', 'blocked early')
+    git(world.seed, 'push', '-q', 'origin', RETRY_BRANCH)
+    const { result } = await retry(world, ({ cwd }) => { commitWork(cwd); return block() })
+    expect(result.status).toBe('retried')
+  })
+})
+
+describe('OQ-91/AC-2: the refusals and outcomes that had no retry test', () => {
+  const setBlocked = (cwd) => {
+    const file = path.join(cwd, 'stories', 'done', 'OQ-98-first.md')
+    writeFileSync(file, readFileSync(file, 'utf8').replace('blocked: null', 'blocked: Which reading of AC-2?'))
+    git(cwd, 'add', '.')
+    git(cwd, 'commit', '-q', '-m', 'block')
+  }
+
+  it('OQ-91/AC-2: a local branch of the same name is local-branch-exists, with nothing spawned', async () => {
+    const world = makeRetryWorld()
+    git(world.repoDir, 'branch', RETRY_BRANCH, 'HEAD')
+    const { result, fake, gh } = await retry(world, () => { throw new Error('must not spawn') })
+    expect(result.status).toBe('local-branch-exists')
+    expect(fake.calls).toHaveLength(0)
+    expect(patches(gh)).toHaveLength(0)
+    expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
+  })
+
+  it('OQ-91/AC-2: a rejected push is push-failed, the body is not replaced, and draft and blocked are reported', async () => {
+    const world = makeRetryWorld()
+    writeFileSync(path.join(world.origin, 'hooks', 'pre-receive'), '#!/bin/sh\necho "refused by test hook" >&2\nexit 1\n', { mode: 0o755 })
+    const { result, gh } = await retry(world, ({ cwd }) => { setBlocked(cwd); return block('T', 'draft') })
+    expect(result.status).toBe('push-failed')
+    expect(result.reason).toContain('refused by test hook')
+    expect(patches(gh)).toHaveLength(0)
+    expect(result.draft).toBe(true)
+    expect(result.blocked).toBe('Which reading of AC-2?')
+    expect(remoteTipOf(world)).toBe(world.tip)
+  })
+
+  it('OQ-91/AC-2: blocked: set and a draft asked for, with no push, are both reported', async () => {
+    const world = makeRetryWorld()
+    // An earlier round left `blocked:` at the pushed tip; this round commits nothing.
+    setBlocked(world.seed)
+    git(world.seed, 'push', '-q', 'origin', RETRY_BRANCH)
+    world.tip = git(world.seed, 'rev-parse', 'HEAD')
+    const { result, gh } = await retry(world, () => block('T', 'draft'))
+    expect(result.status).toBe('body-replaced')
+    expect(result.headSha).toBeNull()
+    expect(remoteTipOf(world)).toBe(world.tip)
+    expect(result.blocked).toBe('Which reading of AC-2?')
+    expect(result.draft).toBe(true)
+    expect(patches(gh)[0].body).not.toHaveProperty('draft')
+  })
+})
+
+describe('OQ-91/AC-3: untracked screenshot baselines are a clean worktree', () => {
+  it('OQ-91/AC-3: a valid block, no commit and only untracked baselines is body-replaced, reporting them', async () => {
+    const world = makeRetryWorld()
+    const { result, gh } = await retry(world, ({ cwd }) => {
+      mkdirSync(path.join(cwd, 'e2e', '__screenshots__'), { recursive: true })
+      writeFileSync(path.join(cwd, 'e2e', '__screenshots__', 'new.png'), 'png')
+      return block()
+    })
+    expect(result.status).toBe('body-replaced')
+    expect(result.untrackedScreenshots).toEqual(['e2e/__screenshots__/new.png'])
+    expect(patches(gh)).toHaveLength(1)
+    expect(remoteTipOf(world)).toBe(world.tip)
+  })
+})
+
+describe('OQ-91/AC-4: a CI retry says where a response to a CI failure goes', () => {
+  it('OQ-91/AC-4: both retries name the heading; only the CI one says it also answers a CI failure, with the evidence', async () => {
+    const ci = await retry(makeRetryWorld(), ({ cwd }) => { commitWork(cwd); return block() }, { source: 'ci', findings: 'CI failed on abc: a test' })
+    const review = await retry(makeRetryWorld(), ({ cwd }) => { commitWork(cwd); return block() })
+    const ciPrompt = ci.fake.calls[0].prompt
+    const reviewPrompt = review.fake.calls[0].prompt
+    expect(ciPrompt).toContain('`## Response to review`')
+    expect(ciPrompt).toMatch(/also where a response to a CI failure goes/)
+    expect(ciPrompt).toMatch(/not caused by your change, such as a flaky test/)
+    expect(ciPrompt).toMatch(/with the evidence/)
+    expect(reviewPrompt).toContain('If you believe one is wrong, say so under a `## Response to review` heading in your final report.')
+    expect(reviewPrompt).not.toMatch(/CI failure/)
+  })
+})

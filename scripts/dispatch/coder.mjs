@@ -386,6 +386,20 @@ async function readBlocked(cwd, branch, filename) {
   return { blocked: null, unreadable: `${filename} is on neither stories/ nor stories/done/ at the tip of ${branch}` }
 }
 
+/** Whether `filename` is a story file with id `storyId` under stories/ or stories/done/ at `ref`. */
+async function hasStoryFile(repoDir, ref, filename, storyId) {
+  for (const candidate of [`stories/${filename}`, `stories/done/${filename}`]) {
+    const source = await gitOrNull(repoDir, ['show', `${ref}:${candidate}`])
+    if (source === null) continue
+    try {
+      return parseFrontmatter(source, candidate).data.id === storyId
+    } catch {
+      return false
+    }
+  }
+  return false
+}
+
 /**
  * Sends a story's coder back to its own open pull request with the findings
  * that stopped it (OQ-85). The coder runs in a fresh worktree of the story's
@@ -404,7 +418,8 @@ async function readBlocked(cwd, branch, filename) {
  * Resolves `{ status, ... }`. Only `retried` (a commit was pushed and the body
  * replaced) and `body-replaced` (no commit and nothing uncommitted, body
  * replaced) mean the retry completed. Every other status means it did not:
- * `pr-not-open`, `wrong-branch`, `branch-missing`, `local-branch-exists`
+ * `pr-not-open`, `wrong-branch` (the head is not `branchFor` of a story file
+ * with this id at its tip on `origin`), `branch-missing`, `local-branch-exists`
  * (refusals, before anything is spawned), `install-failed`, `session-failed`,
  * `nothing-committed`, `uncommitted-changes` (with `paths`), `push-failed`,
  * `pr-block-invalid`, `story-unreadable`, `replace-failed`. Every result after a
@@ -439,6 +454,12 @@ export async function retryStory({
   }
   await git(repoDir, ['fetch', REMOTE, `+refs/heads/${branch}:refs/remotes/${REMOTE}/${branch}`])
   const baseSha = (await git(repoDir, ['rev-parse', `${REMOTE}/${branch}`])).trim()
+
+  // The head is the story's only if `branchFor` would name it: its story file
+  // carries this id and is on the branch, whichever of the two directories.
+  if (!(await hasStoryFile(repoDir, baseSha, filename, storyId))) {
+    return { status: 'wrong-branch', storyId, branch, prNumber, reason: `${branch} has no ${filename} with id ${storyId} in stories/ or stories/done/ at its tip on ${REMOTE}, so it is not the branch ${storyId} is worked on` }
+  }
 
   const scratch = await mkdtemp(path.join(tmpdir(), 'tw-coder-'))
   const tree = path.join(scratch, 'tree')

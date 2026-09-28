@@ -239,7 +239,8 @@ export async function ghAuthToken() {
 
 const PR = '[1-9][0-9]*'
 // [method, path after the repo, permitted body keys or null for none]: the shapes
-// of the six `build*` functions above, and nothing else.
+// of the REST requests the `build*` functions above produce for `repo`, and
+// nothing else. The one GraphQL request is admitted separately, below.
 const ALLOWED = [
   ['POST', new RegExp('^/pulls$'), ['title', 'body', 'head', 'base', 'draft']],
   ['PATCH', new RegExp(`^/pulls/${PR}$`), ['title', 'body']],
@@ -267,8 +268,9 @@ function assertAllowedGraphql(request) {
 }
 
 /**
- * Throws unless `request` has the shape one of the six `build*` functions
- * produces for `repo`. `send` calls this before any network call, so the
+ * Throws unless `request` is a REST request the `build*` functions produce for
+ * `repo`, or the one GraphQL request `buildConvertPullRequestToDraft`
+ * produces. `send` calls this before any network call, so the
  * module's token cannot be used for anything else.
  */
 export function assertAllowedRequest(repo, request) {
