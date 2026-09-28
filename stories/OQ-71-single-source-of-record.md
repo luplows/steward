@@ -29,7 +29,7 @@ me on the current version rather than a superseded copy of it.
       function is the authority — this block is a reader's summary of it and must
       not drift from it."* A restatement carrying neither a link nor that marking
       fails this criterion.
-- [ ] **AC-3** — **The credential model.** Authority: the design doc's
+- [x] **AC-3** — **The credential model.** Authority: the design doc's
       "Credential minimalism". `REVIEW.md`'s "For the coder: opening a PR" no
       longer states that the runner's credential is "scoped to pull-request
       writes but, like the coder's, not to commit statuses or workflow
@@ -132,7 +132,12 @@ with one that removes the opportunity.
   precedent, and the wording AC-2's link form should match
 - `.claude/prompts/coder.md`, the allowlist block — the precedent for AC-2's
   marked-summary form
-- `REVIEW.md`, "For the coder: opening a PR" — AC-3's live defect
+- `REVIEW.md`, "For the coder: opening a PR" — AC-3's live defect. Fixed on
+  2026-09-28 by the pull request that let the dispatcher session land
+  (branch `write-story/dispatcher-session-lands`), because the claim also said
+  the runner could not trigger the sweep. The design doc's "Invocation shape"
+  carried a third copy ("its own, differently-scoped credential"), fixed in the
+  same pull request.
 - `.github/workflows/land-approved.yml` — AC-5's authority
 - [#119](https://github.com/luplows/tower-workshop-paths/pull/119) — the review
   comment enumerating all four defects, with line numbers

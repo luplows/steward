@@ -255,8 +255,10 @@ does not push: the dispatcher pushes its branch after the session
 access to the remote. Holding both a push and the means to clear the gate it
 feeds was the gap OQ-63 closed: with the owner's `repo`-scoped token, a coder
 could set `review/agent` to `success` on its own head and then dispatch
-`land-approved.yml`, the two rules `CLAUDE.md` states and nothing but prose
-enforced.
+`land-approved.yml`, breaking two rules that nothing but prose enforced: a
+session does not clear its own gate, and no session but the dispatcher session
+running `land.mjs` triggers the sweep (`CLAUDE.md`, "Branches and pull
+requests").
 
 **The coder holds no credential capable of a commit status, a workflow
 dispatch, or a pull-request write.** `scripts/dispatch/coder-env.mjs`
@@ -274,11 +276,13 @@ and body — the `pull_request_template.md` sections it always filled in — und
 `## Open as` and a line that is only `draft` or `ready`. Nothing may follow
 it, so that `parsePrBlock` in `scripts/dispatch/outcome.mjs` can read it;
 `coder.md` pins the exact block. The runner creates the PR from that text with
-its own credential, one scoped to pull-request writes but, like the
-coder's, not to commit statuses or workflow dispatch — so the thing that opens
-the PR still cannot clear the gate or trigger the sweep. This is the same shape
-as "Recording a verdict" above: the party with the judgement (or, here, the
-text) is not the party with the credential.
+the owner's credential. What keeps the thing that opens the PR from clearing the
+gate is not that credential's scope: `review/agent` is derived by
+`review-gate.yml` from the reviewer's verdict, and the runner triggers the sweep
+only through `land.mjs` (`docs/agent-workflow-design.md`, "Credential
+minimalism" and "The dispatcher session"). This is the same shape as "Recording
+a verdict" above: the party with the judgement (or, here, the text) is not the
+party with the credential.
 
 **Answering a review finding the coder disagrees with** no longer means
 replying on the PR — AC-3 of OQ-63 removes commenting from the coder's reach

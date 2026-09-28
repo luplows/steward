@@ -16,15 +16,26 @@ Instructions only. Rationale, mechanism and history live in the files listed und
 - Check whether `README.md`, `Open-Questions.md` and `Project-Outline.md` need updating as a result
   of the change. Include any such updates in the same pull request.
 - Open a pull request as a draft if it is not finished. Mark it ready when it is.
-- Do not merge your own pull request.
+- Do not merge a pull request, your own or any other. The sweep is the only thing that merges.
 - Do not delete the head branch. The sweep deletes it (see
   [`scripts/land/delete-merged-heads.mjs`](scripts/land/delete-merged-heads.mjs)); the repository's
   `delete_branch_on_merge` setting is not relied on.
 - Do not trigger [`land-approved.yml`](.github/workflows/land-approved.yml). Only the owner, or
-  [`scripts/dispatch/land.mjs`](scripts/dispatch/land.mjs) run by the dispatcher, may; no agent
-  session does. It lands one eligible pull request per run, only when triggered, so a merge-ready
-  pull request waits. Its eligibility rules and the `review-blocked` circuit breaker are defined in
-  that file.
+  [`scripts/dispatch/land.mjs`](scripts/dispatch/land.mjs) run by the dispatcher, may. The
+  dispatcher is either a script or the **dispatcher session**: the one session the owner has asked
+  to run `scripts/dispatch/` (see `docs/agent-workflow-design.md`, "The dispatcher session").
+  - The dispatcher session lands only by running `land.mjs`, directly or through `story.mjs`. It
+    never runs `gh workflow run`, and never merges through the API or any other way. No other
+    agent session triggers the sweep at all.
+  - It runs `land.mjs` only for a pull request whose head has an honoured `pass` or
+    `pass-with-observations` verdict and green CI. `land.mjs` re-checks both through `review/agent`
+    and `mergeable_state`; its header defines landable.
+  - The sweep lands the **oldest** landable pull request, not the one `land.mjs` was run for.
+    Before running it, check that no older open pull request is landable that the session may not
+    land.
+- The sweep lands one eligible pull request per run, only when triggered, so a merge-ready pull
+  request waits. Its eligibility rules and the `review-blocked` circuit breaker are defined in
+  `land-approved.yml`.
 - Agent containers have no `gh` CLI: use the GitHub MCP tools where the session has them, otherwise
   `git` plus the REST API. A spawned session may have neither.
 

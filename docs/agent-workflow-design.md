@@ -289,7 +289,8 @@ than relaxed.
 ### Happy path
 
 1. Session A writes a story, with Open questions empty, and opens it as a pull request from the
-   owner's account. Today it is reviewed on request, and the owner (or `land.mjs`) triggers the sweep.
+   owner's account. Today it is reviewed on request, and the owner, or the dispatcher session
+   running `land.mjs`, triggers the sweep.
    **Planned (OQ-83):** the loop reviews it against `REVIEW.md`'s story-PR items and lands it.
    **Planned (OQ-81, OQ-82):** only a pull request from an account with write access can land, and
    a coder's own pull request cannot change `stories/` beyond its own story.
@@ -314,8 +315,9 @@ than relaxed.
 6. Dispatcher posts the verdict as a marker comment, and `review-gate.yml` derives
    `review/agent` = `success` on the head SHA from it.
 7. The landing sweep merges it (squash) once `mergeable_state` is `clean`. The owner
-   triggers the sweep, or runs `scripts/dispatch/land.mjs` (OQ-50), which waits until the PR is
-   landable, triggers it and waits for the merge. `story.mjs` calls `land.mjs`.
+   triggers the sweep, or the owner or the dispatcher session (**The dispatcher session**, below)
+   runs `scripts/dispatch/land.mjs` (OQ-50), which waits until the PR is landable, triggers it and
+   waits for the merge. `story.mjs` calls `land.mjs`.
    **Planned (OQ-86):** the next story starts only once this one is merged or stopped, so every
    story is dispatched from a `main` that includes the last.
 
@@ -403,6 +405,40 @@ That is not cryptographic independence — closing that properly still needs a s
 identity — but "read the script and see it cannot fabricate" is a real improvement over "trust the
 orchestrating agent."
 
+### The dispatcher session
+
+Decided 2026-09-28 by the owner. Until the loop runs unattended (OQ-86), the dispatch scripts are
+run by hand, from a Claude Code session the owner has asked to act as dispatcher. That session
+runs `coder.mjs`, `review.mjs`, `land.mjs` and `story.mjs` from the main checkout, and relays what
+they return. It is the dispatcher's hands, not a coder or a reviewer: it writes no code for a
+story and decides no verdict.
+
+**It may land, and only through `land.mjs`.** It runs `land.mjs`, directly or through `story.mjs`,
+for a pull request whose head has an honoured `pass` or `pass-with-observations` verdict and green
+CI. It never runs `gh workflow run land-approved.yml`, and never merges through the API or any
+other way. No other agent session triggers the sweep. `CLAUDE.md`, "Branches and pull requests",
+states the rule; this section is its rationale.
+
+Why this is safe enough:
+
+- **`land.mjs` decides nothing a script would not.** It triggers the sweep only once
+  `review/agent` is `success` and `mergeable_state` is `clean` on the head, and the sweep re-checks
+  both. The session can choose *when* to land, never *whether* a head passed: the verdict is the
+  reviewer's, and `review/agent` is posted by `review-gate.yml`.
+- **It is a rule, not a mechanism.** The session holds the owner's credential, as the script
+  dispatcher does (**Credential minimalism**, below), so nothing but the rule stops it triggering
+  the sweep some other way. The rule names `land.mjs` because that module's own allowlist permits
+  the one dispatch and no other write.
+- **The sweep lands the oldest landable pull request**, not the one `land.mjs` was run for
+  (`land-approved.yml`, "One PR per run, oldest first"). So before running it, the session checks
+  that no older open pull request is landable that it may not land, such as one waiting for the
+  owner's go-ahead. **Planned (OQ-93):** `land.mjs` names its pull request to the sweep, which then
+  considers only that one, and this check goes.
+
+The owner can require a go-ahead before the session lands particular pull requests, for example
+ones that change `CLAUDE.md`, `REVIEW.md`, `.github/`, `.claude/` or this document. That is an
+instruction to the session, lifted when the owner says so, and not part of this design.
+
 ### Invocation shape
 
 Sketches, not literal — the prompts are rendered from files with the story injected.
@@ -469,7 +505,7 @@ Three flags are load-bearing:
 
 **The coder no longer holds a GitHub API credential at all (OQ-63).** It commits and emits the PR
 title and body as the last thing in its report; the dispatcher pushes the branch and opens the pull
-request with its own, differently-scoped credential. (The coder's reach of git's own SSH
+request with the owner's credential (**Credential minimalism**, below). (The coder's reach of git's own SSH
 authentication is untouched by anything below; that is OQ-73's.) `gh` is not on the coder's allowlist, and `--env
 "$(coderEnv)"` (`scripts/dispatch/coder-env.mjs`) strips `GH_TOKEN`, `GITHUB_TOKEN` and
 `GH_ENTERPRISE_TOKEN` from its process environment and points `GH_CONFIG_DIR` at an empty
@@ -584,7 +620,8 @@ from a merge. With the owner's `repo`-scoped token, a coder holding `Bash(gh:*)`
 against this repository the same way the reviewer's gap was, by probing with deliberately invalid
 payloads and getting `422` (authorised, only validation failed) rather than `403` (denied). Both of
 the rules this workflow is built on — *you do not clear your own gate*, *triggering the sweep is
-the owner's* — were held by `CLAUDE.md`'s prose and nothing else.
+the owner's* — were held by `CLAUDE.md`'s prose and nothing else. (The second has since been
+widened to the dispatcher session running `land.mjs`; see **The dispatcher session**.)
 
 The coder no longer pushes (OQ-84). The dispatcher pushes its branch, and the coder's allowlist
 grants no `git push` and denies it outright. That removes the reason given above for treating the
@@ -619,11 +656,12 @@ it was obscured the real mechanism:
 - **`review/agent` is posted by `review-gate.yml`, not by the dispatcher** — the workflow reads the
   marker comment and derives the status. So the dispatcher's output is a *comment*, and enforcement
   is a GitHub Actions job it does not control. That split is the guarantee, and it already exists.
-- **Triggering `land-approved.yml` is the owner's, or `land.mjs`'s when the dispatcher runs it;
-  no agent session does.** Enforced as a tested prohibition in OQ-68 and OQ-48 rather than by
-  scope on a token. `land.mjs` (OQ-50) is the one module that triggers it. Its own allowlist
-  permits that one dispatch (`main`, no inputs) and no other write, and neither `coder.mjs` nor
-  `review.mjs` imports it. `github.mjs`'s prohibition stays as it is.
+- **Triggering `land-approved.yml` is the owner's, or `land.mjs`'s when the dispatcher runs it,
+  whether the dispatcher is a script or the dispatcher session; no other agent session does.**
+  Enforced as a tested prohibition in OQ-68 and OQ-48 rather than by scope on a token. For the
+  dispatcher session it is a rule, not a mechanism (**The dispatcher session**, above). `land.mjs`
+  (OQ-50) is the one module that triggers it. Its own allowlist permits that one dispatch (`main`,
+  no inputs) and no other write, and neither `coder.mjs` nor `review.mjs` imports it. `github.mjs`'s prohibition stays as it is.
 
 A genuinely separated credential needs a second GitHub identity, which is item 10 of the open
 questions table below and is not built. Until it is, this section says what is true.
@@ -759,7 +797,8 @@ be kept essentially as-is:
   delivered it at roughly 5% of that rate, so the trigger was removed and landing is explicit
   (`gh workflow run land-approved.yml`) until a reliable one was chosen. `land.mjs` (OQ-50) is
   that trigger: it triggers the sweep once a PR is landable, and re-triggers while the PR is still
-  open. It never merges itself. `story.mjs` (OQ-48) calls it, and nothing else does.
+  open. It never merges itself. `story.mjs` (OQ-48) calls it, and the owner or the dispatcher
+  session may run it directly; nothing else does.
 - **Planned (OQ-81):** it lands only pull requests whose author has write access (the same
   association set the gate honours for markers), because a landed `ready` story is work the loop
   will carry out.
