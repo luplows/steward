@@ -44,8 +44,9 @@ instruction.
 
 ## Out of scope
 
-- The **coder's** permissions. A coder must commit, push and open a PR; this is
-  about the reviewer only, and the two are deliberately asymmetric.
+- The **coder's** permissions. A coder must commit on its own branch (the
+  dispatcher pushes that branch and opens the PR: OQ-84, OQ-63); this is about
+  the reviewer only, and the two are deliberately asymmetric.
 - A second GitHub identity. That is the full answer to self-marking and is
   listed separately in the design's Phase 5; this story is narrower and does not
   depend on it.
