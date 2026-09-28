@@ -294,7 +294,16 @@ than relaxed.
    **Planned (OQ-81, OQ-82):** only a pull request from an account with write access can land, and
    a coder's own pull request cannot change `stories/` beyond its own story.
 2. Dispatcher picks the highest-tier, lowest-id ready story; creates a worktree and the branch
-   `story/OQ-49-import-player-info`.
+   `story/OQ-49-import-player-info`. **Planned (OQ-86):** the loop skips a ready story whose
+   `story/OQ-<n>-*` branch already exists on `origin` (`stories/README.md`'s `in-progress`), so a
+   story stopped after its PR was opened, which still reads `ready` on `main`, is never dispatched
+   again. A story that stops before it has a PR stops the loop instead, since nothing on `origin`
+   would keep it from being dispatched again. **Planned (OQ-86):** before picking, and only between
+   stories, the loop fast-forwards its own checkout to `origin/main` (`git merge --ff-only`), so
+   its code, prompts and queue include everything already landed. If that is not a fast-forward, it
+   stops and dispatches nothing. A story stopped with its PR open does not hold the update back.
+   Each story then runs in its own process, so it loads the code as updated; the loop's own
+   process keeps what it loaded at start.
 3. Coder implements, tests green, commits, and emits the PR title/body and a
    draft-or-ready decision in its report. The dispatcher pushes the branch (`pushBranch` in
    `scripts/dispatch/coder.mjs`), so a model session has no write access to the remote, then opens
@@ -306,9 +315,9 @@ than relaxed.
    `review/agent` = `success` on the head SHA from it.
 7. The landing sweep merges it (squash) once `mergeable_state` is `clean`. The owner
    triggers the sweep, or runs `scripts/dispatch/land.mjs` (OQ-50), which waits until the PR is
-   landable, triggers it and waits for the merge. **Planned (OQ-48):** the loop calls `land.mjs`,
-   and the next story starts only once this one is merged or stopped, so every story is dispatched
-   from a `main` that includes the last.
+   landable, triggers it and waits for the merge. **Planned (OQ-48):** the loop calls `land.mjs`.
+   **Planned (OQ-86):** the next story starts only once this one is merged or stopped, so every
+   story is dispatched from a `main` that includes the last.
 
 ### Failure paths
 
@@ -316,13 +325,16 @@ The majority of the interesting behaviour.
 
 | Situation | Route |
 |---|---|
-| Reviewer returns `block` | Findings → coder respawned with story + findings. **Bounded**; OQ-48 sets the number. |
-| Still failing at the bound | Human queue. Round count **derived from `block` verdicts on the PR**, not stored. `review-blocked` is applied by hand today. **Planned (OQ-48):** the dispatcher sets `blocked:` on the story. **Planned (OQ-80):** `review-gate.yml` applies `review-blocked`. |
-| CI red on the head | **Planned (OQ-48):** failure output → coder respawned on the same branch. Bounded separately (OQ-48's AC-6b), derived from the PR's failed CI runs; then `blocked:`, no label. |
+| Reviewer returns `block` | Findings → coder respawned with story + findings. **Bounded**; OQ-48 sets the number. **Planned (OQ-85):** the respawn works on the existing branch and pull request, replaces the PR body, never opens a second PR, and says whether its findings came from review or CI. It leaves the PR's draft state alone: acting on a coder's `blocked:` or draft is OQ-48's. |
+| Still failing at the bound | Human queue. Round count **derived from `block` verdicts on the PR**, not stored. `review-blocked` is applied by hand today. **Planned (OQ-48):** the dispatcher makes the PR a draft (OQ-87), then records `blocked:` in the story file on the story's own branch, as a commit it pushes. The PR stays open, as a draft; `main`'s copy is not touched. **Planned (OQ-80):** `review-gate.yml` applies `review-blocked`. |
+| CI red on the head | **Planned (OQ-48):** a run that concluded `failure` → failure output → coder respawned on the same branch. Bounded separately (OQ-48's AC-4), derived from the PR's failed CI runs; then `blocked:` on the branch, no label. |
+| CI cancelled, timed out, or not finished within the dispatcher's wait | **Planned (OQ-48):** not retried and not counted. The story stops, with `blocked:` on the branch naming the outcome. None of these is something a coder can fix (OQ-48's AC-5). |
+| A retry reports the coder's `blocked:`, a draft request or a failure; a review records no verdict; a retry after red CI pushes no commit; landing fails | **Planned (OQ-48):** the story stops. Only the results OQ-48's AC-2 names continue the run; every other result stops it. Every stop with an open PR makes the PR a draft first, so nothing can land it, which keeps the rule that a `blocked:` story is always a draft. Then it records `blocked:` on the branch. |
+| The dispatcher is interrupted mid-story | **Planned (OQ-48, OQ-86):** once the run has pushed, the story's branch on `origin` keeps it `in-progress`, so the loop skips it. The owner resumes it from its PR number (OQ-48's AC-9), which derives where it was from GitHub alone; a run killed between its push and opening the PR leaves a branch with no PR, which the owner handles by hand. Killed before its first push, the story has no branch on `origin` and the loop picks it again, but the killed run's local branch makes the dispatch return `branch-exists`, which stops the loop (OQ-86's AC-3 and AC-4). |
 | Story was wrong, not the code | `blocked:` set with the reason → Session A |
 | Coder hits ambiguity mid-story | `blocked:` + the specific question → Session A |
 | Branch stale | Rebase; if it fails, kick back rather than merge against a moved world |
-| Spawn died / timed out / hit budget | Dispatcher records it and moves on; the watchdog surfaces it |
+| Spawn died / timed out / hit budget | Dispatcher records it and moves on; the watchdog surfaces it. **Planned (OQ-86):** a coder dispatch that ends before a PR exists (a failed install or session, nothing committed, uncommitted changes, a failed push) stops the loop rather than moving on. Nothing records it on `origin`, so moving on would dispatch the same story again. |
 
 **The outlet valve must never prompt.** A spawned session that asks a question with nobody attached
 hangs — one observed instance sat blocked for eight minutes. Invocations pass
@@ -350,9 +362,10 @@ dispatcher rewritten from scratch — it is a property of the PR, which is where
 anyway.
 
 The same derivation feeds the circuit breaker. **Planned (OQ-48, OQ-80):** when the bound is
-reached, the dispatcher sets `blocked:` on the story, and `review-gate.yml` applies
-`review-blocked`, because it sees every PR, including ones no dispatcher ran. That is what finally
-makes the breaker in `land-approved.yml` count a signal something reliably produces.
+reached, the dispatcher makes the PR a draft and sets `blocked:` on the story, on the story's
+own branch, and `review-gate.yml` applies `review-blocked`, because it sees every PR, including
+ones no dispatcher ran. That is what finally makes the breaker in `land-approved.yml` count a
+signal something reliably produces.
 
 ---
 
@@ -1016,6 +1029,10 @@ is why this is recorded here rather than only in a code comment.
   cannot be tested on the PR that introduces them. **Mitigation: move logic out of `run:` blocks
   into committed scripts with unit tests.** The untestable surface shrinks to YAML wiring.
 - **`GITHUB_TOKEN` pushes do not trigger further workflows.**
+- **Converting a PR to draft is GraphQL only.** REST's "Update a pull request" takes `title`,
+  `body`, `state`, `base` and `maintainer_can_modify`, with no `draft`; the GraphQL mutation
+  `convertPullRequestToDraft` does it (checked 2026-09-25). **Planned (OQ-87):** `github.mjs`
+  sends that one mutation, and its allowlist admits no other GraphQL.
 - **Squash merges create a new commit**; leftover branches cannot be fast-forwarded afterwards.
 - **Branch protection is not readable** from agent sessions (403). It *is* readable locally as the
   owner.

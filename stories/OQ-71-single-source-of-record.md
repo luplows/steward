@@ -37,7 +37,7 @@ me on the current version rather than a superseded copy of it.
       `coder.md` by #119, and survived in `REVIEW.md`, which both corrected
       passages then pointed readers at by name.
 - [ ] **AC-4** — **The retry bound and who applies `review-blocked`.**
-      Authorities: OQ-48's AC-6 for the number of blocking verdicts, and OQ-80
+      Authorities: OQ-48's AC-3 for the number of blocking verdicts, and OQ-80
       for applying the label (OQ-80 took over what were OQ-48's AC-6b and AC-6c
       on 2026-09-25), until each is implemented; after that, the code it names.
       Every statement of the bound, or of who applies the label, links to its
