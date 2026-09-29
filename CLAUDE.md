@@ -15,7 +15,9 @@ Instructions only. Rationale, mechanism and history live in the files listed und
   An empty section is a missing one. **Verification** gives the commands run and their real results.
 - Check whether `README.md`, `Open-Questions.md` and `Project-Outline.md` need updating as a result
   of the change. Include any such updates in the same pull request.
-- Open a pull request as a draft if it is not finished. Mark it ready when it is.
+- Open a pull request as a draft if it is not finished. Mark it ready when it is. Session A is the
+  exception: it opens every pull request as a draft and marks it ready only when the owner says so
+  (see [`docs/session-a.md`](docs/session-a.md)).
 - Do not merge a pull request, your own or any other. The sweep is the only thing that merges.
 - Do not delete the head branch. The sweep deletes it (see
   [`scripts/land/delete-merged-heads.mjs`](scripts/land/delete-merged-heads.mjs)); the repository's
@@ -86,6 +88,7 @@ recalled — in story files, docs, commit messages, pull request bodies and revi
 | [`docs/agent-workflow-design.md`](docs/agent-workflow-design.md) | **The workflow's design of record** — roles, the gate, deliberate exclusions, platform facts. Read it before proposing a change to how work flows through this repository. |
 | [`REVIEW.md`](REVIEW.md) | The enumerated checklist a pull request is reviewed against. |
 | [`stories/README.md`](stories/README.md) | Story schema, status derivation, ordering, readiness test. |
+| [`docs/session-a.md`](docs/session-a.md) | Instructions for the session that writes stories with the owner, including how a story pull request is handed over. |
 | [`docs/migration-plan.md`](docs/migration-plan.md) | The phased sequence for building the workflow, and its status. Not a design document. |
 | [`docs/gap-analysis.md`](docs/gap-analysis.md) | A dated snapshot, kept for its reasoning. Not a design document, and not current. |
 | `Completed-Questions.md` | Archive of resolved stories. |

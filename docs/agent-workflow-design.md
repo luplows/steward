@@ -289,8 +289,10 @@ than relaxed.
 ### Happy path
 
 1. Session A writes a story, with Open questions empty, and opens it as a pull request from the
-   owner's account. Today it is reviewed on request, and the owner, or the dispatcher session
-   running `land.mjs`, triggers the sweep.
+   owner's account, as a **draft**. It marks the pull request ready only when the owner says so,
+   and that is the owner's go-ahead for it to land (decided 2026-09-28; `docs/session-a.md`).
+   Today a ready one is reviewed on request, and the owner, or the dispatcher session running
+   `land.mjs`, triggers the sweep.
    **Planned (OQ-83):** the loop reviews it against `REVIEW.md`'s story-PR items and lands it.
    **Planned (OQ-81, OQ-82):** only a pull request from an account with write access can land, and
    a coder's own pull request cannot change `stories/` beyond its own story.
