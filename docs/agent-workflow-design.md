@@ -436,6 +436,33 @@ The owner can require a go-ahead before the session lands particular pull reques
 ones that change `CLAUDE.md`, `REVIEW.md`, `.github/`, `.claude/` or this document. That is an
 instruction to the session, lifted when the owner says so, and not part of this design.
 
+### Running unattended
+
+Decided 2026-09-28 by the owner, planning how Session A's pull requests reach the queue without a
+dispatcher session in between.
+
+- **Planned (OQ-101):** a Windows scheduled task starts the loop every 15 minutes while the machine
+  is on, on mains power only. The task is a script: a run with nothing ready starts no model
+  session. GitHub's cron is not used (**Watchdog**, below).
+- **Planned (OQ-101):** a run takes a lock that a dead holder does not keep, stops and reports if it
+  finds what an interrupted run left behind, and appends one line to a local run log. That log is
+  how the owner hears about the loop's own stops. A blocked story pull request is also reported by
+  GitHub's failure email, since a blocking verdict fails the gate's run.
+- **Planned (OQ-86):** `--max-stories N` caps how many stories one run starts.
+- **Planned (OQ-102):** past a usage threshold, the loop starts no coder session, first dispatch or
+  retry, but reviews and landing carry on, so every pull request ends with a review posted. A
+  story that would have been retried is paused, and resumes on a later run under the threshold.
+  What is measured, and over what window, is open.
+- Any pull request from an account with write access (OQ-81) that passes review may land
+  unattended, including one that changes this document, `CLAUDE.md`, `.github/` or `.claude/`.
+  Marking it ready is the owner's go-ahead: Session A opens its pull requests as drafts and marks
+  one ready only on the owner's word. A dispatched story's own pull request lands on a pass, as it
+  does today: the story was the go-ahead.
+- Before the task is switched on, OQ-81 and OQ-82 are built, so nothing lands automatically from an
+  outsider or changes `stories/` from inside a coder's pull request, and so are OQ-73 (a coder
+  cannot read the owner's stored token) and OQ-80 (the circuit breaker counts real blocks).
+  OQ-101's `depends_on` holds this.
+
 ### Invocation shape
 
 Sketches, not literal — the prompts are rendered from files with the story injected.
