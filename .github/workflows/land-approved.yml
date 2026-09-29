@@ -98,6 +98,20 @@ jobs:
             sha="$(printf '%s' "${pr_json}" | jq -r '.head.sha')"
             mergeable_state="$(printf '%s' "${pr_json}" | jq -r '.mergeable_state // "unknown"')"
 
+            # The repository is public and forking is allowed, so anyone can open a
+            # pull request; only a passing review marker stands between such a
+            # pull request and the sweep, and review-gate.yml only honours a
+            # marker from a writer in the first place. This check comes before
+            # the breaker's exemptions (OQ-81): an outside pull request carrying
+            # `breaker-override` is still skipped.
+            #
+            # Honoured associations (must match review-gate.yml's ASSOC case): OWNER|MEMBER|COLLABORATOR
+            association="$(printf '%s' "${pr_json}" | jq -r '.author_association // ""')"
+            if ! ASSOC="${association}" node scripts/land/check-author.mjs; then
+              echo "PR #${pr}: opened by an account with association '${association}', not a writer, skipping"
+              continue
+            fi
+
             if printf '%s' "${pr_json}" | jq -e '[.labels[].name] | index("review-blocked")' >/dev/null; then
               echo "PR #${pr}: review-blocked, skipping"
               continue

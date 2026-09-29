@@ -294,8 +294,8 @@ than relaxed.
    Today a ready one is reviewed on request, and the owner, or the dispatcher session running
    `land.mjs`, triggers the sweep.
    **Planned (OQ-83):** the loop reviews it against `REVIEW.md`'s story-PR items and lands it.
-   **Planned (OQ-81, OQ-82):** only a pull request from an account with write access can land, and
-   a coder's own pull request cannot change `stories/` beyond its own story.
+   Only a pull request from an account with write access can land (OQ-81). **Planned (OQ-82):** a
+   coder's own pull request cannot change `stories/` beyond its own story.
 2. Dispatcher picks the highest-tier, lowest-id ready story; creates a worktree and the branch
    `story/OQ-49-import-player-info`. **Planned (OQ-86):** the loop skips a ready story whose
    `story/OQ-<n>-*` branch already exists on `origin` (`stories/README.md`'s `in-progress`), so a
@@ -833,9 +833,9 @@ be kept essentially as-is:
   that trigger: it triggers the sweep once a PR is landable, and re-triggers while the PR is still
   open. It never merges itself. `story.mjs` (OQ-48) calls it, and the owner or the dispatcher
   session may run it directly; nothing else does.
-- **Planned (OQ-81):** it lands only pull requests whose author has write access (the same
-  association set the gate honours for markers), because a landed `ready` story is work the loop
-  will carry out.
+- **It lands only pull requests whose author has write access** (the same association set the gate
+  honours for markers, `scripts/land/check-author.mjs`), because a landed `ready` story is work the
+  loop will carry out (OQ-81).
 - **One PR per run.** `mergeable_state` is computed asynchronously, so a second merge in the same
   pass decides on stale data. The same fact has a cost between runs: straight after a merge, other
   open PRs can read `unknown` for a while, and the sweep skips `unknown` rather than guessing. A
