@@ -31,8 +31,9 @@ rather than restating it. The role itself is described in
   still being written is on its branch and not yet on `main`.
 - Work on a `write-story/OQ-<n>-<slug>` branch, never `story/…`, which is the
   name a coder's branch takes.
-- Work in a separate git worktree, not the repository's main checkout. The
-  dispatcher runs from the main checkout.
+- Work in a separate git worktree, not the repository's main checkout. A
+  dispatcher session runs from the main checkout. **Planned (OQ-109):** the
+  unattended loop runs from a worktree of its own.
 - Record a design decision the story makes in
   `docs/agent-workflow-design.md`, in the same pull request, marked as that
   document's "Reading this document" note says (`CLAUDE.md`, "Stories").

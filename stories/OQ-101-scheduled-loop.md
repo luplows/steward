@@ -3,7 +3,7 @@ id: OQ-101
 title: Run the loop on a Windows scheduled task, with a lock, a startup check and a run log
 tier: next
 kind: workflow
-depends_on: [OQ-73, OQ-80, OQ-81, OQ-82, OQ-83, OQ-86]
+depends_on: [OQ-73, OQ-80, OQ-81, OQ-82, OQ-83, OQ-86, OQ-109, OQ-110]
 model: sonnet
 blocked: null
 ---
@@ -23,7 +23,7 @@ what each run did.
       install` registers a Windows scheduled task, and `uninstall` removes it.
       The task:
       - runs the loop's entry point (OQ-86, with OQ-83's reviews) from the
-        repository's main checkout, every 15 minutes;
+        loop's own worktree (OQ-109), every 15 minutes;
       - starts only when the machine is on mains power;
       - starts no new instance while one is running.
 
@@ -43,16 +43,30 @@ what each run did.
       Tests cover a live holder, a dead holder, and release after an error.
 - [ ] **AC-3** — **An interrupted run is reported, not tripped over.** After
       taking the lock and before anything else, the loop looks for what an
-      interrupted run leaves: a `tw-coder-*` worktree in `git worktree list`,
-      or a local `story/*` branch. If it finds either, it writes their names
-      to the run log with status `interrupted`, and exits having dispatched and
-      reviewed nothing. Tests cover a leftover worktree, a leftover local
-      branch, and a clean checkout that goes on.
+      interrupted run leaves: a `tw-coder-*` worktree in `git worktree list`.
+      For each one it finds, it:
+      - makes sure there is an open issue for it, in the same way and with
+        the same title, label and no-duplicate rule as OQ-110's AC-4. The
+        title is `Loop: <OQ-n> is stuck` when the worktree is on a
+        `story/OQ-<n>-*` branch, and `Loop: leftover worktree <directory
+        name> is stuck` otherwise. The body names the machine, the worktree's
+        path, its branch, and the paths `git status --porcelain` reports in
+        it;
+      - records it as an action in the run log (AC-4);
+      - leaves the worktree as it is.
+
+      The run then goes on. A worktree's story is skipped by OQ-110's rules,
+      because the branch is on `origin` or local. A leftover local
+      `story/*` branch is OQ-110's to push, skip and report, not this
+      check's. Tests cover a leftover worktree on a story branch, which gets
+      an issue while the run goes on, an existing issue left alone, and a
+      clean checkout.
 - [ ] **AC-4** — **A run log.** Every run appends exactly one line to
       `%LOCALAPPDATA%\tw-loop\runs.log`, as one JSON object, whatever its
-      outcome, including `locked`, `interrupted` and an error. The object
-      holds the start time, the duration, the final status, and one entry per
-      action the run took:
+      outcome, including `locked` and an error. The object holds the start
+      time, the duration, the final status, and one entry per action the run
+      took:
+      - each leftover worktree found (AC-3), with its issue;
       - each pull request reviewed, with its verdict;
       - each pull request landed;
       - each story run, with OQ-48's final status for it.
@@ -67,12 +81,15 @@ what each run did.
 
 - **The usage threshold.** OQ-102.
 - **Notifications** beyond the run log, such as a toast or a message to a
-  phone. The owner chose the log alone on 2026-09-28.
+  phone. The owner chose the log alone on 2026-09-28. A stuck story and a
+  leftover worktree are the exceptions: OQ-110 and AC-3 raise them as GitHub
+  issues (decided 2026-10-01).
 - **The watchdog**, and anything that runs while the machine is off
   (`docs/agent-workflow-design.md`, "Watchdog").
 - **Running on anything but Windows.**
-- **Resuming an interrupted story.** AC-3 reports it and stops. Clearing it up
-  is the owner's, and resuming a story is OQ-48's AC-9.
+- **Resuming an interrupted story**, or removing its worktree. AC-3 reports
+  it and goes on. Clearing it up is the owner's, and resuming a story is
+  OQ-48's AC-9.
 
 ## Constraints
 
@@ -89,7 +106,9 @@ what each run did.
   - a Windows scheduled task every 15 minutes wakes the loop, and GitHub's
     own cron is not used, because it delivered about 5% of its runs
     (`docs/agent-workflow-design.md`, "Watchdog");
-  - the loop's own stops are reported in a local run log only;
+  - the loop's own stops are reported in a local run log only. On
+    2026-10-01 the owner added GitHub issues for stuck stories (OQ-110), and
+    gave the loop its own worktree (OQ-109);
   - before the task is switched on, OQ-81 and OQ-82 must be built (nothing
     automatic lands without them), and so must OQ-73 and OQ-80. Hence
     `depends_on`.
@@ -98,6 +117,10 @@ what each run did.
   interrupted mid-story") and OQ-86's AC-4. `dispatchCoder` creates its local
   `story/` branch before the install or the session, and works in a
   `tw-coder-*` directory under the system temp directory.
+- AC-3 cannot tell a leftover worktree from one a hand-run on the same
+  machine is using at that moment. The lock (AC-2) covers only runs of the
+  loop. Such a run's worktree is reported too. This is a known limit,
+  expected to be rare, since hand-runs seldom overlap the scheduled loop.
 - OQ-86's AC-6 adds `--max-stories N`, which AC-1 passes through.
 - The owner's hand-run review scheduler, `scheduled-reviews.mjs` with a
   one-off Windows task, is the precedent for starting a script from Task
