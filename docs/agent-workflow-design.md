@@ -296,7 +296,8 @@ than relaxed.
    **Planned (OQ-83):** the loop reviews it against `REVIEW.md`'s story-PR items and lands it.
    Only a pull request from an account with write access can land (OQ-81). CI fails a coder's own
    pull request if it changes `stories/` beyond its own story's move, ticks and `blocked:` edit
-   (OQ-82; `scripts/dispatch/story-containment.mjs`).
+   (OQ-82; `scripts/dispatch/story-containment.mjs`). **Planned (OQ-105):** it also fails one whose
+   head branch names a `story/OQ-<n>-…` other than the story its diff moves.
 2. Dispatcher picks the highest-tier, lowest-id ready story; creates a worktree and the branch
    `story/OQ-49-import-player-info`. **Planned (OQ-86):** the loop skips a ready story whose
    `story/OQ-<n>-*` branch already exists on `origin` (`stories/README.md`'s `in-progress`), so a
