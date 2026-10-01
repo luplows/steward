@@ -96,7 +96,7 @@ export function branchFor(storyFilename) {
 }
 
 /** The tip of `branch` on the remote, or `null` when it is not there. */
-async function remoteTip(repoDir, branch) {
+export async function remoteTip(repoDir, branch) {
   const out = await git(repoDir, ['ls-remote', '--heads', REMOTE, `refs/heads/${branch}`])
   const line = out.split(/\r?\n/).find((l) => l.trim() !== '')
   return line ? line.split(/\s+/)[0] : null
