@@ -294,8 +294,9 @@ than relaxed.
    Today a ready one is reviewed on request, and the owner, or the dispatcher session running
    `land.mjs`, triggers the sweep.
    **Planned (OQ-83):** the loop reviews it against `REVIEW.md`'s story-PR items and lands it.
-   Only a pull request from an account with write access can land (OQ-81). **Planned (OQ-82):** a
-   coder's own pull request cannot change `stories/` beyond its own story.
+   Only a pull request from an account with write access can land (OQ-81). CI fails a coder's own
+   pull request if it changes `stories/` beyond its own story's move, ticks and `blocked:` edit
+   (OQ-82; `scripts/dispatch/story-containment.mjs`).
 2. Dispatcher picks the highest-tier, lowest-id ready story; creates a worktree and the branch
    `story/OQ-49-import-player-info`. **Planned (OQ-86):** the loop skips a ready story whose
    `story/OQ-<n>-*` branch already exists on `origin` (`stories/README.md`'s `in-progress`), so a

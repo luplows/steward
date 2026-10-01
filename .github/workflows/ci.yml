@@ -11,6 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history: the story-diff containment check below needs the
+          # pull request's base commit, which the default shallow (depth-1)
+          # checkout of the merge commit does not reach (OQ-82).
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -18,6 +23,13 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test
+      - name: Check story diff containment (OQ-82)
+        if: github.event_name == 'pull_request'
+        run: >-
+          node scripts/dispatch/story-containment.mjs
+          ${{ github.event.pull_request.base.sha }}
+          ${{ github.event.pull_request.head.sha }}
+          ${{ github.head_ref }}
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

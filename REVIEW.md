@@ -91,6 +91,13 @@ standard it was supposed to meet.
     genuinely delivered fails this item as surely as a misnamed test.
 18. **Containment** — nothing in the diff falls under the story's
     **Out of scope**, and nothing implements a decision the story left open.
+    CI enforces the `stories/` part of this mechanically
+    (`scripts/dispatch/story-containment.mjs`, OQ-82): the only changes a
+    story's own pull request may make under `stories/` are that story's move
+    into `stories/done/`, its acceptance-criterion lines ticking, and its
+    `blocked:` edit. The reviewer's judgement is still needed for the rest —
+    whether the diff outside `stories/` strays into the story's Out of scope,
+    or implements a decision it left open.
 19. The story file is moved to `stories/done/` in this PR.
 
 ## PRs that add or change a story
