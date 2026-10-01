@@ -20,6 +20,23 @@ import { render, wrapInjectedBlock } from './render.mjs'
 
 export const ROLES = ['coder', 'reviewer']
 
+/**
+ * The pinned value of `BASH_DEFAULT_TIMEOUT_MS` and `BASH_MAX_TIMEOUT_MS` for
+ * both roles (OQ-107), one exported constant rather than two literals so the
+ * two cannot drift apart. The OQ-106 spike found the installed CLI's per-call
+ * Bash timeout is `Math.max(BASH_MAX_TIMEOUT_MS ?? 600000, BASH_DEFAULT_TIMEOUT_MS ?? 120000)`,
+ * and that a `BASH_DEFAULT_TIMEOUT_MS` left at its 120000 default loses a
+ * command between 2 and 10 minutes long to the background, where it is killed
+ * with no notification when the session ends. Pinning both to this value lets
+ * such a command finish in the foreground while keeping the longest single
+ * call -- and so the longest stretch in which a session emits no output -- at
+ * 10 minutes. `docs/agent-workflow-design.md`, "A long shell command in a
+ * headless session", Recommendation item 6, is why the value is `600000` and
+ * not higher: raising `BASH_MAX_TIMEOUT_MS` further is out of this story's
+ * scope.
+ */
+export const SHELL_TIMEOUT_MS = '600000'
+
 // The per-role defaults are the values in docs/agent-workflow-design.md,
 // "Invocation shape". Each can be overridden by the caller.
 export const ROLE_DEFAULTS = {
@@ -226,7 +243,11 @@ export function retrySection({ round, roundsRemaining, findings, branch, source 
  * Returns `{ args, env, prompt }`. `prompt` is for stdin (OQ-65) and appears
  * in no element of `args`. The coder's `env` is `coderEnv`'s, so no GitHub
  * credential survives into it. The reviewer's is a copy of `baseEnv`:
- * removing the reviewer's credentials is OQ-62's, not this story's.
+ * removing the reviewer's credentials is OQ-62's, not this story's. Both
+ * roles' `env` then has `BASH_DEFAULT_TIMEOUT_MS` and `BASH_MAX_TIMEOUT_MS`
+ * set to `SHELL_TIMEOUT_MS`, overriding whatever `baseEnv` carried, and
+ * `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` removed so background commands stay
+ * available (OQ-107).
  */
 export function buildInvocation(options) {
   const { role, promptTemplate, story, branch, pr, retry, baseEnv, emptyGhConfigDir } = options
@@ -253,6 +274,9 @@ export function buildInvocation(options) {
       BRANCH: branch,
     }
     env = coderEnv(baseEnv ?? {}, emptyGhConfigDir)
+    env.BASH_DEFAULT_TIMEOUT_MS = SHELL_TIMEOUT_MS
+    env.BASH_MAX_TIMEOUT_MS = SHELL_TIMEOUT_MS
+    delete env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS
   } else {
     if (retry) throw new Error('a reviewer invocation takes no retry')
     if (!pr) throw new Error('a reviewer invocation requires pr')
@@ -266,6 +290,9 @@ export function buildInvocation(options) {
       PR_BODY: pr.body,
     }
     env = { ...(baseEnv ?? {}) }
+    env.BASH_DEFAULT_TIMEOUT_MS = SHELL_TIMEOUT_MS
+    env.BASH_MAX_TIMEOUT_MS = SHELL_TIMEOUT_MS
+    delete env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS
   }
 
   let { text: prompt } = renderBounded(promptTemplate, values)

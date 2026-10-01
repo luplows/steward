@@ -142,6 +142,37 @@ describe('OQ-74/AC-2: the coder takes its env and allowlist from coder-env.mjs',
   })
 })
 
+describe('OQ-107/AC-1: shell timeouts are pinned to 600000 for both roles', () => {
+  for (const [role, options] of [['coder', coderOptions], ['reviewer', reviewerOptions]]) {
+    it(`pins both variables for the ${role}, overriding a baseEnv without either`, () => {
+      const { env } = buildInvocation({ ...options, baseEnv: { PATH: '/bin' } })
+      expect(env.BASH_DEFAULT_TIMEOUT_MS).toBe('600000')
+      expect(env.BASH_MAX_TIMEOUT_MS).toBe('600000')
+    })
+
+    it(`pins both variables for the ${role}, overriding a baseEnv carrying different values for both`, () => {
+      const { env } = buildInvocation({
+        ...options,
+        baseEnv: { PATH: '/bin', BASH_DEFAULT_TIMEOUT_MS: '1000', BASH_MAX_TIMEOUT_MS: '2000' },
+      })
+      expect(env.BASH_DEFAULT_TIMEOUT_MS).toBe('600000')
+      expect(env.BASH_MAX_TIMEOUT_MS).toBe('600000')
+    })
+  }
+})
+
+describe('OQ-107/AC-2: background commands stay available', () => {
+  for (const [role, options] of [['coder', coderOptions], ['reviewer', reviewerOptions]]) {
+    it(`removes CLAUDE_CODE_DISABLE_BACKGROUND_TASKS from the ${role}'s env when baseEnv carries it`, () => {
+      const { env } = buildInvocation({
+        ...options,
+        baseEnv: { PATH: '/bin', CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1' },
+      })
+      expect(env).not.toHaveProperty('CLAUDE_CODE_DISABLE_BACKGROUND_TASKS')
+    })
+  }
+})
+
 // Every entry in .claude/settings.json's permissions.allow must be covered by
 // the role's own list, since that file is ignored when the workspace is not
 // trusted. A `Bash(x:*)` entry covers any `Bash(x ...)` entry.
@@ -329,8 +360,8 @@ describe('OQ-74/AC-6: the prompt is not an argument', () => {
 describe('OQ-74/AC-7: the module starts nothing and reads nothing', () => {
   it('exports only pure builders and constants', () => {
     expect(Object.keys(invocationModule).sort()).toEqual([
-      'RETRY_SOURCES', 'REVIEWER_DISALLOWED_TOOLS', 'ROLES', 'ROLE_DEFAULTS', 'buildArgs', 'buildInvocation',
-      'renderBounded', 'retrySection', 'reviewerAllowedTools',
+      'RETRY_SOURCES', 'REVIEWER_DISALLOWED_TOOLS', 'ROLES', 'ROLE_DEFAULTS', 'SHELL_TIMEOUT_MS', 'buildArgs',
+      'buildInvocation', 'renderBounded', 'retrySection', 'reviewerAllowedTools',
     ])
   })
 

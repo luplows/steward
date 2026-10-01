@@ -1343,8 +1343,8 @@ Session A.
 **Decided 2026-10-01 by the owner: background commands stay available.** Item 1 is not adopted.
 Turning them off would mean a story that needs one has to be spotted and run differently. Once the
 loop runs unattended, nothing would spot it, so the owner chose fewer special cases over the
-guarantee. **Planned (OQ-107):** `buildInvocation` pins `BASH_DEFAULT_TIMEOUT_MS` and
-`BASH_MAX_TIMEOUT_MS` to `600000` for both roles, and removes
+guarantee. `buildInvocation` pins `BASH_DEFAULT_TIMEOUT_MS` and `BASH_MAX_TIMEOUT_MS` to `600000`
+for both roles (`SHELL_TIMEOUT_MS` in `scripts/dispatch/invocation.mjs`), and removes
 `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` if the dispatcher's environment carries it (items 2 to 4,
 with the default changed as item 6 says). `coder.md` and `reviewer.md` tell a session never to end
 its turn while a command runs (item 5). **Planned (OQ-108):** a coder session that completes with

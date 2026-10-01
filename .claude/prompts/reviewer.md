@@ -200,6 +200,20 @@ permitted."* Your allowlist includes `node` and `npm`, which can reach far more
 than the denied commands suggest. Posting nothing is a rule you keep, not a wall
 you are behind.
 
+## Background commands end silently
+
+A session like yours ends the moment it stops calling tools. Anything still
+running in the background is stopped right there, and you are never notified
+when it finishes — nothing arrives after your last tool call. So never end
+your turn to wait for a command.
+
+A command may run in the foreground for up to 10 minutes. For something that
+needs longer, start it in the background and wait for it by checking its
+output file, with `node -e` waits that each return within 10 minutes, calling
+it again until the command has finished. A command that times out has already
+been stopped: narrow it or split it into smaller pieces rather than starting
+the same command again unchanged.
+
 ## Verify rather than accept
 
 Where a claim is cheap to test, test it. If the PR says 240 tests pass, run
