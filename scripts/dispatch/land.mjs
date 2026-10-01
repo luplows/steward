@@ -58,6 +58,9 @@ export const REVIEW_PENDING_BOUND_MS = 30 * 60_000
 export const BLOCKED_BOUND_MS = 10 * 60_000
 // `mergeable_state` `unknown` (or any state that is not `clean`, `blocked` or `dirty`).
 export const UNKNOWN_BOUND_MS = 5 * 60_000
+// `review/agent` reads `failure`/`error` on the same head the caller holds a passing verdict for
+// (`passedAt`): the gate has not yet turned the fresh pass into a `success` status (OQ-104).
+export const GATE_LAG_BOUND_MS = 2 * 60_000
 // Sweep triggers sent for one pull request that is still open afterwards.
 export const MAX_TRIGGERS = 5
 // Total time in one call, whatever the reason.
@@ -170,11 +173,19 @@ function reviewState(json) {
 /**
  * Why the pull request cannot be landed yet, or `null` if it can. `wait` is
  * `{ reason, bound }` for a condition that may clear; `final` is a terminal status.
+ *
+ * `gateLag` is true when the caller holds an honoured pass at this exact head
+ * (`passedAt`): a `failure`/`error` status is then the gate not having caught up
+ * yet rather than a real block, so it is waited through instead of being final
+ * (OQ-104).
  */
-function assess(pr, review) {
+function assess(pr, review, gateLag) {
   if (pr.draft) return { final: 'draft' }
   if (pr.labels.includes('review-blocked')) return { final: 'review-blocked' }
-  if (review === 'failure' || review === 'error') return { final: 'review-failed' }
+  if (review === 'failure' || review === 'error') {
+    if (gateLag) return { wait: 'gate-lag', bound: GATE_LAG_BOUND_MS }
+    return { final: 'review-failed' }
+  }
   if (review !== 'success') return { wait: 'review-pending', bound: REVIEW_PENDING_BOUND_MS }
   if (pr.mergeableState === 'dirty') return { final: 'conflict' }
   if (pr.mergeableState === 'clean') return null
@@ -189,6 +200,12 @@ function assess(pr, review) {
  * Waits until pull request `number` is landable, triggers the sweep, and waits
  * until it is merged. Returns `{ status, ... }`; `status` is `merged` on success.
  * `sleep` and `now` are injectable so the bounds can be tested without waiting.
+ *
+ * `passedAt`, optional: a head SHA at which the caller holds an honoured `pass`
+ * or `pass-with-observations` verdict. While the pull request's head is still
+ * `passedAt`, a `review/agent` of `failure`/`error` is waited through for up to
+ * `GATE_LAG_BOUND_MS` (returning `gate-lag` if it has not cleared by then)
+ * instead of ending the call at once with `review-failed` (OQ-104).
  */
 export async function landPullRequest({
   number,
@@ -196,6 +213,7 @@ export async function landPullRequest({
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now = Date.now,
   latencyLog = DEFAULT_LATENCY_LOG,
+  passedAt,
 }) {
   requirePrNumber(number)
   const startedAt = now()
@@ -222,9 +240,10 @@ export async function landPullRequest({
     headSha = pr.headSha
 
     // Not asked for at all when the pull request is a draft or blocked: the answer changes nothing.
-    const early = assess(pr, 'success')
+    const early = assess(pr, 'success', false)
     const review = early?.final ? 'success' : reviewState(await ctx.send(buildGetCommitStatus(ctx.repo, headSha)))
-    const verdict = early?.final ? early : assess(pr, review)
+    const gateLag = passedAt != null && headSha === passedAt
+    const verdict = early?.final ? early : assess(pr, review, gateLag)
 
     if (verdict?.final) return finish(verdict.final)
 

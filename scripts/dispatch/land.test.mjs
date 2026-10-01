@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import {
   BLOCKED_BOUND_MS,
+  GATE_LAG_BOUND_MS,
   MAX_TOTAL_WAIT_MS,
   MAX_TRIGGERS,
   POLL_INTERVAL_MS,
@@ -213,6 +214,38 @@ describe('OQ-50/AC-3: unknown is waited through and the sweep is re-triggered', 
     const result = await w.run({ number: 7 })
     expect(['timeout', 'trigger-limit']).toContain(result.status)
     expect(w.t).toBeLessThanOrEqual(MAX_TOTAL_WAIT_MS + POLL_INTERVAL_MS)
+    w.cleanup()
+  })
+})
+
+describe('OQ-104/AC-1 and AC-3: passedAt waits out a gate that has not caught up yet', () => {
+  it('OQ-104/AC-3: passedAt equal to the head, failure for two polls then success, lands normally', async () => {
+    const w = world({
+      reviewAt: (t) => (t < 2 * POLL_INTERVAL_MS ? 'failure' : 'success'),
+      pullAt: (t, dispatches) => pull({ mergeable_state: 'clean', merged: dispatches > 0 }),
+    })
+    const result = await w.run({ passedAt: SHA })
+    expect(result).toMatchObject({ status: 'merged', triggers: 1 })
+    expect(w.dispatches).toHaveLength(1)
+    expect(w.t).toBeLessThan(GATE_LAG_BOUND_MS)
+    w.cleanup()
+  })
+
+  it('OQ-104/AC-1: passedAt equal to the head, failure throughout, returns gate-lag at the bound', async () => {
+    const w = world({ reviewAt: () => 'failure', pullAt: () => pull({ mergeable_state: 'clean' }) })
+    const result = await w.run({ passedAt: SHA })
+    expect(result.status).toBe('gate-lag')
+    expect(w.t).toBeGreaterThanOrEqual(GATE_LAG_BOUND_MS)
+    expect(w.dispatches).toEqual([])
+    w.cleanup()
+  })
+
+  it('OQ-104/AC-1: passedAt given but different from the head stays review-failed at once', async () => {
+    const w = world({ reviewAt: () => 'failure', pullAt: () => pull() })
+    const result = await w.run({ passedAt: SHA2 })
+    expect(result.status).toBe('review-failed')
+    expect(w.t).toBe(0)
+    expect(w.dispatches).toEqual([])
     w.cleanup()
   })
 })

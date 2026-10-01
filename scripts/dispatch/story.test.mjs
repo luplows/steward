@@ -147,6 +147,10 @@ describe('OQ-48/AC-2: what each result leads to', () => {
       stops(decideLand({ status }), `land-${status}`)
     }
   })
+
+  it('OQ-104/AC-2: a gate-lag landing stops like any other non-merged status', () => {
+    stops(decideLand({ status: 'gate-lag' }), 'land-gate-lag')
+  })
 })
 
 describe('OQ-48/AC-1: one story, in order', () => {
@@ -195,6 +199,26 @@ describe('OQ-48/AC-1: one story, in order', () => {
     expect(h.names()).toEqual(['dispatch', 'ci', 'review', 'retry', 'review', 'land'])
     expect(h.calls[2][1].rereview).toBe(false)
     expect(h.calls[4][1].rereview).toBe(true)
+  })
+
+  it('OQ-104/AC-2: landPullRequest is passed passedAt as the head that passed', async () => {
+    const h = harness({ dispatch: opened, ci: [green], reviews: [{ verdict: 'pass' }], lands: [{ status: 'merged' }] })
+    await h.run()
+    const land = h.calls.find((c) => c[0] === 'land')[1]
+    expect(land.passedAt).toBe(H1)
+  })
+
+  it('OQ-104/AC-2: after a retry moves the head, landPullRequest is passed the new head that passed', async () => {
+    const h = harness({
+      dispatch: opened,
+      ci: [green, green],
+      reviews: [{ verdict: 'block', text: 'Fix the substitution.' }, { verdict: 'pass', head: H2 }],
+      retries: [retried(H2)],
+      lands: [{ status: 'merged' }],
+    })
+    await h.run()
+    const land = h.calls.find((c) => c[0] === 'land')[1]
+    expect(land.passedAt).toBe(H2)
   })
 
   it('OQ-48/AC-1: reviews are spent only on a head whose CI is green', async () => {

@@ -378,7 +378,7 @@ export async function runStory({
       if (decision.next === 'stop') return stop(decision.status, decision.reason)
       phase = decision.next === 'land' ? { next: 'land' } : await retry(decision, findingsOf(phase.comment))
     } else if (phase.next === 'land') {
-      const landed = await d.landPullRequest({ number: run.pr, ctx: landCtx })
+      const landed = await d.landPullRequest({ number: run.pr, ctx: landCtx, passedAt: run.headSha })
       const decision = decideLand(landed)
       if (decision.next === 'stop') return stop(decision.status, decision.reason, { land: landed })
       return { status: 'merged', pr: run.pr, headSha: run.headSha, land: landed }
