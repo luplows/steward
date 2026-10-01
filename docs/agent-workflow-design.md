@@ -1101,6 +1101,245 @@ the variables rather than blanking them, which is why it works. Whoever implemen
 reviewer's half of the same problem — is the person most likely to reach for the empty string, which
 is why this is recorded here rather than only in a code comment.
 
+### A long shell command in a headless session
+
+**A `-p` session loses a shell command that outlasts the shell timeout.** Claude Code moves the
+command to the background and tells the session it will be notified when it finishes. The session
+ends its turn to wait. A `-p` session ends when the model stops calling tools, so the CLI kills the
+command and the session exits 0. `spawnSession` classifies that as `completed`. This is what
+happened to OQ-86's first dispatch on 2026-10-01. The trials below (OQ-106) reproduce it, and test
+three environment variables against it.
+
+**How the trials were run.** Seven trial sessions on 2026-10-01, from 05:37 UTC, on the owner's
+Windows machine. Every one ran Claude Code `2.1.281 (Claude Code)` (`claude --version`, run on the
+binary `resolveClaudeExecutable` found). Each was started by `spawnSession` in
+`scripts/dispatch/spawn.mjs`, with `role: 'coder'` except T7 (`role: 'reviewer'`). So the arguments
+and environment were the ones `buildInvocation` builds, with these choices:
+
+- **Model `haiku`** for every trial, to keep them cheap. Effort and the rest of the arguments were
+  the role defaults: `--effort medium` for the coder, `--effort high` for the reviewer.
+- **`maxBudgetUsd: 1`** for every trial.
+- **`spawnSession`'s default `timeoutMs` and `stallMs`**: `DEFAULT_TIMEOUT_MS` and
+  `DEFAULT_STALL_MS` in `spawn.mjs`. No trial was stopped. Every one has `stoppedFor: null`, exit
+  code 0 and classification `completed`.
+- **`baseEnv`** was the trial runner's `process.env`, with the variable under test added. Thirteen
+  variables were removed first. The runner was a `node` script started from a Claude Code session,
+  and that session had put them in its shell's environment. They name that session (its id, its
+  pid, its messaging socket and token), so a trial must not inherit them. The thirteen are
+  `CLAUDECODE`, `CLAUDE_AGENT_SDK_VERSION`, `CLAUDE_CODE_CHILD_SESSION`,
+  `CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING`, `CLAUDE_CODE_ENABLE_TASKS`,
+  `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_EXECPATH`, `CLAUDE_CODE_MESSAGING_SOCKET`,
+  `CLAUDE_CODE_MESSAGING_TOKEN`, `CLAUDE_CODE_SESSION_ATTENDED`, `CLAUDE_CODE_SESSION_ID`,
+  `CLAUDE_EFFORT` and `CLAUDE_PID`. A dispatcher started from a Claude Code session passes
+  variables like these on to its sessions, because `baseEnv` defaults to `process.env` in
+  `coder.mjs` and `review.mjs`. Whether any of them changes these results was not tested.
+- **`buildInvocation` overrides none of the three variables under test** at this commit. The
+  runner recorded each variable as it stood in `buildInvocation`'s returned `env`, which is what
+  the session ran with. In every trial that was the value added, and unset for the other two.
+- **Working directory:** a fresh, empty scratch directory per trial, outside this repository's
+  tree. It was not a git repository.
+- **Prompt:** a short instruction, not `coder.md` or `reviewer.md`. `<params>` was the parameter
+  instruction given for each trial, and `<command>` its command:
+
+  ```text
+  This session is a short test of the Bash tool. Run the command below with the Bash tool, once, exactly as written. <params>
+
+  <command>
+
+  When you have the Bash tool's result, reply with that result quoted verbatim.
+  ```
+
+- **The slow command** was this `node -e` timer, with `N` set to 150 or 660. It writes
+  `finished.txt` and prints one line when the time is up:
+
+  ```bash
+  node -e "setTimeout(()=>{require('fs').writeFileSync('finished.txt',new Date().toISOString());console.log('timer finished after N s')},N000)"
+  ```
+
+  "Ended before the command finished" compares the time `spawnSession` resolved with
+  `finished.txt`'s modification time. The runner looked for the file one minute after the
+  command's own end. Where the file never appeared, the background command's output file (the
+  path in the shell result) was read afterwards.
+- **What the shell tool returned** is taken from each session's transcript under
+  `~/.claude/projects/`, found by the `session_id` in the session's JSON output. Each one is
+  quoted below exactly as the transcript holds it.
+- The trial script is not committed. Its full text is in the body of the pull request that added
+  this subsection.
+
+T4 runs no slow command, so it was run first on its own. That also showed that `haiku` accepts
+the role's `--effort` argument before the six long trials were committed to it. Those six were
+started together, from one `node` script run in the background.
+
+Each trial below gives the Claude Code version (`2.1.281` for all seven), the variables set beyond
+what `buildInvocation` produces, the command and how long it takes, what the shell tool returned,
+whether the session ended before the command finished, and `total_cost_usd`.
+
+**T1: Q1, the baseline.** Coder. **Added:** nothing. **Parameters:** "Do not set the timeout or
+run_in_background parameters." **Command:** the timer at 150 s. **Shell tool returned**, 120 s
+after the call:
+
+```text
+Command did not complete within its 120s timeout and was moved to the background (ID: bnr6zuyzk). Output is being written to: C:\Users\steve\AppData\Local\Temp\claude\C--Users-steve-AppData-Local-Temp-claude-C--Users-steve-AppData-Local-Temp-tw-coder-q5fluR-tree-d18945d5-43bb-47db-96d8-3ef89b5e9c52-scratchpad-oq106-scratch-T1\8ba9f7b6-730c-4f80-bd4c-2e56e973cecb\tasks\bnr6zuyzk.output. You will be notified when it completes. To check interim output, use Read on that file path.
+```
+
+**Ended before the command finished:** yes. The session ended at 134.9 s, with the final text "I've
+run the command, but it needs 150 seconds to complete. The Bash tool's default timeout is 120
+seconds, so the process was automatically moved to the background. I'll wait for it to finish."
+`finished.txt` was never written. The background output file held only `[killed]`.
+**`total_cost_usd`:** 0.0254879.
+**Answer to Q1:** yes on both counts. With nothing added, the command was moved to the background
+at 120 s. The session then ended its turn and exited, and the CLI killed the command.
+
+**T2: Q2.** Coder. **Added:** `BASH_DEFAULT_TIMEOUT_MS=600000`. **Parameters:** as T1.
+**Command:** the timer at 150 s. **Shell tool returned**, 150 s after the call:
+
+```text
+timer finished after 150 s
+```
+
+**Ended before the command finished:** no. The command finished at 05:40:21.230Z and the session
+ended at 05:40:22.757Z. **`total_cost_usd`:** 0.0489788.
+**Answer to Q2:** yes. The command finished in the foreground, and its output came back to the
+session as the tool result.
+
+**T3: Q3, a command past the timeout.** Coder. **Added:** `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`.
+**Parameters:** as T1. **Command:** the timer at 150 s. **Shell tool returned**, 120 s after the
+call, marked as an error (`is_error: true`):
+
+```text
+Exit code 143
+Command timed out after 2m 0s
+```
+
+**Ended before the command finished:** yes, because the command was stopped. It never wrote
+`finished.txt`, and the session ended at 129.3 s. **`total_cost_usd`:** 0.0238691.
+**Answer to Q3, first part:** the command was stopped at the shell timeout (exit code 143) and the
+session saw it as an error. It was not moved to the background.
+
+**T4: Q3, `run_in_background`.** Coder. **Added:** `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`.
+**Parameters:** "Set the run_in_background parameter to true. Do not set the timeout parameter."
+**Command:** `node -e "console.log('background command ran')"`, which returns at once. The
+session passed `"run_in_background": "true"`. **Shell tool returned**, marked as an error:
+
+```text
+<tool_use_error>InputValidationError: Bash failed due to the following issue:
+An unexpected parameter `run_in_background` was provided</tool_use_error>
+```
+
+**Ended before the command finished:** not applicable. The command never ran. The session's own
+summary listed the Bash tool's parameters as `command`, `description`, `dangerouslyDisableSandbox`
+and `timeout`. **`total_cost_usd`:** 0.0536022.
+**Answer to Q3, second part:** no. With the variable set, `run_in_background` is not a parameter of
+the Bash tool, and a call that passes it is rejected before anything runs.
+
+**T5: Q4.** Coder. **Added:** `BASH_MAX_TIMEOUT_MS=900000`. **Parameters:** "Set the timeout
+parameter to 800000. Do not set the run_in_background parameter." The session passed
+`"timeout": 800000`. **Command:** the timer at 660 s. **Shell tool returned**, 660 s after the
+call:
+
+```text
+timer finished after 660 s
+```
+
+**Ended before the command finished:** no. The command finished at 05:48:52.842Z and the session
+ended at 05:48:56.418Z. **`total_cost_usd`:** 0.0501535.
+**Answer to Q4:** yes. With the maximum raised to 900000, an explicit timeout of 800000 took
+effect, and a 660-second command finished in the foreground.
+
+**T6: Q4's control.** Coder. **Added:** nothing. **Parameters:** as T5, and the session passed
+`"timeout": 800000`. **Command:** the timer at 660 s. **Shell tool returned**, 600 s after the call:
+
+```text
+Command did not complete within its 600s timeout and was moved to the background (ID: bap4qokky). Output is being written to: C:\Users\steve\AppData\Local\Temp\claude\C--Users-steve-AppData-Local-Temp-claude-C--Users-steve-AppData-Local-Temp-tw-coder-q5fluR-tree-d18945d5-43bb-47db-96d8-3ef89b5e9c52-scratchpad-oq106-scratch-T6\75e687ec-29b6-45de-aa30-fce0bda017ce\tasks\bap4qokky.output. You will be notified when it completes. To check interim output, use Read on that file path.
+```
+
+**Ended before the command finished:** yes. The session ended at 615.6 s, saying it would "be
+notified when it completes". `finished.txt` was never written, and the background output file held
+only `[killed]`. **`total_cost_usd`:** 0.0251996.
+**What T6 adds to Q4:** a timeout above the maximum is accepted without an error, then cut to the
+maximum without saying so in advance: 800000 was asked for, and the result reports "its 600s
+timeout". So the outcome in T5 is the raised maximum taking effect, not the explicit timeout alone.
+
+**T7: Q5, the reviewer.** Reviewer (`role: 'reviewer'`, so the reviewer's allowlist and a plain
+copy of `baseEnv`; unlike `review.mjs`, the runner did not pass `baseEnv` through `coderEnv`
+first, which changes only credentials and `GH_CONFIG_DIR`). **Added:** nothing. **Parameters:**
+as T1. **Command:** the timer at 150 s. **Shell tool returned**, 120 s after the call:
+
+```text
+Command did not complete within its 120s timeout and was moved to the background (ID: bk4qdpx2l). Output is being written to: C:\Users\steve\AppData\Local\Temp\claude\C--Users-steve-AppData-Local-Temp-claude-C--Users-steve-AppData-Local-Temp-tw-coder-q5fluR-tree-d18945d5-43bb-47db-96d8-3ef89b5e9c52-scratchpad-oq106-scratch-T7\ab4aee68-0bd8-445a-999a-abe88c86ba74\tasks\bk4qdpx2l.output. You will be notified when it completes. To check interim output, use Read on that file path.
+```
+
+**Ended before the command finished:** yes. The session ended at 133.2 s, saying "I'm waiting for
+it to finish so I can provide you with the result." `finished.txt` was never written, and the
+background output file held only `[killed]`. **`total_cost_usd`:** 0.0487476.
+**Answer to Q5:** yes. A reviewer session behaves as T1 does.
+
+All seven cost 0.2760387 USD together.
+
+**What the trials do not show.** Each configuration was tried once, with `haiku`. The shell
+tool's result comes from the CLI and should not depend on the model. Ending the turn after a
+background notice is the model's choice. All three `haiku` sessions that got one (T1, T6, T7) made
+it, and so did OQ-86's coder. Two things were not tried. One is a command past 600 s with
+`CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` and `BASH_DEFAULT_TIMEOUT_MS=600000` together; T3 suggests
+an exit 143 at 600 s. The other is an inherited `BASH_DEFAULT_TIMEOUT_MS` above 600000 raising the
+maximum on its own. OQ-76 read that rule from the CLI's code. T2 and T5 agree with it but do not
+test that case. Like the reviewer's shell check in "Invocation shape", all of this belongs to
+Claude Code 2.1.281, and another version can change it.
+
+**Recommendation.** This is a recommendation only. Acting on it is a later story, written by
+Session A.
+
+1. **Set `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` in `coderEnv`** (T3, T4). A command past the
+   timeout then fails as an error the session sees, instead of moving to the background and being
+   killed silently when the session ends (T1, T6). It also takes `run_in_background` out of the
+   Bash tool (T4). That costs little in a `-p` session, where a background command does not outlive
+   the session anyway (T1, T6: `[killed]`). It does stop a session from running a command in the
+   background and polling it, which is how this spike's own coder ran its trials. A later story
+   that needs that would have to do without it.
+2. **Set `BASH_DEFAULT_TIMEOUT_MS=600000` in `coderEnv`** (T2). A command up to 10 minutes long,
+   such as a slow test suite, then finishes in the foreground without the session having to pass
+   a `timeout`. With item 1, a command longer than that fails visibly rather than being lost (T3,
+   by extension).
+3. **Set `BASH_MAX_TIMEOUT_MS=600000` in `coderEnv`**, the planned value (T5, T6). T6 shows that
+   600000 caps even an explicit `timeout` above it. T5 shows that a raised maximum lets one call
+   run longer. That would also lengthen the longest stretch in which a session emits nothing.
+4. **Set the same three variables, at the same values, in the reviewer's environment** (T7). Q5
+   shows the reviewer is exposed in the same way. The reviewer's environment in `buildInvocation`
+   is a plain copy of `baseEnv`. `review.mjs` currently passes `coderEnv`'s output as that
+   `baseEnv`, so values set in `coderEnv` would reach a reviewer started through `review.mjs`.
+   They would not reach one started through `buildInvocation` by any other caller, as T7 was. So
+   they belong in `buildInvocation`'s reviewer branch too, which is where OQ-76's AC-5 already
+   plans its pins for both roles.
+5. **Add a line to `coder.md` about background commands, and the same to `reviewer.md`** (T1, T6,
+   T7). Every session that was told a command had moved to the background ended its turn to wait.
+   The line should say that a `-p` session ends when it stops calling tools, so no notification
+   ever arrives. It should say never to end a turn to wait for a command. And if a command times
+   out, the session should narrow it, or rerun it with an explicit `timeout` no higher than 600000.
+   With item 1 in place the background notice should not appear. The line is the backstop if a
+   later CLI version stops honouring the variable.
+
+6. **OQ-76's AC-5, value by value.** OQ-76 plans to pin `BASH_DEFAULT_TIMEOUT_MS=120000` and
+   `BASH_MAX_TIMEOUT_MS=600000` for both roles in `buildInvocation`, and to derive
+   `DEFAULT_STALL_MS` from that maximum. Items 2 to 4 above already imply the answers. Here they
+   are against each planned value:
+
+   - **`BASH_DEFAULT_TIMEOUT_MS`: change 120000 to 600000** (T1, T7 against T2). At 120000, a
+     command between 2 and 10 minutes long is moved to the background and lost when the session
+     ends. At 600000 it finishes in the foreground. Pinning it to 120000 would pin the failure this
+     spike studies.
+   - **`BASH_MAX_TIMEOUT_MS`: keep 600000** (T6, T5). It is the bound that holds even against an
+     explicit larger `timeout` (T6). Raising it lengthens the longest single call (T5).
+   - **`DEFAULT_STALL_MS`: keep the planned derivation and value**, the pinned maximum plus a
+     margin, which OQ-76 puts at 12 minutes. The default rises to 600000, but under the CLI's rule
+     `Math.max(BASH_MAX_TIMEOUT_MS ?? 600000, BASH_DEFAULT_TIMEOUT_MS ?? 120000)` the maximum is
+     still 600000. T6 shows a call cut off at 600 s with the maximum unset. So the longest single
+     shell call, during which a session emits no event (OQ-76's Context), stays 10 minutes. The
+     stall interval needs no more than OQ-76 already plans. If a later story raises
+     `BASH_MAX_TIMEOUT_MS`, the stall interval must rise with it, to above the new maximum. The
+     derivation OQ-76 plans makes that automatic. Until OQ-76 lands, output stays
+     `--output-format json`, which is silent for the whole session, so `DEFAULT_STALL_MS` has to
+     stay above a whole session's length. None of these trials changes that.
+
 ### GitHub mechanics
 
 - **`mergeable_state`**: `clean` (all *required* checks green), `blocked` (required check
