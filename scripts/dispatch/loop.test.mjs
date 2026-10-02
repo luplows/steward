@@ -1,11 +1,22 @@
 // @vitest-environment node
 
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { parseArgs, parseMaxStories, pickStory, runLoop, runStoryProcess, updateCheckout } from './loop.mjs'
+import {
+  defaultWorktreePath,
+  hasCheckedOutBranch,
+  initWorktree,
+  parseArgs,
+  parseMaxStories,
+  pickStory,
+  requireOwnWorktree,
+  runLoop,
+  runStoryProcess,
+  updateCheckout,
+} from './loop.mjs'
 
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8' })
 
@@ -45,7 +56,7 @@ function makeRepo(root) {
   }
 }
 
-describe('OQ-86/AC-1: fetches and fast-forwards the checkout between stories', () => {
+describe('OQ-109/AC-3: fetches origin and stops on anything uncommitted, rather than fast-forwarding', () => {
   const originalEnv = { ...process.env }
   let root
 
@@ -60,7 +71,7 @@ describe('OQ-86/AC-1: fetches and fast-forwards the checkout between stories', (
     rmSync(root, { recursive: true, force: true })
   })
 
-  it('OQ-86/AC-1: a checkout behind origin/main fast-forwards to it', async () => {
+  it('OQ-109/AC-3: an update to a newer origin/main checks out its tip, detached', async () => {
     const sub = path.join(root, 'ff')
     mkdirSync(sub)
     const repo = makeRepo(sub)
@@ -76,10 +87,11 @@ describe('OQ-86/AC-1: fetches and fast-forwards the checkout between stories', (
     const result = await updateCheckout(repo.repoDir)
     expect(result).toEqual({ status: 'updated', headSha: advancedSha })
     expect(repo.headSha()).toBe(advancedSha)
+    expect(await hasCheckedOutBranch(repo.repoDir)).toBe(false)
   })
 
-  it('OQ-86/AC-1: a checkout that has diverged (a local commit not on origin) refuses', async () => {
-    const sub = path.join(root, 'diverged')
+  it('OQ-109/AC-3: a modified tracked file stops the update, naming the path and changing nothing', async () => {
+    const sub = path.join(root, 'dirty-tracked')
     mkdirSync(sub)
     const repo = makeRepo(sub)
     const otherClone = path.join(sub, 'other')
@@ -89,19 +101,34 @@ describe('OQ-86/AC-1: fetches and fast-forwards the checkout between stories', (
     git(otherClone, 'commit', '-m', 'advance')
     git(otherClone, 'push', 'origin', 'main')
 
-    // repoDir makes its own local commit, never pushed: now diverged from origin/main.
-    writeFileSync(path.join(repo.repoDir, 'local.txt'), 'local only\n')
-    repo.commit('local, unpushed')
+    // A tracked file modified but never committed in repoDir.
+    writeFileSync(path.join(repo.repoDir, 'README.md'), 'edited locally\n')
     const localSha = repo.headSha()
 
     const result = await updateCheckout(repo.repoDir)
-    expect(result.status).toBe('not-fast-forward')
-    expect(typeof result.reason).toBe('string')
+    expect(result.status).toBe('dirty')
+    expect(result.paths).toEqual(['README.md'])
     // Nothing was dispatched: the checkout is untouched.
     expect(repo.headSha()).toBe(localSha)
+    expect(execFileSync('git', ['status', '--porcelain'], { cwd: repo.repoDir, encoding: 'utf8' }).trim()).not.toBe('')
   })
 
-  it('OQ-86/AC-1: the fast-forward is unaffected by another story\'s branch existing on origin', async () => {
+  it('OQ-109/AC-3: an untracked file stops the update, naming the path and changing nothing', async () => {
+    const sub = path.join(root, 'dirty-untracked')
+    mkdirSync(sub)
+    const repo = makeRepo(sub)
+    const localSha = repo.headSha()
+
+    writeFileSync(path.join(repo.repoDir, 'scratch.txt'), 'not tracked\n')
+
+    const result = await updateCheckout(repo.repoDir)
+    expect(result.status).toBe('dirty')
+    expect(result.paths).toEqual(['scratch.txt'])
+    expect(repo.headSha()).toBe(localSha)
+    expect(existsSync(path.join(repo.repoDir, 'scratch.txt'))).toBe(true)
+  })
+
+  it('OQ-109/AC-3: a story branch on origin does not affect the update', async () => {
     const sub = path.join(root, 'other-branch')
     mkdirSync(sub)
     const repo = makeRepo(sub)
@@ -123,18 +150,18 @@ describe('OQ-86/AC-1: fetches and fast-forwards the checkout between stories', (
     expect(result).toEqual({ status: 'updated', headSha: advancedSha })
   })
 
-  it('OQ-86/AC-1: runLoop stops with its own status and dispatches nothing when the fast-forward refuses', async () => {
+  it('OQ-109/AC-3: runLoop stops with its own status and dispatches nothing when the checkout is dirty', async () => {
     const pickStory = async () => { throw new Error('pickStory must not be called') }
     const runStoryProcess = async () => { throw new Error('runStoryProcess must not be called') }
-    const failingUpdateCheckout = async () => ({ status: 'not-fast-forward', reason: 'local changes would be discarded' })
+    const dirtyUpdateCheckout = async () => ({ status: 'dirty', paths: ['README.md'] })
 
-    const result = await runLoop({ deps: { updateCheckout: failingUpdateCheckout, pickStory, runStoryProcess } })
-    expect(result.status).toBe('update-failed')
-    expect(result.reason).toBe('local changes would be discarded')
+    const result = await runLoop({ deps: { updateCheckout: dirtyUpdateCheckout, pickStory, runStoryProcess } })
+    expect(result.status).toBe('dirty')
+    expect(result.paths).toEqual(['README.md'])
     expect(result.report).toEqual([])
   })
 
-  it('OQ-86/AC-1: the checkout is not fetched and fast-forwarded again while a story\'s process is running', async () => {
+  it('OQ-86/AC-1: the checkout is not fetched and updated again while a story\'s process is running', async () => {
     const calls = []
     let running = false
     const guardedUpdateCheckout = async () => {
@@ -471,5 +498,97 @@ describe('OQ-86/AC-6: --max-stories caps how many stories a run starts', () => {
   it('OQ-86/AC-6: parseArgs accepts a well-formed invocation', () => {
     expect(parseArgs(['--max-stories', '3', '--repo', 'x/y'])).toEqual({ repo: 'x/y', maxStories: 3 })
     expect(parseArgs([])).toEqual({ repo: 'luplows/tower-workshop-paths', maxStories: undefined })
+  })
+})
+
+describe('OQ-109/AC-1: --init creates a worktree of the loop\'s own, detached at origin/main', () => {
+  const originalEnv = { ...process.env }
+  let root
+
+  beforeAll(() => {
+    process.env.GIT_AUTHOR_NAME = process.env.GIT_COMMITTER_NAME = 'Test'
+    process.env.GIT_AUTHOR_EMAIL = process.env.GIT_COMMITTER_EMAIL = 'test@example.com'
+    root = mkdtempSync(path.join(tmpdir(), 'tw-loop-init-'))
+  })
+
+  afterAll(() => {
+    process.env = originalEnv
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  it('OQ-109/AC-1: the default path is a sibling of the repository root, named after it with -loop appended', () => {
+    const repoDir = path.resolve(path.sep, 'Source', 'tower-workshop-paths')
+    expect(defaultWorktreePath(repoDir)).toBe(path.resolve(path.sep, 'Source', 'tower-workshop-paths-loop'))
+  })
+
+  it('OQ-109/AC-1: creates a worktree at the given path, with a detached HEAD at origin/main', async () => {
+    const sub = path.join(root, 'create')
+    mkdirSync(sub)
+    const repo = makeRepo(sub)
+    const target = path.join(sub, 'loop-worktree')
+
+    await initWorktree(repo.repoDir, target)
+
+    expect(existsSync(target)).toBe(true)
+    expect(git(target, 'rev-parse', 'HEAD').trim()).toBe(repo.headSha())
+    expect(await hasCheckedOutBranch(target)).toBe(false)
+  })
+
+  it('OQ-109/AC-1: refuses, exiting non-zero and creating nothing, when the path already exists', async () => {
+    const sub = path.join(root, 'refuse')
+    mkdirSync(sub)
+    const repo = makeRepo(sub)
+    const target = path.join(sub, 'already-there')
+    mkdirSync(target)
+    writeFileSync(path.join(target, 'marker.txt'), 'pre-existing\n')
+
+    await expect(initWorktree(repo.repoDir, target)).rejects.toThrow(/already exists/)
+    // Refusal left the pre-existing directory exactly as it was -- no worktree was added.
+    expect(existsSync(path.join(target, 'marker.txt'))).toBe(true)
+    expect(git(repo.repoDir, 'worktree', 'list')).not.toContain('already-there')
+  })
+})
+
+describe('OQ-109/AC-2: the loop refuses to run from a checkout that has a branch checked out', () => {
+  const originalEnv = { ...process.env }
+  let root
+
+  beforeAll(() => {
+    process.env.GIT_AUTHOR_NAME = process.env.GIT_COMMITTER_NAME = 'Test'
+    process.env.GIT_AUTHOR_EMAIL = process.env.GIT_COMMITTER_EMAIL = 'test@example.com'
+    root = mkdtempSync(path.join(tmpdir(), 'tw-loop-ownwt-'))
+  })
+
+  afterAll(() => {
+    process.env = originalEnv
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  it('OQ-109/AC-2: a checkout with a branch checked out is refused, naming the checkout and pointing at --init', async () => {
+    const sub = path.join(root, 'branch')
+    mkdirSync(sub)
+    const repo = makeRepo(sub)
+    // A fresh clone has `main` checked out, not detached.
+    expect(await hasCheckedOutBranch(repo.repoDir)).toBe(true)
+
+    let caught
+    try {
+      await requireOwnWorktree(repo.repoDir)
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeDefined()
+    expect(caught.message).toContain(repo.repoDir)
+    expect(caught.message).toContain('--init')
+  })
+
+  it('OQ-109/AC-2: a detached checkout goes on', async () => {
+    const sub = path.join(root, 'detached')
+    mkdirSync(sub)
+    const repo = makeRepo(sub)
+    git(repo.repoDir, 'checkout', '--detach', 'HEAD')
+    expect(await hasCheckedOutBranch(repo.repoDir)).toBe(false)
+
+    await expect(requireOwnWorktree(repo.repoDir)).resolves.toBeUndefined()
   })
 })

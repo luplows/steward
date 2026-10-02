@@ -452,11 +452,13 @@ dispatcher session in between.
   `tw-coder-*` worktree from an interrupted run is raised as a GitHub issue, as OQ-110 raises a
   stuck story, and the run goes on (decided 2026-10-01 by the owner). A blocked story pull request is also reported by
   GitHub's failure email, since a blocking verdict fails the gate's run.
-- **Planned (OQ-109):** the loop runs from a worktree of its own, beside the repository and at a
-  detached `origin/main`, created by `loop.mjs --init`. Between stories it stops if that worktree
-  has anything uncommitted, and otherwise checks out `origin/main`. It refuses to run from a
-  checkout with a branch checked out. Hand-runs from a dispatcher session are unchanged (decided
-  2026-10-01 by the owner).
+- The loop runs from a worktree of its own, beside the repository and at a detached `origin/main`,
+  created once by `node scripts/dispatch/loop.mjs --init [path]` (`initWorktree`,
+  `scripts/dispatch/loop.mjs`, OQ-109). Between stories `updateCheckout` fetches `origin`, stops with
+  status `dirty` if the worktree has anything uncommitted, and otherwise checks out `origin/main`,
+  detached. `main` refuses, before fetching or dispatching anything, to run from a checkout that has
+  a branch checked out (`requireOwnWorktree`). Hand-runs from a dispatcher session are unchanged
+  (decided 2026-10-01 by the owner).
 - **Planned (OQ-110):** stuck stories reach the owner as GitHub issues, one per story, so a
   leftover on one machine is seen from any (decided 2026-10-01 by the owner, who runs the loop on
   two machines).

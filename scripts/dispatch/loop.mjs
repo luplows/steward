@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
  * Runs the story queue unattended, one story at a time, from the latest
- * `origin/main` (OQ-86). It picks a story itself (AC-4), fast-forwards its
- * own checkout before dispatching it (AC-1), and runs it as its own child
- * process of `story.mjs` (AC-2), so every story loads the dispatch modules
- * and prompts as they are on `origin/main` at that moment.
+ * `origin/main` (OQ-86). It picks a story itself (AC-4), updates its own
+ * checkout to `origin/main` before dispatching it (AC-1, now OQ-109's
+ * `updateCheckout`), and runs it as its own child process of `story.mjs`
+ * (AC-2), so every story loads the dispatch modules and prompts as they are
+ * on `origin/main` at that moment.
  *
  * It reimplements none of `story.mjs`: the child process is OQ-48's entry
  * point, started fresh for each story. This module only chooses which story,
@@ -16,7 +17,13 @@
  * from its branch on every pick (AC-4), never stored, so running several
  * stories at once later changes only how many are started.
  *
+ * The loop runs from a worktree of its own (OQ-109), created once by `--init`
+ * and never a branch checkout: `main` refuses to run from a checkout that has
+ * a branch checked out (AC-2), and `updateCheckout` stops rather than discards
+ * anything uncommitted it finds there between stories (AC-3).
+ *
  * Usage:
+ *   node scripts/dispatch/loop.mjs --init [path]
  *   node scripts/dispatch/loop.mjs [--repo owner/name] [--max-stories N]
  */
 import { execFile } from 'node:child_process'
@@ -45,21 +52,28 @@ async function git(cwd, args) {
 }
 
 /**
- * AC-1: fetches `origin/main` and fast-forwards the checkout at `repoDir` to
- * it (`git merge --ff-only`). Resolves `{ status: 'updated', headSha }`, or
- * `{ status: 'not-fast-forward', reason }` when the merge refuses -- a local
- * commit or edit the fast-forward would discard. Never called while a story
- * is running, and indifferent to whether any story's branch exists on
- * `origin`: that is a different ref from the one being fast-forwarded.
+ * AC-3 (OQ-109): fetches `origin/main`, then checks `repoDir`'s working tree.
+ * If `git status --porcelain --untracked-files=all` prints anything, resolves
+ * `{ status: 'dirty', paths }` -- naming the paths it found -- and changes
+ * nothing. Otherwise runs `git checkout --detach origin/main` and resolves
+ * `{ status: 'updated', headSha }`.
+ *
+ * `git merge --ff-only` is no longer used: it goes ahead when there are
+ * uncommitted edits to files the incoming commits do not touch, and keeps
+ * them, which a detached worktree with nothing uncommitted never risks.
+ * Never called while a story is running, and indifferent to whether any
+ * story's branch exists on `origin`: that is a different ref from the one
+ * being checked out.
  */
 export async function updateCheckout(repoDir) {
   await git(repoDir, ['fetch', REMOTE, BASE])
-  try {
-    await git(repoDir, ['merge', '--ff-only', `${REMOTE}/${BASE}`])
-  } catch (error) {
-    const reason = String(error.stderr ?? '').trim() || error.message
-    return { status: 'not-fast-forward', reason }
+  const status = await git(repoDir, ['status', '--porcelain', '--untracked-files=all'])
+  const lines = status.split('\n').filter((line) => line.length > 0)
+  if (lines.length > 0) {
+    const paths = lines.map((line) => line.slice(3).trim())
+    return { status: 'dirty', paths }
   }
+  await git(repoDir, ['checkout', '--detach', `${REMOTE}/${BASE}`])
   const headSha = (await git(repoDir, ['rev-parse', 'HEAD'])).trim()
   return { status: 'updated', headSha }
 }
@@ -150,7 +164,8 @@ export function parseMaxStories(raw) {
  * over, and `{ id, outcome }` for one it ran -- `'merged'`,
  * `'stopped-recorded'` (AC-3's fully-recorded stop, the loop goes on), or
  * `'stopped'` / `'process-error'` (the loop stops, named on the result too).
- * `status` is `'nothing-ready'`, `'max-stories'`, `'update-failed'`,
+ * `status` is `'nothing-ready'`, `'max-stories'`, `'dirty'` (AC-3, OQ-109:
+ * `updateCheckout` found something uncommitted and changed nothing),
  * `'process-error'`, or `'story-stopped'`.
  */
 export async function runLoop({ repoDir = DISPATCHER_ROOT, repo = DEFAULT_REPO, maxStories, deps = {} } = {}) {
@@ -164,8 +179,8 @@ export async function runLoop({ repoDir = DISPATCHER_ROOT, repo = DEFAULT_REPO, 
     }
 
     const update = await d.updateCheckout(repoDir)
-    if (update.status !== 'updated') {
-      return { status: 'update-failed', reason: update.reason, report }
+    if (update.status === 'dirty') {
+      return { status: 'dirty', paths: update.paths, report }
     }
 
     const picked = await d.pickStory(repoDir)
@@ -195,6 +210,60 @@ export async function runLoop({ repoDir = DISPATCHER_ROOT, repo = DEFAULT_REPO, 
   }
 }
 
+/**
+ * AC-1 (OQ-109): the default path for `--init`'s worktree -- a sibling of
+ * `repoDir`'s root, named after it with `-loop` appended. For a repository at
+ * `C:\Source\tower-workshop-paths` that is
+ * `C:\Source\tower-workshop-paths-loop`.
+ */
+export function defaultWorktreePath(repoDir) {
+  const abs = path.resolve(repoDir)
+  return path.join(path.dirname(abs), `${path.basename(abs)}-loop`)
+}
+
+/**
+ * AC-1 (OQ-109): fetches `origin`, then creates a worktree at `targetPath`
+ * with a detached HEAD at `origin/main` (`git worktree add --detach`), run
+ * from `repoDir`. Refuses, throwing and creating nothing, when `targetPath`
+ * already exists -- checked before the fetch, so a refusal touches neither
+ * the network nor the filesystem.
+ */
+export async function initWorktree(repoDir, targetPath = defaultWorktreePath(repoDir)) {
+  if (existsSync(targetPath)) {
+    throw new Error(`${targetPath} already exists; --init refuses to create a worktree there`)
+  }
+  await git(repoDir, ['fetch', REMOTE, BASE])
+  await git(repoDir, ['worktree', 'add', '--detach', targetPath, `${REMOTE}/${BASE}`])
+}
+
+/**
+ * AC-2 (OQ-109): true when `repoDir` has a branch checked out
+ * (`git symbolic-ref -q HEAD` succeeds), false when it is detached.
+ */
+export async function hasCheckedOutBranch(repoDir) {
+  try {
+    await git(repoDir, ['symbolic-ref', '-q', 'HEAD'])
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * AC-2 (OQ-109): throws, naming `repoDir` and pointing at `--init` (AC-1),
+ * when `repoDir` has a branch checked out. Resolves otherwise. `main` calls
+ * this before `runLoop`, so a wrong checkout is refused before anything is
+ * fetched or dispatched.
+ */
+export async function requireOwnWorktree(repoDir) {
+  if (await hasCheckedOutBranch(repoDir)) {
+    throw new Error(
+      `${repoDir} has a branch checked out; run the loop from its own worktree instead ` +
+        '(node scripts/dispatch/loop.mjs --init [path]).',
+    )
+  }
+}
+
 // --------------------------------------------------------------------- CLI
 
 /**
@@ -203,6 +272,8 @@ export async function runLoop({ repoDir = DISPATCHER_ROOT, repo = DEFAULT_REPO, 
  * flag whose own value has already been taken), an unrecognised flag, or a
  * `--max-stories` value `parseMaxStories` rejects. Throws before `main` ever
  * touches `repoDir` or the network, so a bad invocation starts nothing (AC-6).
+ *
+ * `--init` is handled separately in `main`, before `parseArgs` is reached.
  */
 export function parseArgs(argv) {
   const args = [...argv]
@@ -221,7 +292,15 @@ export function parseArgs(argv) {
 }
 
 async function main(argv) {
+  if (argv[0] === '--init') {
+    const rest = argv.slice(1)
+    if (rest.length > 1) throw new Error('usage: node scripts/dispatch/loop.mjs --init [path]')
+    await initWorktree(DISPATCHER_ROOT, rest[0] !== undefined ? path.resolve(rest[0]) : undefined)
+    return
+  }
+
   const { repo, maxStories } = parseArgs(argv)
+  await requireOwnWorktree(DISPATCHER_ROOT)
 
   const result = await runLoop({ repo, maxStories })
   console.log(JSON.stringify(result, null, 2))
