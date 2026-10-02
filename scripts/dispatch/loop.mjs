@@ -151,8 +151,9 @@ export function parseMaxStories(raw) {
  * Runs the queue to `nothing-ready`, `max-stories`, or a stop (AC-1--AC-4,
  * AC-6).
  *
- *   repoDir      the dispatcher's own checkout, fast-forwarded between
- *                stories and handed to each story's process
+ *   repoDir      the loop's own worktree, updated to a detached
+ *                `origin/main` between stories (`updateCheckout`) and handed
+ *                to each story's process
  *   repo         `owner/name`, passed to each story's process
  *   maxStories   caps the number of stories *started*; a skipped story does
  *                not count. Uncapped when omitted

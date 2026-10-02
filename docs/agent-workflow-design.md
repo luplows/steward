@@ -303,10 +303,13 @@ than relaxed.
    story whose `story/OQ-<n>-*` branch already exists on `origin` (`stories/README.md`'s
    `in-progress`), so a story stopped after its PR was opened, which still reads `ready` on `main`,
    is never dispatched again. A story that stops before it has a PR stops the loop instead, since
-   nothing on `origin` would keep it from being dispatched again. Before picking, and only between
-   stories, the loop fast-forwards its own checkout to `origin/main` (`git merge --ff-only`), so
-   its code, prompts and queue include everything already landed. If that is not a fast-forward, it
-   stops and dispatches nothing. A story stopped with its PR open does not hold the update back.
+   nothing on `origin` would keep it from being dispatched again. **Planned (OQ-110):** the
+   dispatch first pushes the story's branch to `origin` as a claim, so the next run skips that
+   story, and the stop opens a `Loop: OQ-n is stuck` issue for it. Before picking, and only between
+   stories, the loop fetches `origin` and checks out `origin/main`, detached, in its own worktree
+   (`updateCheckout`, OQ-109), so its code, prompts and queue include everything already landed.
+   If that worktree has anything uncommitted, it stops with status `dirty` and dispatches nothing.
+   A story stopped with its PR open does not hold the update back.
    Each story then runs in its own process, so it loads the code as updated; the loop's own
    process keeps what it loaded at start.
 3. Coder implements, tests green, commits, and emits the PR title/body and a

@@ -253,7 +253,7 @@ describe('OQ-86/AC-2: two stories run from a checkout that catches up between th
     rmSync(root, { recursive: true, force: true })
   })
 
-  it('OQ-86/AC-2: the second story\'s process starts only after a fast-forward that includes the first\'s merge', async () => {
+  it('OQ-86/AC-2: the second story\'s process starts only after an update that includes the first\'s merge', async () => {
     const sub = path.join(root, 'two-stories')
     mkdirSync(sub)
     const repo = makeRepo(sub)
@@ -294,7 +294,7 @@ describe('OQ-86/AC-2: two stories run from a checkout that catches up between th
     expect(result.report.every((r) => r.outcome === 'merged')).toBe(true)
 
     // The second story's process started from a checkout whose HEAD was the
-    // first story's merge -- only the fast-forward between the two calls
+    // first story's merge -- only the update between the two calls
     // (runLoop's own updateCheckout, not this test's fake) could have put it
     // there, since runStoryProcess never touches repoDir.
     expect(headAtCall[1]).toBe(mergedShas[0])
