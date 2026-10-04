@@ -27,11 +27,12 @@ import path from 'node:path'
 import { buildInvocation, SHELL_TIMEOUT_MS } from './invocation.mjs'
 import { classifySession, validateRawRecord } from './outcome.mjs'
 
-// Decided 2026-10-03 by the owner (docs/agent-workflow-design.md): with
-// streamed output (OQ-76) the stall check can see a session working, so the
-// timeout is left to stop one that is busy but not finishing. 30 minutes was
-// shorter than a real story needs -- the first OQ-110 was about half done at
-// 20 (docs/agent-workflow-design.md, "Why the fix tier").
+// Decided 2026-10-03 by the owner (docs/agent-workflow-design.md, "A long
+// shell command in a headless session"): with streamed output (OQ-76) the
+// stall check can see a session working, so the timeout is left to stop one
+// that is busy but not finishing. 30 minutes was shorter than a real story
+// needs -- the first OQ-110 was about half done at 20 (OQ-76's Context, "Why
+// the timeout goes to 60 minutes").
 export const DEFAULT_TIMEOUT_MS = 60 * 60 * 1000
 
 // A margin above the longest stretch in which a healthy, streaming session

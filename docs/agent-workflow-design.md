@@ -467,8 +467,12 @@ dispatcher session in between.
 - **Planned (OQ-112):** stuck stories reach the owner as GitHub issues, one per story, so a
   leftover on one machine is seen from any (decided 2026-10-01 by the owner, who runs the loop on
   two machines). An issue names the machine by a label the owner sets, never its hostname, since
-  the repository is public. With two or more open `loop-stuck` issues the queue stops completely:
-  a run starts no coder session, review or landing (decided 2026-10-03 by the owner). One stuck
+  the repository is public. A story whose branch is on `origin` with no open pull request is stuck
+  unless its claim is younger than 2 hours (`STUCK_AFTER_MS`, OQ-112's AC-2 and AC-3; this
+  restatement must not drift from them). A younger claim is most likely a dispatch still running,
+  on this machine or another, and a branch with no claim counts as stuck. With two or more open
+  `loop-stuck` issues the queue stops completely: a run starts no coder session, review or landing
+  (decided 2026-10-03 by the owner). One stuck
   story can be its own fault, while two suggest the loop's. **Planned (OQ-110):** the claim
   commit names the machine by the same label.
 - `--max-stories N` caps how many stories one run starts (`scripts/dispatch/loop.mjs`, OQ-86); a
@@ -519,8 +523,8 @@ claude -p "$(render .claude/prompts/reviewer.md OQ-49 $PR)" \
 
 Both roles use `stream-json` rather than `json` so the stall check in `spawn.mjs` can see a session
 working rather than only seeing silence until it ends (OQ-76). In print mode, `--output-format
-stream-json` requires `--verbose` or the CLI exits 1 (`claude --help`, CLI 2.1.281; OQ-76's Context
-is where the runner established this by running the CLI).
+stream-json` requires `--verbose` or the CLI exits 1. `claude --help` does not say so; the runner
+established it by running CLI 2.1.281 (OQ-76's Context).
 
 Both argument lists, both allowlists, the coder's environment and the rendered prompt are built by
 `scripts/dispatch/invocation.mjs` (`buildInvocation`), which starts nothing (OQ-74). The prompt is
