@@ -7,8 +7,9 @@ import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { coderAllowedTools } from './coder-env.mjs'
-import { branchFor, dispatchCoder, findPromptChange, pushArgs, retryStory } from './coder.mjs'
+import { branchFor, claimPushArgs, dispatchCoder, findPromptChange, machineLabel, pushArgs, retryStory } from './coder.mjs'
 import { createContext } from './github.mjs'
+import { pickStory } from './loop.mjs'
 
 // Each test builds a real origin and clones and runs a dozen git commands.
 vi.setConfig({ testTimeout: 60_000 })
@@ -154,6 +155,51 @@ const worktrees = (repoDir) => git(repoDir, 'worktree', 'list', '--porcelain')
 const remoteBranch = (world, branch) => gitOk(world.dir, '--git-dir', world.origin, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`)
 const pulls = (gh) => gh.requests.filter((r) => r.method === 'POST')
 
+/** OQ-110/AC-4: `branch` on origin holds exactly one commit beyond `main`, the claim. */
+const remoteClaimOnly = (world, branch = 'story/OQ-98-first') => {
+  expect(remoteBranch(world, branch)).not.toBeNull()
+  const subjects = git(world.dir, '--git-dir', world.origin, 'log', '--format=%s', `refs/heads/main..refs/heads/${branch}`)
+    .split('\n').filter(Boolean)
+  expect(subjects).toHaveLength(1)
+  expect(subjects[0]).toMatch(/^Claim OQ-\d+ on /)
+}
+
+const installHook = (world, script) => writeFileSync(path.join(world.origin, 'hooks', 'pre-receive'), script, { mode: 0o755 })
+// Refuses every push outright.
+const REFUSE_ALL_HOOK = '#!/bin/sh\necho "refused by test hook" >&2\nexit 1\n'
+// Refuses only a push that updates an existing ref, so a claim (which creates
+// the branch) goes through and the coder's own push (a fast-forward) does not.
+const REFUSE_UPDATE_HOOK = [
+  '#!/bin/sh',
+  'read old new ref',
+  'if [ "$old" != "0000000000000000000000000000000000000000" ]; then',
+  '  echo "refused by test hook" >&2',
+  '  exit 1',
+  'fi',
+  'exit 0',
+].join('\n')
+// Simulates a second machine's claim landing at the instant this one's push
+// arrives: creates `branch` on origin itself, then refuses the update, so a
+// single dispatchCoder call deterministically hits the claim push's catch
+// branch with the ref already there -- never the early `remoteTip` check
+// before the worktree is made, which runs before this hook does anything.
+// `env -u GIT_QUARANTINE_PATH ...`: a pre-receive hook otherwise runs inside
+// the pushed objects' quarantine, where git refuses any `update-ref` outright
+// ("ref updates forbidden inside quarantine environment"); the env it is
+// unset from is a real ref update, so it must leave the quarantine first.
+const raceClaimIntoExistence = (branch) => [
+  '#!/bin/sh',
+  'while read old new ref; do',
+  `  if [ "$ref" = "refs/heads/${branch}" ]; then`,
+  '    new_tip="$(env -u GIT_QUARANTINE_PATH git rev-parse HEAD)"',
+  '    env -u GIT_QUARANTINE_PATH -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES git update-ref "$ref" "$new_tip"',
+  '    echo "refused by test hook (raced)" >&2',
+  '    exit 1',
+  '  fi',
+  'done',
+  'exit 0',
+].join('\n')
+
 // ------------------------------------------------------------------- tests
 
 describe('branchFor', () => {
@@ -218,7 +264,7 @@ describe('OQ-70/AC-1: next story to an open pull request', () => {
 })
 
 describe('OQ-70/AC-2: branch from current origin/main, no upstream', () => {
-  it('OQ-70/AC-2: the branch is made from origin/main as it is now and tracks nothing', async () => {
+  it('OQ-70/AC-2, OQ-110/AC-1: the branch is made from origin/main as it is now, the claim sits on top of it, and it tracks nothing', async () => {
     const world = makeWorld()
     // origin/main moves after the dispatcher's checkout was made.
     writeFileSync(path.join(world.seed, 'later.txt'), 'later')
@@ -232,7 +278,9 @@ describe('OQ-70/AC-2: branch from current origin/main, no upstream', () => {
       const branch = git(cwd, 'rev-parse', '--abbrev-ref', 'HEAD')
       seen = {
         branch,
-        head: git(cwd, 'rev-parse', 'HEAD'),
+        // HEAD is the claim commit, made on top of origin/main as it was.
+        claimParent: git(cwd, 'rev-parse', 'HEAD~1'),
+        claimSubject: git(cwd, 'log', '-1', '--format=%s'),
         remote: gitOk(cwd, 'config', '--get', `branch.${branch}.remote`),
         merge: gitOk(cwd, 'config', '--get', `branch.${branch}.merge`),
         upstream: gitOk(cwd, 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'),
@@ -242,7 +290,8 @@ describe('OQ-70/AC-2: branch from current origin/main, no upstream', () => {
     })
 
     expect(seen.branch).toBe('story/OQ-98-first')
-    expect(seen.head).toBe(newMain)
+    expect(seen.claimParent).toBe(newMain)
+    expect(seen.claimSubject).toMatch(/^Claim OQ-98 on /)
     expect(seen.remote).toBeNull()
     expect(seen.merge).toBeNull()
     expect(seen.upstream).toBeNull()
@@ -269,10 +318,11 @@ describe('OQ-70/AC-3: the coder\'s environment and allowlist', () => {
 describe('OQ-70/AC-4: no commit, no pull request', () => {
   it('OQ-70/AC-4: a session that reports success having committed nothing gets no PR', async () => {
     const world = makeWorld()
-    const { result, gh } = await dispatch(world, () => block()) // a complete, correct block; no commit
+    const { result, gh } = await dispatch(world, () => block()) // a complete, correct block; no commit beyond the claim
     expect(result.status).toBe('nothing-committed')
     expect(pulls(gh)).toHaveLength(0)
-    expect(remoteBranch(world, 'story/OQ-98-first')).toBeNull()
+    // The claim itself (OQ-110) is on origin; it is not the coder having pushed.
+    remoteClaimOnly(world)
   })
 
   it('OQ-70/AC-4, OQ-84/AC-3: a session that reports failure gets no push and no PR, and its commits stay on the local branch', async () => {
@@ -284,20 +334,22 @@ describe('OQ-70/AC-4: no commit, no pull request', () => {
     expect(result.status).toBe('session-failed')
     expect(result.pushed).toBe(false)
     expect(pulls(gh)).toHaveLength(0)
-    expect(remoteBranch(world, 'story/OQ-98-first')).toBeNull()
+    remoteClaimOnly(world)
     expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/story/OQ-98-first')).toBeTruthy()
   })
 })
 
 describe('OQ-84/AC-1: the dispatcher pushes the branch, never forced', () => {
-  it('OQ-84/AC-1: a completed session with a commit is pushed by the dispatcher, then the PR opens', async () => {
+  it('OQ-84/AC-1, OQ-110/AC-1: a completed session with a commit is pushed by the dispatcher, then the PR opens', async () => {
     const world = makeWorld()
     const tips = []
     const { result, gh } = await dispatch(world, ({ cwd }) => {
       finishStory(cwd)
       tips.push(git(cwd, 'rev-parse', 'HEAD'))
-      // The coder did not push: the remote has nothing until the session is over.
-      expect(remoteBranch(world, 'story/OQ-98-first')).toBeNull()
+      // The coder did not push its own commit: only the claim (OQ-110) is on
+      // origin until the session is over.
+      expect(remoteBranch(world, 'story/OQ-98-first')).not.toBe(tips[0])
+      remoteClaimOnly(world)
       return block()
     })
     expect(result.status).toBe('opened')
@@ -305,33 +357,56 @@ describe('OQ-84/AC-1: the dispatcher pushes the branch, never forced', () => {
     expect(result.headSha).toBe(tips[0])
     expect(pulls(gh)).toHaveLength(1)
   })
+})
 
-  it('OQ-84/AC-1: the push is exactly `git push origin <branch>`, and no forced form can be constructed', () => {
+// OQ-110/AC-6 replaces OQ-84/AC-1's old "the push is exactly `git push origin
+// <branch>`, and no forced form can be constructed" test: that test asserted
+// `coder.mjs` builds a single push and never the text `force-with-lease`,
+// which the claim push (AC-1) now contradicts by design. These assertions
+// keep everything the old test checked -- the finished-branch push's exact
+// form and its refusals -- and add the claim push's.
+describe('OQ-110/AC-6: the push rule admits exactly two forms', () => {
+  const BAD_BRANCHES = [
+    '+story/OQ-84-x', '-f', '--force', '-f story/x', 'story/x:story/x', 'HEAD:story/x', '+refs/heads/story/x',
+    'main', 'refs/heads/main', '', undefined, 'story/x --force', 'story/../x',
+  ]
+
+  it('OQ-110/AC-6: the finished-branch push is still exactly `git push origin <branch>`, refusing every input the old test listed', () => {
     expect(pushArgs('story/OQ-84-dispatcher-pushes')).toEqual(['push', 'origin', 'story/OQ-84-dispatcher-pushes'])
-    for (const bad of [
-      '+story/OQ-84-x', '-f', '--force', '-f story/x', 'story/x:story/x', 'HEAD:story/x', '+refs/heads/story/x',
-      'main', 'refs/heads/main', '', undefined, 'story/x --force', 'story/../x',
-    ]) {
-      expect(() => pushArgs(bad), String(bad)).toThrow()
-    }
-    // The only `git` call that names `push` is the one built by pushArgs (the
-    // `--force` in the worktree removal is not a push).
-    expect(SOURCE.match(/'push'/g)).toHaveLength(1)
-    expect(SOURCE).not.toMatch(/force-with-lease/)
+    for (const bad of BAD_BRANCHES) expect(() => pushArgs(bad), String(bad)).toThrow()
+  })
+
+  it('OQ-110/AC-6: the claim push is exactly `git push --force-with-lease=refs/heads/<branch>: origin <branch>`, refusing the same inputs', () => {
+    expect(claimPushArgs('story/OQ-110-claim')).toEqual([
+      'push', '--force-with-lease=refs/heads/story/OQ-110-claim:', 'origin', 'story/OQ-110-claim',
+    ])
+    for (const bad of BAD_BRANCHES) expect(() => claimPushArgs(bad), String(bad)).toThrow()
+  })
+
+  it('OQ-110/AC-6: coder.mjs builds no other push, and no `+` refspec, `--force` or `-f` can be constructed', () => {
+    // The only two `git` calls naming `push` are the ones built by pushArgs and
+    // claimPushArgs (the `--force` in the worktree removal is not a push).
+    expect(SOURCE.match(/'push'/g)).toHaveLength(2)
+    const pushArgsFn = SOURCE.match(/export function pushArgs\(branch\) \{[\s\S]*?\n\}/)[0]
+    expect(pushArgsFn).not.toMatch(/force-with-lease/)
+    const claimPushArgsFn = SOURCE.match(/export function claimPushArgs\(branch\) \{[\s\S]*?\n\}/)[0]
+    expect(claimPushArgsFn).toMatch(/force-with-lease=refs\/heads\/\$\{branch\}:/)
   })
 })
 
 describe('OQ-84/AC-3: what the session left decides the status', () => {
-  const remoteEmpty = (world) => expect(remoteBranch(world, 'story/OQ-98-first')).toBeNull()
   const localKept = (world) => expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/story/OQ-98-first')).toBeTruthy()
 
-  it('OQ-84/AC-3: completed with no commit beyond the base is nothing-committed, and nothing is pushed', async () => {
+  it('OQ-84/AC-3, OQ-110/AC-3: completed with no commit beyond the claim is nothing-committed, and nothing further is pushed', async () => {
     const world = makeWorld()
     const { result, gh } = await dispatch(world, () => block())
     expect(result.status).toBe('nothing-committed')
     expect(result.paths).toEqual([])
     expect(pulls(gh)).toHaveLength(0)
-    remoteEmpty(world)
+    // The claim (one commit beyond origin/main) does not itself count as the
+    // coder's work: the base pushBranch measures from is the claim, not
+    // origin/main, so no commit beyond it is still nothing-committed (AC-3).
+    remoteClaimOnly(world)
   })
 
   it('OQ-84/AC-3: no commit wins over uncommitted changes, and the uncommitted paths are still listed', async () => {
@@ -345,7 +420,7 @@ describe('OQ-84/AC-3: what the session left decides the status', () => {
     expect(result.paths.sort()).toEqual(['stray.txt', 'work.txt'])
     expect(result.reason).toContain('stray.txt')
     expect(pulls(gh)).toHaveLength(0)
-    remoteEmpty(world)
+    remoteClaimOnly(world)
   })
 
   it('OQ-84/AC-3: an uncommitted change is uncommitted-changes, listing the paths; the dispatcher does not commit for the coder', async () => {
@@ -361,7 +436,7 @@ describe('OQ-84/AC-3: what the session left decides the status', () => {
     expect(result.status).toBe('uncommitted-changes')
     expect(result.paths.sort()).toEqual(['stray.txt', 'work.txt'])
     expect(pulls(gh)).toHaveLength(0)
-    remoteEmpty(world)
+    remoteClaimOnly(world)
     // Kept locally, at the coder's own commit: nothing was committed for it.
     localKept(world)
     expect(git(world.repoDir, 'rev-parse', 'refs/heads/story/OQ-98-first')).toBe(tip)
@@ -393,7 +468,7 @@ describe('OQ-84/AC-3: what the session left decides the status', () => {
     expect(result.paths).toEqual(['notes.txt'])
     expect(result.screenshots).toEqual(['e2e/__screenshots__/new-baseline.png'])
     expect(pulls(gh)).toHaveLength(0)
-    remoteEmpty(world)
+    remoteClaimOnly(world)
   })
 
   it('OQ-84/AC-3: a tracked change under e2e/__screenshots__/ is not excepted', async () => {
@@ -411,14 +486,14 @@ describe('OQ-84/AC-3: what the session left decides the status', () => {
 
   it('OQ-84/AC-3: a rejected push is push-failed with git\'s error, the PR is not opened and the commits are kept', async () => {
     const world = makeWorld()
-    // A pre-receive hook on the origin refuses every push.
-    const hook = path.join(world.origin, 'hooks', 'pre-receive')
-    writeFileSync(hook, '#!/bin/sh\necho "refused by test hook" >&2\nexit 1\n', { mode: 0o755 })
+    // A pre-receive hook on the origin lets the claim (a ref creation) through
+    // but refuses the coder's own push (a fast-forward update).
+    installHook(world, REFUSE_UPDATE_HOOK)
     const { result, gh } = await dispatch(world, ({ cwd }) => { finishStory(cwd); return block() })
     expect(result.status).toBe('push-failed')
     expect(result.reason).toContain('refused by test hook')
     expect(pulls(gh)).toHaveLength(0)
-    remoteEmpty(world)
+    remoteClaimOnly(world)
     localKept(world)
   })
 
@@ -426,7 +501,7 @@ describe('OQ-84/AC-3: what the session left decides the status', () => {
     const world = makeWorld()
     const { result } = await dispatch(world, ({ cwd }) => { finishStory(cwd); return envelope('x', { is_error: true }) })
     expect(result.status).toBe('session-failed')
-    remoteEmpty(world)
+    remoteClaimOnly(world)
   })
 })
 
@@ -477,7 +552,8 @@ describe('OQ-84/AC-5: every result after a session carries its output', () => {
 
   it('OQ-84/AC-5: push-failed', async () => {
     const world = makeWorld()
-    writeFileSync(path.join(world.origin, 'hooks', 'pre-receive'), '#!/bin/sh\nexit 1\n', { mode: 0o755 })
+    // Lets the claim (a ref creation) through; refuses the coder's own push.
+    installHook(world, REFUSE_UPDATE_HOOK)
     const { result } = await dispatch(world, ({ cwd }) => { finishStory(cwd); return full('committed') })
     expect(result.status).toBe('push-failed')
     expectSession(result, 'completed', 'committed')
@@ -751,6 +827,199 @@ describe('refusing to run over existing work', () => {
     const { result, fake } = await dispatch(world, () => { throw new Error('must not spawn') })
     expect(result.status).toBe('branch-exists')
     expect(fake.calls).toHaveLength(0)
+  })
+})
+
+// ------------------------------------------------------ OQ-110: the claim
+
+describe('OQ-110/AC-1: a second claim of the same branch is refused', () => {
+  it('OQ-110/AC-1: against a fixture bare repository, a claim succeeds and a second claim of the same name, from the same origin/main, is refused', () => {
+    const world = makeWorld()
+    const branch = 'story/OQ-98-claim-race'
+    const cloneA = path.join(world.dir, 'claim-a')
+    const cloneB = path.join(world.dir, 'claim-b')
+    git(world.dir, 'clone', '-q', world.origin, cloneA)
+    git(world.dir, 'clone', '-q', world.origin, cloneB)
+    for (const clone of [cloneA, cloneB]) git(clone, 'checkout', '-q', '-b', branch)
+
+    git(cloneA, 'commit', '-q', '--allow-empty', '-m', 'Claim OQ-98 on machine-a at t')
+    git(cloneA, ...claimPushArgs(branch))
+    expect(remoteBranch(world, branch)).not.toBeNull()
+
+    // cloneB branched from the same origin/main, before cloneA's claim landed.
+    git(cloneB, 'commit', '-q', '--allow-empty', '-m', 'Claim OQ-98 on machine-b at t')
+    expect(() => git(cloneB, ...claimPushArgs(branch))).toThrow()
+  })
+
+  it('OQ-110/AC-1: dispatchCoder makes the claim commit visible on origin before install is called', async () => {
+    const world = makeWorld()
+    let sawClaimAtInstall = false
+    const { result } = await dispatch(world, ({ cwd }) => { finishStory(cwd); return block() }, {
+      install: async () => {
+        // Observed from inside the install stub: if the claim were not pushed
+        // first, origin would hold nothing here.
+        remoteClaimOnly(world)
+        sawClaimAtInstall = true
+      },
+    })
+    expect(sawClaimAtInstall).toBe(true)
+    expect(result.status).toBe('opened')
+  })
+})
+
+describe('OQ-110/AC-2: a failed claim spends nothing', () => {
+  it('OQ-110/AC-2: a push refused outright is claim-failed, with git\'s error, and nothing is installed, spawned or left behind', async () => {
+    const world = makeWorld()
+    installHook(world, REFUSE_ALL_HOOK)
+    const { result, fake } = await dispatch(world, () => { throw new Error('must not spawn') }, {
+      install: async () => { throw new Error('must not install') },
+    })
+    expect(result.status).toBe('claim-failed')
+    expect(result.storyId).toBe('OQ-98')
+    expect(result.branch).toBe('story/OQ-98-first')
+    expect(result.reason).toContain('refused by test hook')
+    expect(fake.calls).toHaveLength(0)
+    expect(remoteBranch(world, 'story/OQ-98-first')).toBeNull()
+    expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
+    expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/story/OQ-98-first')).toBeNull()
+  })
+
+  it('OQ-110/AC-2: a claim lost to a genuine race (two machines, same origin/main) is branch-exists, not claim-failed', async () => {
+    const world = makeWorld()
+    // A second "machine": its own clone of the same origin, made before
+    // either has claimed anything, so both compute the same branch from the
+    // same origin/main -- the race AC-1's context describes.
+    const repoDirB = path.join(world.dir, 'dispatcher-b')
+    git(world.dir, 'clone', '-q', world.origin, repoDirB)
+
+    const common = {
+      promptTemplate: TEMPLATE,
+      baseEnv: { PATH: '/bin' },
+      install: async () => { throw new Error('must not install') },
+    }
+    const fakeA = fakeRun(() => { throw new Error('must not spawn') })
+    const fakeB = fakeRun(() => { throw new Error('must not spawn') })
+    const [resultA, resultB] = await Promise.all([
+      dispatchCoder({ ctx: fakeGitHub().ctx, repoDir: world.repoDir, sessionOptions: { executable: 'fake-claude', run: fakeA.run }, ...common }),
+      dispatchCoder({ ctx: fakeGitHub().ctx, repoDir: repoDirB, sessionOptions: { executable: 'fake-claude', run: fakeB.run }, ...common }),
+    ])
+
+    const statuses = [resultA.status, resultB.status]
+    // Exactly one claim wins (goes on to install, which this test refuses) and
+    // exactly one loses the race -- and the loser sees branch-exists, since
+    // the branch is on origin by the time its push is refused, never claim-failed.
+    expect(statuses).toContain('branch-exists')
+    expect(statuses).toContain('install-failed')
+    const loser = resultA.status === 'branch-exists' ? resultA : resultB
+    expect(loser.reason).toContain('already exists on origin')
+    expect(remoteBranch(world, 'story/OQ-98-first')).not.toBeNull()
+  })
+
+  it('OQ-110/AC-2: a claim push refused because the ref landed on origin first is branch-exists, deterministically', async () => {
+    const world = makeWorld()
+    // Unlike the race above (two real concurrent calls, and either could in
+    // principle be the one stopped by the early pre-worktree remoteTip check),
+    // this is one dispatchCoder call: the branch does not exist when that
+    // early check runs, so it is the claim push itself that is refused, with
+    // the ref already there by the time its catch handler looks again.
+    installHook(world, raceClaimIntoExistence('story/OQ-98-first'))
+    const { result, fake } = await dispatch(world, () => { throw new Error('must not spawn') }, {
+      install: async () => { throw new Error('must not install') },
+    })
+    expect(result.status).toBe('branch-exists')
+    expect(result.storyId).toBe('OQ-98')
+    expect(result.reason).toContain('already exists on origin')
+    expect(fake.calls).toHaveLength(0)
+    expect(remoteBranch(world, 'story/OQ-98-first')).not.toBeNull()
+    expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
+    expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/story/OQ-98-first')).toBeNull()
+  })
+})
+
+describe('OQ-110/AC-3 and AC-4: the claim, not origin/main, is the base, and it outlives a stop', () => {
+  it('OQ-110/AC-4: the claim stays on origin after a stop before any pull request, and the local branch and worktree are removed', async () => {
+    const world = makeWorld()
+    const cwds = []
+    const { result } = await dispatch(world, ({ cwd }) => { cwds.push(cwd); return block() })
+    expect(result.status).toBe('nothing-committed')
+    remoteClaimOnly(world)
+    expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
+    for (const dir of cwds) expect(existsSync(dir)).toBe(false)
+    expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/story/OQ-98-first')).toBeNull()
+  })
+})
+
+describe('OQ-110/AC-5: the next run skips a story whose claim is on origin', () => {
+  it('OQ-110/AC-5: pickStory skips the claimed story, using the real pickStory against a fixture repository, and the next dispatch takes the following one', async () => {
+    const world = makeWorld()
+    // OQ-98 is claimed, then the run stops before a pull request exists.
+    const stopped = await dispatch(world, () => block())
+    expect(stopped.result.status).toBe('nothing-committed')
+
+    const picked = await pickStory(world.repoDir)
+    expect(picked.skipped).toEqual([{ id: 'OQ-98', branch: 'story/OQ-98-first' }])
+    expect(picked.story).toEqual({ id: 'OQ-99', branch: 'story/OQ-99-second' })
+
+    // As the loop does: it hands the id pickStory chose to the next story process.
+    const { result } = await dispatch(world, ({ cwd }) => { finishStory(cwd, { file: 'OQ-99-second.md' }); return block() }, {
+      storyId: picked.story.id,
+    })
+    expect(result.status).toBe('opened')
+    expect(result.storyId).toBe('OQ-99')
+  })
+})
+
+describe('OQ-110/AC-8: a machine label, never the hostname', () => {
+  it('OQ-110/AC-8: unset or empty is unlabelled; a matching value is used as is; anything else is refused', () => {
+    expect(machineLabel({})).toBe('unlabelled')
+    expect(machineLabel({ TW_MACHINE_LABEL: '' })).toBe('unlabelled')
+    expect(machineLabel({ TW_MACHINE_LABEL: 'owner-laptop_2.local' })).toBe('owner-laptop_2.local')
+    expect(machineLabel({ TW_MACHINE_LABEL: 'a'.repeat(32) })).toBe('a'.repeat(32))
+    for (const bad of ['a'.repeat(33), 'has spaces', 'slash/in/it', 'emoji😀']) {
+      expect(machineLabel({ TW_MACHINE_LABEL: bad })).toBeNull()
+    }
+  })
+
+  it('OQ-110/AC-8: a bad label is bad-machine-label before the branch is created, so nothing is claimed, installed or spawned', async () => {
+    const world = makeWorld()
+    const { result, fake } = await dispatch(world, () => { throw new Error('must not spawn') }, {
+      baseEnv: { PATH: '/bin', TW_MACHINE_LABEL: 'has spaces' },
+      install: async () => { throw new Error('must not install') },
+    })
+    expect(result.status).toBe('bad-machine-label')
+    expect(result.storyId).toBe('OQ-98')
+    expect(result.reason).toContain('TW_MACHINE_LABEL')
+    expect(fake.calls).toHaveLength(0)
+    expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
+    expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/story/OQ-98-first')).toBeNull()
+    expect(remoteBranch(world, 'story/OQ-98-first')).toBeNull()
+  })
+
+  it('OQ-110/AC-8: nothing in scripts/dispatch/ calls os.hostname()', () => {
+    const dispatchDir = here
+    const files = readdirSync(dispatchDir).filter((f) => f.endsWith('.mjs') && !f.endsWith('.test.mjs'))
+    expect(files.length).toBeGreaterThan(0)
+    for (const file of files) {
+      expect(readFileSync(path.join(dispatchDir, file), 'utf8')).not.toMatch(/os\.hostname\(\)/)
+    }
+  })
+
+  it('OQ-110/AC-8: the claim commit names the machine by its label, or "unlabelled" when none is set', async () => {
+    const labelledWorld = makeWorld()
+    const labelled = await dispatch(labelledWorld, ({ cwd }) => { finishStory(cwd); return block() }, {
+      baseEnv: { PATH: '/bin', TW_MACHINE_LABEL: 'owner-laptop' },
+    })
+    expect(labelled.result.status).toBe('opened')
+    const labelledSubjects = git(labelledWorld.dir, '--git-dir', labelledWorld.origin, 'log', '--format=%s', 'story/OQ-98-first')
+    expect(labelledSubjects).toContain('Claim OQ-98 on owner-laptop at ')
+
+    const unlabelledWorld = makeWorld()
+    const unlabelled = await dispatch(unlabelledWorld, ({ cwd }) => { finishStory(cwd); return block() }, {
+      baseEnv: { PATH: '/bin' },
+    })
+    expect(unlabelled.result.status).toBe('opened')
+    const unlabelledSubjects = git(unlabelledWorld.dir, '--git-dir', unlabelledWorld.origin, 'log', '--format=%s', 'story/OQ-98-first')
+    expect(unlabelledSubjects).toContain('Claim OQ-98 on unlabelled at ')
   })
 })
 

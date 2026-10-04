@@ -124,17 +124,51 @@ export function findPromptChange(body) {
 const BRANCH_NAME = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/
 const SCREENSHOT_DIR = 'e2e/__screenshots__/'
 
+/** Throws unless `branch` is a plain name: no refspec, no option, and never `main`. */
+function assertPlainBranch(branch, fnName) {
+  if (typeof branch !== 'string' || !BRANCH_NAME.test(branch) || branch.includes('..')) {
+    throw new Error(`${fnName} requires a plain branch name, got ${JSON.stringify(branch)}`)
+  }
+  if (branch === BASE || branch === `refs/heads/${BASE}`) throw new Error(`${fnName} refuses ${BASE}`)
+}
+
 /**
- * The arguments of the one push the dispatcher makes: `git push origin <branch>`.
- * The branch must be a plain name, which is what keeps a forced form (a `+`
- * refspec or an option), a refspec (`a:b`) or `main` from being constructible.
+ * The arguments of the one push the dispatcher makes for a finished branch:
+ * `git push origin <branch>`. The branch must be a plain name, which is what
+ * keeps a forced form (a `+` refspec or an option), a refspec (`a:b`) or
+ * `main` from being constructible.
  */
 export function pushArgs(branch) {
-  if (typeof branch !== 'string' || !BRANCH_NAME.test(branch) || branch.includes('..')) {
-    throw new Error(`pushArgs requires a plain branch name, got ${JSON.stringify(branch)}`)
-  }
-  if (branch === BASE || branch === `refs/heads/${BASE}`) throw new Error(`pushArgs refuses ${BASE}`)
+  assertPlainBranch(branch, 'pushArgs')
   return ['push', REMOTE, branch]
+}
+
+/**
+ * The arguments of the claim push (AC-1): `git push
+ * --force-with-lease=refs/heads/<branch>: origin <branch>`. The empty
+ * expected value after the colon means "must not already exist" (git's
+ * `git-push` documentation, `--force-with-lease`), so this can only create a
+ * branch, never overwrite one -- a second claim of the same name is refused.
+ * Takes the same plain-name-only branch as `pushArgs`.
+ */
+export function claimPushArgs(branch) {
+  assertPlainBranch(branch, 'claimPushArgs')
+  return ['push', `--force-with-lease=refs/heads/${branch}:`, REMOTE, branch]
+}
+
+const MACHINE_LABEL_RE = /^[A-Za-z0-9._-]{1,32}$/
+
+/**
+ * The machine's label for a claim commit (AC-8): never the hostname, since
+ * the repository is public. Reads `TW_MACHINE_LABEL` from `env`: unset or
+ * empty is `'unlabelled'`, a value matching `MACHINE_LABEL_RE` is used as is,
+ * and anything else is refused by returning `null` -- the caller turns that
+ * into `bad-machine-label` before anything is claimed, installed or spawned.
+ */
+export function machineLabel(env) {
+  const raw = env.TW_MACHINE_LABEL
+  if (raw === undefined || raw === '') return 'unlabelled'
+  return MACHINE_LABEL_RE.test(raw) ? raw : null
 }
 
 /**
@@ -237,6 +271,14 @@ async function cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded }) {
  *   sessionOptions extra `spawnSession` options (executable, run, timeouts,
  *                  budget)
  *
+ * Straight after creating the branch, it makes an empty claim commit naming
+ * the machine (`machineLabel`, AC-8) and pushes it to `origin` with
+ * `claimPushArgs`, which only ever creates the branch there (AC-1); from then
+ * on that commit, not `origin/main`, is the base the dispatch measures
+ * "committed beyond" from. A failed claim push spends nothing further
+ * (AC-2): `bad-machine-label` is refused before the branch is even created,
+ * and `claim-failed` or `branch-exists` before the install or the session.
+ *
  * Resolves `{ status, ... }`. `opened` carries the pull request. Every other
  * status means none was opened, and `reason` says why. `nothing-ready` is not
  * a failure.
@@ -250,8 +292,8 @@ export async function dispatchCoder({
   // The queue is read from the tip just fetched, and the worktree is made from
   // that same commit, so the story chosen is the story the coder is handed.
   await git(repoDir, ['fetch', REMOTE, BASE])
-  const baseSha = (await git(repoDir, ['rev-parse', `${REMOTE}/${BASE}`])).trim()
-  const queue = await loadQueueAt(repoDir, baseSha)
+  const mainSha = (await git(repoDir, ['rev-parse', `${REMOTE}/${BASE}`])).trim()
+  const queue = await loadQueueAt(repoDir, mainSha)
   let chosen
   if (storyId) {
     chosen = queue.find((s) => s.id === storyId)
@@ -276,14 +318,51 @@ export async function dispatchCoder({
     return { status: 'branch-exists', branch, reason: `${branch} already exists on ${REMOTE}` }
   }
 
+  // AC-8: a bad label is refused before anything is claimed, installed or spawned.
+  const label = machineLabel(baseEnv)
+  if (label === null) {
+    return {
+      status: 'bad-machine-label', storyId: chosen.id, branch,
+      reason: `TW_MACHINE_LABEL ${JSON.stringify(baseEnv.TW_MACHINE_LABEL)} does not match ${MACHINE_LABEL_RE}`,
+    }
+  }
+
   const scratch = await mkdtemp(path.join(tmpdir(), 'tw-coder-'))
   const tree = path.join(scratch, 'tree')
   let worktreeAdded = false
+  // Reassigned to the claim commit's sha once it is made (AC-3): from then on
+  // it is the base `pushBranch` and `cleanUp` measure "committed beyond" from,
+  // not `origin/main`.
+  let baseSha = mainSha
   try {
     // `--no-track`: a branch made from `origin/main` otherwise tracks it, and a
     // bare `git push` on it would aim at `main` (AC-2).
-    await git(repoDir, ['worktree', 'add', '--no-track', '-b', branch, tree, baseSha])
+    await git(repoDir, ['worktree', 'add', '--no-track', '-b', branch, tree, mainSha])
     worktreeAdded = true
+
+    // AC-1: the claim commit and its push, before the install or the coder
+    // session spend anything. A failed push means either a race (someone else's
+    // claim beat us to `origin`) or a genuine push failure (AC-2); either way
+    // nothing below this is installed or spawned, and `cleanUp` below removes
+    // the local branch and worktree since their tip is still this claim.
+    // `-c user.name`/`-c user.email`: the claim commit is the dispatcher's own
+    // action, not an authored change, so it must not depend on whichever git
+    // identity happens to be configured on the machine running it (CI's
+    // runners have none at all).
+    await git(tree, [
+      '-c', 'user.name=tw-dispatch', '-c', 'user.email=dispatch@tower-workshop-paths.invalid',
+      'commit', '--allow-empty', '-m', `Claim ${chosen.id} on ${label} at ${new Date().toISOString()}`,
+    ])
+    baseSha = (await git(tree, ['rev-parse', 'HEAD'])).trim()
+    try {
+      await git(tree, claimPushArgs(branch))
+    } catch (error) {
+      if (await remoteTip(repoDir, branch)) {
+        return { status: 'branch-exists', storyId: chosen.id, branch, reason: `${branch} already exists on ${REMOTE}` }
+      }
+      const reason = String(error.stderr ?? '').trim() || error.message
+      return { status: 'claim-failed', storyId: chosen.id, branch, reason }
+    }
 
     const text = readFileSync(path.join(tree, storyPath), 'utf8')
     const { data } = parseFrontmatter(text, storyPath)
