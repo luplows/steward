@@ -88,7 +88,8 @@ describe('OQ-74/AC-1: the argument list', () => {
       expect(args[0]).toBe('-p')
       expect(valueAfter(args, '--permission-prompts')).toBe('none')
       expect(Number(valueAfter(args, '--max-budget-usd'))).toBeGreaterThan(0)
-      expect(valueAfter(args, '--output-format')).toBe('json')
+      expect(valueAfter(args, '--output-format')).toBe('stream-json')
+      expect(args).toContain('--verbose')
       expect(valueAfter(args, '--model')).toBeTruthy()
       expect(valueAfter(args, '--effort')).toBeTruthy()
       expect(listAfter(args, '--allowedTools').length).toBeGreaterThan(0)
@@ -113,6 +114,17 @@ describe('OQ-74/AC-1: the argument list', () => {
   it('uses a different --model per role by default: the reviewer is opus, not the coder\'s', () => {
     expect(valueAfter(buildInvocation(reviewerOptions).args, '--model')).toBe('opus')
   })
+})
+
+describe('OQ-76/AC-1: stream-json output with --verbose, for both roles', () => {
+  for (const [role, options] of [['coder', coderOptions], ['reviewer', reviewerOptions]]) {
+    it(`replaces plain json with stream-json plus --verbose for the ${role}`, () => {
+      const { args } = buildInvocation(options)
+      expect(valueAfter(args, '--output-format')).toBe('stream-json')
+      expect(args.filter((a) => a === '--verbose')).toHaveLength(1)
+      expect(args).not.toContain('json')
+    })
+  }
 })
 
 describe('OQ-74/AC-2: the coder takes its env and allowlist from coder-env.mjs', () => {

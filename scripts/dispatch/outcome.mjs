@@ -33,7 +33,8 @@ export const STOPPED_FOR = [null, 'timeout', 'stall']
  *   role       'coder' | 'reviewer'
  *   exitCode   integer | null   (null when the process was killed by a signal)
  *   signal     string | null
- *   stdout     string           (captured `--output-format json` output)
+ *   stdout     string           (captured `--output-format stream-json --verbose`
+ *              output: one JSON event per line)
  *   stoppedFor null | 'timeout' | 'stall'
  *              set by the runner when it stopped the session for exceeding
  *              its time limit, or for producing no output for the configured
@@ -70,14 +71,30 @@ export function validateRawRecord(record) {
   }
 }
 
+/**
+ * Reads `stdout` as a stream of one JSON event per line (OQ-76/AC-2) and
+ * returns the last event whose `type` is `"result"`, or null when no line
+ * is one. A line that fails to parse as a JSON object is skipped rather than
+ * treated as an error (OQ-76/AC-3): it only matters when it was the one line
+ * that would otherwise have been read as the result, which this reports the
+ * same way as no result line at all -- null, classified below by the rules
+ * for absent output.
+ */
 function parseEnvelope(stdout) {
-  let parsed
-  try {
-    parsed = JSON.parse(stdout)
-  } catch {
-    return null
+  let result = null
+  for (const line of stdout.split(/\r?\n/)) {
+    if (line.trim() === '') continue
+    let parsed
+    try {
+      parsed = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.type === 'result') {
+      result = parsed
+    }
   }
-  return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null
+  return result
 }
 
 /**
@@ -145,9 +162,9 @@ export function parsePrBlock(text) {
  * Returns `{ outcome, reason, envelope, prText? }`:
  *   outcome   one of OUTCOMES
  *   reason    a short human-readable account of why
- *   envelope  the parsed JSON the session emitted, unaltered; null when stdout
- *             did not parse to a JSON object. What a reviewer's verdict inside
- *             it means is not decided here.
+ *   envelope  the last event in stdout's stream whose `type` is `"result"`,
+ *             unaltered; null when stdout holds no such line (OQ-76/AC-2).
+ *             What a reviewer's verdict inside it means is not decided here.
  *   prText    coder records only: parsePrBlock of the envelope's `result`.
  *             Present whatever the outcome, since it is only text the coder
  *             wrote; it is not evidence that anything was pushed or opened.

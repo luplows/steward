@@ -505,7 +505,7 @@ claude -p "$(render .claude/prompts/coder.md OQ-49)" \
   --disallowedTools "Bash(gh:*)" "Bash(git push:*)" \
   --env "$(coderEnv)" \
   --max-budget-usd 6 \
-  --output-format json
+  --output-format stream-json --verbose
 
 # Reviewer — handed no credentials, denied the obvious write paths (see OQ-62)
 claude -p "$(render .claude/prompts/reviewer.md OQ-49 $PR)" \
@@ -514,8 +514,13 @@ claude -p "$(render .claude/prompts/reviewer.md OQ-49 $PR)" \
   --allowedTools $(reviewerAllowedTools) \
   --permission-prompts none \
   --max-budget-usd 3 \
-  --output-format json
+  --output-format stream-json --verbose
 ```
+
+Both roles use `stream-json` rather than `json` so the stall check in `spawn.mjs` can see a session
+working rather than only seeing silence until it ends (OQ-76). In print mode, `--output-format
+stream-json` requires `--verbose` or the CLI exits 1 (`claude --help`, CLI 2.1.281; OQ-76's Context
+is where the runner established this by running the CLI).
 
 Both argument lists, both allowlists, the coder's environment and the rendered prompt are built by
 `scripts/dispatch/invocation.mjs` (`buildInvocation`), which starts nothing (OQ-74). The prompt is
@@ -1379,9 +1384,9 @@ AC-5 now holds the `DEFAULT_STALL_MS` derivation, from OQ-107's maximum, and the
 **Decided 2026-10-03 by the owner: a session's timeout rises to 60 minutes.** On 2026-10-02 the
 20-minute stall interval stopped a working coder, the first OQ-110, about halfway through its
 story. Its output was `--output-format json`, which is silent until the session ends.
-**Planned (OQ-76):** `DEFAULT_TIMEOUT_MS` in `scripts/dispatch/spawn.mjs` goes from 30 to 60
-minutes, together with the 12-minute stall interval that streamed output makes possible. Once a
-session's output shows it working, the stall interval catches one that has hung, and
+`DEFAULT_TIMEOUT_MS` in `scripts/dispatch/spawn.mjs` goes from 30 to 60
+minutes, together with the 12-minute stall interval that streamed output makes possible (OQ-76).
+Once a session's output shows it working, the stall interval catches one that has hung, and
 `--max-budget-usd` caps its spending. That leaves the timeout to stop a session that is busy but
 not finishing, and 30 minutes is shorter than a real story needs.
 

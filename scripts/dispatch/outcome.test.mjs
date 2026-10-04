@@ -33,6 +33,12 @@ const PR_REPORT = [
 // followed by a head-SHA line.
 const REAL_CODER_ENVELOPE = readFileSync(path.join(HERE, 'fixtures/oq75-coder-envelope.json'), 'utf8')
 
+// A real `claude -p --output-format stream-json --verbose` session (OQ-76's
+// Context): 10 events ending in a `result` line. Unedited by this PR except
+// for the Windows user name and a synced plugin id, replaced before the
+// story committed it.
+const REAL_STREAM_SESSION = readFileSync(path.join(HERE, 'fixtures/oq76-stream-session.jsonl'), 'utf8')
+
 function envelope(overrides = {}) {
   return {
     type: 'result',
@@ -246,6 +252,73 @@ describe('OQ-75/AC-4 envelope returned unaltered', () => {
     const env = envelope({ is_error: true })
     expect(classifySession(record({}, env)).envelope).toEqual(env)
     expect(classifySession(record({ stdout: 'garbage' })).envelope).toBeNull()
+  })
+})
+
+describe('OQ-76/AC-2 classifySession reads a stream, not a single envelope', () => {
+  const resultEvent = envelope()
+  const stream = (lines) => lines.map((l) => JSON.stringify(l)).join('\n')
+
+  it('picks the last event whose type is "result" among several lines', () => {
+    const stdout = stream([
+      { type: 'system', subtype: 'init' },
+      { type: 'assistant', message: { content: [{ type: 'text', text: 'working' }] } },
+      resultEvent,
+    ])
+    const result = classifySession(record({ stdout }))
+    expect(result.outcome).toBe('completed')
+    expect(result.envelope).toEqual(resultEvent)
+  })
+
+  it('classifies that result event by exactly the rules for a json envelope today', () => {
+    const budgetEvent = envelope({ subtype: 'error_max_budget_usd' })
+    const stdout = stream([{ type: 'system', subtype: 'init' }, budgetEvent])
+    expect(classifySession(record({ stdout })).outcome).toBe('budget-exhausted')
+  })
+
+  it('a stream holding no "result" event is classified by the rules for absent output, never completed', () => {
+    const stdout = stream([
+      { type: 'system', subtype: 'init' },
+      { type: 'assistant', message: { content: [{ type: 'text', text: 'working' }] } },
+    ])
+    const result = classifySession(record({ stdout }))
+    expect(result.outcome).toBe('malformed-output')
+    expect(result.outcome).not.toBe('completed')
+    expect(result.envelope).toBeNull()
+  })
+})
+
+describe('OQ-76/AC-3 a non-JSON line does not spoil an otherwise complete stream', () => {
+  it('ignores a truncated final line that follows a complete result event', () => {
+    const stdout = `${JSON.stringify({ type: 'system', subtype: 'init' })}\n${JSON.stringify(envelope())}\n{"type":"system","subtype":"thinking_to`
+    const result = classifySession(record({ stdout }))
+    expect(result.outcome).toBe('completed')
+    expect(result.envelope).toEqual(envelope())
+  })
+
+  it('ignores a stray non-JSON line before the result', () => {
+    const stdout = `not json at all\n${JSON.stringify(envelope())}`
+    const result = classifySession(record({ stdout }))
+    expect(result.outcome).toBe('completed')
+    expect(result.envelope).toEqual(envelope())
+  })
+
+  it('is malformed-output when the invalid line is the one the result would be read from', () => {
+    const stdout = `${JSON.stringify({ type: 'system', subtype: 'init' })}\n{"type":"result","subtype":"succ`
+    const result = classifySession(record({ stdout }))
+    expect(result.outcome).toBe('malformed-output')
+    expect(result.envelope).toBeNull()
+  })
+})
+
+describe('OQ-76/AC-4 a stream recorded from a real session', () => {
+  it('classifies the recorded fixture as completed, with the result text returned', () => {
+    const result = classifySession({
+      role: 'coder', exitCode: 0, signal: null, stdout: REAL_STREAM_SESSION, stoppedFor: null,
+    })
+    expect(result.outcome).toBe('completed')
+    expect(result.envelope).toMatchObject({ type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn' })
+    expect(result.envelope.result).toBe('done')
   })
 })
 

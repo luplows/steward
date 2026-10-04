@@ -24,18 +24,22 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
-import { buildInvocation } from './invocation.mjs'
+import { buildInvocation, SHELL_TIMEOUT_MS } from './invocation.mjs'
 import { classifySession, validateRawRecord } from './outcome.mjs'
 
-// docs/agent-workflow-design.md, "What a spawn actually costs": the slowest
-// measured spawn was 16 minutes, and the timeout is to sit well clear of it.
-export const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000
+// Decided 2026-10-03 by the owner (docs/agent-workflow-design.md): with
+// streamed output (OQ-76) the stall check can see a session working, so the
+// timeout is left to stop one that is busy but not finishing. 30 minutes was
+// shorter than a real story needs -- the first OQ-110 was about half done at
+// 20 (docs/agent-workflow-design.md, "Why the fix tier").
+export const DEFAULT_TIMEOUT_MS = 60 * 60 * 1000
 
-// `--output-format json` writes nothing until the session ends, so a healthy
-// session is silent for its whole run (up to 16 minutes measured). The stall
-// interval has to exceed that or it kills sessions that are working; it exists
-// to catch one that neither finishes nor dies before the timeout does.
-export const DEFAULT_STALL_MS = 20 * 60 * 1000
+// A margin above the longest stretch in which a healthy, streaming session
+// can emit no event: one shell call, capped at SHELL_TIMEOUT_MS (OQ-107).
+// Derived rather than a separate literal so the two cannot drift apart
+// (OQ-76/AC-5): raising SHELL_TIMEOUT_MS raises this automatically.
+const STALL_MARGIN_MS = 2 * 60 * 1000
+export const DEFAULT_STALL_MS = Number(SHELL_TIMEOUT_MS) + STALL_MARGIN_MS
 
 const REAL_BINARY = path.join('node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe')
 

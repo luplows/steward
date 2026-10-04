@@ -8,6 +8,9 @@
 //   hang          print one line, then never print again and never finish
 //   tree          start a grandchild that never finishes, print
 //                 "grandchild <pid>", then behave like hang
+//   stream        print a short `stream-json` event stream (OQ-76/AC-6): a
+//                 non-result line, then a line whose type is "result", then
+//                 exit 0
 //
 // The grandchild in `tree` is detached on Windows only. A non-detached child
 // there is placed in its parent's job object and dies with it anyway, which
@@ -43,6 +46,15 @@ if (mode === 'echo') {
 } else if (mode === 'hang') {
   process.stdout.write('started\n')
   setInterval(() => {}, 1000)
+} else if (mode === 'stream') {
+  const events = [
+    { type: 'system', subtype: 'init' },
+    {
+      type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn',
+      result: 'stand-in done',
+    },
+  ]
+  process.stdout.write(events.map((e) => JSON.stringify(e)).join('\n') + '\n')
 } else if (mode === 'tree') {
   const grandchild = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
     stdio: 'ignore',

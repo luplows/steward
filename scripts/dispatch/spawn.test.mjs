@@ -7,8 +7,8 @@ import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import * as spawnModule from './spawn.mjs'
-import { resolveClaudeExecutable, runSession, spawnSession } from './spawn.mjs'
-import { buildInvocation } from './invocation.mjs'
+import { DEFAULT_STALL_MS, DEFAULT_TIMEOUT_MS, resolveClaudeExecutable, runSession, spawnSession } from './spawn.mjs'
+import { buildInvocation, SHELL_TIMEOUT_MS } from './invocation.mjs'
 import { classifySession, RAW_RECORD_FIELDS, validateRawRecord } from './outcome.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -74,7 +74,9 @@ const CODER_OPTIONS = {
 describe('OQ-65/AC-1 the entry point joins invocation, run and classification', () => {
   it('runs what buildInvocation built and returns classifySession of the record', async () => {
     const expected = buildInvocation(CODER_OPTIONS)
-    const record = { role: 'coder', exitCode: 0, signal: null, stdout: '{"not":"a result"}', stoppedFor: null }
+    // A one-line stream (OQ-76): a result event with no "result" field,
+    // which is enough to exercise classification without claiming completion.
+    const record = { role: 'coder', exitCode: 0, signal: null, stdout: '{"type":"result","not":"complete"}', stoppedFor: null }
     const fakeRun = vi.fn().mockResolvedValue({ record, pid: 1 })
 
     const result = await spawnSession({ ...CODER_OPTIONS, executable: '/bin/claude.exe', run: fakeRun })
@@ -90,7 +92,7 @@ describe('OQ-65/AC-1 the entry point joins invocation, run and classification', 
     const unnonced = (text) => text.replace(/\b[0-9a-f]{12}\b/g, '<nonce>')
     expect(unnonced(fakeRun.mock.calls[0][0].prompt)).toBe(unnonced(expected.prompt))
     expect(result.classification).toEqual(classifySession(record))
-    expect(result.output).toEqual({ not: 'a result' })
+    expect(result.output).toEqual({ type: 'result', not: 'complete' })
     expect(result.record).toEqual(record)
   })
 
@@ -308,5 +310,33 @@ describe('OQ-77/AC-3 a cwd that does not exist rejects', () => {
     await expect(run('cwd', undefined, { cwd: path.join(tmpdir(), 'oq77-no-such-dir'), spawnFn: spy }))
       .rejects.toThrow(/cwd does not exist/)
     expect(spy).not.toHaveBeenCalled()
+  })
+})
+
+describe('OQ-76/AC-5 DEFAULT_STALL_MS is derived from SHELL_TIMEOUT_MS, not a separate literal', () => {
+  it('is the pinned shell timeout plus a margin, 12 minutes in total', () => {
+    expect(DEFAULT_STALL_MS).toBe(Number(SHELL_TIMEOUT_MS) + 2 * 60 * 1000)
+    expect(DEFAULT_STALL_MS).toBe(12 * 60 * 1000)
+  })
+
+  it('DEFAULT_TIMEOUT_MS is 60 minutes', () => {
+    expect(DEFAULT_TIMEOUT_MS).toBe(60 * 60 * 1000)
+  })
+})
+
+describe('OQ-76/AC-6 spawnSession\'s output stays the result object, not the stream', () => {
+  it('returns classification.envelope as output for a session that streams several events', async () => {
+    const result = await spawnSession({
+      ...CODER_OPTIONS,
+      executable: NODE,
+      run: (o) => runSession({ ...o, args: [STAND_IN, 'stream'] }),
+    })
+    expect(result.classification.outcome).toBe('completed')
+    expect(result.record.stdout).toContain('\n')
+    expect(result.record.stdout.split('\n').filter(Boolean).length).toBeGreaterThan(1)
+    expect(result.output).toEqual({
+      type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn', result: 'stand-in done',
+    })
+    expect(typeof result.output).toBe('object')
   })
 })

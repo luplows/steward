@@ -112,7 +112,8 @@ export function buildArgs({ role, model, effort, maxBudgetUsd, branch }) {
     '-p',
     '--permission-prompts', 'none',
     '--max-budget-usd', String(maxBudgetUsd),
-    '--output-format', 'json',
+    '--output-format', 'stream-json',
+    '--verbose',
     '--model', model,
     '--effort', effort,
   ]
