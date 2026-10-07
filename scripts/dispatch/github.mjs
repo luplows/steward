@@ -5,6 +5,8 @@
  * state, read its labels, list its comments, and convert it to a draft (OQ-87).
  * The conversion is GraphQL only, and is the one GraphQL request the allowlist
  * admits: one mutation text, with the pull request's node id as its one variable.
+ * OQ-112 adds three more: list the open pull requests for one head branch, list
+ * open issues carrying a given set of labels, and create an issue.
  *
  * Shape (AC-2): every operation has a pure `build*` function that returns the
  * request that *would* be sent, and a pure `parse*` function for the response.
@@ -18,7 +20,8 @@
  *    derives it from the marker comment `composeMarkerComment` produces.
  *  - Trigger any workflow. Only the owner, or `land.mjs` run by the dispatcher (OQ-50), triggers
  *    the landing sweep, and `land.mjs` has its own allowlist.
- *  - Apply labels, count rounds, or decide what a verdict means (OQ-48).
+ *  - Apply a label to a pull request, count rounds, or decide what a verdict
+ *    means (OQ-48). It creates an issue with labels (OQ-112), never applies one.
  *  - Spawn sessions, render prompts, or read stories (AC-7).
  *
  * The marker grammar mirrors the grep in review-gate.yml, which works line by
@@ -126,6 +129,38 @@ export function buildListComments(repo, number, page = 1) {
   }
 }
 
+/** Request to list open pull requests whose head is `branch` (OQ-112's AC-1). */
+export function buildListPullRequestsForHead(repo, branch) {
+  const owner = repo.split('/')[0]
+  return {
+    method: 'GET',
+    url: `${repoPath(repo)}/pulls?head=${encodeURIComponent(`${owner}:${requireString('branch', branch)}`)}&state=open`,
+  }
+}
+
+/** Request to list open issues carrying every one of `labels` (OQ-112's AC-1). */
+export function buildListIssuesByLabels(repo, labels, page = 1) {
+  if (!Array.isArray(labels) || labels.length === 0 || labels.some((l) => typeof l !== 'string')) {
+    throw new Error(`labels must be a non-empty array of strings, got: ${JSON.stringify(labels)}`)
+  }
+  return {
+    method: 'GET',
+    url: `${repoPath(repo)}/issues?labels=${encodeURIComponent(labels.join(','))}&state=open&per_page=100&page=${page}`,
+  }
+}
+
+/** Request to create an issue with a title, a body and labels (OQ-112's AC-1). */
+export function buildCreateIssue(repo, { title, body, labels }) {
+  if (!Array.isArray(labels) || labels.some((l) => typeof l !== 'string')) {
+    throw new Error(`labels must be an array of strings, got: ${JSON.stringify(labels)}`)
+  }
+  return {
+    method: 'POST',
+    url: `${repoPath(repo)}/issues`,
+    body: { title: requireString('title', title), body: requireString('body', body), labels },
+  }
+}
+
 /** Request to convert the pull request with this node id to a draft (GraphQL). */
 export function buildConvertPullRequestToDraft(nodeId) {
   return {
@@ -154,6 +189,16 @@ export function parsePullRequestState(json) {
 
 export function parseLabels(json) {
   return json.map((label) => label.name)
+}
+
+/** Reduces a page of pull requests to what the loop reads (OQ-112's AC-1). */
+export function parsePullRequests(json) {
+  return json.map((pr) => ({ number: pr.number, headRef: pr.head?.ref ?? null }))
+}
+
+/** Reduces a page of issues to what the loop reads (OQ-112's AC-1). Interprets nothing. */
+export function parseIssues(json) {
+  return json.map((issue) => ({ number: issue.number, title: issue.title }))
 }
 
 // ----------------------------------------------------------------- markers
@@ -248,6 +293,9 @@ const ALLOWED = [
   ['GET', new RegExp(`^/pulls/${PR}$`), null],
   ['GET', new RegExp(`^/issues/${PR}/labels\\?per_page=100$`), null],
   ['GET', new RegExp(`^/issues/${PR}/comments\\?per_page=100&page=[1-9][0-9]*$`), null],
+  ['GET', new RegExp('^/pulls\\?head=[^&]+&state=open$'), null],
+  ['GET', new RegExp('^/issues\\?labels=[^&]+&state=open&per_page=100&page=[1-9][0-9]*$'), null],
+  ['POST', new RegExp('^/issues$'), ['title', 'body', 'labels']],
 ]
 
 // The only GraphQL request admitted: `buildConvertPullRequestToDraft`'s shape.
@@ -368,4 +416,25 @@ export async function listPullRequestComments(ctx, number) {
     all.push(...parseComments(json))
     if (json.length < 100) return all
   }
+}
+
+/** Open pull requests whose head is `branch` (OQ-112's AC-1). */
+export async function listOpenPullRequestsForHead(ctx, branch) {
+  return parsePullRequests(await ctx.send(buildListPullRequestsForHead(ctx.repo, branch)))
+}
+
+/** Every open issue carrying every one of `labels` (OQ-112's AC-1). */
+export async function listIssuesByLabels(ctx, labels) {
+  const all = []
+  for (let page = 1; ; page++) {
+    const json = await ctx.send(buildListIssuesByLabels(ctx.repo, labels, page))
+    all.push(...parseIssues(json))
+    if (json.length < 100) return all
+  }
+}
+
+/** Creates an issue with a title, a body and labels (OQ-112's AC-1). */
+export async function createIssue(ctx, args) {
+  const json = await ctx.send(buildCreateIssue(ctx.repo, args))
+  return { number: json.number, url: json.html_url }
 }

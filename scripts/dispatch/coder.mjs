@@ -156,6 +156,33 @@ export function claimPushArgs(branch) {
   return ['push', `--force-with-lease=refs/heads/${branch}:`, REMOTE, branch]
 }
 
+/** OQ-112's AC-2: a claim older than this is stuck rather than a dispatch still running. */
+export const STUCK_AFTER_MS = 2 * 60 * 60 * 1000
+
+// The subject the claim commit above is made with: `Claim <OQ-n> on <label> at <ISO time>`.
+const CLAIM_SUBJECT_GREP = '^Claim [A-Za-z0-9-]+ on '
+
+/**
+ * The age, in milliseconds, of `branch`'s claim commit on `origin` (OQ-112's
+ * AC-2): the commit on the branch, not on `origin/main`, with a subject
+ * beginning `Claim <OQ-n> on ` -- the commit `dispatchCoder` makes above.
+ * Fetches `branch` and `main` fresh from `origin` first, so a stale local
+ * tracking ref cannot report a wrong age. `null` when the branch has no such
+ * commit (an unclaimed branch, or one made before OQ-110). `now` is
+ * overridable so a test can check the boundary deterministically.
+ */
+export async function claimAgeMs(repoDir, branch, now = Date.now()) {
+  await git(repoDir, ['fetch', REMOTE, `+refs/heads/${BASE}:refs/remotes/${REMOTE}/${BASE}`, `+refs/heads/${branch}:refs/remotes/${REMOTE}/${branch}`])
+  const out = await git(repoDir, [
+    'log', `refs/remotes/${REMOTE}/${branch}`, '--not', `refs/remotes/${REMOTE}/${BASE}`,
+    '-E', `--grep=${CLAIM_SUBJECT_GREP}`, '--format=%ct',
+  ])
+  const lines = out.split(/\r?\n/).filter((line) => line !== '')
+  if (lines.length === 0) return null
+  // Oldest match (git log lists newest first) is the claim itself.
+  return now - Number(lines[lines.length - 1]) * 1000
+}
+
 const MACHINE_LABEL_RE = /^[A-Za-z0-9._-]{1,32}$/
 
 /**

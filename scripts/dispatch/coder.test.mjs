@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { coderAllowedTools } from './coder-env.mjs'
-import { branchFor, claimPushArgs, dispatchCoder, findPromptChange, machineLabel, pushArgs, retryStory } from './coder.mjs'
+import { STUCK_AFTER_MS, branchFor, claimAgeMs, claimPushArgs, dispatchCoder, findPromptChange, machineLabel, pushArgs, retryStory } from './coder.mjs'
 import { createContext } from './github.mjs'
 import { pickStory } from './loop.mjs'
 
@@ -162,6 +162,16 @@ const remoteClaimOnly = (world, branch = 'story/OQ-98-first') => {
     .split('\n').filter(Boolean)
   expect(subjects).toHaveLength(1)
   expect(subjects[0]).toMatch(/^Claim OQ-\d+ on /)
+}
+
+/** An empty commit whose author and committer date are both `whenMs`. */
+function commitWithDate(cwd, message, whenMs) {
+  const iso = new Date(whenMs).toISOString()
+  execFileSync(
+    'git',
+    ['-c', 'user.name=t', '-c', 'user.email=t@example.com', '-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-m', message, `--date=${iso}`],
+    { cwd, encoding: 'utf8', env: { ...process.env, GIT_COMMITTER_DATE: iso } },
+  )
 }
 
 const installHook = (world, script) => writeFileSync(path.join(world.origin, 'hooks', 'pre-receive'), script, { mode: 0o755 })
@@ -1435,5 +1445,50 @@ describe('OQ-91/AC-4: a CI retry says where a response to a CI failure goes', ()
     expect(ciPrompt).toMatch(/with the evidence/)
     expect(reviewPrompt).toContain('If you believe one is wrong, say so under a `## Response to review` heading in your final report.')
     expect(reviewPrompt).not.toMatch(/CI failure/)
+  })
+})
+
+describe("OQ-112/AC-2: a claim's age", () => {
+  it('OQ-112/AC-2: a claimed branch reports its claim commit\'s age; an unclaimed one has none', async () => {
+    const world = makeWorld()
+    const tree = path.join(world.dir, 'claim-age-tree')
+    git(world.dir, 'clone', '-q', world.origin, tree)
+
+    git(tree, 'checkout', '-q', '-b', 'story/OQ-98-first')
+    const claimedAt = Date.now() - 3 * 60 * 60 * 1000 // three hours old
+    commitWithDate(tree, 'Claim OQ-98 on test-machine at ' + new Date(claimedAt).toISOString(), claimedAt)
+    git(tree, 'push', '-q', 'origin', 'story/OQ-98-first')
+
+    git(tree, 'checkout', '-q', 'main')
+    git(tree, 'checkout', '-q', '-b', 'story/OQ-99-second')
+    git(tree, 'commit', '-q', '--allow-empty', '-m', 'not a claim, just a regular commit')
+    git(tree, 'push', '-q', 'origin', 'story/OQ-99-second')
+
+    const now = Date.now()
+    const age = await claimAgeMs(world.repoDir, 'story/OQ-98-first', now)
+    expect(age).not.toBeNull()
+    expect(Math.abs(age - (now - claimedAt))).toBeLessThan(1500) // %ct truncates to the second
+    expect(await claimAgeMs(world.repoDir, 'story/OQ-99-second', now)).toBeNull()
+  })
+
+  it('OQ-112/AC-2: STUCK_AFTER_MS separates a claim older than it from one younger', async () => {
+    const world = makeWorld()
+    const tree = path.join(world.dir, 'claim-age-tree-2')
+    git(world.dir, 'clone', '-q', world.origin, tree)
+
+    git(tree, 'checkout', '-q', '-b', 'story/OQ-98-first')
+    const oldAt = Date.now() - (STUCK_AFTER_MS + 10 * 60 * 1000)
+    commitWithDate(tree, 'Claim OQ-98 on test-machine at old', oldAt)
+    git(tree, 'push', '-q', 'origin', 'story/OQ-98-first')
+
+    git(tree, 'checkout', '-q', 'main')
+    git(tree, 'checkout', '-q', '-b', 'story/OQ-99-second')
+    const youngAt = Date.now() - 5 * 60 * 1000
+    commitWithDate(tree, 'Claim OQ-99 on test-machine at young', youngAt)
+    git(tree, 'push', '-q', 'origin', 'story/OQ-99-second')
+
+    const now = Date.now()
+    expect(await claimAgeMs(world.repoDir, 'story/OQ-98-first', now)).toBeGreaterThanOrEqual(STUCK_AFTER_MS)
+    expect(await claimAgeMs(world.repoDir, 'story/OQ-99-second', now)).toBeLessThan(STUCK_AFTER_MS)
   })
 })

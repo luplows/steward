@@ -7,18 +7,24 @@ import path from 'node:path'
 import * as github from './github.mjs'
 import {
   buildConvertPullRequestToDraft,
+  buildCreateIssue,
   buildCreatePullRequest,
   buildGetPullRequestLabels,
   buildGetPullRequestState,
   buildListComments,
+  buildListIssuesByLabels,
+  buildListPullRequestsForHead,
   buildPostComment,
   buildReplacePullRequest,
   composeMarkerComment,
   convertPullRequestToDraft,
   createContext,
+  createIssue,
   createPullRequest,
   getPullRequestLabels,
   getPullRequestState,
+  listIssuesByLabels,
+  listOpenPullRequestsForHead,
   listPullRequestComments,
   parseComments,
   parseMarkerComment,
@@ -47,6 +53,9 @@ function allBuiltRequests() {
     buildGetPullRequestState(REPO, 7),
     buildGetPullRequestLabels(REPO, 7),
     buildListComments(REPO, 7),
+    buildListPullRequestsForHead(REPO, 'story/OQ-1-x'),
+    buildListIssuesByLabels(REPO, ['loop-stuck']),
+    buildCreateIssue(REPO, { title: 't', body: 'b', labels: ['loop-stuck'] }),
   ]
 }
 
@@ -192,7 +201,7 @@ describe('OQ-68/AC-3: no commit status', () => {
   })
 
   it('OQ-68/AC-3: send itself refuses a status or workflow-dispatch request before any network call', async () => {
-    const fetch = fakeFetch(Array.from({ length: 6 }, () => ({ json: {} })))
+    const fetch = fakeFetch(Array.from({ length: 9 }, () => ({ json: {} })))
     const getToken = async () => 't'
     const ctx = createContext({ repo: REPO, fetch, getToken })
     const base = `https://api.github.com/repos/${REPO}`
@@ -207,7 +216,7 @@ describe('OQ-68/AC-3: no commit status', () => {
     for (const request of refused) await expect(ctx.send(request)).rejects.toThrow(/refusing/)
     expect(fetch.calls).toHaveLength(0)
     for (const request of allBuiltRequests()) await ctx.send(request)
-    expect(fetch.calls).toHaveLength(6)
+    expect(fetch.calls).toHaveLength(9)
   })
 
   it('OQ-68/AC-3: the source neither names the status endpoint nor a workflow dispatch', async () => {
@@ -356,24 +365,32 @@ describe('OQ-68/AC-7: module surface', () => {
         'WRITABLE_VERDICTS',
         'assertAllowedRequest',
         'buildConvertPullRequestToDraft',
+        'buildCreateIssue',
         'buildCreatePullRequest',
         'buildGetPullRequestLabels',
         'buildGetPullRequestState',
         'buildListComments',
+        'buildListIssuesByLabels',
+        'buildListPullRequestsForHead',
         'buildPostComment',
         'buildReplacePullRequest',
         'composeMarkerComment',
         'convertPullRequestToDraft',
         'createContext',
+        'createIssue',
         'createPullRequest',
         'getPullRequestLabels',
         'getPullRequestState',
         'ghAuthToken',
+        'listIssuesByLabels',
+        'listOpenPullRequestsForHead',
         'listPullRequestComments',
         'parseComments',
+        'parseIssues',
         'parseLabels',
         'parseMarkerComment',
         'parsePullRequestState',
+        'parsePullRequests',
         'postComment',
         'replacePullRequest',
       ].sort(),
@@ -386,6 +403,63 @@ describe('OQ-68/AC-7: module surface', () => {
     for (const name of Object.keys(github)) {
       expect(name).not.toMatch(/spawn|prompt|render|story|stories|dispatch|workflow|status|label(?!s)|round/i)
     }
+  })
+})
+
+describe('OQ-112/AC-1: three more operations', () => {
+  it('OQ-112/AC-1: lists open pull requests for a head branch', async () => {
+    expect(buildListPullRequestsForHead(REPO, 'story/OQ-1-x')).toEqual({
+      method: 'GET',
+      url: `https://api.github.com/repos/${REPO}/pulls?head=luplows%3Astory%2FOQ-1-x&state=open`,
+    })
+    const fetch = fakeFetch([{ json: [{ number: 9, head: { ref: 'story/OQ-1-x' } }] }])
+    const ctx = createContext({ repo: REPO, fetch, getToken: async () => 't' })
+    expect(await listOpenPullRequestsForHead(ctx, 'story/OQ-1-x')).toEqual([{ number: 9, headRef: 'story/OQ-1-x' }])
+  })
+
+  it('OQ-112/AC-1: lists open issues by labels, paging until a short one', async () => {
+    expect(buildListIssuesByLabels(REPO, ['loop-stuck'], 2)).toEqual({
+      method: 'GET',
+      url: `https://api.github.com/repos/${REPO}/issues?labels=loop-stuck&state=open&per_page=100&page=2`,
+    })
+    expect(() => buildListIssuesByLabels(REPO, [])).toThrow(/labels/)
+    expect(() => buildListIssuesByLabels(REPO, [1])).toThrow(/labels/)
+
+    const full = Array.from({ length: 100 }, (_, i) => ({ number: i, title: `Loop: OQ-${i} is stuck` }))
+    const fetch = fakeFetch([{ json: full }, { json: [{ number: 100, title: 'Loop: OQ-100 is stuck' }] }])
+    const ctx = createContext({ repo: REPO, fetch, getToken: async () => 't' })
+    const issues = await listIssuesByLabels(ctx, ['loop-stuck'])
+    expect(issues).toHaveLength(101)
+    expect(fetch.calls[1].url).toContain('page=2')
+  })
+
+  it('OQ-112/AC-1: creates an issue with a title, a body and labels', async () => {
+    expect(buildCreateIssue(REPO, { title: 'Loop: OQ-1 is stuck', body: 'b', labels: ['loop-stuck'] })).toEqual({
+      method: 'POST',
+      url: `https://api.github.com/repos/${REPO}/issues`,
+      body: { title: 'Loop: OQ-1 is stuck', body: 'b', labels: ['loop-stuck'] },
+    })
+    expect(() => buildCreateIssue(REPO, { title: 't', body: 'b', labels: 'loop-stuck' })).toThrow(/labels/)
+    const fetch = fakeFetch([{ json: { number: 42, html_url: 'https://x/issues/42' } }])
+    const ctx = createContext({ repo: REPO, fetch, getToken: async () => 't' })
+    expect(await createIssue(ctx, { title: 't', body: 'b', labels: ['loop-stuck'] })).toEqual({
+      number: 42,
+      url: 'https://x/issues/42',
+    })
+  })
+
+  it('OQ-112/AC-1: a non-matching head or labels value is refused before the network', async () => {
+    const fetch = fakeFetch([{ json: {} }])
+    const ctx = createContext({ repo: REPO, fetch, getToken: async () => 't' })
+    const base = `https://api.github.com/repos/${REPO}`
+    const refused = [
+      { method: 'GET', url: `${base}/pulls?head=x&state=closed` },
+      { method: 'GET', url: `${base}/pulls?head=x&state=open&extra=1` },
+      { method: 'GET', url: `${base}/issues?labels=x&state=open&per_page=50&page=1` },
+      { method: 'POST', url: `${base}/issues`, body: { title: 't', body: 'b', labels: ['x'], assignee: 'nope' } },
+    ]
+    for (const request of refused) await expect(ctx.send(request)).rejects.toThrow(/refusing/)
+    expect(fetch.calls).toHaveLength(0)
   })
 })
 

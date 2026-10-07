@@ -22,6 +22,14 @@
  * a branch checked out (AC-2), and `updateCheckout` stops rather than discards
  * anything uncommitted it finds there between stories (AC-3).
  *
+ * OQ-112: a story the loop cannot progress is raised with the owner as a
+ * GitHub issue, one per story (`reportStuck`), and two or more open
+ * `loop-stuck` issues stop the queue completely (`stuckLimitStatus`), on the
+ * reasoning that one stuck story can be its own fault while two suggest the
+ * loop's. Both are gated on `ctx` being supplied: `main` always supplies one,
+ * so production runs always get them; a caller (or test) exercising only the
+ * pre-OQ-112 control flow, with no `ctx`, gets exactly that flow unchanged.
+ *
  * Usage:
  *   node scripts/dispatch/loop.mjs --init [path]
  *   node scripts/dispatch/loop.mjs [--repo owner/name] [--max-stories N]
@@ -31,7 +39,8 @@ import { existsSync, realpathSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { branchFor, claimPushArgs, remoteTip } from './coder.mjs'
+import { STUCK_AFTER_MS, branchFor, claimAgeMs, claimPushArgs, machineLabel, remoteTip } from './coder.mjs'
+import { createContext, createIssue, listIssuesByLabels, listOpenPullRequestsForHead } from './github.mjs'
 import { dispatchable, loadQueue } from './queue.mjs'
 
 const execFileAsync = promisify(execFile)
@@ -45,6 +54,86 @@ const REMOTE = 'origin'
 const BASE = 'main'
 
 const MAX_STORIES_RE = /^[1-9][0-9]*$/
+
+// OQ-112's AC-6: two or more open `loop-stuck` issues stop the queue completely.
+export const STUCK_ISSUE_LIMIT = 2
+const STUCK_LABEL = 'loop-stuck'
+const stuckIssueTitle = (id) => `Loop: ${id} is stuck`
+
+/**
+ * OQ-112's AC-6: `null` under the limit, or `{ status: 'stuck-limit', reason }`
+ * naming the count and each issue's number -- or, when the count itself could
+ * not be read, naming that error instead. A run that cannot see the issues
+ * cannot know the limit has not been reached, so a failed count is treated as
+ * the limit reached.
+ */
+async function stuckLimitStatus(ctx, d) {
+  let issues
+  try {
+    issues = await d.listIssuesByLabels(ctx, [STUCK_LABEL])
+  } catch (error) {
+    return { status: 'stuck-limit', reason: `could not count open ${STUCK_LABEL} issues: ${error.message}` }
+  }
+  if (issues.length < STUCK_ISSUE_LIMIT) return null
+  const numbers = issues.map((i) => `#${i.number}`).join(', ')
+  return { status: 'stuck-limit', reason: `${issues.length} open ${STUCK_LABEL} issues (${numbers}), at or over the limit of ${STUCK_ISSUE_LIMIT}` }
+}
+
+/** The body of a stuck-story issue (OQ-112's AC-4). */
+function stuckIssueBody({ id, branch, reason, baseEnv }) {
+  const label = machineLabel(baseEnv) ?? 'unlabelled'
+  return [
+    `Story: ${id}`,
+    `Branch: ${branch}`,
+    `Machine: ${label}`,
+    `Time: ${new Date().toISOString()}`,
+    '',
+    reason,
+  ].join('\n')
+}
+
+/**
+ * OQ-112's AC-4: makes sure there is one open issue titled `Loop: <id> is
+ * stuck`, creating one with the `loop-stuck` label only if none is already
+ * open. Resolves `{ opened: true, issue }`, `{ opened: false, alreadyOpen:
+ * true }`, or `{ opened: false, error }` when listing or creating failed
+ * (AC-5) -- the caller's own skip or stop is unaffected either way.
+ */
+async function reportStuck(ctx, d, { id, branch, reason, baseEnv }) {
+  const title = stuckIssueTitle(id)
+  try {
+    const open = await d.listIssuesByLabels(ctx, [STUCK_LABEL])
+    if (open.some((i) => i.title === title)) return { opened: false, alreadyOpen: true }
+    const issue = await d.createIssue(ctx, { title, body: stuckIssueBody({ id, branch, reason, baseEnv }), labels: [STUCK_LABEL] })
+    return { opened: true, issue }
+  } catch (error) {
+    return { opened: false, error: error.message }
+  }
+}
+
+/**
+ * OQ-112's AC-3: whether a skip entry from `pickStory` is stuck, and if so why.
+ * A local-only branch is stuck whatever its age (AC-3's second bullet). A
+ * branch on origin is stuck unless an open pull request already shows it
+ * (no issue needed, OQ-48's AC-8) or its claim is younger than
+ * `STUCK_AFTER_MS` (most likely a dispatch still running). `null` means not
+ * stuck; a thrown error from either check is treated the same as "not sure
+ * enough to report" and surfaces as the skip's own `stuck.error` (AC-5).
+ */
+async function stuckReasonForSkip(ctx, d, repoDir, skip) {
+  if (skip.location === 'local') {
+    return skip.pushed
+      ? 'the branch existed only locally, and was just pushed to origin'
+      : `the branch exists only locally, and pushing it to origin failed: ${skip.error}`
+  }
+  const openPRs = await d.listOpenPullRequestsForHead(ctx, skip.branch)
+  if (openPRs.length > 0) return null
+  const age = await d.claimAgeMs(repoDir, skip.branch)
+  if (age !== null && age < STUCK_AFTER_MS) return null
+  return age === null
+    ? 'the branch is on origin with no open pull request and no claim commit'
+    : `the branch is on origin with no open pull request, and its claim is ${Math.round(age / 60000)} minutes old`
+}
 
 async function git(cwd, args) {
   const { stdout } = await execFileAsync('git', ['-c', 'core.quotepath=off', ...args], { cwd, maxBuffer: 64 * 1024 * 1024 })
@@ -179,7 +268,7 @@ export function parseMaxStories(raw) {
 
 /**
  * Runs the queue to `nothing-ready`, `max-stories`, or a stop (AC-1--AC-4,
- * AC-6).
+ * AC-6, and OQ-112's AC-3, AC-5, AC-6).
  *
  *   repoDir      the loop's own worktree, updated to a detached
  *                `origin/main` between stories (`updateCheckout`) and handed
@@ -187,22 +276,42 @@ export function parseMaxStories(raw) {
  *   repo         `owner/name`, passed to each story's process
  *   maxStories   caps the number of stories *started*; a skipped story does
  *                not count. Uncapped when omitted
- *   deps         `{ updateCheckout, pickStory, runStoryProcess }`, replaceable
- *                by a test
+ *   ctx          a `github.mjs` context. OQ-112's stuck-issue limit and
+ *                reporting run only when this is given (see this module's
+ *                top comment); `main` always gives one
+ *   baseEnv      read for the machine label in a stuck issue's body
+ *                (OQ-110's AC-8); defaults to `process.env`
+ *   deps         `{ updateCheckout, pickStory, runStoryProcess,
+ *                listIssuesByLabels, createIssue, listOpenPullRequestsForHead,
+ *                claimAgeMs }`, replaceable by a test
  *
  * Resolves `{ status, report, ... }`. `report` is every story the run
  * touched, in order: `{ id, branch, outcome: 'skipped' }` for one AC-4 passed
  * over, and `{ id, outcome }` for one it ran -- `'merged'`,
  * `'stopped-recorded'` (AC-3's fully-recorded stop, the loop goes on), or
  * `'stopped'` / `'process-error'` (the loop stops, named on the result too).
- * `status` is `'nothing-ready'`, `'max-stories'`, `'dirty'` (AC-3, OQ-109:
+ * A skip or a stop that OQ-112's AC-3 finds stuck carries a `stuck` field:
+ * `reportStuck`'s result, or omitted when it was not stuck (an open pull
+ * request, or a claim younger than `STUCK_AFTER_MS`). `status` is
+ * `'nothing-ready'`, `'max-stories'`, `'dirty'` (AC-3, OQ-109:
  * `updateCheckout` found something uncommitted and changed nothing),
- * `'process-error'`, or `'story-stopped'`.
+ * `'process-error'`, `'story-stopped'`, or `'stuck-limit'` (OQ-112's AC-6).
  */
-export async function runLoop({ repoDir = DISPATCHER_ROOT, repo = DEFAULT_REPO, maxStories, deps = {} } = {}) {
-  const d = { updateCheckout, pickStory, runStoryProcess, ...deps }
+export async function runLoop({
+  repoDir = DISPATCHER_ROOT, repo = DEFAULT_REPO, maxStories, ctx, baseEnv = process.env, deps = {},
+} = {}) {
+  const d = {
+    updateCheckout, pickStory, runStoryProcess,
+    listIssuesByLabels, createIssue, listOpenPullRequestsForHead, claimAgeMs,
+    ...deps,
+  }
   const report = []
   let started = 0
+
+  if (ctx) {
+    const limited = await stuckLimitStatus(ctx, d)
+    if (limited) return { ...limited, report }
+  }
 
   for (;;) {
     if (maxStories !== undefined && started >= maxStories) {
@@ -215,7 +324,26 @@ export async function runLoop({ repoDir = DISPATCHER_ROOT, repo = DEFAULT_REPO, 
     }
 
     const picked = await d.pickStory(repoDir)
-    for (const s of picked.skipped) report.push({ id: s.id, branch: s.branch, outcome: 'skipped' })
+    for (const s of picked.skipped) {
+      const entry = { id: s.id, branch: s.branch, outcome: 'skipped' }
+      report.push(entry)
+      if (ctx) {
+        let reason
+        try {
+          reason = await stuckReasonForSkip(ctx, d, repoDir, s)
+        } catch (error) {
+          entry.stuck = { opened: false, error: error.message }
+          continue
+        }
+        if (reason) entry.stuck = await reportStuck(ctx, d, { id: s.id, branch: s.branch, reason, baseEnv })
+      }
+    }
+
+    if (ctx) {
+      const limited = await stuckLimitStatus(ctx, d)
+      if (limited) return { ...limited, report }
+    }
+
     if (!picked.story) {
       return { status: 'nothing-ready', report }
     }
@@ -236,7 +364,17 @@ export async function runLoop({ repoDir = DISPATCHER_ROOT, repo = DEFAULT_REPO, 
       report.push({ id: picked.story.id, outcome: 'stopped-recorded', status: r.status })
       continue
     }
-    report.push({ id: picked.story.id, outcome: 'stopped', status: r?.status, reason: r?.reason })
+    const entry = { id: picked.story.id, outcome: 'stopped', status: r?.status, reason: r?.reason }
+    // OQ-112's AC-3's third case: a dispatch that stopped before a pull
+    // request existed (`branch-exists` and `not-ready` mean another run holds
+    // the claim, or the story is no longer ready -- neither is stuck).
+    if (ctx && r?.dispatch && !['opened', 'branch-exists', 'not-ready'].includes(r.dispatch.status)) {
+      entry.stuck = await reportStuck(ctx, d, {
+        id: picked.story.id, branch: picked.story.branch,
+        reason: `the story's dispatch ended ${r.status}: ${r.reason}`, baseEnv,
+      }).catch((error) => ({ opened: false, error: error.message }))
+    }
+    report.push(entry)
     return { status: 'story-stopped', storyId: picked.story.id, storyStatus: r?.status, reason: r?.reason, report }
   }
 }
@@ -333,7 +471,7 @@ async function main(argv) {
   const { repo, maxStories } = parseArgs(argv)
   await requireOwnWorktree(DISPATCHER_ROOT)
 
-  const result = await runLoop({ repo, maxStories })
+  const result = await runLoop({ repo, maxStories, ctx: createContext({ repo }) })
   console.log(JSON.stringify(result, null, 2))
   if (result.status !== 'nothing-ready' && result.status !== 'max-stories') process.exitCode = 1
 }

@@ -5,7 +5,9 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } 
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createContext } from './github.mjs'
 import {
+  STUCK_ISSUE_LIMIT,
   defaultWorktreePath,
   hasCheckedOutBranch,
   initWorktree,
@@ -716,5 +718,224 @@ describe('OQ-109/AC-2: the loop refuses to run from a checkout that has a branch
     expect(await hasCheckedOutBranch(repo.repoDir)).toBe(false)
 
     await expect(requireOwnWorktree(repo.repoDir)).resolves.toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------- OQ-112: stuck stories
+
+const REPO = 'luplows/tower-workshop-paths'
+
+/** Like github.test.mjs's fakeFetch: answers queued responses in order. */
+function fakeFetch(responses) {
+  const calls = []
+  const fn = async (url, init) => {
+    calls.push({ url, method: init.method, body: init.body ? JSON.parse(init.body) : undefined })
+    const next = responses.shift()
+    if (!next) throw new Error(`no fake response queued for ${init.method} ${url}`)
+    return { ok: next.ok ?? true, status: next.status ?? 200, json: async () => next.json ?? {}, text: async () => JSON.stringify(next.json ?? {}) }
+  }
+  fn.calls = calls
+  return fn
+}
+
+function makeCtx(responses) {
+  const fetch = fakeFetch(responses)
+  return { fetch, ctx: createContext({ repo: REPO, fetch, getToken: async () => 'tok' }) }
+}
+
+const noIssuesOpen = { json: [] }
+const issueCreated = (number) => ({ json: { number, html_url: `https://x/issues/${number}` } })
+const updated = async () => ({ status: 'updated' })
+const neverCalled = (name) => async () => { throw new Error(`${name} must not be called`) }
+
+describe('OQ-112/AC-3, AC-4, AC-5: a stuck story opens exactly one GitHub issue', () => {
+  it('OQ-112/AC-3, AC-4: a branch on origin with no open pull request and no claim opens an issue naming the story, branch, machine and reason', async () => {
+    const { ctx, fetch } = makeCtx([noIssuesOpen, noIssuesOpen, issueCreated(11), noIssuesOpen])
+    const pickStory = async () => ({ story: null, skipped: [{ id: 'OQ-1', branch: 'story/OQ-1-x', location: 'origin' }] })
+    const result = await runLoop({
+      ctx, baseEnv: { TW_MACHINE_LABEL: 'laptop' },
+      deps: {
+        updateCheckout: updated, pickStory, runStoryProcess: neverCalled('runStoryProcess'),
+        listOpenPullRequestsForHead: async () => [], claimAgeMs: async () => null,
+      },
+    })
+    expect(result.status).toBe('nothing-ready')
+    expect(result.report[0]).toMatchObject({ id: 'OQ-1', branch: 'story/OQ-1-x', outcome: 'skipped' })
+    expect(result.report[0].stuck).toEqual({ opened: true, issue: { number: 11, url: 'https://x/issues/11' } })
+    const createCall = fetch.calls.find((c) => c.method === 'POST')
+    expect(createCall.url).toBe(`https://api.github.com/repos/${REPO}/issues`)
+    expect(createCall.body).toEqual({
+      title: 'Loop: OQ-1 is stuck',
+      body: expect.stringContaining('Story: OQ-1'),
+      labels: ['loop-stuck'],
+    })
+    expect(createCall.body.body).toContain('Branch: story/OQ-1-x')
+    expect(createCall.body.body).toContain('Machine: laptop')
+  })
+
+  it('OQ-112/AC-3: a local-only branch opens an issue whatever its age, without checking a pull request or a claim', async () => {
+    const { ctx } = makeCtx([noIssuesOpen, noIssuesOpen, issueCreated(12), noIssuesOpen])
+    const pickStory = async () => ({ story: null, skipped: [{ id: 'OQ-2', branch: 'story/OQ-2-x', location: 'local', pushed: true }] })
+    const result = await runLoop({
+      ctx,
+      deps: {
+        updateCheckout: updated, pickStory, runStoryProcess: neverCalled('runStoryProcess'),
+        listOpenPullRequestsForHead: neverCalled('listOpenPullRequestsForHead'), claimAgeMs: neverCalled('claimAgeMs'),
+      },
+    })
+    expect(result.report[0].stuck).toEqual({ opened: true, issue: { number: 12, url: 'https://x/issues/12' } })
+  })
+
+  it('OQ-112/AC-4: a local-only branch whose push failed names the real push error, not a false claim that it was pushed', async () => {
+    const { ctx, fetch } = makeCtx([noIssuesOpen, noIssuesOpen, issueCreated(21), noIssuesOpen])
+    const pickStory = async () => ({
+      story: null,
+      skipped: [{ id: 'OQ-5', branch: 'story/OQ-5-x', location: 'local', pushed: false, error: 'remote rejected' }],
+    })
+    const result = await runLoop({
+      ctx,
+      deps: {
+        updateCheckout: updated, pickStory, runStoryProcess: neverCalled('runStoryProcess'),
+        listOpenPullRequestsForHead: neverCalled('listOpenPullRequestsForHead'), claimAgeMs: neverCalled('claimAgeMs'),
+      },
+    })
+    expect(result.report[0].stuck).toEqual({ opened: true, issue: { number: 21, url: 'https://x/issues/21' } })
+    const createCall = fetch.calls.find((c) => c.method === 'POST')
+    expect(createCall.body.body).toContain('pushing it to origin failed: remote rejected')
+    expect(createCall.body.body).not.toContain('was just pushed to origin')
+  })
+
+  it('OQ-112/AC-3: a dispatch that stopped before a pull request existed opens an issue; branch-exists does not', async () => {
+    const { ctx: stuckCtx } = makeCtx([noIssuesOpen, noIssuesOpen, noIssuesOpen, issueCreated(13)])
+    const pickStory = async () => ({ story: { id: 'OQ-3', branch: 'story/OQ-3-x' }, skipped: [] })
+    const runStoryProcess = async () => ({
+      status: 'ran',
+      result: { status: 'install-failed', stopped: true, reason: 'npm ci failed', dispatch: { status: 'install-failed', reason: 'npm ci failed' } },
+    })
+    const result = await runLoop({ ctx: stuckCtx, deps: { updateCheckout: updated, pickStory, runStoryProcess } })
+    expect(result.status).toBe('story-stopped')
+    expect(result.report[0].stuck).toEqual({ opened: true, issue: { number: 13, url: 'https://x/issues/13' } })
+
+    const { ctx: branchExistsCtx } = makeCtx([noIssuesOpen, noIssuesOpen])
+    const runStoryProcess2 = async () => ({
+      status: 'ran',
+      result: { status: 'branch-exists', stopped: true, reason: 'taken', dispatch: { status: 'branch-exists', reason: 'taken' } },
+    })
+    const result2 = await runLoop({ ctx: branchExistsCtx, deps: { updateCheckout: updated, pickStory, runStoryProcess: runStoryProcess2 } })
+    expect(result2.report[0].stuck).toBeUndefined()
+  })
+
+  it('OQ-112/AC-4, AC-5: an already-open issue with the same title is left alone, no second one created', async () => {
+    const { ctx, fetch } = makeCtx([noIssuesOpen, { json: [{ number: 9, title: 'Loop: OQ-1 is stuck' }] }, noIssuesOpen])
+    const pickStory = async () => ({ story: null, skipped: [{ id: 'OQ-1', branch: 'story/OQ-1-x', location: 'origin' }] })
+    const result = await runLoop({
+      ctx,
+      deps: {
+        updateCheckout: updated, pickStory, runStoryProcess: neverCalled('runStoryProcess'),
+        listOpenPullRequestsForHead: async () => [], claimAgeMs: async () => null,
+      },
+    })
+    expect(result.report[0].stuck).toEqual({ opened: false, alreadyOpen: true })
+    expect(fetch.calls.filter((c) => c.method === 'POST')).toHaveLength(0)
+  })
+
+  it('OQ-112/AC-5: a skip with an open pull request, or a claim younger than STUCK_AFTER_MS, gets no issue', async () => {
+    const { ctx: withPr } = makeCtx([noIssuesOpen, noIssuesOpen])
+    const pickStory = async () => ({ story: null, skipped: [{ id: 'OQ-1', branch: 'story/OQ-1-x', location: 'origin' }] })
+    const resultWithPr = await runLoop({
+      ctx: withPr,
+      deps: {
+        updateCheckout: updated, pickStory, runStoryProcess: neverCalled('runStoryProcess'),
+        listOpenPullRequestsForHead: async () => [{ number: 5, headRef: 'story/OQ-1-x' }], claimAgeMs: neverCalled('claimAgeMs'),
+      },
+    })
+    expect(resultWithPr.report[0].stuck).toBeUndefined()
+
+    const { ctx: youngClaim } = makeCtx([noIssuesOpen, noIssuesOpen])
+    const resultYoung = await runLoop({
+      ctx: youngClaim,
+      deps: {
+        updateCheckout: updated, pickStory, runStoryProcess: neverCalled('runStoryProcess'),
+        listOpenPullRequestsForHead: async () => [], claimAgeMs: async () => 5 * 60 * 1000,
+      },
+    })
+    expect(resultYoung.report[0].stuck).toBeUndefined()
+  })
+
+  it('OQ-112/AC-5: a failed issue creation is recorded on the report, and the loop goes on to the next story', async () => {
+    const { ctx } = makeCtx([noIssuesOpen, noIssuesOpen, { ok: false, status: 500, json: { message: 'boom' } }, noIssuesOpen, noIssuesOpen])
+    let i = 0
+    const pickStory = async () => (i++ === 0
+      ? { story: { id: 'OQ-2', branch: 'story/OQ-2-x' }, skipped: [{ id: 'OQ-1', branch: 'story/OQ-1-x', location: 'origin' }] }
+      : { story: null, skipped: [] })
+    const runStoryProcess = async () => ({ status: 'ran', result: { status: 'merged' } })
+    const result = await runLoop({
+      ctx,
+      deps: {
+        updateCheckout: updated, pickStory, runStoryProcess,
+        listOpenPullRequestsForHead: async () => [], claimAgeMs: async () => null,
+      },
+    })
+    expect(result.status).toBe('nothing-ready')
+    expect(result.report[0].stuck.opened).toBe(false)
+    expect(result.report[0].stuck.error).toMatch(/500/)
+    expect(result.report[1]).toEqual({ id: 'OQ-2', outcome: 'merged' })
+  })
+
+  it('without a ctx, the pre-OQ-112 control flow runs unchanged: no issue is checked for or opened', async () => {
+    const pickStory = async () => ({ story: null, skipped: [{ id: 'OQ-1', branch: 'story/OQ-1-x', location: 'local', pushed: true }] })
+    const result = await runLoop({ deps: { updateCheckout: updated, pickStory, runStoryProcess: neverCalled('runStoryProcess') } })
+    expect(result.report).toEqual([{ id: 'OQ-1', branch: 'story/OQ-1-x', outcome: 'skipped' }])
+  })
+})
+
+describe('OQ-112/AC-6: two or more open loop-stuck issues stop the queue completely', () => {
+  it('OQ-112/AC-6: a run that starts at the limit picks nothing, naming the count and each issue\'s number', async () => {
+    const { ctx } = makeCtx([{ json: [{ number: 1, title: 'Loop: OQ-1 is stuck' }, { number: 2, title: 'Loop: OQ-2 is stuck' }] }])
+    const result = await runLoop({
+      ctx,
+      deps: { updateCheckout: neverCalled('updateCheckout'), pickStory: neverCalled('pickStory'), runStoryProcess: neverCalled('runStoryProcess') },
+    })
+    expect(result.status).toBe('stuck-limit')
+    expect(result.reason).toContain('2 open loop-stuck issues')
+    expect(result.reason).toContain('#1')
+    expect(result.reason).toContain('#2')
+    expect(STUCK_ISSUE_LIMIT).toBe(2)
+  })
+
+  it('OQ-112/AC-6: a run that reaches the limit partway, after a skip opens the second issue, picks nothing more', async () => {
+    const { ctx } = makeCtx([
+      { json: [{ number: 1, title: 'Loop: OQ-1 is stuck' }] }, // start of run: below the limit
+      { json: [{ number: 1, title: 'Loop: OQ-1 is stuck' }] }, // reportStuck's own existing-issue check
+      issueCreated(2), // the second issue is opened
+      { json: [{ number: 1, title: 'x' }, { number: 2, title: 'y' }] }, // before-pick: now at the limit
+    ])
+    const pickStory = async () => ({ story: { id: 'OQ-3', branch: 'story/OQ-3-x' }, skipped: [{ id: 'OQ-2', branch: 'story/OQ-2-x', location: 'local' }] })
+    const result = await runLoop({
+      ctx,
+      deps: { updateCheckout: updated, pickStory, runStoryProcess: neverCalled('runStoryProcess') },
+    })
+    expect(result.status).toBe('stuck-limit')
+    expect(result.report[0]).toMatchObject({ id: 'OQ-2', outcome: 'skipped' })
+  })
+
+  it('OQ-112/AC-6: a run below the limit goes on as usual', async () => {
+    const { ctx } = makeCtx([noIssuesOpen, noIssuesOpen, noIssuesOpen])
+    let i = 0
+    const pickStory = async () => (i++ === 0 ? { story: { id: 'OQ-1', branch: 'story/OQ-1-x' }, skipped: [] } : { story: null, skipped: [] })
+    const runStoryProcess = async () => ({ status: 'ran', result: { status: 'merged' } })
+    const result = await runLoop({ ctx, deps: { updateCheckout: updated, pickStory, runStoryProcess } })
+    expect(result.status).toBe('nothing-ready')
+    expect(result.report).toEqual([{ id: 'OQ-1', outcome: 'merged' }])
+  })
+
+  it('OQ-112/AC-6: a failed count is treated as the limit reached, naming the error, and picks nothing', async () => {
+    const { ctx } = makeCtx([{ ok: false, status: 503, json: { message: 'unavailable' } }])
+    const result = await runLoop({
+      ctx,
+      deps: { updateCheckout: neverCalled('updateCheckout'), pickStory: neverCalled('pickStory'), runStoryProcess: neverCalled('runStoryProcess') },
+    })
+    expect(result.status).toBe('stuck-limit')
+    expect(result.reason).toMatch(/503/)
   })
 })
