@@ -360,7 +360,7 @@ The majority of the interesting behaviour.
 | Situation | Route |
 |---|---|
 | Reviewer returns `block` | Findings → coder respawned with story + findings. **Bounded** at three blocking verdicts (`MAX_ROUNDS` in `scripts/dispatch/story.mjs`, OQ-48). The respawn (`retryStory` in `scripts/dispatch/coder.mjs`) works on the existing branch and pull request, replaces the PR body, never opens a second PR, and says whether its findings came from review or CI. It leaves the PR's draft state alone: `story.mjs` acts on a coder's `blocked:` or draft, and stops the story. |
-| Still failing at the bound | Human queue. Round count **derived from `block` verdicts on the PR**, not stored. `review-blocked` is applied by hand today. `story.mjs` makes the PR a draft (OQ-87), then records `blocked:` in the story file on the story's own branch, as a commit it pushes with `pushBranch`. If the conversion to a draft fails it commits nothing, so a `blocked:` story is never left ready. The PR stays open, as a draft; `main`'s copy is not touched. **Planned (OQ-80):** `review-gate.yml` applies `review-blocked`. |
+| Still failing at the bound | Human queue. Round count **derived from `block` verdicts on the PR**, not stored. `review-gate.yml` applies `review-blocked` itself (OQ-80). `story.mjs` makes the PR a draft (OQ-87), then records `blocked:` in the story file on the story's own branch, as a commit it pushes with `pushBranch`. If the conversion to a draft fails it commits nothing, so a `blocked:` story is never left ready. The PR stays open, as a draft; `main`'s copy is not touched. |
 | CI red on the head | A run that concluded `failure` → failure output → coder respawned on the same branch. Bounded separately at three (OQ-48's AC-4), derived from the PR's failed CI runs (`countRedCiRounds`); then `blocked:` on the branch, no label. |
 | CI cancelled, timed out, or not finished within the dispatcher's wait | Not retried and not counted. The story stops, with `blocked:` on the branch naming the outcome. None of these is something a coder can fix (OQ-48's AC-5); `waitForCi`'s `red` result carries the run's `conclusion` to tell them apart. |
 | A retry reports the coder's `blocked:`, a draft request or a failure; a review records no verdict; a retry after red CI pushes no commit; landing fails | The story stops. Only the results OQ-48's AC-2 names continue the run (the `decide*` functions of `story.mjs`); every other result stops it. Every stop with an open PR makes the PR a draft first, so nothing can land it, which keeps the rule that a `blocked:` story is always a draft. Then it records `blocked:` on the branch. |
@@ -396,10 +396,9 @@ dispatcher rewritten from scratch — it is a property of the PR, which is where
 anyway.
 
 The same derivation feeds the circuit breaker. When the bound is reached, `story.mjs` makes the
-PR a draft and sets `blocked:` on the story, on the story's own branch. **Planned (OQ-80):**
-`review-gate.yml` applies `review-blocked`, because it sees every PR, including
-ones no dispatcher ran. That is what finally makes the breaker in `land-approved.yml` count a
-signal something reliably produces.
+PR a draft and sets `blocked:` on the story, on the story's own branch. `review-gate.yml` applies
+`review-blocked` itself, because it sees every PR, including ones no dispatcher ran. That is what
+makes the breaker in `land-approved.yml` count a signal something reliably produces.
 
 ---
 
@@ -922,10 +921,9 @@ be kept essentially as-is:
 - Circuit breaker at five `review-blocked` PRs, with exemptions for `breaker-override` and
   workflow-only diffs so a tripped breaker is not a trap.
 
-Today the label is applied by hand, so the breaker counts a signal nothing reliably produces.
-**Planned (OQ-80):** `review-blocked` is applied automatically when a story reaches the round
-bound, by `review-gate.yml`, with the bound derived from the PR's own `block` verdicts rather than
-remembered.
+`review-blocked` is applied automatically when a pull request reaches the round bound, by
+`review-gate.yml`, with the bound derived from the PR's own `block` verdicts rather than
+remembered (OQ-80).
 
 ### Merge queue
 

@@ -29,6 +29,14 @@ name: Review gate
 # Forgetting to run the reviewer leaves the status pending, so the PR simply
 # cannot merge. That is deliberate: the gate fails safe rather than silently
 # passing.
+#
+# A fourth step (OQ-80): after applying the verdict, this workflow recounts the
+# well-formed `block` (or deprecated `fail`) markers from write-access authors on the whole
+# pull request -- not only the comment that triggered this run -- and applies
+# `review-blocked` once there are three (OQ-48's bound). This workflow sees every pull
+# request, including ones no dispatcher ran, so it is where that label can be produced
+# reliably rather than applied by hand. The label is never removed or reapplied by anything
+# here: see `scripts/land/apply-review-blocked.mjs`.
 
 on:
   pull_request:
@@ -46,7 +54,10 @@ on:
 permissions:
   contents: read
   statuses: write
-  pull-requests: read
+  # Widened from `read` to `write` (OQ-80): this workflow applies `review-blocked` itself
+  # once a pull request reaches the round bound, which costs the write. Nothing here removes
+  # a label or reads anything the `read` scope did not already cover.
+  pull-requests: write
 
 jobs:
   # A new head commit always returns the gate to pending. That is what makes
@@ -78,6 +89,9 @@ jobs:
       && contains(github.event.comment.body, '<!-- agent-review')
     runs-on: ubuntu-latest
     steps:
+      - name: Check out scripts/land/apply-review-blocked.mjs
+        uses: actions/checkout@v4
+
       - name: Apply verdict from marker
         env:
           GH_TOKEN: ${{ github.token }}
@@ -157,3 +171,17 @@ jobs:
             echo "::error title=Review blocked::Agent review found blocking items on ${head}. See ${COMMENT_URL}"
             exit 1
           fi
+
+      # Runs whether or not the step above found a block, and whatever that step did with
+      # ASSOC or the marker on *this* comment (OQ-80): the round bound is counted across every
+      # comment on the pull request, not only the one that triggered this run, so a round can
+      # complete on a comment that is not itself a block -- for instance a corrected marker
+      # posted after one that already was. See REVIEW.md, "the block still counts toward the
+      # round bound like any other".
+      - name: Apply review-blocked at the round bound
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.issue.number }}
+        run: node scripts/land/apply-review-blocked.mjs
