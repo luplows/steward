@@ -13,6 +13,11 @@ const git = (cwd, ...args) => execFileSync(
   { cwd, encoding: 'utf8' },
 ).trim()
 
+// OQ-113: every test in this file runs git, through scenario, MAIN or git
+// directly, which a machine running anything else has pushed past the 5 s
+// default.
+const CONTAINMENT_TEST_TIMEOUT = 30_000
+
 const STORY = (id) => `---
 id: ${id}
 title: A story
@@ -95,7 +100,7 @@ describe('OQ-82/AC-2: a conforming move with ticks', () => {
       write('stories/done/OQ-82-foo.md', STORY('OQ-82').replace('- [ ] **AC-1**', '- [x] **AC-1**'))
     })
     await expect(checkStoryContainment(args)).resolves.toEqual({ ok: true })
-  })
+  }, CONTAINMENT_TEST_TIMEOUT)
 })
 
 describe('OQ-82/AC-2: a conforming blocked: edit', () => {
@@ -104,7 +109,7 @@ describe('OQ-82/AC-2: a conforming blocked: edit', () => {
       write('stories/OQ-82-foo.md', STORY('OQ-82').replace('blocked: null', 'blocked: "waiting on the owner"'))
     })
     await expect(checkStoryContainment(args)).resolves.toEqual({ ok: true })
-  })
+  }, CONTAINMENT_TEST_TIMEOUT)
 })
 
 describe('OQ-82/AC-2: a second story added', () => {
@@ -117,7 +122,7 @@ describe('OQ-82/AC-2: a second story added', () => {
     const result = await checkStoryContainment(args)
     expect(result.ok).toBe(false)
     expect(result.violations).toContainEqual(expect.objectContaining({ file: 'stories/OQ-200-new.md' }))
-  })
+  }, CONTAINMENT_TEST_TIMEOUT)
 })
 
 describe('OQ-82/AC-2: another story\'s ACs edited', () => {
@@ -132,7 +137,7 @@ describe('OQ-82/AC-2: another story\'s ACs edited', () => {
     const found = result.violations.find((v) => v.file === 'stories/OQ-90-other.md')
     expect(found).toBeDefined()
     expect(found.line).toBeGreaterThan(0)
-  })
+  }, CONTAINMENT_TEST_TIMEOUT)
 })
 
 describe('OQ-82/AC-2: its own AC reworded', () => {
@@ -147,7 +152,7 @@ describe('OQ-82/AC-2: its own AC reworded', () => {
     const result = await checkStoryContainment(args)
     expect(result.ok).toBe(false)
     expect(result.violations).toContainEqual(expect.objectContaining({ file: 'stories/done/OQ-82-foo.md' }))
-  })
+  }, CONTAINMENT_TEST_TIMEOUT)
 })
 
 describe('OQ-82/AC-2: a tick removed', () => {
@@ -168,7 +173,7 @@ describe('OQ-82/AC-2: a tick removed', () => {
     const result = await checkStoryContainment({ ...args, branch: 'story/OQ-83-tick-removed' })
     expect(result.ok).toBe(false)
     expect(result.violations).toContainEqual(expect.objectContaining({ file: 'stories/OQ-83-preticked.md' }))
-  })
+  }, CONTAINMENT_TEST_TIMEOUT)
 })
 
 describe('OQ-82/AC-1 and AC-2: a story branch with no move that adds a story', () => {
@@ -179,7 +184,7 @@ describe('OQ-82/AC-1 and AC-2: a story branch with no move that adds a story', (
     const result = await checkStoryContainment(args)
     expect(result.ok).toBe(false)
     expect(result.violations).toContainEqual(expect.objectContaining({ file: 'stories/OQ-201-added.md' }))
-  })
+  }, CONTAINMENT_TEST_TIMEOUT)
 })
 
 describe('OQ-82/AC-3: a story-writing PR is not restricted', () => {
@@ -194,5 +199,5 @@ describe('OQ-82/AC-3: a story-writing PR is not restricted', () => {
 
     const result = await checkStoryContainment({ cwd: repo, base: MAIN(), head, branch: 'chore/add-stories' })
     expect(result).toEqual({ ok: true })
-  })
+  }, CONTAINMENT_TEST_TIMEOUT)
 })

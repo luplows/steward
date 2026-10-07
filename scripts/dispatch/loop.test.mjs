@@ -58,6 +58,11 @@ function makeRepo(root) {
   }
 }
 
+// OQ-113: a test that calls makeRepo builds a bare origin plus a clone with
+// real git commands, which a machine running anything else has pushed past
+// the 5 s default. Passed to those tests, and to no other.
+const LOOP_TEST_TIMEOUT = 30_000
+
 describe('OQ-109/AC-3: fetches origin and stops on anything uncommitted, rather than fast-forwarding', () => {
   const originalEnv = { ...process.env }
   let root
@@ -90,7 +95,7 @@ describe('OQ-109/AC-3: fetches origin and stops on anything uncommitted, rather 
     expect(result).toEqual({ status: 'updated', headSha: advancedSha })
     expect(repo.headSha()).toBe(advancedSha)
     expect(await hasCheckedOutBranch(repo.repoDir)).toBe(false)
-  })
+  }, LOOP_TEST_TIMEOUT)
 
   it('OQ-109/AC-3: a modified tracked file stops the update, naming the path and changing nothing', async () => {
     const sub = path.join(root, 'dirty-tracked')
@@ -113,7 +118,7 @@ describe('OQ-109/AC-3: fetches origin and stops on anything uncommitted, rather 
     // Nothing was dispatched: the checkout is untouched.
     expect(repo.headSha()).toBe(localSha)
     expect(execFileSync('git', ['status', '--porcelain'], { cwd: repo.repoDir, encoding: 'utf8' }).trim()).not.toBe('')
-  })
+  }, LOOP_TEST_TIMEOUT)
 
   it('OQ-109/AC-3: an untracked file stops the update, naming the path and changing nothing', async () => {
     const sub = path.join(root, 'dirty-untracked')
@@ -128,7 +133,7 @@ describe('OQ-109/AC-3: fetches origin and stops on anything uncommitted, rather 
     expect(result.paths).toEqual(['scratch.txt'])
     expect(repo.headSha()).toBe(localSha)
     expect(existsSync(path.join(repo.repoDir, 'scratch.txt'))).toBe(true)
-  })
+  }, LOOP_TEST_TIMEOUT)
 
   it('OQ-109/AC-3: a story branch on origin does not affect the update', async () => {
     const sub = path.join(root, 'other-branch')
@@ -150,7 +155,7 @@ describe('OQ-109/AC-3: fetches origin and stops on anything uncommitted, rather 
 
     const result = await updateCheckout(repo.repoDir)
     expect(result).toEqual({ status: 'updated', headSha: advancedSha })
-  })
+  }, LOOP_TEST_TIMEOUT)
 
   it('OQ-109/AC-3: runLoop stops with its own status and dispatches nothing when the checkout is dirty', async () => {
     const pickStory = async () => { throw new Error('pickStory must not be called') }
@@ -218,7 +223,7 @@ describe('OQ-86/AC-4: pickStory skips an in-progress story and derives nothing-r
     const picked = await pickStory(repo.repoDir)
     expect(picked.skipped).toEqual([{ id: 'OQ-20', branch: 'story/OQ-20-already-running', location: 'origin' }])
     expect(picked.story).toEqual({ id: 'OQ-21', branch: 'story/OQ-21-next-up' })
-  })
+  }, LOOP_TEST_TIMEOUT)
 
   it('OQ-86/AC-4: a queue whose only ready stories all have branches on origin yields no story', async () => {
     const sub = path.join(root, 'all-skipped')
@@ -237,7 +242,7 @@ describe('OQ-86/AC-4: pickStory skips an in-progress story and derives nothing-r
       { id: 'OQ-30', branch: 'story/OQ-30-running-one', location: 'origin' },
       { id: 'OQ-31', branch: 'story/OQ-31-running-two', location: 'origin' },
     ])
-  })
+  }, LOOP_TEST_TIMEOUT)
 })
 
 describe('OQ-86/AC-2: two stories run from a checkout that catches up between them', () => {
@@ -300,7 +305,7 @@ describe('OQ-86/AC-2: two stories run from a checkout that catches up between th
     // (runLoop's own updateCheckout, not this test's fake) could have put it
     // there, since runStoryProcess never touches repoDir.
     expect(headAtCall[1]).toBe(mergedShas[0])
-  })
+  }, LOOP_TEST_TIMEOUT)
 })
 
 describe('OQ-86/AC-2, AC-3: runStoryProcess as a real child process', () => {
@@ -467,7 +472,7 @@ describe('OQ-111: a story whose branch exists only locally is pushed to origin a
     expect(picked.story).toEqual({ id: 'OQ-51', branch: 'story/OQ-51-next-up' })
     // The claim push landed the branch's tip exactly as it was, not a new commit.
     expect(repo.remoteTip(branch)).toBe(localSha)
-  })
+  }, LOOP_TEST_TIMEOUT)
 
   it('OQ-111/AC-1: a local-only branch whose push fails is still skipped, with git\'s error reported', async () => {
     const sub = path.join(root, 'local-only-push-fails')
@@ -491,7 +496,7 @@ describe('OQ-111: a story whose branch exists only locally is pushed to origin a
     expect(picked.skipped[0]).toMatchObject({ id: 'OQ-52', branch, location: 'local', pushed: false })
     expect(picked.skipped[0].error).toBeTruthy()
     expect(repo.remoteTip(branch)).toBeNull()
-  })
+  }, LOOP_TEST_TIMEOUT)
 
   it('OQ-111/AC-2: a branch on origin only is skipped as on origin, with nothing pushed', async () => {
     const sub = path.join(root, 'origin-only')
@@ -509,7 +514,7 @@ describe('OQ-111: a story whose branch exists only locally is pushed to origin a
     expect(picked.skipped).toEqual([{ id: 'OQ-53', branch, location: 'origin' }])
     expect(picked.story).toEqual({ id: 'OQ-54', branch: 'story/OQ-54-after' })
     expect(repo.remoteTip(branch)).toBe(originSha)
-  })
+  }, LOOP_TEST_TIMEOUT)
 
   it('OQ-111/AC-2: a branch both local and on origin at different tips is skipped as on origin, with nothing pushed', async () => {
     const sub = path.join(root, 'local-and-origin')
@@ -532,7 +537,7 @@ describe('OQ-111: a story whose branch exists only locally is pushed to origin a
     expect(picked.story).toBeNull()
     expect(picked.skipped).toEqual([{ id: 'OQ-55', branch, location: 'origin' }])
     expect(repo.remoteTip(branch)).toBe(originSha)
-  })
+  }, LOOP_TEST_TIMEOUT)
 
   it('OQ-111/AC-3: runLoop goes on to dispatch the next ready story after pickStory pushes and skips a local-only branch', async () => {
     const sub = path.join(root, 'loop-continues')
@@ -557,7 +562,7 @@ describe('OQ-111: a story whose branch exists only locally is pushed to origin a
     expect(result.report[0]).toEqual({ id: 'OQ-60', branch, outcome: 'skipped' })
     expect(result.report[1]).toEqual({ id: 'OQ-61', outcome: 'merged' })
     expect(repo.remoteTip(branch)).not.toBeNull()
-  })
+  }, LOOP_TEST_TIMEOUT)
 })
 
 describe('OQ-86/AC-6: --max-stories caps how many stories a run starts', () => {
@@ -660,7 +665,7 @@ describe('OQ-109/AC-1: --init creates a worktree of the loop\'s own, detached at
     expect(existsSync(target)).toBe(true)
     expect(git(target, 'rev-parse', 'HEAD').trim()).toBe(repo.headSha())
     expect(await hasCheckedOutBranch(target)).toBe(false)
-  })
+  }, LOOP_TEST_TIMEOUT)
 
   it('OQ-109/AC-1: refuses, exiting non-zero and creating nothing, when the path already exists', async () => {
     const sub = path.join(root, 'refuse')
@@ -674,7 +679,7 @@ describe('OQ-109/AC-1: --init creates a worktree of the loop\'s own, detached at
     // Refusal left the pre-existing directory exactly as it was -- no worktree was added.
     expect(existsSync(path.join(target, 'marker.txt'))).toBe(true)
     expect(git(repo.repoDir, 'worktree', 'list')).not.toContain('already-there')
-  })
+  }, LOOP_TEST_TIMEOUT)
 })
 
 describe('OQ-109/AC-2: the loop refuses to run from a checkout that has a branch checked out', () => {
@@ -708,7 +713,7 @@ describe('OQ-109/AC-2: the loop refuses to run from a checkout that has a branch
     expect(caught).toBeDefined()
     expect(caught.message).toContain(repo.repoDir)
     expect(caught.message).toContain('--init')
-  })
+  }, LOOP_TEST_TIMEOUT)
 
   it('OQ-109/AC-2: a detached checkout goes on', async () => {
     const sub = path.join(root, 'detached')
@@ -718,7 +723,7 @@ describe('OQ-109/AC-2: the loop refuses to run from a checkout that has a branch
     expect(await hasCheckedOutBranch(repo.repoDir)).toBe(false)
 
     await expect(requireOwnWorktree(repo.repoDir)).resolves.toBeUndefined()
-  })
+  }, LOOP_TEST_TIMEOUT)
 })
 
 // ---------------------------------------------------- OQ-112: stuck stories
