@@ -60,9 +60,12 @@ only against one that happens not to.
         own doc comment, which leaves *"a credential helper's own storage"*
         untouched on purpose and presents that as safe. After AC-2 it must say
         what keeps that storage out of reach.
-      If the `coder.md` heading is reworded, update
-      `stories/done/OQ-65-spawn-sessions.md`, which cites it by name. Grep for
-      further copies before calling this done.
+      Grep for further copies before calling this done. A copy found under
+      `stories/` is not edited in this pull request, because story
+      containment (`scripts/dispatch/story-containment.mjs`, OQ-82) fails a
+      story's pull request that changes another file there. The PR body
+      lists each such copy, with file and line, for Session A to correct
+      afterwards, or says that none was found.
       The `coder.md` edits go through the emit-a-diff route, because a spawned
       coder cannot write to `.claude/prompts/`.
 

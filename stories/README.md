@@ -74,6 +74,11 @@ natural-looking extension. Adding a value is cheap for the same reason.
 cannot be derived. Everything else about where a story stands is read from the
 filesystem, git, and GitHub — by two different things, at two different layers.
 
+A story only the owner can carry out, by hand and outside the loop, keeps
+`blocked:` set with a reason saying so, so the loop never picks it up. The
+owner starts a session for it, and that session's pull request moves the story
+to `stories/done/` like any other.
+
 **From the story files alone.** These are what the queue reader derives. The
 first match wins, so the order of the rows is part of the definition:
 

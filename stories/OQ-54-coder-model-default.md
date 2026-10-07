@@ -1,7 +1,7 @@
 ---
 id: OQ-54
 title: Resolve the coder model from a single declared default
-tier: next
+tier: normal
 kind: workflow
 depends_on: [OQ-61]
 model: sonnet

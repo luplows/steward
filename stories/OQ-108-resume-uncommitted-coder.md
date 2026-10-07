@@ -5,7 +5,7 @@ tier: normal
 kind: workflow
 depends_on: [OQ-107]
 model: sonnet
-blocked: null
+blocked: "Parked by the owner until a dispatch after OQ-107 is seen to lose uncommitted work (nothing-committed or uncommitted-changes with paths). The first time that happens, Session A clears this."
 ---
 
 ## Intent
