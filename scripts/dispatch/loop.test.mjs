@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -214,7 +214,7 @@ describe('OQ-86/AC-4: pickStory skips an in-progress story and derives nothing-r
     git(repo.repoDir, 'push', 'origin', 'main:refs/heads/story/OQ-20-already-running')
 
     const picked = await pickStory(repo.repoDir)
-    expect(picked.skipped).toEqual([{ id: 'OQ-20', branch: 'story/OQ-20-already-running' }])
+    expect(picked.skipped).toEqual([{ id: 'OQ-20', branch: 'story/OQ-20-already-running', location: 'origin' }])
     expect(picked.story).toEqual({ id: 'OQ-21', branch: 'story/OQ-21-next-up' })
   })
 
@@ -232,8 +232,8 @@ describe('OQ-86/AC-4: pickStory skips an in-progress story and derives nothing-r
     const picked = await pickStory(repo.repoDir)
     expect(picked.story).toBeNull()
     expect(picked.skipped).toEqual([
-      { id: 'OQ-30', branch: 'story/OQ-30-running-one' },
-      { id: 'OQ-31', branch: 'story/OQ-31-running-two' },
+      { id: 'OQ-30', branch: 'story/OQ-30-running-one', location: 'origin' },
+      { id: 'OQ-31', branch: 'story/OQ-31-running-two', location: 'origin' },
     ])
   })
 })
@@ -417,7 +417,7 @@ describe('OQ-86/AC-3: the loop goes on only after a merge or a fully recorded st
   })
 })
 
-describe('OQ-86/AC-4: a local-only branch stops the loop rather than looping on branch-exists', () => {
+describe('a dispatch that returns branch-exists still stops the loop (OQ-111 retitle: a local-only branch no longer does, since pickStory now pushes and skips it before any dispatch)', () => {
   it('OQ-86/AC-4: dispatchCoder\'s branch-exists (no pull request, nothing recorded) stops the loop', async () => {
     const calls = []
     const pickStory = async () => (calls.length === 0 ? { story: { id: 'OQ-1', branch: 'story/OQ-1-x' }, skipped: [] } : { story: null, skipped: [] })
@@ -429,6 +429,132 @@ describe('OQ-86/AC-4: a local-only branch stops the loop rather than looping on 
     expect(result.status).toBe('story-stopped')
     expect(result.storyStatus).toBe('branch-exists')
     expect(calls).toEqual(['OQ-1'])
+  })
+})
+
+describe('OQ-111: a story whose branch exists only locally is pushed to origin and skipped', () => {
+  const originalEnv = { ...process.env }
+  let root
+
+  beforeAll(() => {
+    process.env.GIT_AUTHOR_NAME = process.env.GIT_COMMITTER_NAME = 'Test'
+    process.env.GIT_AUTHOR_EMAIL = process.env.GIT_COMMITTER_EMAIL = 'test@example.com'
+    root = mkdtempSync(path.join(tmpdir(), 'tw-loop-local-only-'))
+  })
+
+  afterAll(() => {
+    process.env = originalEnv
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  it('OQ-111/AC-1, AC-2: a local-only branch is pushed as it is and skipped, and the next ready story is dispatched', async () => {
+    const sub = path.join(root, 'local-only')
+    mkdirSync(sub)
+    const repo = makeRepo(sub)
+    writeStory(repo.repoDir, 'OQ-50', 'local-only')
+    writeStory(repo.repoDir, 'OQ-51', 'next-up')
+    repo.commit('add stories')
+    repo.push()
+    const branch = 'story/OQ-50-local-only'
+    git(repo.repoDir, 'branch', branch)
+    const localSha = git(repo.repoDir, 'rev-parse', branch).trim()
+    expect(repo.remoteTip(branch)).toBeNull()
+
+    const picked = await pickStory(repo.repoDir)
+    expect(picked.skipped).toEqual([{ id: 'OQ-50', branch, location: 'local', pushed: true }])
+    expect(picked.story).toEqual({ id: 'OQ-51', branch: 'story/OQ-51-next-up' })
+    // The claim push landed the branch's tip exactly as it was, not a new commit.
+    expect(repo.remoteTip(branch)).toBe(localSha)
+  })
+
+  it('OQ-111/AC-1: a local-only branch whose push fails is still skipped, with git\'s error reported', async () => {
+    const sub = path.join(root, 'local-only-push-fails')
+    mkdirSync(sub)
+    const repo = makeRepo(sub)
+    writeStory(repo.repoDir, 'OQ-52', 'push-fails')
+    repo.commit('add story')
+    repo.push()
+    const branch = 'story/OQ-52-push-fails'
+    git(repo.repoDir, 'branch', branch)
+
+    // A pre-receive hook that refuses every push, so the claim push fails
+    // deterministically rather than relying on a real race with another machine.
+    const hookPath = path.join(repo.origin, 'hooks', 'pre-receive')
+    writeFileSync(hookPath, '#!/bin/sh\nexit 1\n')
+    chmodSync(hookPath, 0o755)
+
+    const picked = await pickStory(repo.repoDir)
+    expect(picked.story).toBeNull()
+    expect(picked.skipped).toHaveLength(1)
+    expect(picked.skipped[0]).toMatchObject({ id: 'OQ-52', branch, location: 'local', pushed: false })
+    expect(picked.skipped[0].error).toBeTruthy()
+    expect(repo.remoteTip(branch)).toBeNull()
+  })
+
+  it('OQ-111/AC-2: a branch on origin only is skipped as on origin, with nothing pushed', async () => {
+    const sub = path.join(root, 'origin-only')
+    mkdirSync(sub)
+    const repo = makeRepo(sub)
+    writeStory(repo.repoDir, 'OQ-53', 'origin-only')
+    writeStory(repo.repoDir, 'OQ-54', 'after')
+    repo.commit('add stories')
+    repo.push()
+    const branch = 'story/OQ-53-origin-only'
+    git(repo.repoDir, 'push', 'origin', `main:refs/heads/${branch}`)
+    const originSha = repo.remoteTip(branch)
+
+    const picked = await pickStory(repo.repoDir)
+    expect(picked.skipped).toEqual([{ id: 'OQ-53', branch, location: 'origin' }])
+    expect(picked.story).toEqual({ id: 'OQ-54', branch: 'story/OQ-54-after' })
+    expect(repo.remoteTip(branch)).toBe(originSha)
+  })
+
+  it('OQ-111/AC-2: a branch both local and on origin at different tips is skipped as on origin, with nothing pushed', async () => {
+    const sub = path.join(root, 'local-and-origin')
+    mkdirSync(sub)
+    const repo = makeRepo(sub)
+    writeStory(repo.repoDir, 'OQ-55', 'both')
+    repo.commit('add story')
+    repo.push()
+    const branch = 'story/OQ-55-both'
+    git(repo.repoDir, 'branch', branch)
+    git(repo.repoDir, 'push', 'origin', branch)
+    const originSha = repo.remoteTip(branch)
+
+    git(repo.repoDir, 'checkout', branch)
+    git(repo.repoDir, 'commit', '--allow-empty', '-m', 'diverge locally')
+    const localSha = git(repo.repoDir, 'rev-parse', branch).trim()
+    expect(localSha).not.toBe(originSha)
+
+    const picked = await pickStory(repo.repoDir)
+    expect(picked.story).toBeNull()
+    expect(picked.skipped).toEqual([{ id: 'OQ-55', branch, location: 'origin' }])
+    expect(repo.remoteTip(branch)).toBe(originSha)
+  })
+
+  it('OQ-111/AC-3: runLoop goes on to dispatch the next ready story after pickStory pushes and skips a local-only branch', async () => {
+    const sub = path.join(root, 'loop-continues')
+    mkdirSync(sub)
+    const repo = makeRepo(sub)
+    writeStory(repo.repoDir, 'OQ-60', 'local-only')
+    writeStory(repo.repoDir, 'OQ-61', 'next')
+    repo.commit('add stories')
+    repo.push()
+    const branch = 'story/OQ-60-local-only'
+    git(repo.repoDir, 'branch', branch)
+
+    const calls = []
+    const runStoryProcess = async ({ storyId }) => {
+      calls.push(storyId)
+      return { status: 'ran', result: { status: 'merged' } }
+    }
+
+    const result = await runLoop({ repoDir: repo.repoDir, maxStories: 1, deps: { runStoryProcess } })
+    expect(result.status).toBe('max-stories')
+    expect(calls).toEqual(['OQ-61'])
+    expect(result.report[0]).toEqual({ id: 'OQ-60', branch, outcome: 'skipped' })
+    expect(result.report[1]).toEqual({ id: 'OQ-61', outcome: 'merged' })
+    expect(repo.remoteTip(branch)).not.toBeNull()
   })
 })
 

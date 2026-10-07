@@ -314,8 +314,11 @@ than relaxed.
    `pickStory`'s existing check for a branch on `origin` skips the story on the next run. A failed
    claim push spends nothing (no install, no session) and leaves nothing behind: `branch-exists`
    when the branch is then on `origin` (a race with another machine), otherwise `claim-failed`
-   carrying git's error. **Planned (OQ-111):** a story whose branch is only local is skipped too,
-   after the branch is pushed. **Planned (OQ-112):** the stop opens a `Loop: OQ-n is stuck` issue
+   carrying git's error. A story whose branch is only local is skipped too (`pickStory`, OQ-111): it
+   is pushed to `origin` as it is with `claimPushArgs` before the skip, and the skip entry says
+   whether the branch was on `origin` or only local, and for a local one, whether that push
+   succeeded. A branch both local and on `origin` counts as on `origin`, whatever its local tip, and
+   nothing is pushed for it. **Planned (OQ-112):** the stop opens a `Loop: OQ-n is stuck` issue
    for the story.
    Before picking, and only between
    stories, the loop fetches `origin` and checks out `origin/main`, detached, in its own worktree
@@ -352,7 +355,7 @@ The majority of the interesting behaviour.
 | CI red on the head | A run that concluded `failure` → failure output → coder respawned on the same branch. Bounded separately at three (OQ-48's AC-4), derived from the PR's failed CI runs (`countRedCiRounds`); then `blocked:` on the branch, no label. |
 | CI cancelled, timed out, or not finished within the dispatcher's wait | Not retried and not counted. The story stops, with `blocked:` on the branch naming the outcome. None of these is something a coder can fix (OQ-48's AC-5); `waitForCi`'s `red` result carries the run's `conclusion` to tell them apart. |
 | A retry reports the coder's `blocked:`, a draft request or a failure; a review records no verdict; a retry after red CI pushes no commit; landing fails | The story stops. Only the results OQ-48's AC-2 names continue the run (the `decide*` functions of `story.mjs`); every other result stops it. Every stop with an open PR makes the PR a draft first, so nothing can land it, which keeps the rule that a `blocked:` story is always a draft. Then it records `blocked:` on the branch. |
-| The dispatcher is interrupted mid-story | The owner resumes it from its PR number (`story.mjs OQ-n --pr <number>`, OQ-48's AC-9), which derives where it was from GitHub alone. Once the run has pushed, the story's branch on `origin` keeps it `in-progress`, so the loop (OQ-86) skips it; a run killed between its push and opening the PR leaves a branch with no PR, which the owner handles by hand. Killed before its claim push, the story has no branch on `origin` and the loop picks it again, but the killed run's local branch makes the dispatch return `branch-exists`, which stops the loop (OQ-86's AC-3 and AC-4). The claim push (OQ-110, above) means a run killed after it almost always leaves a branch every machine sees, since the claim lands before the install or the session starts. **Planned (OQ-111):** the loop skips a story whose branch is only local, after pushing it. **Planned (OQ-112):** it opens a `Loop: OQ-n is stuck` issue for a story branch with no open pull request. |
+| The dispatcher is interrupted mid-story | The owner resumes it from its PR number (`story.mjs OQ-n --pr <number>`, OQ-48's AC-9), which derives where it was from GitHub alone. Once the run has pushed, the story's branch on `origin` keeps it `in-progress`, so the loop (OQ-86) skips it; a run killed between its push and opening the PR leaves a branch with no PR, which the owner handles by hand. Killed before its claim push, the story has no branch on `origin` and the loop picks it again, but the killed run's local branch makes the dispatch return `branch-exists`, which stops the loop (OQ-86's AC-3 and AC-4). The claim push (OQ-110, above) means a run killed after it almost always leaves a branch every machine sees, since the claim lands before the install or the session starts. The loop skips a story whose branch is only local, after pushing it (OQ-111, above). **Planned (OQ-112):** it opens a `Loop: OQ-n is stuck` issue for a story branch with no open pull request. |
 | Story was wrong, not the code | `blocked:` set with the reason → Session A |
 | Coder hits ambiguity mid-story | `blocked:` + the specific question → Session A |
 | Branch stale | Rebase; if it fails, kick back rather than merge against a moved world |

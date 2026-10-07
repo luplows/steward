@@ -957,7 +957,8 @@ describe('OQ-110/AC-5: the next run skips a story whose claim is on origin', () 
     expect(stopped.result.status).toBe('nothing-committed')
 
     const picked = await pickStory(world.repoDir)
-    expect(picked.skipped).toEqual([{ id: 'OQ-98', branch: 'story/OQ-98-first' }])
+    // OQ-111: pickStory's skip entries now say where the branch was found.
+    expect(picked.skipped).toEqual([{ id: 'OQ-98', branch: 'story/OQ-98-first', location: 'origin' }])
     expect(picked.story).toEqual({ id: 'OQ-99', branch: 'story/OQ-99-second' })
 
     // As the loop does: it hands the id pickStory chose to the next story process.

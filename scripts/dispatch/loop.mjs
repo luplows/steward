@@ -31,7 +31,7 @@ import { existsSync, realpathSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { branchFor, remoteTip } from './coder.mjs'
+import { branchFor, claimPushArgs, remoteTip } from './coder.mjs'
 import { dispatchable, loadQueue } from './queue.mjs'
 
 const execFileAsync = promisify(execFile)
@@ -78,16 +78,36 @@ export async function updateCheckout(repoDir) {
   return { status: 'updated', headSha }
 }
 
+/** The local tip of `branch` in `repoDir`, or `null` when there is none. */
+async function localTip(repoDir, branch) {
+  try {
+    return (await git(repoDir, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])).trim()
+  } catch {
+    return null
+  }
+}
+
 /**
  * AC-4: the first `ready` story (`dispatchable()`, `stories/README.md`'s
- * ordering) whose `story/OQ-<n>-*` branch does not exist on `origin` --
+ * ordering) whose `story/OQ-<n>-*` branch is neither on `origin` nor local --
  * `in-progress` is this, derived fresh and never stored. Reads the queue
  * from `repoDir`'s working tree, which `updateCheckout` is expected to have
  * just brought to `origin/main`.
  *
- * Resolves `{ story: { id, branch } | null, skipped: [{ id, branch }] }`:
- * `skipped` is every `in-progress` story passed over before the pick (or
- * before concluding none is ready), in order.
+ * A branch on `origin` is skipped as before. A branch that exists only
+ * locally (OQ-111's AC-1, AC-2) -- a run killed between creating its branch
+ * and pushing its claim (`coder.mjs`'s `dispatchCoder`), or a leftover from
+ * before OQ-110 -- is pushed to `origin` with `coder.mjs`'s `claimPushArgs`,
+ * as it is, and skipped too, so another machine sees it taken instead of
+ * dispatching it again. A branch both local and on `origin` counts as on
+ * `origin`, whatever its local tip: nothing is pushed for it.
+ *
+ * Resolves `{ story: { id, branch } | null, skipped }`. `skipped` is every
+ * `in-progress` story passed over before the pick (or before concluding none
+ * is ready), in order, each `{ id, branch, location: 'origin' }` or
+ * `{ id, branch, location: 'local', pushed: true }` /
+ * `{ id, branch, location: 'local', pushed: false, error }` (git's error from
+ * the failed push).
  */
 export async function pickStory(repoDir) {
   const queue = await loadQueue(repoDir)
@@ -96,7 +116,17 @@ export async function pickStory(repoDir) {
     const filename = path.basename(story.filePath)
     const branch = branchFor(filename)
     if (await remoteTip(repoDir, branch)) {
-      skipped.push({ id: story.id, branch })
+      skipped.push({ id: story.id, branch, location: 'origin' })
+      continue
+    }
+    if (await localTip(repoDir, branch)) {
+      try {
+        await git(repoDir, claimPushArgs(branch))
+        skipped.push({ id: story.id, branch, location: 'local', pushed: true })
+      } catch (error) {
+        const reason = String(error.stderr ?? '').trim() || error.message
+        skipped.push({ id: story.id, branch, location: 'local', pushed: false, error: reason })
+      }
       continue
     }
     return { story: { id: story.id, branch }, skipped }
