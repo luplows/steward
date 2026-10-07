@@ -36,8 +36,9 @@ A section that restates the PR title in other words is also unfilled.
    — the two queues have different completion moves, and a story is not also
    copied into the archive.
 5. Any new open question or story uses the next unused OQ number — checked
-   against `stories/`, `Open-Questions.md` and `Completed-Questions.md`, which
-   share one number space. Numbers are never reused or renumbered.
+   against `stories/` (`done/` and `retired/` included), `Open-Questions.md`
+   and `Completed-Questions.md`, which share one number space. Numbers are
+   never reused or renumbered.
 6. Commit granularity: one commit is right for most changes; a PR that both
    regenerates data files and changes logic splits those into separate commits.
 7. The diff matches the **What changed** description. No unrelated changes

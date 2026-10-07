@@ -97,7 +97,7 @@ describe('OQ-49/AC-2: bad frontmatter fails loudly, naming the file', () => {
     expect(() => buildStory('/fake/OQ-1-x.md', source, false)).toThrow(/OQ-1-x\.md.*required field 'blocked'/s)
   })
 
-  it('does not choke on a field this module does not read, written as a block YAML list (e.g. stories/OQ-55-*.md)', () => {
+  it('does not choke on a field this module does not read, written as a block YAML list (e.g. a mechanisms: list)', () => {
     const source = [
       '---',
       'id: OQ-1',

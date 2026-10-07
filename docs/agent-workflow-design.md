@@ -114,7 +114,13 @@ stories/
   OQ-50-share-levels-via-link.md
   done/
     OQ-42-agent-review-gate.md     ← completed, moved by its own PR
+  retired/
+    OQ-55-declare-story-mechanisms.md  ← dropped unbuilt, moved by Session A
 ```
+
+A story the owner decides not to build is retired, not deleted (decided 2026-10-07 by the owner).
+It keeps its file and its number in a directory nothing dispatches from, so reviving it is a
+`git mv`. `stories/README.md`, "Lifecycle", says how.
 
 ```markdown
 ---

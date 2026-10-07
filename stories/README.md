@@ -14,6 +14,7 @@ Copy [`_TEMPLATE.md`](_TEMPLATE.md) to start one.
 | [`../Open-Questions.md`](../Open-Questions.md) | The **idea backlog** — unrefined. Prose stories, open questions still open, no acceptance criteria. | **No.** |
 | `stories/` | **Refined** stories with enumerated acceptance criteria, ready to hand to a coder. | Yes. |
 | `stories/done/` | Completed stories, moved here by the PR that completed them. | — |
+| `stories/retired/` | Stories dropped without being built, moved here by a Session A PR with the date and reason in their Context. | **No.** |
 | [`../Completed-Questions.md`](../Completed-Questions.md) | The **historical archive**, going back to OQ-1. Grepped by number (`grep -n 'OQ-37' ../Completed-Questions.md`), never read whole. | — |
 
 **Nothing dispatches from `Open-Questions.md`.** It is input to a planning
@@ -32,7 +33,8 @@ before this directory existed stays in the archive where its references point.
 Unchanged from `Open-Questions.md`: every story has a permanent `OQ-<n>`.
 **Numbers are never reused and never renumbered**, so a number always points at
 the same story, whether it lives here, in the backlog, or in the archive. A new
-story takes the next unused number — check all three places before picking one.
+story takes the next unused number — check all three places before picking one,
+including `stories/done/` and `stories/retired/`.
 
 ## Frontmatter
 
@@ -193,5 +195,13 @@ decision, marked, so that the goal state reaches `main` when it is decided.
    archive.
 4. If the story turns out to be wrong rather than the code, `blocked:` is set
    with the reason and it goes back to a planning session.
+5. A story the owner decides not to build is **retired**: a Session A PR moves
+   it to `stories/retired/` with a `git mv`, adds the date and reason to its
+   Context, and corrects whatever else cites it. Neither the queue reader nor
+   the story lint reads that directory, so a retired story is never
+   dispatched, and a `**Planned**` marker naming one is reported as naming no
+   story file. A `depends_on` naming one would leave that story `waiting` for
+   good, so the retiring PR removes it. Reviving one is a `git mv` back into
+   `stories/`.
 
 `git log stories/OQ-49-*.md` is that story's refinement trail.

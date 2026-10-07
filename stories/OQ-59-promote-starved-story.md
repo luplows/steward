@@ -6,9 +6,6 @@ kind: workflow
 depends_on: [OQ-49]
 model: sonnet
 blocked: null
-mechanisms:
-  - story age derived from git history
-  - the tier-override promotion rule and its selection record
 ---
 
 ## Intent

@@ -25,8 +25,9 @@ rather than restating it. The role itself is described in
 
 ## Writing it
 
-- Use the next unused OQ number, checked against `stories/`,
-  `Open-Questions.md` and `Completed-Questions.md` (`REVIEW.md` item 5). Also
+- Use the next unused OQ number, checked against `stories/` (`done/` and
+  `retired/` included), `Open-Questions.md` and `Completed-Questions.md`
+  (`REVIEW.md` item 5). Also
   check every branch on `origin` (`git ls-remote --heads origin`): a story
   still being written is on its branch and not yet on `main`.
 - Work on a `write-story/OQ-<n>-<slug>` branch, never `story/…`, which is the
@@ -64,3 +65,5 @@ Decided by the owner on 2026-09-28.
 - A story that comes back with `blocked:` set, from a coder or from the loop,
   is Session A's to resolve with the owner. Clearing `blocked:` is Session
   A's (`stories/_TEMPLATE.md`).
+- A story the owner decides not to build is retired to `stories/retired/`, as
+  `stories/README.md`, "Lifecycle", describes.
