@@ -6,7 +6,9 @@
  * The conversion is GraphQL only, and is the one GraphQL request the allowlist
  * admits: one mutation text, with the pull request's node id as its one variable.
  * OQ-112 adds three more: list the open pull requests for one head branch, list
- * open issues carrying a given set of labels, and create an issue.
+ * open issues carrying a given set of labels, and create an issue. OQ-83 adds a
+ * fourth: list every open pull request against a given base branch, with its
+ * draft state and its author's association -- what `writer-prs.mjs` scans.
  *
  * Shape (AC-2): every operation has a pure `build*` function that returns the
  * request that *would* be sent, and a pure `parse*` function for the response.
@@ -138,6 +140,14 @@ export function buildListPullRequestsForHead(repo, branch) {
   }
 }
 
+/** Request to list open pull requests against `base` (OQ-83's AC-1). */
+export function buildListOpenPullRequests(repo, { base = 'main', page = 1 } = {}) {
+  return {
+    method: 'GET',
+    url: `${repoPath(repo)}/pulls?base=${encodeURIComponent(requireString('base', base))}&state=open&per_page=100&page=${page}`,
+  }
+}
+
 /** Request to list open issues carrying every one of `labels` (OQ-112's AC-1). */
 export function buildListIssuesByLabels(repo, labels, page = 1) {
   if (!Array.isArray(labels) || labels.length === 0 || labels.some((l) => typeof l !== 'string')) {
@@ -194,6 +204,17 @@ export function parseLabels(json) {
 /** Reduces a page of pull requests to what the loop reads (OQ-112's AC-1). */
 export function parsePullRequests(json) {
   return json.map((pr) => ({ number: pr.number, headRef: pr.head?.ref ?? null }))
+}
+
+/** Reduces a page of pull requests to what the writer-PR scan reads (OQ-83's AC-1). Interprets nothing. */
+export function parseOpenPullRequests(json) {
+  return json.map((pr) => ({
+    number: pr.number,
+    headRef: pr.head?.ref ?? null,
+    headSha: pr.head?.sha ?? null,
+    draft: pr.draft === true,
+    authorAssociation: pr.author_association ?? null,
+  }))
 }
 
 /** Reduces a page of issues to what the loop reads (OQ-112's AC-1). Interprets nothing. */
@@ -294,6 +315,7 @@ const ALLOWED = [
   ['GET', new RegExp(`^/issues/${PR}/labels\\?per_page=100$`), null],
   ['GET', new RegExp(`^/issues/${PR}/comments\\?per_page=100&page=[1-9][0-9]*$`), null],
   ['GET', new RegExp('^/pulls\\?head=[^&]+&state=open$'), null],
+  ['GET', new RegExp('^/pulls\\?base=[^&]+&state=open&per_page=100&page=[1-9][0-9]*$'), null],
   ['GET', new RegExp('^/issues\\?labels=[^&]+&state=open&per_page=100&page=[1-9][0-9]*$'), null],
   ['POST', new RegExp('^/issues$'), ['title', 'body', 'labels']],
 ]
@@ -421,6 +443,16 @@ export async function listPullRequestComments(ctx, number) {
 /** Open pull requests whose head is `branch` (OQ-112's AC-1). */
 export async function listOpenPullRequestsForHead(ctx, branch) {
   return parsePullRequests(await ctx.send(buildListPullRequestsForHead(ctx.repo, branch)))
+}
+
+/** Every open pull request against `base` (OQ-83's AC-1). */
+export async function listOpenPullRequests(ctx, { base = 'main' } = {}) {
+  const all = []
+  for (let page = 1; ; page++) {
+    const json = await ctx.send(buildListOpenPullRequests(ctx.repo, { base, page }))
+    all.push(...parseOpenPullRequests(json))
+    if (json.length < 100) return all
+  }
 }
 
 /** Every open issue carrying every one of `labels` (OQ-112's AC-1). */

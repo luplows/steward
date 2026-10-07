@@ -552,6 +552,13 @@ describe('OQ-78/AC-3: only the gate\'s author associations make a marker a verdi
     expect([...HONOURED_ASSOCIATIONS].sort()).toEqual([...honoured].sort())
   })
 
+  it('OQ-83/AC-5: writer-prs.mjs reads the same HONOURED_ASSOCIATIONS binding, not a restatement of its own', () => {
+    const source = readFileSync(path.join(here, 'writer-prs.mjs'), 'utf8')
+    expect(source).toMatch(/import\s*\{[^}]*\bHONOURED_ASSOCIATIONS\b[^}]*\}\s*from\s*'\.\/review\.mjs'/)
+    // No local array literal redefining it under the same name.
+    expect(source).not.toMatch(/const\s+HONOURED_ASSOCIATIONS\s*=/)
+  })
+
   it('OQ-78/AC-3: a marker from a non-writer is not a verdict and the review goes ahead', async () => {
     for (const association of ['NONE', 'CONTRIBUTOR', 'FIRST_TIME_CONTRIBUTOR', null]) {
       const { done, github } = review('story/OQ-99-thing', { comments: [comment(1, HEAD(), 'pass', association)] })

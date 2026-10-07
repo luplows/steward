@@ -944,3 +944,156 @@ describe('OQ-112/AC-6: two or more open loop-stuck issues stop the queue complet
     expect(result.reason).toMatch(/503/)
   })
 })
+
+// --------------------------------------------- OQ-83: writer pull requests
+
+describe('OQ-83/AC-1: the writer-pull-request scan runs only with both a ctx and a landCtx', () => {
+  it('OQ-83/AC-1: with a ctx but no landCtx, the scan does not run', async () => {
+    let called = false
+    const scan = async () => { called = true; return { landed: false, report: [] } }
+    const result = await runLoop({
+      ctx: {},
+      deps: {
+        updateCheckout: async () => ({ status: 'updated' }),
+        pickStory: async () => ({ story: null, skipped: [] }),
+        runStoryProcess: neverCalled('runStoryProcess'), listIssuesByLabels: async () => [],
+        reviewAndLandWriterPullRequests: scan,
+      },
+    })
+    expect(called).toBe(false)
+    expect(result.status).toBe('nothing-ready')
+  })
+
+  it('OQ-83/AC-1: with neither a ctx nor a landCtx, the scan does not run', async () => {
+    let called = false
+    const scan = async () => { called = true; return { landed: false, report: [] } }
+    const result = await runLoop({
+      deps: {
+        updateCheckout: async () => ({ status: 'updated' }),
+        pickStory: async () => ({ story: null, skipped: [] }),
+        runStoryProcess: neverCalled('runStoryProcess'), reviewAndLandWriterPullRequests: scan,
+      },
+    })
+    expect(called).toBe(false)
+    expect(result.status).toBe('nothing-ready')
+  })
+})
+
+describe('OQ-83/AC-6: a writer\'s pull request is reviewed and landed as part of the loop', () => {
+  const originalEnv = { ...process.env }
+  let root
+
+  beforeAll(() => {
+    process.env.GIT_AUTHOR_NAME = process.env.GIT_COMMITTER_NAME = 'Test'
+    process.env.GIT_AUTHOR_EMAIL = process.env.GIT_COMMITTER_EMAIL = 'test@example.com'
+    root = mkdtempSync(path.join(tmpdir(), 'tw-loop-writer-'))
+  })
+
+  afterAll(() => {
+    process.env = originalEnv
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  it('OQ-83/AC-6: a writer\'s story pull request is reviewed and landed before the next story is dispatched', async () => {
+    const sub = path.join(root, 'before-dispatch')
+    mkdirSync(sub)
+    const repo = makeRepo(sub)
+    writeStory(repo.repoDir, 'OQ-50', 'next')
+    repo.commit('add story')
+    repo.push()
+
+    let scanCalls = 0
+    // Simulates land.mjs's merge: a commit pushed straight to origin from a
+    // throwaway clone, never through repoDir -- the dispatcher's own
+    // checkout only sees it once runLoop's own updateCheckout runs again.
+    const reviewAndLandWriterPullRequests = async () => {
+      scanCalls++
+      if (scanCalls > 1) return { landed: false, report: [] }
+      const clone = path.join(sub, 'land-writer')
+      git(sub, 'clone', repo.origin, clone)
+      writeFileSync(path.join(clone, 'WRITER.md'), 'landed\n')
+      git(clone, 'add', '.')
+      git(clone, 'commit', '-m', 'writer pr landed')
+      git(clone, 'push', 'origin', 'main')
+      return { landed: true, report: [{ number: 99, outcome: 'merged' }] }
+    }
+    // Mirrors OQ-86/AC-2's fake: a real move-to-done pushed straight to
+    // origin, since production merges only through the landing sweep, never
+    // by committing in repoDir. Without this, OQ-50 would still read ready
+    // on the next pass and the loop would dispatch it forever.
+    let storyCalls = 0
+    const runStoryProcess = async ({ storyId }) => {
+      storyCalls++
+      const clone = path.join(sub, `land-story-${storyCalls}`)
+      git(sub, 'clone', repo.origin, clone)
+      mkdirSync(path.join(clone, 'stories', 'done'), { recursive: true })
+      git(clone, 'mv', `stories/${storyId}-next.md`, `stories/done/${storyId}-next.md`)
+      git(clone, 'commit', '-m', `merge ${storyId}`)
+      git(clone, 'push', 'origin', 'main')
+      return { status: 'ran', result: { status: 'merged', pr: storyCalls, storyId } }
+    }
+
+    const result = await runLoop({
+      repoDir: repo.repoDir,
+      ctx: {},
+      landCtx: {},
+      deps: { reviewAndLandWriterPullRequests, runStoryProcess, listIssuesByLabels: async () => [] },
+    })
+
+    expect(result.status).toBe('nothing-ready')
+    expect(result.report).toEqual([
+      { number: 99, outcome: 'merged' },
+      { id: 'OQ-50', outcome: 'merged' },
+    ])
+    expect(scanCalls).toBe(2)
+  }, LOOP_TEST_TIMEOUT)
+
+  it('OQ-83/AC-6: a writer\'s story pull request landed on a run with nothing ready has the story it adds dispatched in the same run', async () => {
+    const sub = path.join(root, 'nothing-ready')
+    mkdirSync(sub)
+    const repo = makeRepo(sub)
+    // The queue starts with nothing ready: no story file at all.
+
+    let scanCalls = 0
+    const reviewAndLandWriterPullRequests = async () => {
+      scanCalls++
+      if (scanCalls > 1) return { landed: false, report: [] }
+      // The writer's pull request's merge adds a new ready story, the way a
+      // Session A hand-off would.
+      const clone = path.join(sub, 'land-writer')
+      git(sub, 'clone', repo.origin, clone)
+      writeStory(clone, 'OQ-60', 'added-by-writer-pr')
+      git(clone, 'add', '.')
+      git(clone, 'commit', '-m', 'writer pr landed, adding OQ-60')
+      git(clone, 'push', 'origin', 'main')
+      return { landed: true, report: [{ number: 100, outcome: 'merged' }] }
+    }
+    // See the sibling test above: a real move-to-done, pushed straight to
+    // origin, so OQ-60 does not read ready again on the next pass.
+    let storyCalls = 0
+    const runStoryProcess = async ({ storyId }) => {
+      storyCalls++
+      const clone = path.join(sub, `land-story-${storyCalls}`)
+      git(sub, 'clone', repo.origin, clone)
+      mkdirSync(path.join(clone, 'stories', 'done'), { recursive: true })
+      git(clone, 'mv', `stories/${storyId}-added-by-writer-pr.md`, `stories/done/${storyId}-added-by-writer-pr.md`)
+      git(clone, 'commit', '-m', `merge ${storyId}`)
+      git(clone, 'push', 'origin', 'main')
+      return { status: 'ran', result: { status: 'merged', pr: storyCalls, storyId } }
+    }
+
+    const result = await runLoop({
+      repoDir: repo.repoDir,
+      ctx: {},
+      landCtx: {},
+      deps: { reviewAndLandWriterPullRequests, runStoryProcess, listIssuesByLabels: async () => [] },
+    })
+
+    expect(result.status).toBe('nothing-ready')
+    expect(result.report).toEqual([
+      { number: 100, outcome: 'merged' },
+      { id: 'OQ-60', outcome: 'merged' },
+    ])
+    expect(scanCalls).toBe(2)
+  }, LOOP_TEST_TIMEOUT)
+})

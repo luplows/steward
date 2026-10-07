@@ -52,12 +52,13 @@ Decided by the owner on 2026-09-28.
   this session. Marking a pull request ready is the owner's go-ahead for it
   to be reviewed and landed. The landing sweep never lands a draft
   (`land-approved.yml`).
-- Until the loop picks these pull requests up itself (**Planned (OQ-83)** in
-  `docs/agent-workflow-design.md`: it reviews and lands a ready pull request
-  from a trusted author, and skips drafts), the owner or the dispatcher
-  session reviews and lands a ready one.
+- The loop itself picks these pull requests up (OQ-83;
+  `docs/agent-workflow-design.md`, "The loop"): before every pick, and also
+  on a run with nothing ready, it reviews and lands a ready pull request from
+  a trusted author, and skips a draft -- marking one ready is what hands it
+  over.
 - If its review blocks, fix the story on the same branch, and it is reviewed
-  again once its head has moved. Under OQ-83 the loop re-reviews it and never
+  again once its head has moved. The loop re-reviews it then and never
   spawns a coder for a pull request it did not open.
 
 ## Stopped stories

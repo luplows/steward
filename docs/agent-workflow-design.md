@@ -297,10 +297,10 @@ than relaxed.
 1. Session A writes a story, with Open questions empty, and opens it as a pull request from the
    owner's account, as a **draft**. It marks the pull request ready only when the owner says so,
    and that is the owner's go-ahead for it to land (decided 2026-09-28; `docs/session-a.md`).
-   Today a ready one is reviewed on request, and the owner, or the dispatcher session running
-   `land.mjs`, triggers the sweep.
-   **Planned (OQ-83):** the loop reviews it against `REVIEW.md`'s story-PR items and lands it.
-   Only a pull request from an account with write access can land (OQ-81). CI fails a coder's own
+   Before every pick, and also on a run with nothing ready, the loop itself reviews any such open,
+   non-draft pull request against `REVIEW.md`'s story-PR items and lands it on a passing verdict
+   (OQ-83; `scripts/dispatch/writer-prs.mjs`). Only a pull request from an account with write
+   access is reviewed at all, let alone landed (OQ-81). CI fails a coder's own
    pull request if it changes `stories/` beyond its own story's move, ticks and `blocked:` edit
    (OQ-82; `scripts/dispatch/story-containment.mjs`). **Planned (OQ-105):** it also fails one whose
    head branch names a `story/OQ-<n>-…` other than the story its diff moves.

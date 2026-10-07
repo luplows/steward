@@ -30,6 +30,15 @@
  * so production runs always get them; a caller (or test) exercising only the
  * pre-OQ-112 control flow, with no `ctx`, gets exactly that flow unchanged.
  *
+ * OQ-83: before picking a story on every pass -- so a run with nothing ready
+ * is covered too -- the loop reviews and lands any open, non-draft pull
+ * request against `main` whose author the gate honours and that it did not
+ * open itself (`writer-prs.mjs`'s `reviewAndLandWriterPullRequests`): the
+ * pull request Session A opens from the owner's account once a story is
+ * refined. Landing one re-reads the queue before picking, so a story it just
+ * moved to `stories/done/` is seen in the same run. This is gated on both
+ * `ctx` and `landCtx` being supplied, for the same reason as OQ-112's above.
+ *
  * Usage:
  *   node scripts/dispatch/loop.mjs --init [path]
  *   node scripts/dispatch/loop.mjs [--repo owner/name] [--max-stories N]
@@ -41,7 +50,9 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { STUCK_AFTER_MS, branchFor, claimAgeMs, claimPushArgs, machineLabel, remoteTip } from './coder.mjs'
 import { createContext, createIssue, listIssuesByLabels, listOpenPullRequestsForHead } from './github.mjs'
+import { createLandContext } from './land.mjs'
 import { dispatchable, loadQueue } from './queue.mjs'
+import { reviewAndLandWriterPullRequests } from './writer-prs.mjs'
 
 const execFileAsync = promisify(execFile)
 
@@ -277,13 +288,17 @@ export function parseMaxStories(raw) {
  *   maxStories   caps the number of stories *started*; a skipped story does
  *                not count. Uncapped when omitted
  *   ctx          a `github.mjs` context. OQ-112's stuck-issue limit and
- *                reporting run only when this is given (see this module's
- *                top comment); `main` always gives one
+ *                reporting, and OQ-83's writer-pull-request scan, run only
+ *                when this is given (see this module's top comment); `main`
+ *                always gives one
+ *   landCtx      a `land.mjs` context. OQ-83's writer-pull-request scan runs
+ *                only when this is given too; `main` always gives one
  *   baseEnv      read for the machine label in a stuck issue's body
  *                (OQ-110's AC-8); defaults to `process.env`
  *   deps         `{ updateCheckout, pickStory, runStoryProcess,
  *                listIssuesByLabels, createIssue, listOpenPullRequestsForHead,
- *                claimAgeMs }`, replaceable by a test
+ *                claimAgeMs, reviewAndLandWriterPullRequests }`, replaceable
+ *                by a test
  *
  * Resolves `{ status, report, ... }`. `report` is every story the run
  * touched, in order: `{ id, branch, outcome: 'skipped' }` for one AC-4 passed
@@ -292,17 +307,20 @@ export function parseMaxStories(raw) {
  * `'stopped'` / `'process-error'` (the loop stops, named on the result too).
  * A skip or a stop that OQ-112's AC-3 finds stuck carries a `stuck` field:
  * `reportStuck`'s result, or omitted when it was not stuck (an open pull
- * request, or a claim younger than `STUCK_AFTER_MS`). `status` is
- * `'nothing-ready'`, `'max-stories'`, `'dirty'` (AC-3, OQ-109:
+ * request, or a claim younger than `STUCK_AFTER_MS`). Before each pick, every
+ * writer pull request `reviewAndLandWriterPullRequests` considered (OQ-83) is
+ * also appended, each `{ number, outcome, ... }` as that function documents.
+ * `status` is `'nothing-ready'`, `'max-stories'`, `'dirty'` (AC-3, OQ-109:
  * `updateCheckout` found something uncommitted and changed nothing),
  * `'process-error'`, `'story-stopped'`, or `'stuck-limit'` (OQ-112's AC-6).
  */
 export async function runLoop({
-  repoDir = DISPATCHER_ROOT, repo = DEFAULT_REPO, maxStories, ctx, baseEnv = process.env, deps = {},
+  repoDir = DISPATCHER_ROOT, repo = DEFAULT_REPO, maxStories, ctx, landCtx, baseEnv = process.env, deps = {},
 } = {}) {
   const d = {
     updateCheckout, pickStory, runStoryProcess,
     listIssuesByLabels, createIssue, listOpenPullRequestsForHead, claimAgeMs,
+    reviewAndLandWriterPullRequests,
     ...deps,
   }
   const report = []
@@ -321,6 +339,21 @@ export async function runLoop({
     const update = await d.updateCheckout(repoDir)
     if (update.status === 'dirty') {
       return { status: 'dirty', paths: update.paths, report }
+    }
+
+    // OQ-83's AC-1: before every pick, not only when nothing is ready, so a
+    // writer's pull request is caught whether or not a story is also dispatched.
+    if (ctx && landCtx) {
+      const writer = await d.reviewAndLandWriterPullRequests({ ctx, landCtx, repoDir })
+      report.push(...writer.report)
+      if (writer.landed) {
+        // A landing may have moved a story to stories/done/ and added a new
+        // one to the queue (AC-6's second case); pick from the fresh tip.
+        const refreshed = await d.updateCheckout(repoDir)
+        if (refreshed.status === 'dirty') {
+          return { status: 'dirty', paths: refreshed.paths, report }
+        }
+      }
     }
 
     const picked = await d.pickStory(repoDir)
@@ -471,7 +504,7 @@ async function main(argv) {
   const { repo, maxStories } = parseArgs(argv)
   await requireOwnWorktree(DISPATCHER_ROOT)
 
-  const result = await runLoop({ repo, maxStories, ctx: createContext({ repo }) })
+  const result = await runLoop({ repo, maxStories, ctx: createContext({ repo }), landCtx: createLandContext({ repo }) })
   console.log(JSON.stringify(result, null, 2))
   if (result.status !== 'nothing-ready' && result.status !== 'max-stories') process.exitCode = 1
 }
