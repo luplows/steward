@@ -7,6 +7,9 @@ Instructions only. Rationale, mechanism and history live in the files listed und
 
 - Never commit or push to `main`. It is protected.
 - For every change: feature branch, commit, push, open a pull request.
+- Work in a git worktree of your own, never the repository's main checkout, so that sessions running
+  at the same time cannot collide. This applies to every session, the dispatcher session and
+  Session A included. The dispatch scripts make the coder's and reviewer's worktrees themselves.
 - Address anything arising from an open pull request with a new commit on its existing branch. New
   branch only for unrelated work.
 - When a change both regenerates data files and alters logic, commit the regeneration separately.

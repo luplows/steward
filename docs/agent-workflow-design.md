@@ -429,9 +429,17 @@ orchestrating agent."
 
 Decided 2026-09-28 by the owner. Until the loop runs unattended (OQ-86), the dispatch scripts are
 run by hand, from a Claude Code session the owner has asked to act as dispatcher. That session
-runs `coder.mjs`, `review.mjs`, `land.mjs` and `story.mjs` from the main checkout, and relays what
-they return. It is the dispatcher's hands, not a coder or a reviewer: it writes no code for a
-story and decides no verdict.
+runs `coder.mjs`, `review.mjs`, `land.mjs` and `story.mjs`, and relays what they return. It is the
+dispatcher's hands, not a coder or a reviewer: it writes no code for a story and decides no
+verdict.
+
+It runs them from a worktree of its own at a detached `origin/main`, never from the repository's
+main checkout (decided 2026-10-06 by the owner, replacing the main checkout). Before each dispatch
+it fetches `origin` and checks out `origin/main`, detached, as the loop's `updateCheckout` does.
+The scripts run against the checkout they are loaded from (`DISPATCHER_ROOT`, `coder.mjs`), so the
+session runs the code that has landed, and the main checkout is left free for whoever else is
+working. This is a rule, not a mechanism: only the loop's `main` refuses a checkout with a branch
+checked out (`requireOwnWorktree`, `scripts/dispatch/loop.mjs`).
 
 **It may land, and only through `land.mjs`.** It runs `land.mjs`, directly or through `story.mjs`,
 for a pull request whose head has an honoured `pass` or `pass-with-observations` verdict and green
@@ -472,8 +480,8 @@ dispatcher session in between.
   `scripts/dispatch/loop.mjs`, OQ-109). Between stories `updateCheckout` fetches `origin`, stops with
   status `dirty` if the worktree has anything uncommitted, and otherwise checks out `origin/main`,
   detached. `main` refuses, before fetching or dispatching anything, to run from a checkout that has
-  a branch checked out (`requireOwnWorktree`). Hand-runs from a dispatcher session are unchanged
-  (decided 2026-10-01 by the owner).
+  a branch checked out (`requireOwnWorktree`). A dispatcher session's hand-runs also come from a
+  worktree of their own, by rule rather than by that check (**The dispatcher session**, above).
 - **Planned (OQ-112):** stuck stories reach the owner as GitHub issues, one per story, so a
   leftover on one machine is seen from any (decided 2026-10-01 by the owner, who runs the loop on
   two machines). An issue names the machine by a label the owner sets, never its hostname, since
