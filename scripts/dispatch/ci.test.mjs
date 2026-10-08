@@ -376,6 +376,79 @@ describe('OQ-118/AC-3: ci.yml names its setup steps with the AC-2 prefix, and on
   })
 })
 
+const CI_WORKFLOW_FILE = path.join(HERE, '..', '..', '.github', 'workflows', 'ci.yml')
+const SCREENSHOTS_WORKFLOW_FILE = path.join(HERE, '..', '..', '.github', 'workflows', 'update-screenshots.yml')
+const OQ117_WORKFLOWS = [
+  ['ci.yml', CI_WORKFLOW_FILE],
+  ['update-screenshots.yml', SCREENSHOTS_WORKFLOW_FILE],
+]
+
+function installStepOf(text) {
+  const blocks = testJobStepBlocks(text)
+  const fields = blocks.map(fieldsOfStep)
+  const idx = fields.findIndex((f) => f.name === 'Setup: Playwright browsers')
+  if (idx === -1) throw new Error('no "Setup: Playwright browsers" step found')
+  return blocks[idx]
+}
+
+describe('OQ-117/AC-1: the browser cache is keyed on the runner OS and the locked @playwright/test version', () => {
+  const lockfile = JSON.parse(readFileSync(path.join(HERE, '..', '..', 'package-lock.json'), 'utf8'))
+  const lockedVersion = lockfile.packages['node_modules/@playwright/test'].version
+
+  it('the version resolved from package-lock.json today is the installed @playwright/test version', () => {
+    expect(lockedVersion).toBe('1.63.0')
+  })
+
+  for (const [label, file] of OQ117_WORKFLOWS) {
+    it(`${label} resolves the version from package-lock.json (not package.json's range) and caches ~/.cache/ms-playwright on runner.os and that version`, () => {
+      const text = readFileSync(file, 'utf8')
+      expect(text).toContain("require('./package-lock.json')")
+      expect(text).toContain("packages['node_modules/@playwright/test'].version")
+      expect(text).not.toContain("require('./package.json')")
+      expect(text).toContain('path: ~/.cache/ms-playwright')
+      expect(text).toContain('key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}')
+    })
+  }
+})
+
+describe('OQ-117/AC-2: a cache hit installs only system packages; a miss installs the browser too', () => {
+  for (const [label, file] of OQ117_WORKFLOWS) {
+    it(`${label}'s install step branches on steps.playwright-cache.outputs.cache-hit`, () => {
+      const block = installStepOf(readFileSync(file, 'utf8'))
+      expect(block).toContain('steps.playwright-cache.outputs.cache-hit')
+      expect(block).toMatch(/cmd="npx playwright install-deps chromium"/)
+      expect(block).toMatch(/cmd="npx playwright install --with-deps chromium"/)
+    })
+  }
+})
+
+describe('OQ-117/AC-3: the install step tries at most twice, each try bounded within the step limit, logging which try runs', () => {
+  for (const [label, file] of OQ117_WORKFLOWS) {
+    it(`${label}'s install step runs at most 2 tries of 2 minutes each (<= its 5-minute timeout-minutes), naming each try`, () => {
+      const block = installStepOf(readFileSync(file, 'utf8'))
+      expect(block).toMatch(/for attempt in 1 2; do/)
+      expect(block).toContain('echo "Playwright install attempt $attempt of 2"')
+      const tries = 2 // "for attempt in 1 2" above
+      const perTryMinutesMatches = [...block.matchAll(/timeout (\d+)m /g)].map((m) => Number(m[1]))
+      expect(perTryMinutesMatches).toEqual([2]) // one `timeout …m` call inside the loop, run once per try
+      const stepTimeout = Number(block.match(/timeout-minutes: (\d+)/)[1])
+      expect(stepTimeout).toBe(5)
+      expect(perTryMinutesMatches[0] * tries).toBeLessThanOrEqual(stepTimeout)
+    })
+  }
+})
+
+describe('OQ-117/AC-4: the install step limits itself to 5 minutes, and the job limits itself to 20', () => {
+  for (const [label, file] of OQ117_WORKFLOWS) {
+    it(`${label} sets job timeout-minutes: 20 and the install step's own timeout-minutes: 5`, () => {
+      const text = readFileSync(file, 'utf8')
+      expect(text).toMatch(/^ {4}timeout-minutes: 20$/m)
+      const block = installStepOf(text)
+      expect(block).toMatch(/timeout-minutes: 5/)
+    })
+  }
+})
+
 describe('OQ-118/AC-4: a failed step is one whose conclusion is neither success nor skipped', () => {
   it('names a failed, cancelled and timed_out step in failedJobs and the findings, and leaves success and skipped out', async () => {
     const { ctx } = fakeGithub({

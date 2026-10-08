@@ -831,13 +831,13 @@ skip plus an auto-filed story — keeps the signal visible instead of burying it
 Determinism requires fixed clock, seeded data, no external network, and **stable test IDs rather
 than text or positional selectors**.
 
-**Setup is cached and bounded.** **Planned (OQ-117):** CI caches Playwright's browser, keyed on the
+**Setup is cached and bounded.** CI caches Playwright's browser, keyed on the runner's OS and the
 installed `@playwright/test` version, and on a hit installs only the system packages. The install
-step has a 5-minute limit and tries twice within it; the job has a 20-minute limit, well inside
-`story.mjs`'s 30-minute CI wait. `update-screenshots.yml` does the same with the same key, so
-baselines are minted by the browser CI compares against. Decided 2026-10-07 by the owner, after
-installs hung in apt and one browser download was refused, with no limit short of GitHub's
-360-minute default. Retrying the install is a retry of setup, not of a test, so it does not
+step has a 5-minute limit and tries twice within it, two minutes each; the job has a 20-minute
+limit, well inside `story.mjs`'s 30-minute CI wait. `update-screenshots.yml` does the same with the
+same key, so baselines are minted by the browser CI compares against. Decided 2026-10-07 by the
+owner, after installs hung in apt and one browser download was refused, with no limit short of
+GitHub's 360-minute default. Retrying the install is a retry of setup, not of a test, so it does not
 contradict "no retries in the merge gate": the checks themselves still run once. `detect-drift.yml`'s
 weekly install is left as it is (decided 2026-10-08 by the owner): it gates no pull request.
 
