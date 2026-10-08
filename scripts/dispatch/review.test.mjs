@@ -660,6 +660,104 @@ describe('OQ-78/AC-6: a re-review still refuses to post over a marker that arriv
   })
 })
 
+describe('OQ-121: a malformed verdict is tried once more before the story stops', () => {
+  it('OQ-121/AC-1: a malformed reply then a valid pass is recorded, with two sessions and one comment', async () => {
+    const { done, github, session } = review('story/OQ-99-thing', {
+      reply: (callIndex) => (callIndex === 0 ? 'Looks good to me!' : verdictText(shas['story/OQ-99-thing'])),
+    })
+    const result = await done
+    expect(result).toMatchObject({ status: 'recorded', sessions: 2 })
+    expect(session.calls).toHaveLength(2)
+    // Same worktree, prompt, story, pull request, environment and model both times.
+    expect(session.calls[1].cwd).toBe(session.calls[0].cwd)
+    // Render nonces are random per call, so strip them before comparing the rest of the prompt.
+    const stripNonces = (text) => text.replace(/[0-9a-f]{12}/g, 'NONCE')
+    expect(stripNonces(session.calls[1].prompt)).toBe(stripNonces(session.calls[0].prompt))
+    expect(session.calls[1].env).toEqual(session.calls[0].env)
+    expect(modelOf(session.calls[1].args)).toBe(modelOf(session.calls[0].args))
+    expect(github.posted).toHaveLength(1)
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('OQ-121/AC-1: dependencies are installed only once, before either session', async () => {
+    const installs = []
+    const install = async (options) => installs.push(options)
+    const { done } = review('story/OQ-99-thing', {
+      install,
+      reply: (callIndex) => (callIndex === 0 ? 'Looks good to me!' : verdictText(shas['story/OQ-99-thing'])),
+    })
+    await done
+    expect(installs).toHaveLength(1)
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('OQ-121/AC-2: two malformed replies is malformed-verdict, with two sessions, nothing posted, and both reasons given', async () => {
+    const { done, github, session } = review('story/OQ-99-thing', { reply: 'Looks good to me!' })
+    const result = await done
+    expect(result.status).toBe('malformed-verdict')
+    expect(result.sessions).toBe(2)
+    expect(session.calls).toHaveLength(2)
+    expect(github.posted).toEqual([])
+    expect(result.reason).toContain('first session')
+    expect(result.reason).toContain('second session')
+    expect(result.reason).toContain('no JSON verdict object found')
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('OQ-121/AC-3: a session that did not complete runs no second session', async () => {
+    const github = fakeGitHub({ branch: 'story/OQ-99-thing', states: [shas['story/OQ-99-thing']] })
+    const run = async ({ role }) => ({ record: { role, exitCode: 1, signal: null, stdout: '', stoppedFor: null }, pid: 1 })
+    const result = await reviewPullRequest({
+      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, install: noInstall, sessionOptions: { run, executable: 'stand-in' },
+    })
+    expect(result).toMatchObject({ status: 'session-failed', sessions: 1 })
+  })
+
+  it('OQ-121/AC-3: a null verdict from the first reply runs no second session', async () => {
+    const { done, session } = review('story/OQ-99-thing', {
+      reply: verdictText(shas['story/OQ-99-thing'], { verdict: null, summary: 'declined' }),
+    })
+    const result = await done
+    expect(result).toMatchObject({ status: 'no-verdict', sessions: 1 })
+    expect(session.calls).toHaveLength(1)
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('OQ-121/AC-1b: a malformed reply whose session also left an untracked file in the checkout runs no second session and resets nothing', async () => {
+    const github = fakeGitHub({ branch: 'story/OQ-99-thing', states: [shas['story/OQ-99-thing']] })
+    const calls = []
+    const run = async ({ role, cwd }) => {
+      writeFileSync(path.join(cwd, 'left-behind.txt'), 'x')
+      calls.push({ cwd })
+      const stdout = JSON.stringify({
+        type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn', result: 'Looks good to me!',
+      })
+      return { record: { role, exitCode: 0, signal: null, stdout, stoppedFor: null }, pid: 1 }
+    }
+    const result = await reviewPullRequest({
+      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, install: noInstall, sessionOptions: { run, executable: 'stand-in' },
+    })
+    expect(result.status).toBe('malformed-verdict')
+    expect(result.sessions).toBe(1)
+    // The second reviewability check saw the file the first session left --
+    // nothing cleaned it up in between, so there was nothing to reset.
+    expect(result.reason).toContain('uncommitted changes')
+    expect(calls).toHaveLength(1)
+    expect(github.posted).toEqual([])
+    // AC-1b: the checkout itself is not cleaned away, so the file is still there.
+    expect(existsSync(path.join(calls[0].cwd, 'left-behind.txt'))).toBe(true)
+  })
+})
+
+describe('OQ-121/AC-4: every result after a session ran says how many sessions it ran', () => {
+  it('a recorded verdict after one session carries sessions: 1', async () => {
+    const { done } = review('story/OQ-99-thing')
+    expect(await done).toMatchObject({ status: 'recorded', sessions: 1 })
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('a head-moved result after a session carries sessions: 1', async () => {
+    const other = shas['story/OQ-98-other']
+    const { done } = review('story/OQ-99-thing', { states: [shas['story/OQ-99-thing'], other], reply: verdictText(other) })
+    expect(await done).toMatchObject({ status: 'head-moved', sessions: 1 })
+  }, REVIEW_TEST_TIMEOUT)
+})
+
 describe('OQ-69: the prompt is rendered from the dispatcher\'s own checkout, not the PR\'s', () => {
   it('OQ-69: a PR that rewrites reviewer.md and render.mjs does not change the prompt used to review it', async () => {
     expect(git(seedDir, 'show', 'story/OQ-99-poison:.claude/prompts/reviewer.md')).toContain('POISON-TEMPLATE')

@@ -230,7 +230,13 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
  * Resolves `{ status, ... }`. `recorded` carries the comment id; every other
  * status means nothing was posted, and `reason` says why. `no-verdict` and
  * `already-reviewed` are not failures; `install-failed` and `rereview-refused`
- * are.
+ * are. Every result returned after a session started carries `sessions`, the
+ * number of reviewer sessions run (1 or 2, OQ-121). A verdict that does not
+ * parse (`parseReviewerVerdict` rejects it) gets one re-run, in the same
+ * worktree with the same prompt, story, pull request, environment and model;
+ * a second malformed reply is `malformed-verdict` with both sessions' reasons.
+ * The checkout is checked again before the re-run, and if the first session
+ * left it changed, there is no second session and nothing is reset.
  */
 export async function reviewPullRequest({
   number, ctx, repoDir = DISPATCHER_ROOT, promptTemplate, baseEnv = process.env, sessionOptions = {},
@@ -260,6 +266,11 @@ export async function reviewPullRequest({
   const scratch = await mkdtemp(path.join(scratchRoot, 'tw-review-'))
   const tree = path.join(scratch, 'tree')
   let worktreeAdded = false
+  // AC-1b: set when a first session leaves the checkout changed, so the
+  // `finally` below leaves the worktree and scratch directory in place
+  // instead of cleaning them away -- a reviewer that wrote to its checkout is
+  // itself worth seeing.
+  let keepCheckout = false
   try {
     await git(repoDir, ['fetch', REMOTE, pr.headRef, pr.baseRef])
     const fetchedTip = (await git(repoDir, ['rev-parse', `${REMOTE}/${pr.headRef}`])).trim()
@@ -312,7 +323,8 @@ export async function reviewPullRequest({
     } catch (error) {
       return { status: 'install-failed', reason: error.message }
     }
-    const { classification, output } = await spawnSession({
+
+    const runSession = () => spawnSession({
       ...sessionOptions,
       role: 'reviewer',
       promptTemplate: template,
@@ -323,44 +335,76 @@ export async function reviewPullRequest({
       model: chooseReviewerModel(story.model),
       cwd: tree,
     })
+
+    let sessions = 1
+    let { classification, output } = await runSession()
     if (classification.outcome !== 'completed') {
-      return { status: 'session-failed', outcome: classification.outcome, reason: classification.reason }
+      return { status: 'session-failed', outcome: classification.outcome, reason: classification.reason, sessions }
     }
 
-    const parsed = parseReviewerVerdict(output.result)
-    if (!parsed.ok) return { status: 'malformed-verdict', reason: parsed.reason }
+    let parsed = parseReviewerVerdict(output.result)
+    if (!parsed.ok) {
+      // OQ-121: one malformed verdict does not stop the story; try once more,
+      // in the same checkout, unless the first session left it changed.
+      const firstReason = parsed.reason
+      try {
+        await assertReviewableCheckout(tree, pr.headSha, repoDir)
+      } catch (error) {
+        keepCheckout = true
+        return {
+          status: 'malformed-verdict',
+          reason: `first session: ${firstReason}; no second session: the checkout was changed (${error.message})`,
+          sessions,
+        }
+      }
+      sessions = 2
+      ;({ classification, output } = await runSession())
+      if (classification.outcome !== 'completed') {
+        return { status: 'session-failed', outcome: classification.outcome, reason: classification.reason, sessions }
+      }
+      parsed = parseReviewerVerdict(output.result)
+      if (!parsed.ok) {
+        return { status: 'malformed-verdict', reason: `first session: ${firstReason}; second session: ${parsed.reason}`, sessions }
+      }
+    }
     const { verdict } = parsed
 
     // A `null` verdict is the reviewer declining to review; the PR stays pending.
-    if (verdict.verdict === null) return { status: 'no-verdict', headSha: verdict.head, summary: verdict.summary }
+    if (verdict.verdict === null) return { status: 'no-verdict', headSha: verdict.head, summary: verdict.summary, sessions }
 
     // The checkout it was handed was at `pr.headSha`; a verdict about another
     // commit was not made from what it read.
     if (verdict.head !== pr.headSha) {
-      return { status: 'head-moved', reason: `the reviewer reported ${verdict.head}, having been handed ${pr.headSha}` }
+      return { status: 'head-moved', reason: `the reviewer reported ${verdict.head}, having been handed ${pr.headSha}`, sessions }
     }
     const current = await getPullRequestState(ctx, number)
     if (verdict.head !== current.headSha) {
-      return { status: 'head-moved', reason: `the pull request moved to ${current.headSha} during the review of ${verdict.head}` }
+      return {
+        status: 'head-moved',
+        reason: `the pull request moved to ${current.headSha} during the review of ${verdict.head}`,
+        sessions,
+      }
     }
     const raced = await verdictAt(ctx, number, verdict.head)
     // Under a re-review the block being overridden is expected to be there; a
     // different governing marker is one that arrived during the review.
     if (raced && !(rereview && raced.commentId === existing.commentId)) {
-      return { status: 'already-reviewed', headSha: verdict.head, existing: raced }
+      return { status: 'already-reviewed', headSha: verdict.head, existing: raced, sessions }
     }
 
     let body
     try {
       body = composeMarkerComment({ headSha: verdict.head, verdict: verdict.verdict, findings: formatFindings(verdict) })
     } catch (error) {
-      return { status: 'unrecordable', reason: error.message }
+      return { status: 'unrecordable', reason: error.message, sessions }
     }
     const { id } = await postComment(ctx, number, body)
-    return { status: 'recorded', headSha: verdict.head, verdict: verdict.verdict, commentId: id }
+    return { status: 'recorded', headSha: verdict.head, verdict: verdict.verdict, commentId: id, sessions }
   } finally {
-    if (worktreeAdded) await git(repoDir, ['worktree', 'remove', '--force', tree]).catch(() => {})
-    await rm(scratch, { recursive: true, force: true })
+    if (!keepCheckout) {
+      if (worktreeAdded) await git(repoDir, ['worktree', 'remove', '--force', tree]).catch(() => {})
+      await rm(scratch, { recursive: true, force: true })
+    }
   }
 }
 
