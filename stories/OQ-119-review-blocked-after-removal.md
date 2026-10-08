@@ -36,13 +36,11 @@ should count towards applying it again.
 - [ ] **AC-3** — A test of `applyReviewBlocked` with an injected `api` shows
       the events request it makes, and that it still never calls the
       labels-removal endpoint.
-- [ ] **AC-4** — `review-gate.yml` can make AC-1's request. If its
-      `permissions:` do not already allow it, the pull request adds the
-      narrowest permission that does (a `read`), with a comment saying why,
-      and its body says how that was established. The comment above
+- [ ] **AC-4** — `review-gate.yml`'s `permissions:` add `issues: read`, with
+      a comment saying it is for AC-1's events request. The comment above
       `pull-requests: write` (`review-gate.yml` lines 57–59, "Nothing here
       removes a label or reads anything the `read` scope did not already
-      cover") is corrected if it no longer holds.
+      cover") is corrected to match.
 - [ ] **AC-5** — The three places that say the label is never reapplied are
       corrected to say what AC-1 does: the header of
       `scripts/land/apply-review-blocked.mjs` (lines 18–20), the comment in
@@ -80,6 +78,16 @@ should count towards applying it again.
   `node scripts/land/apply-review-blocked.mjs` with `GH_TOKEN` set to
   `github.token`. Its `permissions:` are `contents: read`,
   `statuses: write` and `pull-requests: write`.
+- Why AC-4 adds `issues: read` rather than leaving it to be found out:
+  GitHub's "Permissions required for GitHub Apps" (read 2026-10-08) lists
+  `GET /repos/{owner}/{repo}/issues/{issue_number}/events` under both
+  "Issues" (read) and "Pull requests" (read), each with the "Additional
+  permissions" mark. That page says the mark means either that more than one
+  permission is needed or that any one of a set will do, without saying
+  which applies here. So `pull-requests: write` alone may or may not be
+  enough, and the gate's workflow cannot be tried on the pull request that
+  changes it for an `issue_comment` run, which runs from the default branch.
+  Adding the `read` settles it either way.
 - GitHub's "Issue event types" reference (read 2026-10-08): an `unlabeled`
   event carries `created_at` and `label.name`, and applies to pull requests as
   well as issues.

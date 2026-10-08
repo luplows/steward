@@ -42,6 +42,12 @@ today, but nothing would fail if one changed and the other did not.
       13–16) says that markers are read with `github.mjs`'s
       `parseMarkerComment`, and no longer says the module keeps a
       transcription of the gate's pattern.
+- [ ] **AC-5** — The test titled "the marker pattern is the one
+      review-gate.yml greps with, transcribed"
+      (`scripts/land/apply-review-blocked.test.mjs`, line 145) is renamed so
+      that its title says what it checks, that `review-gate.yml` greps with
+      that pattern, and no longer says the module holds a transcription. Its
+      expectations are unchanged, as AC-3 requires.
 
 ## Out of scope
 
