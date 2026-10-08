@@ -85,6 +85,14 @@ export function decideCi(result, redCount = 0) {
     return { next: 'stop', status: 'ci-wait-timed-out', reason: 'CI did not finish within the wait; a coder cannot fix that' }
   }
   if (result.result === 'red' && result.conclusion === 'failure') {
+    if (result.setupFailure) {
+      const steps = (result.setupSteps ?? []).join(', ') || 'no step reported'
+      return {
+        next: 'stop',
+        status: 'ci-setup-failed',
+        reason: `CI failed in setup step(s) ${steps}, outside the repository; a coder retry cannot fix it`,
+      }
+    }
     if (redCount >= MAX_ROUNDS) {
       const jobs = (result.jobNames ?? []).join(', ') || 'no job reported'
       return { next: 'stop', status: 'ci-round-bound', reason: `CI has failed on ${redCount} commits, the bound; failing jobs: ${jobs}` }
@@ -358,7 +366,8 @@ export async function runStory({
   for (;;) {
     if (phase.next === 'ci') {
       const ci = await d.waitForCi(ciCtx, run.headSha)
-      const redCount = ci.result === 'red' && ci.conclusion === 'failure' ? await d.countRedCiRounds(ciCtx, run.pr) : 0
+      const redCount =
+        ci.result === 'red' && ci.conclusion === 'failure' && !ci.setupFailure ? await d.countRedCiRounds(ciCtx, run.pr) : 0
       const decision = decideCi(ci, redCount)
       if (decision.next === 'stop') return stop(decision.status, decision.reason, { ci })
       phase = decision.next === 'review' ? { next: 'review' } : await retry(decision, ci.findings)

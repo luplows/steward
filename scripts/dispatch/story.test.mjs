@@ -321,6 +321,30 @@ describe('OQ-48/AC-4 and AC-5: CI rounds are bounded, and only a failure is retr
   })
 })
 
+describe('OQ-118/AC-5: a setup failure stops the story rather than retrying it', () => {
+  const setupFailure = { result: 'red', conclusion: 'failure', jobNames: ['test'], findings: 'CI failed.', setupFailure: true, setupSteps: ['Setup: Playwright browsers'] }
+
+  it('OQ-118/AC-5: decideCi stops before the red-round bound, naming the failed setup step', () => {
+    expect(decideCi(setupFailure, 0)).toMatchObject({ next: 'stop', status: 'ci-setup-failed' })
+    expect(decideCi(setupFailure, 0).reason).toContain('Setup: Playwright browsers')
+    // Even at the bound, a setup failure is still reported as itself, not the bound.
+    expect(decideCi(setupFailure, MAX_ROUNDS).status).toBe('ci-setup-failed')
+  })
+
+  it('OQ-118/AC-5: the run spawns no coder retry, counts no red round, drafts the pull request and records blocked:', async () => {
+    let counted = 0
+    const h = harness({ dispatch: opened, ci: [setupFailure], redCount: () => ++counted })
+    const result = await h.run()
+    expect(result.status).toBe('ci-setup-failed')
+    expect(result.reason).toContain('Setup: Playwright browsers')
+    expect(h.names()).toEqual(['dispatch', 'ci', 'draft', 'record'])
+    expect(h.names()).not.toContain('retry')
+    expect(counted).toBe(0)
+    expect(h.calls.find((c) => c[0] === 'record')[1].reason).toContain('Setup: Playwright browsers')
+    expect(result.record).toMatchObject({ draft: true, recorded: true, failed: [] })
+  })
+})
+
 describe('OQ-48/AC-6: the round numbers a retry is given', () => {
   it('OQ-48/AC-6: a review retry gets the block count plus one, and a CI retry the red count plus one', async () => {
     for (const [blocks, round] of [[1, 2], [2, 3]]) {

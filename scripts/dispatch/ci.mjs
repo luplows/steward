@@ -24,6 +24,17 @@ import { ghAuthToken } from './github.mjs'
 const API = 'https://api.github.com'
 
 export const CI_WORKFLOW_PATH = '.github/workflows/ci.yml'
+// AC-2: the name prefix `ci.yml` gives each setup step, and the name GitHub
+// gives a job's own first step. A cleanup step GitHub reports as `Post Setup:
+// …` does not start with the prefix (it starts with `Post `), so it is not a
+// setup step.
+export const SETUP_STEP_PREFIX = 'Setup: '
+export const SETUP_JOB_STEP_NAME = 'Set up job'
+
+/** Whether `name` (a step's `name` as the Actions jobs API reports it) is a setup step (AC-2). */
+export function isSetupStep(name) {
+  return typeof name === 'string' && (name.startsWith(SETUP_STEP_PREFIX) || name === SETUP_JOB_STEP_NAME)
+}
 // How long `waitForCi` waits for the run to finish before returning `timed-out`.
 // ci.yml takes minutes on a runner; this leaves room for a queue.
 export const CI_WAIT_TIMEOUT_MS = 30 * 60 * 1000
@@ -206,6 +217,24 @@ export function composeCiFindings(headSha, run, failedJobs) {
   return lines.join('\n').trimEnd()
 }
 
+// A step is failed under the same rule the job filter above uses: its
+// conclusion is neither `success` nor `skipped` (AC-4), so a cancelled or
+// timed-out step is named too, not only an outright `failure`.
+function failedStepNamesOf(job) {
+  return (job.steps ?? []).filter((s) => s.conclusion !== 'success' && s.conclusion !== 'skipped').map((s) => s.name)
+}
+
+/**
+ * Whether a run's failed jobs amount to a setup failure (AC-4): every failed
+ * job reported at least one failed step, and every one of those steps is a
+ * setup step (AC-2). A failed job that reported no failed step, or any failed
+ * step that is not a setup step, means it is not.
+ */
+function isSetupFailureOf(jobsWithSteps) {
+  if (jobsWithSteps.length === 0) return false
+  return jobsWithSteps.every((steps) => steps.length > 0 && steps.every(isSetupStep))
+}
+
 async function failedJobsOf(ctx, run) {
   const json = await ctx.send(buildListRunJobs(ctx.repo, run.id))
   const failed = (json.jobs ?? []).filter((job) => job.conclusion !== 'success' && job.conclusion !== 'skipped')
@@ -217,11 +246,7 @@ async function failedJobsOf(ctx, run) {
     } catch (error) {
       logExcerpt = `(the job's log could not be read: ${error.message})`
     }
-    out.push({
-      name: job.name,
-      steps: (job.steps ?? []).filter((s) => s.conclusion === 'failure').map((s) => s.name),
-      logExcerpt,
-    })
+    out.push({ name: job.name, steps: failedStepNamesOf(job), logExcerpt })
   }
   return out
 }
@@ -229,11 +254,14 @@ async function failedJobsOf(ctx, run) {
 /**
  * Waits for the ci.yml run on `headSha` to finish, then returns
  *   { result: 'green' }
- *   { result: 'red', conclusion, failedJobs: [{ name, steps, logExcerpt }], jobNames, findings }
+ *   { result: 'red', conclusion, failedJobs: [{ name, steps, logExcerpt }], jobNames,
+ *     findings, setupFailure, setupSteps }
  *   { result: 'timed-out' }
  * The wait is bounded by `CI_WAIT_TIMEOUT_MS`. Anything but a `success`
  * conclusion is red, and `conclusion` says which (`failure`, `cancelled`, ...):
- * only a `failure` is something a retried coder can fix (OQ-48's AC-5).
+ * only a `failure` is something a retried coder can fix (OQ-48's AC-5), and
+ * even a `failure` is not when it is a setup failure (OQ-118's AC-4, AC-5):
+ * `setupFailure` says so, and `setupSteps` names the failed setup steps.
  */
 export async function waitForCi(ctx, headSha, { timeoutMs = CI_WAIT_TIMEOUT_MS, pollMs = CI_POLL_INTERVAL_MS } = {}) {
   requireSha(headSha)
@@ -243,12 +271,15 @@ export async function waitForCi(ctx, headSha, { timeoutMs = CI_WAIT_TIMEOUT_MS, 
     if (run && run.status === 'completed') {
       if (run.conclusion === 'success') return { result: 'green' }
       const failedJobs = await failedJobsOf(ctx, run)
+      const setupFailure = isSetupFailureOf(failedJobs.map((job) => job.steps))
       return {
         result: 'red',
         conclusion: run.conclusion,
         failedJobs,
         jobNames: failedJobs.map((job) => job.name),
         findings: composeCiFindings(headSha, run, failedJobs),
+        setupFailure,
+        setupSteps: setupFailure ? failedJobs.flatMap((job) => job.steps) : [],
       }
     }
     if (ctx.now() + pollMs > deadline) return { result: 'timed-out' }
@@ -258,8 +289,9 @@ export async function waitForCi(ctx, headSha, { timeoutMs = CI_WAIT_TIMEOUT_MS, 
 
 /**
  * The number of red CI rounds on a pull request: the distinct commits on it
- * whose latest ci.yml run concluded `failure`. Derived from GitHub on every
- * call; nothing is stored.
+ * whose latest ci.yml run concluded `failure`, except one that was a setup
+ * failure (OQ-118's AC-4, AC-6) rather than something a coder retry can fix.
+ * Derived from GitHub on every call; nothing is stored.
  */
 export async function countRedCiRounds(ctx, number) {
   const shas = new Set()
@@ -271,7 +303,10 @@ export async function countRedCiRounds(ctx, number) {
   let red = 0
   for (const sha of shas) {
     const run = await latestCiRunFor(ctx, sha)
-    if (run?.status === 'completed' && run.conclusion === 'failure') red++
+    if (run?.status !== 'completed' || run.conclusion !== 'failure') continue
+    const json = await ctx.send(buildListRunJobs(ctx.repo, run.id))
+    const failedJobs = (json.jobs ?? []).filter((job) => job.conclusion !== 'success' && job.conclusion !== 'skipped')
+    if (!isSetupFailureOf(failedJobs.map(failedStepNamesOf))) red++
   }
   return red
 }

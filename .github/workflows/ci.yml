@@ -10,17 +10,20 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: 'Setup: checkout'
+        uses: actions/checkout@v4
         with:
           # Full history: the story-diff containment check below needs the
           # pull request's base commit, which the default shallow (depth-1)
           # checkout of the merge commit does not reach (OQ-82).
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - name: 'Setup: Node'
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - name: 'Setup: npm ci'
+        run: npm ci
       - run: npm run lint
       - run: npm test
       - name: Check story diff containment (OQ-82)
@@ -31,7 +34,8 @@ jobs:
           ${{ github.event.pull_request.head.sha }}
           ${{ github.head_ref }}
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
+      - name: 'Setup: Playwright browsers'
+        run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
       # A failing screenshot assertion (OQ-40) reports a pixel count in the
       # log; the expected/actual/diff images that make it diagnosable are in

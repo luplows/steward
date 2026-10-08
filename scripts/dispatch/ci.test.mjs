@@ -7,6 +7,8 @@ import { describe, expect, it } from 'vitest'
 import {
   CI_LOG_EXCERPT_MAX_CHARS,
   CI_WAIT_TIMEOUT_MS,
+  SETUP_JOB_STEP_NAME,
+  SETUP_STEP_PREFIX,
   assertAllowedCiRequest,
   buildGetJobLog,
   buildListPullRequestCommits,
@@ -15,11 +17,13 @@ import {
   countRedCiRounds,
   createCiContext,
   excerptLog,
+  isSetupStep,
   waitForCi,
 } from './ci.mjs'
 import { retrySection } from './invocation.mjs'
 
-const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures')
+const HERE = path.dirname(fileURLToPath(import.meta.url))
+const FIXTURES = path.join(HERE, 'fixtures')
 
 const REPO = 'luplows/tower-workshop-paths'
 const SHA = 'a'.repeat(40)
@@ -287,6 +291,188 @@ describe('OQ-79/AC-4: red CI rounds are derived from GitHub alone', () => {
     const commits = Array.from({ length: 150 }, (_, i) => i.toString(16).padStart(40, '0'))
     const runsBySha = Object.fromEntries(commits.map((sha) => [sha, [run({ head_sha: sha, conclusion: 'failure' })]]))
     expect(await countRedCiRounds(fakeGithub({ commits, runsBySha }).ctx, 7)).toBe(150)
+  })
+})
+
+describe('OQ-118/AC-2: isSetupStep', () => {
+  it('recognises the prefix and GitHub\'s own first step, not a Post cleanup step or an ordinary step', () => {
+    expect(SETUP_STEP_PREFIX).toBe('Setup: ')
+    expect(SETUP_JOB_STEP_NAME).toBe('Set up job')
+    expect(isSetupStep('Setup: checkout')).toBe(true)
+    expect(isSetupStep('Set up job')).toBe(true)
+    expect(isSetupStep(`Post ${SETUP_STEP_PREFIX}checkout`)).toBe(false)
+    expect(isSetupStep('Run npm run lint')).toBe(false)
+    expect(isSetupStep('Complete job')).toBe(false)
+    expect(isSetupStep(undefined)).toBe(false)
+  })
+})
+
+// AC-3: a text scan of ci.yml, deliberately not a YAML parser (the story's Constraints).
+function testJobStepBlocks(text) {
+  const lines = text.split(/\r?\n/)
+  const stepsIdx = lines.findIndex((l) => /^ {4}steps:\s*$/.test(l))
+  if (stepsIdx === -1) throw new Error('no "    steps:" found for the test job in ci.yml')
+  const blocks = []
+  let current = null
+  for (let i = stepsIdx + 1; i < lines.length; i++) {
+    const line = lines[i]
+    if (/^ {6}- /.test(line)) {
+      if (current) blocks.push(current.join('\n'))
+      current = [line]
+    } else if (current && (/^ {8,}/.test(line) || line.trim() === '')) {
+      current.push(line)
+    } else {
+      break
+    }
+  }
+  if (current) blocks.push(current.join('\n'))
+  return blocks
+}
+
+function runTextOf(body) {
+  const lines = body.split('\n')
+  const idx = lines.findIndex((l) => /^ {8}run:/.test(l))
+  if (idx === -1) return null
+  const text = [lines[idx]]
+  for (let i = idx + 1; i < lines.length; i++) {
+    if (/^ {10,}/.test(lines[i]) || lines[i].trim() === '') text.push(lines[i])
+    else break
+  }
+  return text.join('\n')
+}
+
+function fieldsOfStep(block) {
+  // Normalise the dash onto the step's own 8-space key indentation, so a key
+  // nested under `with:` (10 spaces) is never mistaken for the step's own.
+  const body = block.replace(/^( {6})- /, '$1  ')
+  const name = body.match(/^ {8}name:\s*(.+?)\s*$/m)?.[1]?.replace(/^['"]|['"]$/g, '')
+  const uses = body.match(/^ {8}uses:\s*(\S+)/m)?.[1]
+  return { name, uses, run: runTextOf(body) }
+}
+
+describe('OQ-118/AC-3: ci.yml names its setup steps with the AC-2 prefix, and only those', () => {
+  const workflow = readFileSync(path.join(HERE, '..', '..', '.github', 'workflows', 'ci.yml'), 'utf8')
+  const steps = testJobStepBlocks(workflow).map(fieldsOfStep)
+
+  it('every checkout, setup-node, cache, npm-ci or playwright-install step is named with the prefix, and no other step is', () => {
+    let sawSetupStep = false
+    for (const step of steps) {
+      const isSetupKind =
+        (step.uses !== undefined && /^actions\/(checkout|setup-node|cache)@/.test(step.uses)) ||
+        (step.run !== null && (step.run.includes('npm ci') || step.run.includes('playwright install')))
+      if (isSetupKind) {
+        sawSetupStep = true
+        expect(step.name, `expected ${JSON.stringify(step)} to be named with the ${JSON.stringify(SETUP_STEP_PREFIX)} prefix`).toMatch(
+          new RegExp(`^${SETUP_STEP_PREFIX}`),
+        )
+      } else {
+        expect(
+          step.name?.startsWith(SETUP_STEP_PREFIX) ?? false,
+          `step ${JSON.stringify(step)} is named with the ${JSON.stringify(SETUP_STEP_PREFIX)} prefix but is not a setup step`,
+        ).toBe(false)
+      }
+    }
+    expect(sawSetupStep, 'found no setup step in ci.yml at all').toBe(true)
+  })
+})
+
+describe('OQ-118/AC-4: a failed step is one whose conclusion is neither success nor skipped', () => {
+  it('names a failed, cancelled and timed_out step in failedJobs and the findings, and leaves success and skipped out', async () => {
+    const { ctx } = fakeGithub({
+      runsBySha: { [SHA]: [run({ conclusion: 'failure' })] },
+      jobs: {
+        1: [
+          {
+            id: 10,
+            name: 'test',
+            conclusion: 'failure',
+            steps: [
+              { name: 'a-failed', conclusion: 'failure' },
+              { name: 'b-cancelled', conclusion: 'cancelled' },
+              { name: 'c-timed-out', conclusion: 'timed_out' },
+              { name: 'd-success', conclusion: 'success' },
+              { name: 'e-skipped', conclusion: 'skipped' },
+            ],
+          },
+        ],
+      },
+      logs: { 10: 'boom' },
+    })
+    const result = await waitForCi(ctx, SHA)
+    expect(result.failedJobs[0].steps).toEqual(['a-failed', 'b-cancelled', 'c-timed-out'])
+    expect(result.findings).toContain('"a-failed"')
+    expect(result.findings).toContain('"b-cancelled"')
+    expect(result.findings).toContain('"c-timed-out"')
+    expect(result.findings).not.toContain('"d-success"')
+    expect(result.findings).not.toContain('"e-skipped"')
+  })
+
+  it('is a setup failure when every failed step of every failed job is a setup step, and names them', async () => {
+    const { ctx } = fakeGithub({
+      runsBySha: { [SHA]: [run({ conclusion: 'failure' })] },
+      jobs: { 1: [{ id: 10, name: 'test', conclusion: 'failure', steps: [{ name: 'Setup: Node', conclusion: 'failure' }] }] },
+      logs: { 10: 'boom' },
+    })
+    const result = await waitForCi(ctx, SHA)
+    expect(result.setupFailure).toBe(true)
+    expect(result.setupSteps).toEqual(['Setup: Node'])
+  })
+
+  it('is not a setup failure when a failed step of a failed job is not a setup step', async () => {
+    const { ctx } = fakeGithub({
+      runsBySha: { [SHA]: [run({ conclusion: 'failure' })] },
+      jobs: {
+        1: [
+          {
+            id: 10,
+            name: 'test',
+            conclusion: 'failure',
+            steps: [{ name: 'Setup: Node', conclusion: 'failure' }, { name: 'Run npm test', conclusion: 'failure' }],
+          },
+        ],
+      },
+      logs: { 10: 'boom' },
+    })
+    const result = await waitForCi(ctx, SHA)
+    expect(result.setupFailure).toBe(false)
+    expect(result.setupSteps).toEqual([])
+  })
+
+  it('a failed job reporting no failed step is not a setup failure', async () => {
+    const { ctx } = fakeGithub({
+      runsBySha: { [SHA]: [run({ conclusion: 'failure' })] },
+      jobs: { 1: [{ id: 10, name: 'test', conclusion: 'failure', steps: [] }] },
+      logs: { 10: 'boom' },
+    })
+    expect((await waitForCi(ctx, SHA)).setupFailure).toBe(false)
+  })
+})
+
+describe('OQ-118/AC-6: countRedCiRounds does not count a setup failure', () => {
+  it('excludes a commit whose only failed steps were setup steps, counts one whose failed step was not', async () => {
+    const { ctx, requests } = fakeGithub({
+      commits: [SHA, SHA2],
+      runsBySha: {
+        [SHA]: [run({ conclusion: 'failure' })],
+        [SHA2]: [run({ id: 2, head_sha: SHA2, conclusion: 'failure' })],
+      },
+      jobs: {
+        1: [{ id: 10, name: 'test', conclusion: 'failure', steps: [{ name: 'Setup: Playwright browsers', conclusion: 'failure' }] }],
+        2: [{ id: 20, name: 'test', conclusion: 'failure', steps: [{ name: 'Run npm test', conclusion: 'failure' }] }],
+      },
+    })
+    expect(await countRedCiRounds(ctx, 7)).toBe(1)
+    // AC-6: only the existing buildListRunJobs request, never a job's log.
+    expect(requests.some((r) => r.url.includes('/logs'))).toBe(false)
+  })
+
+  it('a failed job with no reported step is still counted, since it cannot be confirmed as setup-only', async () => {
+    const { ctx } = fakeGithub({
+      commits: [SHA],
+      runsBySha: { [SHA]: [run({ conclusion: 'failure' })] },
+      jobs: { 1: [{ id: 10, name: 'test', conclusion: 'failure', steps: [] }] },
+    })
+    expect(await countRedCiRounds(ctx, 7)).toBe(1)
   })
 })
 
