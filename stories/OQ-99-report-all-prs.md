@@ -5,7 +5,7 @@ tier: later
 kind: workflow
 depends_on: []
 model: sonnet
-blocked: null
+blocked: "Held for the move to steward, decided 2026-10-08 by the owner (docs/agent-workflow-design.md, Portability, R4)"
 ---
 
 ## Intent

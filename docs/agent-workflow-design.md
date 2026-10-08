@@ -1499,6 +1499,363 @@ readiness test, whether the gate works at all. Both arguments point at Session A
 
 ---
 
+## Portability: other projects, other companies' models
+
+Refined with the owner from 2026-10-07. The goals, the move's shape and its order are decided;
+M4 (how a role names its model) and R7's issue queue are still
+open, and both wait for the workflow's own repository. Each answer is recorded here, dated, in
+the pull request that makes it.
+
+### Goals
+
+Decided 2026-10-07 by the owner.
+
+1. **The owner can use the workflow in other projects.**
+2. **Models from other companies can be used**, so that the work is not all done by similar
+   models. This is the [reviewer-on-a-different-model](#quality-beyond-the-gate) hedge taken
+   further: a different company's model decorrelates more than a different model from the same one.
+3. **The workflow is insulated from any one AI model company** folding or pricing the owner out.
+4. **This repository stays focused on the product**, not on the workflow.
+
+The owner is starting to plan another project and wants to work the same way in both. That is
+what makes goal 1 near-term: the second project is the workflow's first user outside this
+repository.
+
+### What the workflow is for
+
+[`harness-outline.md`](harness-outline.md) holds the owner's own account of it (from
+2026-10-07): what it is, who it is for, why, the three things it must never do, and the view for
+deciding what is next. It is the harness's product outline, and moves with this document.
+
+### Decided so far
+
+- **The move comes first** (decided 2026-10-07 by the owner). **Planned (OQ-115):** the workflow
+  moves to a repository of its own, and this repository uses it. **Planned (OQ-114):** once moved,
+  coder and reviewer sessions run through an adapter per agent tool, so that a role can be given
+  another company's model. Both are drafts, to be split before either is dispatched.
+- **Goal 3 is about AI model companies, not GitHub** (decided 2026-10-07 by the owner). The gate
+  stays on GitHub. Moving the hosting would be a far larger migration, and would depend on the
+  target platform's rules much more than switching models does.
+- **The move comes before OQ-73 and before OQ-101, after OQ-118 and OQ-117 are built** (decided
+  2026-10-07, revised 2026-10-08 by the owner). See R5.
+- **Coder sessions are isolated in a container** (decided 2026-10-08 by the owner), built after the
+  move as OQ-73's rewrite. See R5.
+- **A project takes the workflow as a package pinned by git tag**, with no npm publishing planned,
+  runs the loop from its own worktree, and keeps thin gate workflow files written by an `init`
+  command (decided 2026-10-07 by the owner). See R2.
+- **The workflow's repository is public** (decided 2026-10-07 by the owner). If its stories come
+  from issues, only issues a writer created or labelled may enter its queue. See R8.
+- **The workflow is named `steward`**: the repository `luplows/steward` and the package `steward`
+  (decided 2026-10-07 by the owner). See R10.
+- **Its stories are numbered `ST-<n>`**, and every unbuilt workflow story moves except this
+  repository's own, with its history (decided 2026-10-08 by the owner). See R1, R4 and R9.
+- **The second project starts with the gate only** (decided 2026-10-08 by the owner). See R6.
+- **The moving workflow stories are held here until the move**, and **steward starts with this
+  repository's lines stripped from its prompts and `REVIEW.md`** (decided 2026-10-08 by the
+  owner). See R4 and R1.
+- **OQ-115 stays here and OQ-114 moves**, and the extracted history names this repository's pull
+  requests in plain text (decided 2026-10-08 by the owner). See R4 and R1.
+
+### The move, in order
+
+Decided 2026-10-08 by the owner. The engine is made project-neutral here first, where the loop
+and gate already work, so that the workflow's repository can dispatch its own `ST-<n>` stories
+from the day it exists. Today the `OQ` prefix is hardcoded in five modules, so it could not.
+
+1. **Here, built by the loop:** OQ-118 then OQ-117 (CI), OQ-122 (a settings file with the
+   repository and the story prefix, #210), OQ-123 (one command-line entry point, finding the
+   project from the working directory and the scripts and prompts from wherever the engine is
+   installed, #211).
+2. **By hand, the owner with Session A (a bootstrap, not a story):** create `luplows/steward`,
+   public; extract the moved paths with their history (`git filter-repo`, not installed here yet);
+   renumber the moved stories `ST-<n>`, each naming its old OQ id; push `main`, the one direct
+   push, made before any protection exists; then protect `main`, and give the repository its own
+   CI, review gate and landing, running the engine from its own checkout.
+3. **In steward:** `init` and the thin gate workflow files (R2); the second project's gate-only
+   start (R6, R7); then OQ-73 as containers, and OQ-101.
+4. **Here:** OQ-115, narrowed to adopting steward: pin it, switch to the thin workflow files,
+   remove the moved code and documents, and retire the moved stories with a note naming each one's
+   `ST-<n>`.
+
+### What ties the workflow to one company today
+
+Checked on 2026-10-07 against `main` at `66c578d`:
+
+- **The agent tool is the Claude Code CLI.** `spawn.mjs` finds its binary (`resolveClaudeExecutable`,
+  or `CLAUDE_EXECUTABLE`). `invocation.mjs` builds the `claude -p` arguments, including Claude
+  Code's tool-allowlist syntax (`Bash(git diff:*)` and so on, here and in `coder-env.mjs`).
+  `outcome.mjs` classifies a session from the CLI's JSON result.
+- **The guarantees on each role are enforced through that CLI.** The coder holds no credential and
+  may not push or run `gh` (OQ-63, OQ-67, OQ-84; OQ-73 still planned). The reviewer cannot write
+  (OQ-62 still planned). Those rest on Claude Code's allowlists and permission modes. Another tool
+  has to provide each guarantee again, and show it holds, rather than inherit it.
+- **The models are Claude model names.** The coder's is the story's `model:` field (`sonnet` in
+  `stories/_TEMPLATE.md`). The reviewer's is `opus` (`ROLE_DEFAULTS`, `invocation.mjs`), unless
+  that matches the story's model by name, in which case it is `sonnet` (`chooseReviewerModel`,
+  `review.mjs`). "Different" is decided by comparing those names.
+- **The prompts are written for that CLI.** `.claude/prompts/coder.md` and `reviewer.md` name its
+  tools and its allowlist behaviour.
+
+### What ties the workflow to this repository today
+
+- `DEFAULT_REPO` is `luplows/tower-workshop-paths` in `coder.mjs`, `land.mjs`, `loop.mjs`,
+  `review.mjs` and `story.mjs`. Each also takes `--repo`.
+- The scripts run against the checkout they are loaded from (`DISPATCHER_ROOT`), and read this
+  repository's `stories/` and `.claude/prompts/`.
+- The gate is this repository's own workflows. `ci.yml` runs `scripts/dispatch/story-containment.mjs`.
+  `land-approved.yml` runs `scripts/land/select-candidates.mjs`, `check-author.mjs` and
+  `delete-merged-heads.mjs`. `review-gate.yml` derives `review/agent`.
+- The rules the gate enforces mix the general with this project's own: `REVIEW.md`, `CLAUDE.md`,
+  `stories/README.md`, `stories/_TEMPLATE.md` and this document.
+
+### Open questions
+
+**Models (OQ-114)**
+
+- **M1. Which tools and models.** The owner's examples are OpenAI's GPT models. An adapter needs,
+  from the tool: a non-interactive run from a prompt, a machine-readable result, restrictions on
+  what the session may run, confinement to its working directory, and a time or cost bound.
+  OpenAI's own documentation (developers.openai.com/codex/noninteractive, read 2026-10-07)
+  describes the Codex CLI's `codex exec` for this: the prompt as an argument, `--json` for JSON
+  Lines output, and `--sandbox read-only | workspace-write | danger-full-access`. Not yet run here.
+  Its restrictions are a sandbox policy, not a per-command allowlist like Claude Code's, so M3
+  applies in full. **Decided 2026-10-08 by the owner: the Codex CLI is the first adapter, for the
+  reviewer (M2), after a spike** that runs it here and shows it can run `npm test` inside its
+  read-only sandbox and return a verdict the gate can parse.
+- **M2. Which role first.** **Decided 2026-10-08 by the owner: the reviewer.** Goal 2's value is largest there, and a
+  reviewer that cannot write is a smaller guarantee to re-establish than a coder's.
+- **M3. Guarantees before use.** **Decided 2026-10-08 by the owner:** no tool runs a role until that role's guarantees are
+  shown to hold for it by tests, in the way OQ-73's AC-1 tests the coder's.
+- **M4. How a story or role names its model.** Today a bare Claude model name. It needs the tool as
+  well. OQ-54 (one declared default coder model) would be reworked or folded in. **Left open for
+  the workflow's own repository** (owner, 2026-10-08): it works best as configurable for the
+  specific job, rather than fixed per project.
+- **M5. Prompts.** One prompt per role with per-tool parts, or one per tool? **Decided 2026-10-08
+  by the owner: one prompt per role**, holding the role's rules once, with a small section per tool
+  for that tool's specifics, so the rules cannot drift between tools.
+- **M6. Switching away (goal 3).** **Decided 2026-10-08 by the owner:** replacing a tool for a role is a configuration change,
+  with no code change beyond its adapter.
+
+**A repository of its own (OQ-115)**
+
+- **R1. What moves.** Proposed by Session A, 2026-10-07, from `main` at `21fdb52`; **decided
+  2026-10-08 by the owner, as proposed**. It is the extraction list for the bootstrap ("The move, in
+  order", step 2):
+
+  | Moves to the workflow's repository | Stays here |
+  |---|---|
+  | `scripts/dispatch/` (with `story-containment.mjs`), `scripts/land/`, `scripts/lint-stories.mjs`, `scripts/report/review-verdicts.mjs`, and their tests | The product, its data scripts (`scripts/extract-*`, `generate-*`, `verify-workshop-costs.mjs`, `scripts/lib/`) |
+  | `.claude/prompts/coder.md` and `reviewer.md`, with their project-specific lines stripped, and slots for them added later (below) | This project's stories: `stories/`, `stories/done/`, `stories/retired/`, `Completed-Questions.md`, `Open-Questions.md` |
+  | `REVIEW.md` except items 8 and 10, which name Vitest, Playwright, the buy-order algorithm and screenshot baselines | `REVIEW.md` items 8 and 10, as this project's own review items |
+  | The workflow rules in `CLAUDE.md` ("Branches and pull requests", "Claims about this repository", "Stories") | `CLAUDE.md`'s project rules ("Testing", screenshot baselines), plus a pointer to the workflow's rules |
+  | `stories/README.md` and `_TEMPLATE.md`, as the story schema of record | A short `stories/README.md` pointing at the schema |
+  | This document, `docs/harness-outline.md`, `docs/session-a.md`, `docs/migration-plan.md`, `docs/gap-analysis.md` | `Project-Outline.md`, `README.md`, and the short document on how this project uses the workflow |
+  | The logic of `review-gate.yml` and `land-approved.yml`, and the containment step in `ci.yml` | Thin workflow files that call it (R2), `ci.yml`'s product checks, `deploy-pages.yml`, `detect-drift.yml`, `update-screenshots.yml` |
+
+  The prompts' project-specific lines are few. In `coder.md`: the repository name, the testing
+  frameworks and screenshot-baseline rules, and `mytower.app` being reachable. In `reviewer.md`:
+  the repository name. They become a `{{REPO}}` slot and a project section the project supplies,
+  rendered by the same bounded injection as the story (`render.mjs`).
+
+  **Decided 2026-10-08 by the owner: steward starts clean.** At the bootstrap, steward's copies
+  of the prompts have this repository's lines stripped by hand: its name, Vitest and Playwright,
+  the screenshot-baseline rules, `mytower.app`, and the pointer to `Completed-Questions.md`
+  (`coder.md`). The slot and the project section are built in steward afterwards, before this
+  repository adopts it (OQ-115), since this project's lines have to come back through them.
+
+  **`REVIEW.md` items 8 and 10 are removed from steward's copy** (decided 2026-10-08 by the owner),
+  leaving gaps in the numbering. A story in steward closes the gaps and updates every reference to
+  an item number.
+
+  A side effect worth having: in the workflow's repository the prompts need not live under
+  `.claude/`, so a coder there could edit them directly, instead of through the emit-a-diff route
+  (**A spawned session cannot edit `.claude/prompts/`**, above).
+
+  **This document** (proposed by Session A, owner agreed to record it, 2026-10-07): it moves with
+  the workflow and stays the workflow's design of record. At `66c578d` most of its 1,640 lines are
+  about the workflow. The passages about this project stay here, in a short document of this
+  repository's own on how it uses the workflow:
+  - "Branching and releases": Pages as the alpha channel, and tags as checkpoints;
+  - in "Quality beyond the gate", the buy-order examples given for items 3 and 4 (property-based
+    and golden tests; the techniques themselves move), and item 5, validating scraped data;
+  - open question 9, the production deployment target;
+  - mentions of `mytower.app` as an example of network egress.
+
+  The example story under "The story artifact" (a `playerInfo.dat` import) is replaced with a
+  neutral one. `Project-Outline.md` stays the product's design of record. Once moved, a workflow
+  design change lands in the workflow's repository, and this one sees it only as a version it
+  chooses to take, which is goal 4.
+
+  **The history moves with the code** (decided 2026-10-08 by the owner): the moved paths are
+  extracted with their git history, for example with `git filter-repo`, so `git log` on a moved
+  file in the workflow's repository still shows the commits and stories that shaped it.
+  **Commit messages name this repository's pull requests in plain text** (decided 2026-10-08 by
+  the owner): the extraction rewrites each `(#N)` as `(tower-workshop-paths PR N)`. Left as it was,
+  `#N` would link to the workflow's repository's own #N. Written as `luplows/tower-workshop-paths#N`,
+  it would add a cross-reference to each of this repository's pull requests when steward's `main`
+  is pushed.
+- **R2. How a project uses it.** Proposed by Session A, 2026-10-07; **decided 2026-10-07 by the
+  owner, as proposed, with the git-tag pin** (below):
+  - **A Node package with a command-line entry point**, added as a development dependency of each
+    project and pinned to a tagged version. To begin with it is installed straight from the
+    workflow's public repository by git tag, so no package registry account is needed; publishing
+    to npm can come later.
+  - **The loop runs from the project's own worktree, as now** (`loop.mjs --init`). Today every story
+    runs the dispatch code as it is on `origin/main` (OQ-86). With a pinned dependency, that becomes
+    the engine version `origin/main` pins, so a project takes a new workflow version only through
+    a pull request of its own that changes the pin.
+  - **The gate's workflow files stay in each project, but thin**: the triggers and permissions,
+    then one step running the package's command. An `init` command writes them. This is preferred
+    over GitHub's reusable workflows because the gate's logic already lives in scripts, and because
+    each project keeps control of its own triggers, permissions and secrets.
+  - The scripts stop finding the project relative to their own location (`DISPATCHER_ROOT`).
+    They take the project from the working directory and its configuration (R3), and their
+    prompts from the package.
+
+  **Decided 2026-10-07 by the owner: the git-tag pin**, to keep it simple. Publishing to npm is not
+  planned. The rest of R2 was accepted as proposed the same day: the loop runs from the project's
+  own worktree, and thin gate files written by `init`, not GitHub's reusable workflows.
+- **R3. What a project configures.** At least its repository, its CI commands (OQ-94), its own
+  review items, and where its stories live. **Decided 2026-10-08 by the owner: for now, only what
+  differs between the projects: the repository and the story id prefix**, in a settings file at
+  the project root (OQ-122). The base branch, the remote, the stories directory and the CI workflow
+  path are the same in all three repositories (`main`, `origin`, `stories/`,
+  `.github/workflows/ci.yml`), so they stay constants until a project needs something else. The
+  prompts' project section, a project's own review items, models and commit attribution come
+  later; attribution matters once the second project has a coder, since its `AGENTS.md` forbids AI
+  attribution.
+- **R4. The workflow's own stories.** The new repository needs a queue of its own. Which of this
+  repository's workflow stories move with it? **Decided 2026-10-08 by the owner: every unbuilt
+  `kind: workflow` story moves, except those about this repository's own files**: OQ-117 and OQ-118
+  (this repository's CI, built before the move, R5), OQ-72 (retiring this repository's
+  `Open-Questions.md`) and OQ-94 (this repository's `CLAUDE.md`). OQ-71 moves: the claims it
+  consolidates are in the workflow's documents. A story built before the move stays in
+  `stories/done/` here, as history. A moved story takes the new repository's next number (R9) and
+  names its old OQ id.
+
+  **OQ-115 stays, and OQ-114 moves** (decided 2026-10-08 by the owner). OQ-115 is this
+  repository's adoption of steward, "The move, in order", step 4, so it is about this repository's
+  own files, like OQ-72 and OQ-94. OQ-114, the adapters for other companies' models, is engine work
+  and moves. It is not a prerequisite of the move and not a high priority. Its `depends_on:
+  [OQ-115]` only meant "after the move", so it is dropped when the story is renumbered.
+
+  **Held here until the move** (decided 2026-10-08 by the owner): the moving workflow stories
+  that the loop would otherwise reach after OQ-123 carry `blocked:` saying so, so that they are
+  built in steward rather than here. They are OQ-54, OQ-59, OQ-62, OQ-88, OQ-89, OQ-98, OQ-100,
+  OQ-103, OQ-105, OQ-119 and OQ-120 (`normal` tier) and OQ-99 (`later`). The steward copies are
+  renumbered with `blocked:` cleared; the copies here are retired by OQ-115.
+- **R5. When.** **Revised 2026-10-08 by the owner: the move comes before OQ-73**, once the story
+  pull requests #204 to #208 (OQ-117 to OQ-121) have landed, and still before OQ-101. OQ-73's coder
+  (#209) found that its candidate mechanism, a separate Windows account for spawns, needs an
+  administrator to create the account, a separate Claude Code login, a way to start a process as
+  that account from node, and access to the worktree. That makes OQ-73 three or four stories, and
+  the owner chose not to hold the move for them. The credential isolation is built in the
+  workflow's repository, where the second project gets it too.
+
+  **Clarified 2026-10-08 by the owner:** OQ-118 and then OQ-117 are *built* before the move, not
+  only written, because they fix CI itself and the move's own pull requests go through CI. The
+  move does not wait for OQ-119, OQ-120 or OQ-121: whichever are built first move with the
+  workflow, and the rest go to its queue (R4). Since the hold under R4, OQ-119 and OQ-120 are not
+  built here; OQ-121 still is, ahead of OQ-122 in the queue.
+
+  **OQ-73's mechanism is a container** (decided 2026-10-08 by the owner, replacing the separate
+  Windows account in OQ-73's Context). Decided, not yet built: coder sessions run in a container whose
+  image the workflow's repository defines, with only the work and the agent tool's own login passed
+  in, so no host keyring, `~/.ssh` or user profile is reachable. The reason is portability: a new
+  machine needs one standard install (a container runtime) rather than account management, and
+  the same image runs on Windows, macOS and Linux. It may also give the reviewer its read-only
+  mount (OQ-62). OQ-73 is parked until after the move: #209 stays a draft with its `blocked:`, and
+  the story is rewritten in the workflow's repository as a spike, a build, and OQ-73's own checks
+  as the proof. Known questions for the spike: a git worktree's `.git` file holds an absolute host
+  path, and `node_modules` on a bind mount from Windows is slow.
+  This passage carries no **Planned** marker yet: OQ-73 is in flight (#209), so its story file
+  cannot be given the acceptance criterion that would resolve one. Its rewrite adds both.
+
+  Superseded: **decided 2026-10-07 by the owner: after OQ-73, before OQ-101.** The owner's build
+  order is OQ-80 (landed as #203 on 2026-10-07), then OQ-73, then OQ-101, so the move comes after OQ-80 and
+  OQ-73 land and OQ-101 is built in the workflow's repository. OQ-101's `install` registers a
+  scheduled task per machine, and the second project needs one too, so building it once there
+  avoids building it here and then moving it. Which repository's queue OQ-101 then sits in is R4.
+
+  The question as it stood: the earlier proposal was to move after the whole build order, so that
+  what moves is known to work unattended. Against that, the second project's planning has started,
+  and every workflow story built here first is one more thing to move.
+- **R6. The second project.** What it needs from the workflow decides how general R2 and R3 must
+  be. Answered so far (owner, 2026-10-07): it is also a Node project on GitHub, in a **private**
+  repository. **Decided 2026-10-08 by the owner: the gate only, at first.** The workflow reviews
+  and lands the pull requests the owner or the owner's interactive sessions open there, each
+  against the issue it closes, and runs no unattended coder until coder sessions are isolated
+  (OQ-73's containers, R5). That is the review-and-land pipeline the owner called worth having on
+  its own (`docs/harness-outline.md`, "Why"). The issue-as-story design it needs is R7.
+
+  A private repository changes things this design assumes about this public one:
+  - **Branch protection.** GitHub's documentation ("About protected branches", read 2026-10-07)
+    makes protected branches available for private repositories only on GitHub Pro, Team or
+    Enterprise, not GitHub Free. This repository's gate relies on them: `test` and `review/agent`
+    are required checks, with `enforce_admins: true` (**Mechanics**, under **Branching and
+    releases**, above). `land.mjs` and the sweep re-check `review/agent` themselves rather than
+    trusting `clean`, but nothing else stops a direct push to `main`. The second project's account
+    is on **GitHub Free** (owner, 2026-10-07), so on that project the gate is kept by the
+    workflow's own checks and by rule, not by GitHub. **Accepted for now** (owner, 2026-10-07):
+    the owner works alone. Contributors will be added only if they are trusted and understand the
+    process and this limitation. Before bringing in anyone less trusted, the owner will upgrade to
+    GitHub Pro or make the repository public, so that the guardrails are enforced by GitHub.
+  - **Actions minutes.** **Costs**, below, says minutes are not a constraint *because the
+    repository is public*. Private repositories draw on the plan's included minutes.
+  - **Privacy choices made because this repository is public**, such as naming a machine by a
+    label rather than its hostname (OQ-112), may be relaxed per project, but do not have to be.
+- **R7. Where stories come from.** The second project keeps its stories as GitHub issues, not files
+  under `stories/`. The queue could take either, by a per-project setting. Not yet refined: the
+  file-based design leans on things an issue does not give for free, such as frontmatter the lint
+  checks, `git mv` to `stories/done/` as completion, ticks in the diff, and story containment.
+
+  Further out, the owner wants to explore a project board rather than a simple queue for managing
+  stories and priority, and is trying a GitHub Project for that on the second project. That is not
+  a requirement of the move (owner, 2026-10-07). It meets two principles here head on:
+  [Status is derived, not stored](#status-is-derived-not-stored), where a board's columns are
+  stored status; and [Tier is priority](#tier-is-priority-and-nothing-else), where a board's order
+  is set by hand rather than derived from a field.
+
+  **Decided 2026-10-08 by the owner: for the gate-only start (R6), only the reviewer's input.** The
+  reviewer of a second-project pull request reads the issue it closes (`Closes #n`) as its story.
+  The queue from issues (ready state, priority and dependencies, which that project keeps in its
+  GitHub Project, labels and "blocked by" relationships) waits until that project gets a coder.
+- **R8. Whether the workflow's repository is public or private.** **Decided 2026-10-07 by the
+  owner: public**, with the condition below. The owner had leaned that way: the work is
+  exploratory, the code is already public in this repository, and private brings no benefit the
+  owner needs. R2's git-tag pin also assumes it, since installing from a private repository would
+  need a credential on every runner and machine that installs it.
+  Public makes it simple for any project to use, and keeps Actions minutes free. Private keeps it
+  to the owner, but a project using it then needs access to it, by package registry
+  authentication or GitHub's settings for sharing workflows from a private repository, and that
+  bears on R2. One condition if public: anyone can open an issue or a pull request on a public
+  repository. If its stories come from issues (R7), only issues a writer created or labelled may
+  enter its queue, the same stance OQ-81 takes for landing pull requests.
+- **R9. Story numbering in the new repository, and the old references.** This document cites OQ
+  numbers 150 times, across 43 distinct ids (`main` at `66c578d`), and every one is this
+  repository's story, in `stories/done/` or `Completed-Questions.md`. If the new repository also
+  numbered its stories OQ-1 onwards, "OQ-73" would become ambiguous. Proposed (Session A,
+  2026-10-07): the new repository's stories take a prefix of their own, for example `WF-<n>`.
+  The OQ references this document carries over keep their numbers, with one note saying they mean
+  tower-workshop-paths' stories, and where to find them. Continuing OQ numbering in the new
+  repository was considered and set aside: it would tie the two repositories' numbering together
+  for good, against goal 4. The prefix touches everything that matches `OQ-<n>` today: the queue
+  reader's and lint's filename patterns, branch names (`story/OQ-<n>-…`), test names
+  (`OQ-<n>/AC-<n>`) and the design doc's markers.
+
+  **Decided 2026-10-08 by the owner: `ST-<n>`**, for steward (R10), not `WF-<n>`.
+- **R10. The name of the repository and the package.** **Decided 2026-10-07 by the owner:
+  `steward`**, the repository `luplows/steward` (no repository by that name existed under `luplows`
+  on that date, by `gh repo view`) and the package `steward`. It looks after the work on the
+  owner's behalf while the owner keeps the decisions, which is the "why" in
+  [`harness-outline.md`](harness-outline.md). The owner wanted that future state settled first.
+
+  The question as it stood: with the git-tag pin (R2), only the
+  repository name is needed at the move; the package name is whatever its `package.json` says. The
+  name should not name a model company (goal 3), and need not say "story" if units of work come
+  from issues (R7).
+---
+
 ## Deliberately excluded
 
 - **More agent roles.** Two roles plus a script is the right complexity.
@@ -1524,3 +1881,5 @@ readiness test, whether the gate works at all. Both arguments point at Session A
 | 8 | What CI runs | **Resolved:** current suite plus schema lint, AC traceability, existing-test flag. No tiering at 70 s. |
 | 9 | Production deployment target | Open. None today; Pages is alpha. Tags are checkpoints until one exists. |
 | 10 | Second GitHub identity | Open. The only thing that fully closes self-marking. Cost: a machine account or App. |
+| 11 | Other companies' models | Open. Goals decided 2026-10-07, and comes after the move; questions M1–M6 under [Portability](#portability-other-projects-other-companies-models). OQ-114. |
+| 12 | The workflow in a repository of its own | Open. Goals decided 2026-10-07, and comes first; questions R1–R10 under [Portability](#portability-other-projects-other-companies-models). OQ-115. |

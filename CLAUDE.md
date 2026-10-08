@@ -94,4 +94,5 @@ recalled — in story files, docs, commit messages, pull request bodies and revi
 | [`docs/session-a.md`](docs/session-a.md) | Instructions for the session that writes stories with the owner, including how a story pull request is handed over. |
 | [`docs/migration-plan.md`](docs/migration-plan.md) | The phased sequence for building the workflow, and its status. Not a design document. |
 | [`docs/gap-analysis.md`](docs/gap-analysis.md) | A dated snapshot, kept for its reasoning. Not a design document, and not current. |
+| [`docs/harness-outline.md`](docs/harness-outline.md) | The workflow's product outline, as a product of its own (steward): who it is for, why, what it must never do. Moves with the workflow. |
 | `Completed-Questions.md` | Archive of resolved stories. |
