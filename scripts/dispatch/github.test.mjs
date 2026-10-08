@@ -13,6 +13,7 @@ import {
   buildGetPullRequestState,
   buildListComments,
   buildListIssuesByLabels,
+  buildListOpenPullRequests,
   buildListPullRequestsForHead,
   buildPostComment,
   buildReplacePullRequest,
@@ -24,10 +25,12 @@ import {
   getPullRequestLabels,
   getPullRequestState,
   listIssuesByLabels,
+  listOpenPullRequests,
   listOpenPullRequestsForHead,
   listPullRequestComments,
   parseComments,
   parseMarkerComment,
+  parseOpenPullRequests,
   postComment,
   replacePullRequest,
 } from './github.mjs'
@@ -45,18 +48,21 @@ const WORKFLOW_MARKER_RE =
 const WORKFLOW_MARKER_RE_LINEWISE =
   /<!--[^\S\n]*agent-review[^\S\n]+head=[0-9a-f]{40}[^\S\n]+verdict=(pass-with-observations|pass|block|fail)[^\S\n]*-->/
 
+// Keyed by builder name (OQ-116/AC-2) so a test can check every `build*` export
+// this module has is represented here, without a hand-maintained count.
 function allBuiltRequests() {
-  return [
-    buildCreatePullRequest(REPO, { title: 't', body: 'b', head: 'h', draft: true }),
-    buildReplacePullRequest(REPO, 7, { title: 't', body: 'b' }),
-    buildPostComment(REPO, 7, 'hello'),
-    buildGetPullRequestState(REPO, 7),
-    buildGetPullRequestLabels(REPO, 7),
-    buildListComments(REPO, 7),
-    buildListPullRequestsForHead(REPO, 'story/OQ-1-x'),
-    buildListIssuesByLabels(REPO, ['loop-stuck']),
-    buildCreateIssue(REPO, { title: 't', body: 'b', labels: ['loop-stuck'] }),
-  ]
+  return {
+    buildCreatePullRequest: buildCreatePullRequest(REPO, { title: 't', body: 'b', head: 'h', draft: true }),
+    buildReplacePullRequest: buildReplacePullRequest(REPO, 7, { title: 't', body: 'b' }),
+    buildPostComment: buildPostComment(REPO, 7, 'hello'),
+    buildGetPullRequestState: buildGetPullRequestState(REPO, 7),
+    buildGetPullRequestLabels: buildGetPullRequestLabels(REPO, 7),
+    buildListComments: buildListComments(REPO, 7),
+    buildListPullRequestsForHead: buildListPullRequestsForHead(REPO, 'story/OQ-1-x'),
+    buildListOpenPullRequests: buildListOpenPullRequests(REPO, { base: 'main', page: 1 }),
+    buildListIssuesByLabels: buildListIssuesByLabels(REPO, ['loop-stuck']),
+    buildCreateIssue: buildCreateIssue(REPO, { title: 't', body: 'b', labels: ['loop-stuck'] }),
+  }
 }
 
 function fakeFetch(responses) {
@@ -136,7 +142,7 @@ describe('OQ-68/AC-1: the operations', () => {
 
 describe('OQ-68/AC-2: injectable I/O', () => {
   it('OQ-68/AC-2: builders are pure and carry no token', () => {
-    for (const request of allBuiltRequests()) {
+    for (const request of Object.values(allBuiltRequests())) {
       expect(JSON.stringify(request)).not.toMatch(/Bearer|Authorization/)
     }
     expect(buildPostComment(REPO, 1, 'x')).toEqual(buildPostComment(REPO, 1, 'x'))
@@ -194,14 +200,15 @@ describe('OQ-68/AC-2: injectable I/O', () => {
 
 describe('OQ-68/AC-3: no commit status', () => {
   it('OQ-68/AC-3: no request this module can build targets a commit status, check or workflow', () => {
-    for (const request of allBuiltRequests()) {
+    for (const request of Object.values(allBuiltRequests())) {
       expect(request.url).not.toMatch(/\/statuses\/|\/check-|\/actions\/|\/dispatches/)
       expect(JSON.stringify(request.body ?? {})).not.toContain('review/agent')
     }
   })
 
   it('OQ-68/AC-3: send itself refuses a status or workflow-dispatch request before any network call', async () => {
-    const fetch = fakeFetch(Array.from({ length: 9 }, () => ({ json: {} })))
+    const built = allBuiltRequests()
+    const fetch = fakeFetch(Array.from({ length: Object.keys(built).length }, () => ({ json: {} })))
     const getToken = async () => 't'
     const ctx = createContext({ repo: REPO, fetch, getToken })
     const base = `https://api.github.com/repos/${REPO}`
@@ -215,8 +222,8 @@ describe('OQ-68/AC-3: no commit status', () => {
     ]
     for (const request of refused) await expect(ctx.send(request)).rejects.toThrow(/refusing/)
     expect(fetch.calls).toHaveLength(0)
-    for (const request of allBuiltRequests()) await ctx.send(request)
-    expect(fetch.calls).toHaveLength(9)
+    for (const request of Object.values(built)) await ctx.send(request)
+    expect(fetch.calls).toHaveLength(Object.keys(built).length)
   })
 
   it('OQ-68/AC-3: the source neither names the status endpoint nor a workflow dispatch', async () => {
@@ -463,6 +470,81 @@ describe('OQ-112/AC-1: three more operations', () => {
     ]
     for (const request of refused) await expect(ctx.send(request)).rejects.toThrow(/refusing/)
     expect(fetch.calls).toHaveLength(0)
+  })
+})
+
+describe('OQ-116/AC-2: every builder is in allBuiltRequests', () => {
+  it('OQ-116/AC-2: every build* export is a key in allBuiltRequests, except the GraphQL one', () => {
+    // buildConvertPullRequestToDraft is the one GraphQL request; OQ-87/AC-2's own
+    // tests cover its shape and allowlist entry, so it is excluded here.
+    const excluded = ['buildConvertPullRequestToDraft']
+    const builders = Object.keys(github).filter((name) => name.startsWith('build'))
+    const covered = Object.keys(allBuiltRequests())
+    for (const name of builders) {
+      if (excluded.includes(name)) continue
+      expect(covered).toContain(name)
+    }
+  })
+})
+
+describe('OQ-116/AC-3: buildListOpenPullRequests', () => {
+  it('OQ-116/AC-3: builds the GET for an explicit base and page', () => {
+    expect(buildListOpenPullRequests(REPO, { base: 'main', page: 2 })).toEqual({
+      method: 'GET',
+      url: `https://api.github.com/repos/${REPO}/pulls?base=main&state=open&per_page=100&page=2`,
+    })
+  })
+
+  it('OQ-116/AC-3: defaults to base=main and page=1', () => {
+    expect(buildListOpenPullRequests(REPO)).toEqual({
+      method: 'GET',
+      url: `https://api.github.com/repos/${REPO}/pulls?base=main&state=open&per_page=100&page=1`,
+    })
+    expect(buildListOpenPullRequests(REPO, {})).toEqual(buildListOpenPullRequests(REPO))
+  })
+
+  it('OQ-116/AC-3: a non-string base throws', () => {
+    expect(() => buildListOpenPullRequests(REPO, { base: 7 })).toThrow(/base must be a string/)
+  })
+
+  it('OQ-116/AC-3: an empty base builds base=&, which send refuses before any network call', async () => {
+    const request = buildListOpenPullRequests(REPO, { base: '' })
+    expect(request.url).toBe(`https://api.github.com/repos/${REPO}/pulls?base=&state=open&per_page=100&page=1`)
+    const fetch = fakeFetch([{ json: {} }])
+    const ctx = createContext({ repo: REPO, fetch, getToken: async () => 't' })
+    await expect(ctx.send(request)).rejects.toThrow(/refusing/)
+    expect(fetch.calls).toHaveLength(0)
+  })
+})
+
+describe('OQ-116/AC-4: the response side of listing open pull requests', () => {
+  it('OQ-116/AC-4: parseOpenPullRequests reduces to number, headRef, headSha, draft and authorAssociation', () => {
+    const json = [
+      { number: 1, head: { ref: 'story/a', sha: SHA }, draft: true, author_association: 'OWNER' },
+      { number: 2, draft: false },
+    ]
+    expect(parseOpenPullRequests(json)).toEqual([
+      { number: 1, headRef: 'story/a', headSha: SHA, draft: true, authorAssociation: 'OWNER' },
+      { number: 2, headRef: null, headSha: null, draft: false, authorAssociation: null },
+    ])
+  })
+
+  it('OQ-116/AC-4: draft is true only when the response draft is exactly true', () => {
+    expect(parseOpenPullRequests([{ number: 1, draft: 'true' }])[0].draft).toBe(false)
+    expect(parseOpenPullRequests([{ number: 1 }])[0].draft).toBe(false)
+    expect(parseOpenPullRequests([{ number: 1, draft: true }])[0].draft).toBe(true)
+  })
+
+  it('OQ-116/AC-4: listOpenPullRequests reads a page of 100, then the next, stopping after a short page', async () => {
+    const full = Array.from({ length: 100 }, (_, i) => ({ number: i, head: { ref: `r${i}`, sha: SHA } }))
+    const short = [{ number: 100, head: { ref: 'r100', sha: SHA2 } }]
+    const fetch = fakeFetch([{ json: full }, { json: short }])
+    const ctx = createContext({ repo: REPO, fetch, getToken: async () => 't' })
+    const prs = await listOpenPullRequests(ctx, { base: 'main' })
+    expect(prs.map((pr) => pr.number)).toEqual(Array.from({ length: 101 }, (_, i) => i))
+    expect(fetch.calls).toHaveLength(2)
+    expect(fetch.calls[0].url).toContain('page=1')
+    expect(fetch.calls[1].url).toContain('page=2')
   })
 })
 
