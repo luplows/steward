@@ -108,6 +108,12 @@ One file per story. **OQ numbering is preserved** — those identifiers are refe
 codebase, workflow comments, and `Completed-Questions.md`, and the "never reused, never renumbered"
 rule stays. Only the container changes.
 
+**Planned (OQ-122):** the prefix is a project setting, not part of the code. A project's
+`steward.config.json` names its repository and its story prefix (`OQ` here), and every story-id
+pattern the scripts use is built from it, so the same code can run a queue numbered `ST-<n>`
+(decided 2026-10-08 by the owner, as the first step of moving the workflow to its own
+repository).
+
 ```
 stories/
   OQ-49-import-player-info.md      ← open
