@@ -1556,6 +1556,11 @@ deciding what is next. It is the harness's product outline, and moves with this 
   owner). See R4 and R1.
 - **OQ-115 stays here and OQ-114 moves**, and the extracted history names this repository's pull
   requests in plain text (decided 2026-10-08 by the owner). See R4 and R1.
+- **The bootstrap checklist is agreed**, [`steward-bootstrap.md`](steward-bootstrap.md), with its
+  six decisions (decided 2026-10-08 by the owner). Steward's copies of this document and of
+  `CLAUDE.md` are stripped of this repository's own content at the bootstrap, and R1's list gains
+  the files the dry run found missing (R1). ST-8, the copy of OQ-73, is held in steward until it
+  is rewritten, and steward's own first stories outrank the moved ones (R4).
 
 ### The move, in order
 
@@ -1568,10 +1573,11 @@ from the day it exists. Today the `OQ` prefix is hardcoded in five modules, so i
    project from the working directory and the scripts and prompts from wherever the engine is
    installed, #211).
 2. **By hand, the owner with Session A (a bootstrap, not a story):** create `luplows/steward`,
-   public; extract the moved paths with their history (`git filter-repo`, not installed here yet);
-   renumber the moved stories `ST-<n>`, each naming its old OQ id; push `main`, the one direct
-   push, made before any protection exists; then protect `main`, and give the repository its own
-   CI, review gate and landing, running the engine from its own checkout.
+   public; extract the moved paths with their history (`git filter-repo`, installed on the
+   owner's machine on 2026-10-08 and tried in a dry run); renumber the moved stories `ST-<n>`, each
+   naming its old OQ id; push `main`, the one direct push, made before any protection exists; then
+   protect `main`, and give the repository its own CI, review gate and landing, running the engine
+   from its own checkout. The steps are in [`steward-bootstrap.md`](steward-bootstrap.md).
 3. **In steward:** `init` and the thin gate workflow files (R2); the second project's gate-only
    start (R6, R7); then OQ-73 as containers, and OQ-101.
 4. **Here:** OQ-115, narrowed to adopting steward: pin it, switch to the thin workflow files,
@@ -1652,6 +1658,7 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   | `stories/README.md` and `_TEMPLATE.md`, as the story schema of record | A short `stories/README.md` pointing at the schema |
   | This document, `docs/harness-outline.md`, `docs/session-a.md`, `docs/migration-plan.md`, `docs/gap-analysis.md` | `Project-Outline.md`, `README.md`, and the short document on how this project uses the workflow |
   | The logic of `review-gate.yml` and `land-approved.yml`, and the containment step in `ci.yml` | Thin workflow files that call it (R2), `ci.yml`'s product checks, `deploy-pages.yml`, `detect-drift.yml`, `update-screenshots.yml` |
+  | Added 2026-10-08 by the owner, after the dry run: `test/fixtures/`, the four built stories the moved tests read as fixtures (OQ-51, OQ-68, OQ-69, OQ-70; they become test fixtures in steward, not stories), `.github/pull_request_template.md`, `.oxlintrc.json` and `.gitignore` | The originals of all of these |
 
   The prompts' project-specific lines are few. In `coder.md`: the repository name, the testing
   frameworks and screenshot-baseline rules, and `mytower.app` being reachable. In `reviewer.md`:
@@ -1686,6 +1693,13 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   neutral one. `Project-Outline.md` stays the product's design of record. Once moved, a workflow
   design change lands in the workflow's repository, and this one sees it only as a version it
   chooses to take, which is goal 4.
+
+  **Steward's copy is stripped of them at the bootstrap** (decided 2026-10-08 by the owner, as the
+  prompts are): the passages above, and the example story, are removed or replaced in steward's
+  copy before its first push, rather than left for a steward story. Steward's `CLAUDE.md` keeps
+  the testing rules that hold for it (CI is required, tests go alongside new logic, in Vitest, no
+  coverage tooling, green CI is not sufficient) and drops Playwright, screenshot baselines and the
+  buy-order algorithm (decided 2026-10-08 by the owner).
 
   **The history moves with the code** (decided 2026-10-08 by the owner): the moved paths are
   extracted with their git history, for example with `git filter-repo`, so `git log` on a moved
@@ -1749,6 +1763,14 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   built in steward rather than here. They are OQ-54, OQ-59, OQ-62, OQ-88, OQ-89, OQ-98, OQ-100,
   OQ-103, OQ-105, OQ-119 and OQ-120 (`normal` tier) and OQ-99 (`later`). The steward copies are
   renumbered with `blocked:` cleared; the copies here are retired by OQ-115.
+
+  **In steward, two exceptions and an order** (decided 2026-10-08 by the owner, agreeing the
+  bootstrap checklist). ST-8, the copy of OQ-73, carries `blocked:` saying it is to be rewritten
+  as containers (R5): it reads `ready` on this repository's `main`, so copied as it is, steward's
+  loop would dispatch the Windows-account version at once. ST-18, the copy of OQ-108, keeps the
+  owner's own `blocked:`. And steward's own first stories (the prompts' `{{REPO}}` slot and project
+  section, closing `REVIEW.md`'s numbering gaps, and `init` with the thin workflow files) are
+  written at tier `next` before its loop first runs, so they come before the moved stories.
 - **R5. When.** **Revised 2026-10-08 by the owner: the move comes before OQ-73**, once the story
   pull requests #204 to #208 (OQ-117 to OQ-121) have landed, and still before OQ-101. OQ-73's coder
   (#209) found that its candidate mechanism, a separate Windows account for spawns, needs an
