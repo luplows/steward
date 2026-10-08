@@ -1539,8 +1539,8 @@ deciding what is next. It is the harness's product outline, and moves with this 
   target platform's rules much more than switching models does.
 - **The move comes before OQ-73 and before OQ-101, after OQ-118 and OQ-117 are built** (decided
   2026-10-07, revised 2026-10-08 by the owner). See R5.
-- **Coder sessions are isolated in a container** (decided 2026-10-08 by the owner), built after the
-  move as OQ-73's rewrite. See R5.
+- **Planned (OQ-73): coder sessions are isolated in a container** (decided 2026-10-08 by the
+  owner), built after the move as OQ-73's rewrite. See R5.
 - **A project takes the workflow as a package pinned by git tag**, with no npm publishing planned,
   runs the loop from its own worktree, and keeps thin gate workflow files written by an `init`
   command (decided 2026-10-07 by the owner). See R2.
@@ -1760,7 +1760,7 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   built here; OQ-121 still is, ahead of OQ-122 in the queue.
 
   **OQ-73's mechanism is a container** (decided 2026-10-08 by the owner, replacing the separate
-  Windows account in OQ-73's Context). Decided, not yet built: coder sessions run in a container whose
+  Windows account in OQ-73's Context). **Planned (OQ-73):** coder sessions run in a container whose
   image the workflow's repository defines, with only the work and the agent tool's own login passed
   in, so no host keyring, `~/.ssh` or user profile is reachable. The reason is portability: a new
   machine needs one standard install (a container runtime) rather than account management, and
@@ -1769,8 +1769,11 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   the story is rewritten in the workflow's repository as a spike, a build, and OQ-73's own checks
   as the proof. Known questions for the spike: a git worktree's `.git` file holds an absolute host
   path, and `node_modules` on a bind mount from Windows is slow.
-  This passage carries no **Planned** marker yet: OQ-73 is in flight (#209), so its story file
-  cannot be given the acceptance criterion that would resolve one. Its rewrite adds both.
+  The **Planned (OQ-73)** markers here and under "Decided so far" were added on 2026-10-08 at the
+  owner's decision, after #199's review. OQ-73's story file does not yet have the acceptance
+  criterion that resolves them, as this document's "Reading this document" note asks: OQ-73 is in
+  flight (#209), so its file is not edited here. Its rewrite in the workflow's repository adds that
+  criterion, and the markers take the rewritten story's `ST-<n>` when it is renumbered.
 
   Superseded: **decided 2026-10-07 by the owner: after OQ-73, before OQ-101.** The owner's build
   order is OQ-80 (landed as #203 on 2026-10-07), then OQ-73, then OQ-101, so the move comes after OQ-80 and
@@ -1801,7 +1804,7 @@ Checked on 2026-10-07 against `main` at `66c578d`:
     the owner works alone. Contributors will be added only if they are trusted and understand the
     process and this limitation. Before bringing in anyone less trusted, the owner will upgrade to
     GitHub Pro or make the repository public, so that the guardrails are enforced by GitHub.
-  - **Actions minutes.** **Costs**, below, says minutes are not a constraint *because the
+  - **Actions minutes.** **Costs**, above, says minutes are not a constraint *because the
     repository is public*. Private repositories draw on the plan's included minutes.
   - **Privacy choices made because this repository is public**, such as naming a machine by a
     label rather than its hostname (OQ-112), may be relaxed per project, but do not have to be.
