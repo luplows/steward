@@ -1694,7 +1694,11 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   the owner): the extraction rewrites each `(#N)` as `(tower-workshop-paths PR N)`. Left as it was,
   `#N` would link to the workflow's repository's own #N. Written as `luplows/tower-workshop-paths#N`,
   it would add a cross-reference to each of this repository's pull requests when steward's `main`
-  is pushed.
+  is pushed. **Extended 2026-10-08 by the owner, after a dry run of the extraction:** a bare `#N`
+  in a commit body ("From #195's review…") is rewritten the same way, as
+  `tower-workshop-paths PR N`. The dry run (from `main` at `d86080c`) kept 127 commits, whose
+  bodies had 106 lines with a bare `#N`. Every one was this repository's pull request. A `#N` that
+  follows a `/` or a letter or digit, such as `owner/repo#N`, is left alone.
 - **R2. How a project uses it.** Proposed by Session A, 2026-10-07; **decided 2026-10-07 by the
   owner, as proposed, with the git-tag pin** (below):
   - **A Node package with a command-line entry point**, added as a development dependency of each
