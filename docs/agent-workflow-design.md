@@ -932,7 +932,9 @@ be kept essentially as-is:
 
 `review-blocked` is applied automatically when a pull request reaches the round bound, by
 `review-gate.yml`, with the bound derived from the PR's own `block` verdicts rather than
-remembered (OQ-80).
+remembered (OQ-80). **Planned (OQ-119):** removing the label by hand means "I have seen the cost,
+proceed", so after a removal only blocks recorded since the latest removal count towards applying
+it again, read from the pull request's `unlabeled` events (decided 2026-10-08 by the owner).
 
 ### Merge queue
 
