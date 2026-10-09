@@ -865,7 +865,9 @@ but not the `apt-get` under it, which kept the dpkg lock, so the second try fail
 the retry could not recover from the hang it was added for. **Planned (OQ-136):** only the try's
 own processes are stopped: a process that starts during the try in a process group and a session
 that both existed before it, such as another test's child, is left running (amended 2026-10-09 by
-the owner).
+the owner). **Planned (OQ-136):** the wait tests the lock with an `fcntl` lock, as apt and dpkg take
+it, since a `flock` probe cannot see theirs; the repair is limited to 20 seconds, and a repair that
+fails or times out is logged and does not stop the second try (amended again the same day).
 
 **Definition of green:** it builds, lint is clean, every AC has a named test, Vitest passes,
 Playwright passes without retries, no pre-existing test was modified without story authorization,
@@ -1642,7 +1644,9 @@ deciding what is next. It is the harness's product outline, and moves with this 
   narrowed clean-up still stops a process something else starts in a new session during a try,
   OQ-136's behavioural test runs alone, in a CI step of its own, not in `npm test`; in the real
   install step only a system service started mid-try is exposed. OQ-136 is a prerequisite of the
-  move: it unblocks OQ-130.
+  move: it unblocks OQ-130. When #241's review then blocked on the wait's lock probe, the owner
+  amended AC-2 to AC-4 again (the same day) and kept the exception for Session A to make the fix,
+  because OQ-136 blocks the move, while saying such exceptions are not to become the rule.
 
 ### The move, in order
 
