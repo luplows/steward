@@ -1478,12 +1478,12 @@ not finishing, and 30 minutes is shorter than a real story needs.
   into committed scripts with unit tests.** The untestable surface shrinks to YAML wiring.
 - **`GITHUB_TOKEN` pushes do not trigger further workflows.** The exceptions are
   `workflow_dispatch` and `repository_dispatch` (GitHub's documentation, read 2026-10-08). So the
-  sweep's merges, made with `github.token`, start no `push` run of `ci.yml` or `deploy-pages.yml`:
-  the last ones were on 2026-09-28. **Planned (OQ-124):** both workflows also run on `workflow_run`
-  of `Land approved PRs`, and each job with no `needs:` skips unless the sweep moved `main`
-  (`github.event.workflow_run.head_sha != github.sha`), so a sweep that landed nothing costs no
-  runner. The sweep itself gains no permission, token or secret (decided 2026-10-08 by the owner;
-  see "Portability", "Decided so far").
+  sweep's merges, made with `github.token`, started no `push` run of `ci.yml` or `deploy-pages.yml`
+  on their own: the last ones made that way were on 2026-09-28. Both workflows (OQ-124) also run on
+  `workflow_run` of `Land approved PRs`, and each job with no `needs:` skips unless the sweep moved
+  `main` (`github.event.workflow_run.head_sha != github.sha`), so a sweep that landed nothing costs
+  no runner. The sweep itself gains no permission, token or secret (decided 2026-10-08 by the
+  owner; see "Portability", "Decided so far").
 - **Converting a PR to draft is GraphQL only.** REST's "Update a pull request" takes `title`,
   `body`, `state`, `base` and `maintainer_can_modify`, with no `draft`; the GraphQL mutation
   `convertPullRequestToDraft` does it (checked 2026-09-25). `github.mjs`
@@ -1592,9 +1592,9 @@ deciding what is next. It is the harness's product outline, and moves with this 
   GitHub App token for the merge, which needs a secret per repository; and a personal access
   token, ruled out as a stored owner credential). Each project opts in in its own workflow files,
   and the sweep is unchanged. The skip matters for the owner's private repository, which draws on
-  the plan's included minutes. **Planned (OQ-124)** here, a `fix` story, built before the move;
-  steward's `ci.yml` gets the same trigger at the bootstrap (`steward-bootstrap.md`, B6), and a
-  project's thin files get it from `init` (R2).
+  the plan's included minutes. Built here (OQ-124), a `fix` story, before the move; steward's
+  `ci.yml` gets the same trigger at the bootstrap (`steward-bootstrap.md`, B6), and a project's thin
+  files get it from `init` (R2).
 
 ### The move, in order
 
@@ -1762,7 +1762,7 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   reviewer's observation on #217, and widened by the owner the same day). A test that covers this
   repository's own flows stays here, even where it sits in a moved test file. The case found so
   far is `scripts/dispatch/ci.test.mjs`: OQ-117's tests read this repository's `ci.yml` Playwright
-  steps, `update-screenshots.yml` and `package-lock.json`'s `@playwright/test`, and OQ-124's may
+  steps, `update-screenshots.yml` and `package-lock.json`'s `@playwright/test`, and OQ-124's also
   read `deploy-pages.yml`, none of which steward has. Steward's copy drops them. OQ-118's tests,
   which read steward's own `ci.yml`, move. OQ-115 keeps the tests that stay when it removes the
   moved code from this repository.

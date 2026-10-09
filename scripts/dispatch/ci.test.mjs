@@ -596,3 +596,119 @@ describe('OQ-79/AC-5: only the four reads are permitted, checked before the netw
     expect(touched).toBe(0)
   })
 })
+
+// OQ-124: both workflow files, scanned as text per the story's Constraints.
+const DEPLOY_WORKFLOW_FILE = path.join(HERE, '..', '..', '.github', 'workflows', 'deploy-pages.yml')
+const LAND_APPROVED_WORKFLOW_FILE = path.join(HERE, '..', '..', '.github', 'workflows', 'land-approved.yml')
+const OQ124_SKIP_IF = "if: github.event_name != 'workflow_run' || github.event.workflow_run.head_sha != github.sha"
+
+// The workflow name a `workflow_run` trigger must match, read from land-approved.yml's own
+// `name:` line rather than hardcoded, so renaming the sweep without updating the trigger fails
+// these tests (AC-5).
+const sweepName = readFileSync(LAND_APPROVED_WORKFLOW_FILE, 'utf8').match(/^name:\s*(.+?)\s*$/m)[1]
+
+function workflowRunTriggerOf(text) {
+  const m = text.match(/^on:\n([\s\S]*?)^\S/m)
+  return (m ? m[1] : text).match(/ {2}workflow_run:\n([\s\S]*?)(?=\n {2}\S|\n\S|$)/)?.[0] ?? null
+}
+
+// All step blocks of every job in the file, not just the first job's (AC-4 needs every
+// checkout step, and deploy-pages.yml has two jobs).
+function allStepBlocks(text) {
+  const lines = text.split(/\r?\n/)
+  const blocks = []
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^ {4}steps:\s*$/.test(lines[i])) continue
+    let current = null
+    for (let j = i + 1; j < lines.length; j++) {
+      const line = lines[j]
+      if (/^ {6}- /.test(line)) {
+        if (current) blocks.push(current.join('\n'))
+        current = [line]
+      } else if (current && (/^ {8,}/.test(line) || line.trim() === '')) {
+        current.push(line)
+      } else {
+        break
+      }
+    }
+    if (current) blocks.push(current.join('\n'))
+  }
+  return blocks
+}
+
+// A job block: its own line through the line before the next top-level (2-space) job key.
+function jobBlock(text, jobName) {
+  const lines = text.split(/\r?\n/)
+  const start = lines.findIndex((l) => new RegExp(`^ {2}${jobName}:\\s*$`).test(l))
+  if (start === -1) throw new Error(`no job "${jobName}" found`)
+  const block = [lines[start]]
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^ {2}\S/.test(lines[i])) break
+    block.push(lines[i])
+  }
+  return block.join('\n')
+}
+
+describe('OQ-124/AC-1: ci.yml also triggers on workflow_run of the sweep, completed; pull_request and push unchanged', () => {
+  const text = readFileSync(CI_WORKFLOW_FILE, 'utf8')
+
+  it('keeps the existing pull_request and push triggers', () => {
+    expect(text).toMatch(/^on:\n {2}pull_request:\n {4}branches: \[main\]\n {2}push:\n {4}branches: \[main\]\n/m)
+  })
+
+  it(`adds workflow_run on "${sweepName}", types: [completed]`, () => {
+    const trigger = workflowRunTriggerOf(text)
+    expect(trigger).not.toBeNull()
+    expect(trigger).toContain(`workflows: [${sweepName}]`)
+    expect(trigger).toContain('types: [completed]')
+  })
+})
+
+describe('OQ-124/AC-2: deploy-pages.yml also triggers on the same workflow_run; push and workflow_dispatch unchanged', () => {
+  const text = readFileSync(DEPLOY_WORKFLOW_FILE, 'utf8')
+
+  it('keeps the existing push and workflow_dispatch triggers', () => {
+    expect(text).toMatch(/^on:\n {2}push:\n {4}branches: \[main\]\n {2}workflow_dispatch:\n/m)
+  })
+
+  it(`adds workflow_run on "${sweepName}", types: [completed]`, () => {
+    const trigger = workflowRunTriggerOf(text)
+    expect(trigger).not.toBeNull()
+    expect(trigger).toContain(`workflows: [${sweepName}]`)
+    expect(trigger).toContain('types: [completed]')
+  })
+})
+
+describe('OQ-124/AC-3: every job with no needs: carries the exact skip condition; a job with needs: is left without one', () => {
+  it("ci.yml's test job (no needs:) carries the exact if:", () => {
+    const block = jobBlock(readFileSync(CI_WORKFLOW_FILE, 'utf8'), 'test')
+    expect(block).not.toMatch(/^ {4}needs:/m)
+    expect(block).toContain(OQ124_SKIP_IF)
+  })
+
+  it("deploy-pages.yml's build job (no needs:) carries the exact if:, and deploy (needs: build) carries none", () => {
+    const text = readFileSync(DEPLOY_WORKFLOW_FILE, 'utf8')
+    const build = jobBlock(text, 'build')
+    expect(build).not.toMatch(/^ {4}needs:/m)
+    expect(build).toContain(OQ124_SKIP_IF)
+    const deploy = jobBlock(text, 'deploy')
+    expect(deploy).toMatch(/^ {4}needs: build\s*$/m)
+    expect(deploy).not.toContain(OQ124_SKIP_IF)
+  })
+})
+
+describe('OQ-124/AC-4: no checkout step is given a ref:, so a workflow_run run checks out github.sha', () => {
+  for (const [label, file] of [
+    ['ci.yml', CI_WORKFLOW_FILE],
+    ['deploy-pages.yml', DEPLOY_WORKFLOW_FILE],
+  ]) {
+    it(`${label}'s checkout step(s) take no ref:`, () => {
+      const blocks = allStepBlocks(readFileSync(file, 'utf8'))
+      const checkoutBlocks = blocks.filter((b) => /uses: actions\/checkout@/.test(b))
+      expect(checkoutBlocks.length).toBeGreaterThan(0)
+      for (const block of checkoutBlocks) {
+        expect(block).not.toMatch(/^\s*ref:/m)
+      }
+    })
+  }
+})

@@ -5,11 +5,17 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_run:
+    workflows: [Land approved PRs]
+    types: [completed]
 
 jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Skip a workflow_run started by a sweep that landed nothing (OQ-124): the
+    # sweep moves main only on a merge, so an unchanged sha means no work to do.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.head_sha != github.sha
     steps:
       - name: 'Setup: checkout'
         uses: actions/checkout@v4
