@@ -108,7 +108,7 @@ One file per story. **OQ numbering is preserved** — those identifiers are refe
 codebase, workflow comments, and `Completed-Questions.md`, and the "never reused, never renumbered"
 rule stays. Only the container changes.
 
-**Planned (OQ-127, OQ-128, OQ-129):** the prefix is a project setting, not part
+**Planned (OQ-128, OQ-129):** the prefix is a project setting, not part
 of the code. A project's `steward.config.json` names its repository and its story prefix (`OQ`
 here), and every story-id pattern the scripts use is built from it, so the same code can run a
 queue numbered `ST-<n>` (decided 2026-10-08 by the owner, as the first step of moving the workflow
@@ -116,8 +116,9 @@ to its own repository). `scripts/dispatch/settings.mjs` reads and validates that
 The default repository comes from it in five modules under `scripts/dispatch/` and in
 `scripts/report/review-verdicts.mjs` (OQ-125). The queue reader — `queue.mjs`'s filename pattern,
 frontmatter `id` check and `numericId`, `review.mjs`'s `resolveStory`, and `coder.mjs`'s
-`loadQueueAt` — takes the prefix from it already (OQ-126). OQ-127 and OQ-128 take the prefix from it
-in the story lint and `coder.mjs`'s and `story.mjs`'s story-id checks; OQ-129 fails a
+`loadQueueAt` — takes the prefix from it already (OQ-126), and so does the story lint,
+`scripts/lint-stories.mjs` (OQ-127). OQ-128 takes the prefix from it
+in `coder.mjs`'s and `story.mjs`'s story-id checks; OQ-129 fails a
 test if either comes back into the code (split from OQ-122 on 2026-10-08 by the owner;
 `review-verdicts.mjs`, and OQ-129 in this marker, added the same day from #222's review).
 

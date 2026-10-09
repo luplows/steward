@@ -22,8 +22,12 @@
 import { readFile, readdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { readSettings } from './dispatch/settings.mjs'
 
-export const STORY_FILENAME_RE = /^OQ-\d+-[\w-]+\.md$/
+/** The filename pattern for a project's stories, built from its story-id prefix (OQ-127). */
+export function storyFilenameRe(prefix) {
+  return new RegExp(`^${prefix}-\\d+-[\\w-]+\\.md$`)
+}
 
 const REQUIRED_FRONTMATTER_FIELDS = ['id', 'title', 'tier', 'kind', 'depends_on', 'model', 'blocked']
 const TIERS = ['fix', 'next', 'normal', 'later']
@@ -229,8 +233,8 @@ function lintAcceptanceCriteria(filePath, section) {
   return violations
 }
 
-/** Validates one story file's schema (AC-2 through AC-5). */
-export function lintStory(filePath, source) {
+/** Validates one story file's schema (AC-2 through AC-5), against the project's story-id `prefix` (OQ-127). */
+export function lintStory(filePath, source, prefix) {
   const violations = []
   const fileName = path.basename(filePath)
   const { entries, bodyStartLine, frontmatterEndLine, malformed } = parseFrontmatter(source)
@@ -245,12 +249,14 @@ export function lintStory(filePath, source) {
     }
   }
 
+  const idRe = new RegExp(`^${prefix}-\\d+$`)
+
   const idEntry = entries.get('id')
   let id = null
   if (idEntry) {
     id = idEntry.value
-    if (typeof id !== 'string' || !/^OQ-\d+$/.test(id)) {
-      violations.push(violation(filePath, idEntry.line, 'AC-2', `frontmatter 'id' does not match ^OQ-\\d+$: ${JSON.stringify(id)}`))
+    if (typeof id !== 'string' || !idRe.test(id)) {
+      violations.push(violation(filePath, idEntry.line, 'AC-2', `frontmatter 'id' does not match ^${prefix}-\\d+$: ${JSON.stringify(id)}`))
     }
   }
 
@@ -270,8 +276,8 @@ export function lintStory(filePath, source) {
       violations.push(violation(filePath, dependsEntry.line, 'AC-2', `frontmatter 'depends_on' is not a list: ${JSON.stringify(dependsEntry.value)}`))
     } else {
       for (const dep of dependsEntry.value) {
-        if (!/^OQ-\d+$/.test(dep)) {
-          violations.push(violation(filePath, dependsEntry.line, 'AC-2', `frontmatter 'depends_on' entry does not match ^OQ-\\d+$: ${JSON.stringify(dep)}`))
+        if (!idRe.test(dep)) {
+          violations.push(violation(filePath, dependsEntry.line, 'AC-2', `frontmatter 'depends_on' entry does not match ^${prefix}-\\d+$: ${JSON.stringify(dep)}`))
         }
       }
     }
@@ -293,10 +299,10 @@ export function lintStory(filePath, source) {
     }
   }
 
-  const prefixMatch = fileName.match(/^(OQ-\d+)-/)
+  const prefixMatch = fileName.match(new RegExp(`^(${prefix}-\\d+)-`))
   if (prefixMatch && idEntry && typeof id === 'string') {
     if (id !== prefixMatch[1]) {
-      violations.push(violation(filePath, idEntry.line, 'AC-3', `id '${id}' does not match this file's 'OQ-<n>' prefix '${prefixMatch[1]}'`))
+      violations.push(violation(filePath, idEntry.line, 'AC-3', `id '${id}' does not match this file's '${prefix}-<n>' prefix '${prefixMatch[1]}'`))
     }
   }
 
@@ -316,7 +322,7 @@ export function lintStory(filePath, source) {
   return violations
 }
 
-async function listStoryFiles(dir) {
+async function listStoryFiles(dir, prefix) {
   let entries
   try {
     entries = await readdir(dir, { withFileTypes: true })
@@ -324,20 +330,21 @@ async function listStoryFiles(dir) {
     if (err.code === 'ENOENT') return []
     throw err
   }
-  return entries.filter((entry) => entry.isFile() && STORY_FILENAME_RE.test(entry.name)).map((entry) => path.join(dir, entry.name))
+  return entries.filter((entry) => entry.isFile() && storyFilenameRe(prefix).test(entry.name)).map((entry) => path.join(dir, entry.name))
 }
 
-async function collectStoryIds(rootDir) {
+async function collectStoryIds(rootDir, prefix) {
   const storiesDir = path.join(rootDir, 'stories')
   const doneDir = path.join(storiesDir, 'done')
   const open = new Set()
   const done = new Set()
+  const prefixRe = new RegExp(`^(${prefix}-\\d+)-`)
   for (const [dir, set] of [
     [storiesDir, open],
     [doneDir, done],
   ]) {
-    for (const file of await listStoryFiles(dir)) {
-      const match = path.basename(file).match(/^(OQ-\d+)-/)
+    for (const file of await listStoryFiles(dir, prefix)) {
+      const match = path.basename(file).match(prefixRe)
       if (match) set.add(match[1])
     }
   }
@@ -368,7 +375,9 @@ export async function lintDocs(rootDir) {
   }
 
   const mdFiles = entries.filter((entry) => entry.isFile() && entry.name.endsWith('.md')).map((entry) => path.join(docsDir, entry.name))
-  const { open, done } = await collectStoryIds(rootDir)
+  const { storyPrefix: prefix } = await readSettings(rootDir)
+  const { open, done } = await collectStoryIds(rootDir, prefix)
+  const idRe = new RegExp(`^${prefix}-\\d+$`)
 
   for (const file of mdFiles) {
     const source = await readFile(file, 'utf8')
@@ -378,7 +387,7 @@ export async function lintDocs(rootDir) {
         const ids = match[1]
           .split(',')
           .map((entry) => entry.trim())
-          .filter((entry) => /^OQ-\d+$/.test(entry))
+          .filter((entry) => idRe.test(entry))
 
         for (const id of ids) {
           if (done.has(id)) {
@@ -394,15 +403,16 @@ export async function lintDocs(rootDir) {
   return violations
 }
 
-/** Runs every check (AC-2 through AC-5, and AC-7) across the whole repo. */
+/** Runs every check (AC-2 through AC-5, and AC-7) across the whole repo, against its own `steward.config.json` story-id prefix (OQ-127). */
 export async function lintAll(rootDir = process.cwd()) {
   const violations = []
   const storiesDir = path.join(rootDir, 'stories')
   const doneDir = path.join(storiesDir, 'done')
+  const { storyPrefix } = await readSettings(rootDir)
 
-  for (const file of [...(await listStoryFiles(storiesDir)), ...(await listStoryFiles(doneDir))]) {
+  for (const file of [...(await listStoryFiles(storiesDir, storyPrefix)), ...(await listStoryFiles(doneDir, storyPrefix))]) {
     const source = await readFile(file, 'utf8')
-    violations.push(...lintStory(file, source))
+    violations.push(...lintStory(file, source, storyPrefix))
   }
 
   violations.push(...(await lintDocs(rootDir)))

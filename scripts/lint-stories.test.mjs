@@ -78,8 +78,13 @@ function storySource(frontmatterOpts, sectionOpts) {
 
 let tmpRoot
 
+async function writeSettings(root, storyPrefix) {
+  await writeFile(path.join(root, 'steward.config.json'), JSON.stringify({ repo: 'owner/repo', storyPrefix }), 'utf8')
+}
+
 beforeEach(async () => {
   tmpRoot = await mkdtemp(path.join(tmpdir(), 'lint-stories-test-'))
+  await writeSettings(tmpRoot, 'OQ')
 })
 
 afterEach(async () => {
@@ -93,13 +98,13 @@ async function writeStory(dir, filename, source) {
 
 describe('OQ-61/AC-1: single-run reporting', () => {
   it('a conforming story produces no violations', () => {
-    const violations = lintStory('OQ-9001-fixture.md', storySource())
+    const violations = lintStory('OQ-9001-fixture.md', storySource(), 'OQ')
     expect(violations).toEqual([])
   })
 
   it('reports every violation in one run, not just the first', () => {
     const source = storySource({ tier: 'bogus', kind: 'bogus' })
-    const violations = lintStory('OQ-9001-fixture.md', source)
+    const violations = lintStory('OQ-9001-fixture.md', source, 'OQ')
     const rules = violations.map((v) => v.rule)
     expect(rules).toContain('AC-2')
     expect(violations.filter((v) => v.rule === 'AC-2').length).toBeGreaterThanOrEqual(2)
@@ -119,55 +124,55 @@ describe('OQ-61/AC-1: single-run reporting', () => {
 describe('OQ-61/AC-2: frontmatter schema', () => {
   it('rejects a story missing a required field', () => {
     const source = storySource().replace('model: sonnet\n', '')
-    const violations = lintStory('OQ-9001-fixture.md', source)
+    const violations = lintStory('OQ-9001-fixture.md', source, 'OQ')
     expect(violations.some((v) => v.rule === 'AC-2' && /model/.test(v.message))).toBe(true)
   })
 
   it("rejects an id that doesn't match ^OQ-\\d+$", () => {
-    const violations = lintStory('OQ-9001-fixture.md', storySource({ id: 'weird-id' }))
+    const violations = lintStory('OQ-9001-fixture.md', storySource({ id: 'weird-id' }), 'OQ')
     expect(violations.some((v) => v.rule === 'AC-2' && /'id'/.test(v.message))).toBe(true)
   })
 
   it('rejects a tier outside fix|next|normal|later', () => {
-    const violations = lintStory('OQ-9001-fixture.md', storySource({ tier: 'someday' }))
+    const violations = lintStory('OQ-9001-fixture.md', storySource({ tier: 'someday' }), 'OQ')
     expect(violations.some((v) => v.rule === 'AC-2' && /'tier'/.test(v.message))).toBe(true)
   })
 
   it('rejects a kind outside product|workflow', () => {
-    const violations = lintStory('OQ-9001-fixture.md', storySource({ kind: 'business' }))
+    const violations = lintStory('OQ-9001-fixture.md', storySource({ kind: 'business' }), 'OQ')
     expect(violations.some((v) => v.rule === 'AC-2' && /'kind'/.test(v.message))).toBe(true)
   })
 
   it('rejects depends_on when it is not a list', () => {
     const source = storySource().replace('depends_on: []', 'depends_on: OQ-45')
-    const violations = lintStory('OQ-9001-fixture.md', source)
+    const violations = lintStory('OQ-9001-fixture.md', source, 'OQ')
     expect(violations.some((v) => v.rule === 'AC-2' && /depends_on' is not a list/.test(v.message))).toBe(true)
   })
 
   it('rejects a depends_on entry that does not match ^OQ-\\d+$', () => {
-    const violations = lintStory('OQ-9001-fixture.md', storySource({ dependsOn: ['OQ-45', 'not-a-story'] }))
+    const violations = lintStory('OQ-9001-fixture.md', storySource({ dependsOn: ['OQ-45', 'not-a-story'] }), 'OQ')
     expect(violations.some((v) => v.rule === 'AC-2' && /entry does not match/.test(v.message))).toBe(true)
   })
 
   it('accepts a populated depends_on list of valid ids', () => {
-    const violations = lintStory('OQ-9001-fixture.md', storySource({ dependsOn: ['OQ-45', 'OQ-46'] }))
+    const violations = lintStory('OQ-9001-fixture.md', storySource({ dependsOn: ['OQ-45', 'OQ-46'] }), 'OQ')
     expect(violations).toEqual([])
   })
 
   it('rejects blocked that is neither null nor a non-empty string', () => {
     const source = storySource().replace('blocked: null', 'blocked: ""')
-    const violations = lintStory('OQ-9001-fixture.md', source)
+    const violations = lintStory('OQ-9001-fixture.md', source, 'OQ')
     expect(violations.some((v) => v.rule === 'AC-2' && /'blocked'/.test(v.message))).toBe(true)
   })
 
   it('accepts a non-null blocked reason string', () => {
-    const violations = lintStory('OQ-9001-fixture.md', storySource({ blocked: 'waiting on the owner' }))
+    const violations = lintStory('OQ-9001-fixture.md', storySource({ blocked: 'waiting on the owner' }), 'OQ')
     expect(violations).toEqual([])
   })
 
   it('reports an unknown extra frontmatter field but does not block the run', () => {
     const source = storySource({ extraLines: ['mechanisms: [thing]'] })
-    const violations = lintStory('OQ-9001-fixture.md', source)
+    const violations = lintStory('OQ-9001-fixture.md', source, 'OQ')
     const unknown = violations.find((v) => v.rule === 'AC-2' && /unknown frontmatter field/.test(v.message))
     expect(unknown).toBeDefined()
     expect(unknown.blocking).toBe(false)
@@ -176,12 +181,12 @@ describe('OQ-61/AC-2: frontmatter schema', () => {
 
 describe('OQ-61/AC-3: id must match its own filename', () => {
   it('rejects an id that does not match the OQ-<n> prefix of its filename', () => {
-    const violations = lintStory('OQ-9001-anything.md', storySource({ id: 'OQ-9002' }))
+    const violations = lintStory('OQ-9001-anything.md', storySource({ id: 'OQ-9002' }), 'OQ')
     expect(violations.some((v) => v.rule === 'AC-3')).toBe(true)
   })
 
   it('does not constrain the slug after the prefix', () => {
-    const violations = lintStory('OQ-9001-any-slug-at-all.md', storySource({ id: 'OQ-9001' }))
+    const violations = lintStory('OQ-9001-any-slug-at-all.md', storySource({ id: 'OQ-9001' }), 'OQ')
     expect(violations.some((v) => v.rule === 'AC-3')).toBe(false)
   })
 })
@@ -189,7 +194,7 @@ describe('OQ-61/AC-3: id must match its own filename', () => {
 describe('OQ-61/AC-4: all six sections must be present', () => {
   it('names every missing heading, not just the first', () => {
     const source = frontmatter() + '\n## Intent\n\nSomething.\n'
-    const violations = lintStory('OQ-9001-fixture.md', source)
+    const violations = lintStory('OQ-9001-fixture.md', source, 'OQ')
     const missing = violations.filter((v) => v.rule === 'AC-4').map((v) => v.message)
     expect(missing.some((m) => m.includes('Acceptance criteria'))).toBe(true)
     expect(missing.some((m) => m.includes('Out of scope'))).toBe(true)
@@ -199,50 +204,50 @@ describe('OQ-61/AC-4: all six sections must be present', () => {
   })
 
   it('a fully headed story reports no AC-4 violations', () => {
-    const violations = lintStory('OQ-9001-fixture.md', storySource())
+    const violations = lintStory('OQ-9001-fixture.md', storySource(), 'OQ')
     expect(violations.some((v) => v.rule === 'AC-4')).toBe(false)
   })
 })
 
 describe('OQ-61/AC-5: acceptance-criterion numbering', () => {
   it('rejects an empty Acceptance criteria section', () => {
-    const violations = lintStory('OQ-9001-fixture.md', storySource(undefined, { acceptanceCriteria: '*(none)*' }))
+    const violations = lintStory('OQ-9001-fixture.md', storySource(undefined, { acceptanceCriteria: '*(none)*' }), 'OQ')
     expect(violations.some((v) => v.rule === 'AC-5' && /no AC items/.test(v.message))).toBe(true)
   })
 
   it('rejects an AC-3 with no AC-2 (a gap)', () => {
     const ac = ['- [ ] **AC-1** — first.', '- [ ] **AC-3** — third, skipping second.'].join('\n')
-    const violations = lintStory('OQ-9001-fixture.md', storySource(undefined, { acceptanceCriteria: ac }))
+    const violations = lintStory('OQ-9001-fixture.md', storySource(undefined, { acceptanceCriteria: ac }), 'OQ')
     expect(violations.some((v) => v.rule === 'AC-5' && /missing 'AC-2'/.test(v.message))).toBe(true)
   })
 
   it('rejects two AC-1 items (a duplicate)', () => {
     const ac = ['- [ ] **AC-1** — first.', '- [ ] **AC-1** — first again.'].join('\n')
-    const violations = lintStory('OQ-9001-fixture.md', storySource(undefined, { acceptanceCriteria: ac }))
+    const violations = lintStory('OQ-9001-fixture.md', storySource(undefined, { acceptanceCriteria: ac }), 'OQ')
     expect(violations.some((v) => v.rule === 'AC-5' && /duplicate 'AC-1'/.test(v.message))).toBe(true)
   })
 
   it('rejects an AC-4b with no AC-4', () => {
     const ac = ['- [ ] **AC-1** — first.', '- [ ] **AC-4b** — an orphaned suffix.'].join('\n')
-    const violations = lintStory('OQ-9001-fixture.md', storySource(undefined, { acceptanceCriteria: ac }))
+    const violations = lintStory('OQ-9001-fixture.md', storySource(undefined, { acceptanceCriteria: ac }), 'OQ')
     expect(violations.some((v) => v.rule === 'AC-5' && /'AC-4b' has no base 'AC-4'/.test(v.message))).toBe(true)
   })
 
   it('accepts a suffixed id whose base is present, alongside a clean 1..n run', () => {
     const ac = ['- [ ] **AC-1** — first.', '- [ ] **AC-1b** — inserted after dispatch.', '- [ ] **AC-2** — second.'].join('\n')
-    const violations = lintStory('OQ-9001-fixture.md', storySource(undefined, { acceptanceCriteria: ac }))
+    const violations = lintStory('OQ-9001-fixture.md', storySource(undefined, { acceptanceCriteria: ac }), 'OQ')
     expect(violations.some((v) => v.rule === 'AC-5')).toBe(false)
   })
 
   it('rejects an AC item that is not a task-list checkbox at all', () => {
     const ac = ['- [ ] **AC-1** — first.', '- **AC-2** — not a checkbox.'].join('\n')
-    const violations = lintStory('OQ-9001-fixture.md', storySource(undefined, { acceptanceCriteria: ac }))
+    const violations = lintStory('OQ-9001-fixture.md', storySource(undefined, { acceptanceCriteria: ac }), 'OQ')
     expect(violations.some((v) => v.rule === 'AC-5' && /not a well-formed/.test(v.message))).toBe(true)
   })
 
   it('rejects an AC item whose id is not bolded', () => {
     const ac = ['- [ ] **AC-1** — first.', '- [ ] AC-2 — id not bolded.'].join('\n')
-    const violations = lintStory('OQ-9001-fixture.md', storySource(undefined, { acceptanceCriteria: ac }))
+    const violations = lintStory('OQ-9001-fixture.md', storySource(undefined, { acceptanceCriteria: ac }), 'OQ')
     expect(violations.some((v) => v.rule === 'AC-5' && /not a well-formed/.test(v.message))).toBe(true)
   })
 
@@ -250,7 +255,7 @@ describe('OQ-61/AC-5: acceptance-criterion numbering', () => {
     for (const filename of ['OQ-68-github-operations.md', 'OQ-69-reviewer-dispatch.md', 'OQ-70-coder-dispatch.md']) {
       const filePath = path.join(repoRoot, 'stories', 'done', filename)
       const source = await readFile(filePath, 'utf8')
-      const violations = lintStory(filePath, source).filter((v) => v.rule === 'AC-5')
+      const violations = lintStory(filePath, source, 'OQ').filter((v) => v.rule === 'AC-5')
       expect(violations, `${filename}: ${JSON.stringify(violations)}`).toEqual([])
     }
   })
@@ -357,6 +362,49 @@ describe('OQ-61: frontmatter and section parsing helpers', () => {
   it('parseFrontmatter reports malformed when no --- block is found', () => {
     const { malformed } = parseFrontmatter('## Intent\n\nNo frontmatter here.\n')
     expect(malformed).toBe(true)
+  })
+})
+
+describe('OQ-127/AC-2: the story-id patterns come from settings, not a hardcoded OQ-', () => {
+  it('lintStory passes a well-formed ST-3-thing.md for a project whose settings say ST', () => {
+    const violations = lintStory('ST-3-thing.md', storySource({ id: 'ST-3' }), 'ST')
+    expect(violations).toEqual([])
+  })
+
+  it("lintStory fails a story whose id is 'OQ-3' for a project whose settings say ST", () => {
+    const violations = lintStory('ST-3-thing.md', storySource({ id: 'OQ-3' }), 'ST')
+    expect(violations.some((v) => v.rule === 'AC-2' && /'id'/.test(v.message))).toBe(true)
+  })
+
+  it("lintStory fails a story with a depends_on: [OQ-1] entry for a project whose settings say ST", () => {
+    const violations = lintStory('ST-3-thing.md', storySource({ id: 'ST-3', dependsOn: ['OQ-1'] }), 'ST')
+    expect(violations.some((v) => v.rule === 'AC-2' && /depends_on' entry does not match/.test(v.message))).toBe(true)
+  })
+
+  it('lintAll lints stories/ST-3-thing.md and ignores stories/OQ-3-thing.md, for a project whose settings say ST', async () => {
+    await writeSettings(tmpRoot, 'ST')
+    await writeStory(path.join(tmpRoot, 'stories'), 'ST-3-thing.md', storySource({ id: 'ST-3' }))
+    await writeStory(path.join(tmpRoot, 'stories'), 'OQ-3-thing.md', storySource({ id: 'OQ-3' }))
+
+    const violations = await lintAll(tmpRoot)
+
+    expect(violations.some((v) => v.file.endsWith('ST-3-thing.md'))).toBe(false)
+    expect(violations.some((v) => v.file.endsWith('OQ-3-thing.md'))).toBe(false)
+  })
+
+  it('a **Planned (ST-3)** marker fails when stories/done/ST-3-thing.md exists, and passes when only stories/ST-3-thing.md does, for a project whose settings say ST', async () => {
+    await writeSettings(tmpRoot, 'ST')
+    await mkdir(path.join(tmpRoot, 'docs'), { recursive: true })
+    await writeFile(path.join(tmpRoot, 'docs', 'design.md'), '**Planned (ST-3):** not built yet.\n', 'utf8')
+
+    await writeStory(path.join(tmpRoot, 'stories'), 'ST-3-thing.md', storySource({ id: 'ST-3' }))
+    const openOnly = await lintDocs(tmpRoot)
+    expect(openOnly.some((v) => v.rule === 'AC-7')).toBe(false)
+
+    await rm(path.join(tmpRoot, 'stories', 'ST-3-thing.md'))
+    await writeStory(path.join(tmpRoot, 'stories', 'done'), 'ST-3-thing.md', storySource({ id: 'ST-3' }))
+    const done = await lintDocs(tmpRoot)
+    expect(done.some((v) => v.rule === 'AC-7' && /already in stories\/done/.test(v.message))).toBe(true)
   })
 })
 
