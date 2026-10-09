@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -7,10 +7,10 @@ import { readSettings } from './settings.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
-function withTempProject(fn) {
+async function withTempProject(fn) {
   const dir = mkdtempSync(path.join(tmpdir(), 'steward-settings-'))
   try {
-    return fn(dir)
+    return await fn(dir)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -20,67 +20,120 @@ function writeConfig(dir, contents) {
   writeFileSync(path.join(dir, 'steward.config.json'), contents)
 }
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+describe('withTempProject', () => {
+  it("OQ-135/AC-2 - keeps the directory until the given async function settles", async () => {
+    let existedDuring
+    const dirAfter = await withTempProject(async (dir) => {
+      await delay(10)
+      existedDuring = existsSync(dir)
+      return dir
+    })
+    expect(existedDuring).toBe(true)
+    expect(existsSync(dirAfter)).toBe(false)
+  })
+
+  it('OQ-135/AC-2 - removes the directory and propagates the rejection when the function rejects after a timer', async () => {
+    let dir
+    await expect(
+      withTempProject(async (d) => {
+        dir = d
+        await delay(10)
+        throw new Error('boom')
+      }),
+    ).rejects.toThrow('boom')
+    expect(existsSync(dir)).toBe(false)
+  })
+})
+
 describe('readSettings', () => {
   it('OQ-122/AC-2 - reads this repository\'s own steward.config.json as the committed values', async () => {
     const settings = await readSettings(REPO_ROOT)
     expect(settings).toEqual({ repo: 'luplows/tower-workshop-paths', storyPrefix: 'OQ' })
   })
 
-  it('OQ-122/AC-2 - throws naming the file when steward.config.json is missing', async () => {
+  it('OQ-135/AC-3 - throws naming the file and the problem when steward.config.json is missing', async () => {
     await withTempProject(async (dir) => {
-      await expect(readSettings(dir)).rejects.toThrow(path.join(dir, 'steward.config.json'))
+      const filePath = path.join(dir, 'steward.config.json')
+      const promise = readSettings(dir)
+      await expect(promise).rejects.toThrow(filePath)
+      await expect(promise).rejects.toThrow('file not found')
     })
   })
 
-  it('OQ-122/AC-2 - throws naming the file when the JSON is invalid', async () => {
+  it('OQ-135/AC-3 - throws naming the file and the problem when the JSON is invalid', async () => {
     await withTempProject(async (dir) => {
       writeConfig(dir, '{ not json')
-      await expect(readSettings(dir)).rejects.toThrow(path.join(dir, 'steward.config.json'))
+      const filePath = path.join(dir, 'steward.config.json')
+      const promise = readSettings(dir)
+      await expect(promise).rejects.toThrow(filePath)
+      await expect(promise).rejects.toThrow('invalid JSON')
     })
   })
 
-  it('OQ-122/AC-2 - throws when repo is missing', async () => {
+  it('OQ-135/AC-3 - throws naming the file and the problem when repo is missing', async () => {
     await withTempProject(async (dir) => {
       writeConfig(dir, JSON.stringify({ storyPrefix: 'OQ' }))
-      await expect(readSettings(dir)).rejects.toThrow(/repo/)
+      const filePath = path.join(dir, 'steward.config.json')
+      const promise = readSettings(dir)
+      await expect(promise).rejects.toThrow(filePath)
+      await expect(promise).rejects.toThrow("missing required key 'repo'")
     })
   })
 
-  it('OQ-122/AC-2 - throws when storyPrefix is missing', async () => {
+  it('OQ-135/AC-3 - throws naming the file and the problem when storyPrefix is missing', async () => {
     await withTempProject(async (dir) => {
       writeConfig(dir, JSON.stringify({ repo: 'luplows/tower-workshop-paths' }))
-      await expect(readSettings(dir)).rejects.toThrow(/storyPrefix/)
+      const filePath = path.join(dir, 'steward.config.json')
+      const promise = readSettings(dir)
+      await expect(promise).rejects.toThrow(filePath)
+      await expect(promise).rejects.toThrow("missing required key 'storyPrefix'")
     })
   })
 
-  it('OQ-122/AC-2 - throws when repo is not owner/name', async () => {
+  it('OQ-135/AC-3 - throws naming the file and the problem when repo is not owner/name', async () => {
     await withTempProject(async (dir) => {
       writeConfig(dir, JSON.stringify({ repo: 'not-a-slug', storyPrefix: 'OQ' }))
-      await expect(readSettings(dir)).rejects.toThrow(/repo/)
+      const filePath = path.join(dir, 'steward.config.json')
+      const promise = readSettings(dir)
+      await expect(promise).rejects.toThrow(filePath)
+      await expect(promise).rejects.toThrow("'repo' must be of the form owner/name")
     })
   })
 
-  it('OQ-122/AC-2 - throws when storyPrefix does not match ^[A-Z]{1,8}$', async () => {
+  it('OQ-135/AC-3 - throws naming the file and the problem when storyPrefix is lower case', async () => {
     await withTempProject(async (dir) => {
       writeConfig(dir, JSON.stringify({ repo: 'luplows/tower-workshop-paths', storyPrefix: 'oq' }))
-      await expect(readSettings(dir)).rejects.toThrow(/storyPrefix/)
+      const filePath = path.join(dir, 'steward.config.json')
+      const promise = readSettings(dir)
+      await expect(promise).rejects.toThrow(filePath)
+      await expect(promise).rejects.toThrow("'storyPrefix' must match")
     })
   })
 
-  it('OQ-122/AC-2 - throws when storyPrefix is longer than 8 characters', async () => {
+  it('OQ-135/AC-3 - throws naming the file and the problem when storyPrefix is longer than 8 characters', async () => {
     await withTempProject(async (dir) => {
       writeConfig(dir, JSON.stringify({ repo: 'luplows/tower-workshop-paths', storyPrefix: 'TOOLONGPREFIX' }))
-      await expect(readSettings(dir)).rejects.toThrow(/storyPrefix/)
+      const filePath = path.join(dir, 'steward.config.json')
+      const promise = readSettings(dir)
+      await expect(promise).rejects.toThrow(filePath)
+      await expect(promise).rejects.toThrow("'storyPrefix' must match")
     })
   })
 
-  it('OQ-122/AC-2 - throws when an extra key is present', async () => {
+  it('OQ-135/AC-3 - throws naming the file and the problem when an extra key is present', async () => {
     await withTempProject(async (dir) => {
       writeConfig(
         dir,
         JSON.stringify({ repo: 'luplows/tower-workshop-paths', storyPrefix: 'OQ', extra: 'nope' }),
       )
-      await expect(readSettings(dir)).rejects.toThrow(/extra/)
+      const filePath = path.join(dir, 'steward.config.json')
+      const promise = readSettings(dir)
+      await expect(promise).rejects.toThrow(filePath)
+      await expect(promise).rejects.toThrow("unrecognised key 'extra'")
     })
   })
 })
