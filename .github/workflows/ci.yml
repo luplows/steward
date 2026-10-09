@@ -33,6 +33,10 @@ jobs:
         run: npm ci
       - run: npm run lint
       - run: npm test
+      - name: Run the install clean-up test alone (OQ-136)
+        run: npx vitest run scripts/dispatch/install-cleanup.alone.test.mjs
+        env:
+          VITEST_ALONE: '1'
       - name: Check story diff containment (OQ-82)
         if: github.event_name == 'pull_request'
         run: >-
@@ -62,10 +66,45 @@ jobs:
             else
               cmd="npx playwright install --with-deps chromium"
             fi
+            before_pids="$(ps -eo pid= | tr -d ' ')"
             if timeout 2m $cmd; then
               exit 0
             fi
             echo "Playwright install attempt $attempt failed or timed out"
+            # A try runs under `timeout`, in a process group of its own, and what it starts in a
+            # session of its own (setsid, or sudo's pty) has a new session. So a process that
+            # started during the try is the try's when its group or its session is new too. One
+            # whose group and session were both already there, such as a child of a test runner
+            # or of the Actions runner, is not the try's, and is left alone.
+            leftover="$(awk '
+              NR == FNR { old[$1] = 1; next }
+              !($1 in old) && (!($2 in old) || !($3 in old)) { print $1 }
+              ' <(echo "$before_pids") <(ps -eo pid=,pgid=,sid=))"
+            if [ -n "$leftover" ]; then
+              echo "Stopping leftover processes from attempt $attempt: $leftover"
+              for pid in $leftover; do
+                kill -9 "$pid" 2>/dev/null || sudo kill -9 "$pid" 2>/dev/null || true
+              done
+            else
+              echo "No leftover processes from attempt $attempt"
+            fi
+            if [ "$attempt" -eq 1 ]; then
+              # apt and dpkg lock this file with fcntl(2), which a flock(1) probe cannot see, so
+              # the probe takes the same kind of lock, without waiting, and lets it go at once.
+              dpkg_lock=/var/lib/dpkg/lock-frontend
+              probe='import fcntl, sys; fcntl.lockf(open(sys.argv[1], "a"), fcntl.LOCK_EX | fcntl.LOCK_NB)'
+              waited=0
+              while [ "$waited" -lt 30 ] && ! sudo python3 -c "$probe" "$dpkg_lock" 2>/dev/null; do
+                sleep 1
+                waited=$((waited + 1))
+              done
+              echo "Waited ${waited}s for $dpkg_lock"
+              # Bounded, and not fatal: the step runs under bash -e, and the second try is what
+              # the step is for.
+              if ! sudo timeout 20s dpkg --configure -a; then
+                echo "dpkg --configure -a failed or ran past 20s; making the second try anyway"
+              fi
+            fi
           done
           exit 1
       - run: npm run test:e2e

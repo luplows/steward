@@ -449,6 +449,78 @@ describe('OQ-117/AC-4: the install step limits itself to 5 minutes, and the job 
   }
 })
 
+describe('OQ-136/AC-1: a try that fails or reaches its limit stops every process it started, apt-get and dpkg under sudo included', () => {
+  for (const [label, file] of OQ117_WORKFLOWS) {
+    it(`${label}'s install step snapshots pids before each try, after it picks the new ones whose process group or session is new too, kills (plain then sudo) whatever is still alive, and logs which pids or that none were found`, () => {
+      const block = installStepOf(readFileSync(file, 'utf8'))
+      expect(block).toContain(`before_pids="$(ps -eo pid= | tr -d ' ')"`)
+      expect(block).toContain(`leftover="$(awk '`)
+      expect(block).toContain('!($1 in old) && (!($2 in old) || !($3 in old)) { print $1 }')
+      expect(block).toContain(`' <(echo "$before_pids") <(ps -eo pid=,pgid=,sid=))"`)
+      expect(block).toContain('kill -9 "$pid" 2>/dev/null || sudo kill -9 "$pid" 2>/dev/null || true')
+      expect(block).toContain('echo "Stopping leftover processes from attempt $attempt: $leftover"')
+      expect(block).toContain('echo "No leftover processes from attempt $attempt"')
+    })
+  }
+})
+
+describe('OQ-136/AC-2: before the second try, the step waits at most 30s for the dpkg package lock and then repairs any half-finished install', () => {
+  for (const [label, file] of OQ117_WORKFLOWS) {
+    it(`${label}'s install step waits on /var/lib/dpkg/lock-frontend for at most 30s with an fcntl probe, logs how long it waited, then runs sudo dpkg --configure -a for at most 20s without failing the step`, () => {
+      const block = installStepOf(readFileSync(file, 'utf8'))
+      expect(block).toMatch(/if \[ "\$attempt" -eq 1 \]; then/)
+      expect(block).toContain('dpkg_lock=/var/lib/dpkg/lock-frontend')
+      expect(block).toContain(
+        `probe='import fcntl, sys; fcntl.lockf(open(sys.argv[1], "a"), fcntl.LOCK_EX | fcntl.LOCK_NB)'`,
+      )
+      expect(block).toContain('while [ "$waited" -lt 30 ] && ! sudo python3 -c "$probe" "$dpkg_lock" 2>/dev/null; do')
+      expect(block).not.toContain('flock -n') // the old probe, blind to apt's and dpkg's fcntl lock
+      expect(block).toContain('echo "Waited ${waited}s for $dpkg_lock"')
+      expect(block).toContain('if ! sudo timeout 20s dpkg --configure -a; then')
+      expect(block).toContain('echo "dpkg --configure -a failed or ran past 20s; making the second try anyway"')
+    })
+  }
+})
+
+describe('OQ-136/AC-3: the retry limits are unchanged, and the tries, the wait and the repair still fit inside the 5-minute step timeout', () => {
+  for (const [label, file] of OQ117_WORKFLOWS) {
+    it(`${label} still tries at most twice at timeout 2m each, keeps timeout-minutes: 5 / 20, and caps the wait at 30s and the repair at 20s within that budget`, () => {
+      const text = readFileSync(file, 'utf8')
+      const block = installStepOf(text)
+      expect(block).toMatch(/for attempt in 1 2; do/)
+      const perTryMinutesMatches = [...block.matchAll(/timeout (\d+)m /g)].map((m) => Number(m[1]))
+      expect(perTryMinutesMatches).toEqual([2]) // unchanged from OQ-117: one `timeout …m` call, run once per try
+      const stepTimeout = Number(block.match(/timeout-minutes: (\d+)/)[1])
+      expect(stepTimeout).toBe(5)
+      expect(text).toMatch(/^ {4}timeout-minutes: 20$/m)
+      const waitCapMatches = [...block.matchAll(/waited" -lt (\d+)/g)].map((m) => Number(m[1]))
+      expect(waitCapMatches).toEqual([30])
+      const repairCapMatches = [...block.matchAll(/timeout (\d+)s dpkg --configure -a/g)].map((m) => Number(m[1]))
+      expect(repairCapMatches).toEqual([20])
+      const tries = 2
+      const worstCaseSeconds = perTryMinutesMatches[0] * 60 * tries + waitCapMatches[0] + repairCapMatches[0]
+      expect(worstCaseSeconds).toBe(290)
+      expect(worstCaseSeconds).toBeLessThan(stepTimeout * 60)
+    })
+  }
+})
+
+describe('OQ-136/AC-4: the clean-up test runs alone, outside npm test, in a CI step of its own', () => {
+  it('vite.config.js leaves *.alone.test.mjs out unless VITEST_ALONE=1, and ci.yml runs the clean-up test with it after npm test', () => {
+    const config = readFileSync(path.join(HERE, '..', '..', 'vite.config.js'), 'utf8')
+    expect(config).toContain("...(process.env.VITEST_ALONE === '1' ? [] : ['**/*.alone.test.mjs'])")
+    const blocks = testJobStepBlocks(readFileSync(CI_WORKFLOW_FILE, 'utf8'))
+    const steps = blocks.map(fieldsOfStep)
+    // runTextOf keeps the `run:` key on its first line.
+    const npmTestAt = steps.findIndex((s) => s.run?.trim() === 'run: npm test')
+    const aloneAt = steps.findIndex((s) => s.name === 'Run the install clean-up test alone (OQ-136)')
+    expect(npmTestAt).toBeGreaterThan(-1)
+    expect(aloneAt).toBe(npmTestAt + 1)
+    expect(steps[aloneAt].run.trim()).toBe('run: npx vitest run scripts/dispatch/install-cleanup.alone.test.mjs')
+    expect(blocks[aloneAt]).toMatch(/^ {8}env:\n {10}VITEST_ALONE: '1'$/m)
+  })
+})
+
 describe('OQ-118/AC-4: a failed step is one whose conclusion is neither success nor skipped', () => {
   it('names a failed, cancelled and timed_out step in failedJobs and the findings, and leaves success and skipped out', async () => {
     const { ctx } = fakeGithub({
