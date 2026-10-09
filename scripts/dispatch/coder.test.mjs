@@ -76,6 +76,7 @@ function makeWorld() {
   git(dir, 'init', '-q', '--bare', '-b', 'main', origin)
   git(dir, 'clone', '-q', origin, seed)
   git(seed, 'checkout', '-q', '-b', 'main')
+  writeFileSync(path.join(seed, 'steward.config.json'), JSON.stringify({ repo: REPO, storyPrefix: 'OQ' }))
   mkdirSync(path.join(seed, 'stories'))
   writeFileSync(path.join(seed, 'stories', 'OQ-96-waits.md'), story('OQ-96', { deps: 'OQ-95' }))
   writeFileSync(path.join(seed, 'stories', 'OQ-98-first.md'), story('OQ-98'))

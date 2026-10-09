@@ -22,6 +22,7 @@ import { execFile } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { resolveStory } from './review.mjs'
+import { readSettings } from './settings.mjs'
 
 const execFileAsync = promisify(execFile)
 
@@ -131,8 +132,9 @@ function checkOtherFile(file, oldText, newText) {
  * conforms (AC-2), or `{ ok: false, violations: [{ file, line, message }] }`.
  */
 export async function checkStoryContainment({ cwd, base, head, branch }) {
+  const { storyPrefix } = await readSettings(cwd)
   const nameStatus = await git(cwd, ['diff', '--name-status', '--no-renames', `${base}...${head}`, '--', 'stories/'])
-  const resolved = resolveStory({ nameStatus, branch })
+  const resolved = resolveStory({ nameStatus, branch, prefix: storyPrefix })
   if (resolved.kind === 'none') return { ok: true }
 
   const touched = new Map()

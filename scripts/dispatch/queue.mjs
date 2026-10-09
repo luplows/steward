@@ -15,13 +15,17 @@
 import { readFile, readdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { readSettings } from './settings.mjs'
 
 export const TIERS = ['fix', 'next', 'normal', 'later']
 
-export const STORY_FILENAME_RE = /^OQ-\d+-[\w-]+\.md$/
+/** The filename pattern for a project's stories, built from its story-id prefix (OQ-126). */
+export function storyFilenameRe(prefix) {
+  return new RegExp(`^${prefix}-\\d+-[\\w-]+\\.md$`)
+}
 
-export function isStoryFilename(name) {
-  return STORY_FILENAME_RE.test(name)
+export function isStoryFilename(name, prefix) {
+  return storyFilenameRe(prefix).test(name)
 }
 
 const REQUIRED_FRONTMATTER_FIELDS = ['id', 'title', 'tier', 'depends_on', 'blocked']
@@ -174,12 +178,13 @@ export function isOpenQuestionsEmpty(sectionText) {
  * (which additionally needs the full set of done ids -- see deriveStatus).
  * Throws, naming filePath, on anything AC-2 requires to fail loudly.
  */
-export function buildStory(filePath, source, isDone) {
+export function buildStory(filePath, source, isDone, prefix) {
   const { data, body } = parseFrontmatter(source, filePath)
   const { id, title, tier, depends_on: dependsOn, blocked } = data
 
-  if (typeof id !== 'string' || !/^OQ-\d+$/.test(id)) {
-    throw new Error(`${filePath}: frontmatter 'id' is not of the form OQ-<n>: ${JSON.stringify(id)}`)
+  const idRe = new RegExp(`^${prefix}-\\d+$`)
+  if (typeof id !== 'string' || !idRe.test(id)) {
+    throw new Error(`${filePath}: frontmatter 'id' is not of the form ${prefix}-<n>: ${JSON.stringify(id)}`)
   }
   if (!TIERS.includes(tier)) {
     throw new Error(`${filePath}: unrecognised tier '${tier}'`)
@@ -202,7 +207,7 @@ export function buildStory(filePath, source, isDone) {
 
   return {
     id,
-    numericId: Number(id.slice('OQ-'.length)),
+    numericId: Number(id.slice(prefix.length + 1)),
     title,
     tier,
     dependsOn,
@@ -241,7 +246,7 @@ export function dispatchable(stories) {
   return stories.filter((story) => story.status === 'ready')
 }
 
-async function readStoryDir(dir, isDone) {
+async function readStoryDir(dir, isDone, prefix) {
   let entries
   try {
     entries = await readdir(dir, { withFileTypes: true })
@@ -250,7 +255,7 @@ async function readStoryDir(dir, isDone) {
     throw err
   }
 
-  return entries.filter((entry) => entry.isFile() && isStoryFilename(entry.name)).map((entry) => ({
+  return entries.filter((entry) => entry.isFile() && isStoryFilename(entry.name, prefix)).map((entry) => ({
     filePath: path.join(dir, entry.name),
     isDone,
   }))
@@ -259,18 +264,24 @@ async function readStoryDir(dir, isDone) {
 /**
  * Reads and orders the full queue from `<rootDir>/stories` and
  * `<rootDir>/stories/done`. Throws, naming the offending file, on the first
- * story that fails to parse (AC-2) -- never skips it.
+ * story that fails to parse (AC-2) -- never skips it. The story-id prefix
+ * (OQ-126) is read from `<rootDir>/steward.config.json`; nothing falls back
+ * to a default when it is missing.
  */
 export async function loadQueue(rootDir = process.cwd()) {
+  const { storyPrefix } = await readSettings(rootDir)
   const storiesDir = path.join(rootDir, 'stories')
   const doneDir = path.join(storiesDir, 'done')
 
-  const files = [...(await readStoryDir(storiesDir, false)), ...(await readStoryDir(doneDir, true))]
+  const files = [
+    ...(await readStoryDir(storiesDir, false, storyPrefix)),
+    ...(await readStoryDir(doneDir, true, storyPrefix)),
+  ]
 
   const built = []
   for (const file of files) {
     const source = await readFile(file.filePath, 'utf8')
-    built.push(buildStory(file.filePath, source, file.isDone))
+    built.push(buildStory(file.filePath, source, file.isDone, storyPrefix))
   }
 
   const doneIds = new Set(built.filter((story) => story.isDone).map((story) => story.id))

@@ -46,6 +46,11 @@ let tmpRoot
 
 beforeEach(async () => {
   tmpRoot = await mkdtemp(path.join(tmpdir(), 'queue-test-'))
+  await writeFile(
+    path.join(tmpRoot, 'steward.config.json'),
+    JSON.stringify({ repo: 'luplows/tower-workshop-paths', storyPrefix: 'OQ' }),
+    'utf8',
+  )
 })
 
 afterEach(async () => {
@@ -59,14 +64,14 @@ async function writeStory(dir, filename, source) {
 
 describe('OQ-49/AC-1: filename filtering', () => {
   it('matches OQ-<n>-<slug>.md and nothing else', () => {
-    expect(isStoryFilename('OQ-49-read-story-queue.md')).toBe(true)
-    expect(isStoryFilename('OQ-5-x.md')).toBe(true)
-    expect(isStoryFilename('README.md')).toBe(false)
-    expect(isStoryFilename('_TEMPLATE.md')).toBe(false)
-    expect(isStoryFilename('OQ-49.md')).toBe(false)
-    expect(isStoryFilename('notes.md')).toBe(false)
-    expect(isStoryFilename('OQ-abc-slug.md')).toBe(false)
-    expect(isStoryFilename('OQ-49-slug.md.bak')).toBe(false)
+    expect(isStoryFilename('OQ-49-read-story-queue.md', 'OQ')).toBe(true)
+    expect(isStoryFilename('OQ-5-x.md', 'OQ')).toBe(true)
+    expect(isStoryFilename('README.md', 'OQ')).toBe(false)
+    expect(isStoryFilename('_TEMPLATE.md', 'OQ')).toBe(false)
+    expect(isStoryFilename('OQ-49.md', 'OQ')).toBe(false)
+    expect(isStoryFilename('notes.md', 'OQ')).toBe(false)
+    expect(isStoryFilename('OQ-abc-slug.md', 'OQ')).toBe(false)
+    expect(isStoryFilename('OQ-49-slug.md.bak', 'OQ')).toBe(false)
   })
 
   it('loadQueue ignores README.md and _TEMPLATE.md sitting beside real stories', async () => {
@@ -81,20 +86,46 @@ describe('OQ-49/AC-1: filename filtering', () => {
   })
 })
 
+describe('OQ-126/AC-3: the story-id prefix comes from settings, not a hardcoded OQ-', () => {
+  it('loadQueue loads an ST-<n> story and ignores an OQ-<n> one sitting beside it, for a project whose settings say ST', async () => {
+    const storiesDir = path.join(tmpRoot, 'stories')
+    await writeFile(
+      path.join(tmpRoot, 'steward.config.json'),
+      JSON.stringify({ repo: 'owner/repo', storyPrefix: 'ST' }),
+      'utf8',
+    )
+    await writeStory(storiesDir, 'ST-3-thing.md', storySource({ id: 'ST-3' }))
+    await writeStory(storiesDir, 'OQ-3-thing.md', storySource({ id: 'OQ-3' }))
+
+    const stories = await loadQueue(tmpRoot)
+
+    expect(stories.map((s) => s.id)).toEqual(['ST-3'])
+  })
+
+  it('buildStory accepts id: ST-3 with numericId 3 under an ST project, and refuses id: OQ-3', () => {
+    const story = buildStory('/fake/ST-3-thing.md', storySource({ id: 'ST-3' }), false, 'ST')
+    expect(story.id).toBe('ST-3')
+    expect(story.numericId).toBe(3)
+
+    expect(() => buildStory('/fake/OQ-3-thing.md', storySource({ id: 'OQ-3' }), false, 'ST'))
+      .toThrow(/OQ-3-thing\.md.*not of the form ST-<n>/s)
+  })
+})
+
 describe('OQ-49/AC-2: bad frontmatter fails loudly, naming the file', () => {
   it('throws naming the file when the frontmatter block is missing entirely', () => {
     const source = '## Intent\n\nNo frontmatter here.\n'
-    expect(() => buildStory('/fake/OQ-1-x.md', source, false)).toThrow(/OQ-1-x\.md.*missing frontmatter/s)
+    expect(() => buildStory('/fake/OQ-1-x.md', source, false, 'OQ')).toThrow(/OQ-1-x\.md.*missing frontmatter/s)
   })
 
   it('throws naming the file when a frontmatter line is unparseable', () => {
     const source = ['---', 'id: OQ-1', 'this is not a key value line', 'tier: normal', '---', ''].join('\n')
-    expect(() => buildStory('/fake/OQ-1-x.md', source, false)).toThrow(/OQ-1-x\.md.*unparseable frontmatter line/s)
+    expect(() => buildStory('/fake/OQ-1-x.md', source, false, 'OQ')).toThrow(/OQ-1-x\.md.*unparseable frontmatter line/s)
   })
 
   it('throws naming the file and the field when a required field is missing', () => {
     const source = ['---', 'id: OQ-1', 'title: T', 'tier: normal', 'depends_on: []', '---', '## Open questions', '', '*(none)*', ''].join('\n')
-    expect(() => buildStory('/fake/OQ-1-x.md', source, false)).toThrow(/OQ-1-x\.md.*required field 'blocked'/s)
+    expect(() => buildStory('/fake/OQ-1-x.md', source, false, 'OQ')).toThrow(/OQ-1-x\.md.*required field 'blocked'/s)
   })
 
   it('does not choke on a field this module does not read, written as a block YAML list (e.g. a mechanisms: list)', () => {
@@ -118,7 +149,7 @@ describe('OQ-49/AC-2: bad frontmatter fails loudly, naming the file', () => {
       '',
     ].join('\n')
 
-    const story = buildStory('/fake/OQ-1-x.md', source, false)
+    const story = buildStory('/fake/OQ-1-x.md', source, false, 'OQ')
 
     expect(story.id).toBe('OQ-1')
     expect(story.openQuestionsEmpty).toBe(true)
@@ -221,7 +252,7 @@ describe('OQ-49/AC-5: ordering by tier then lowest id', () => {
 
   it('an unrecognised tier fails loudly rather than sorting arbitrarily', () => {
     const source = storySource({ id: 'OQ-900', tier: 'urgent' })
-    expect(() => buildStory('/fake/OQ-900-x.md', source, false)).toThrow(/OQ-900-x\.md.*unrecognised tier 'urgent'/s)
+    expect(() => buildStory('/fake/OQ-900-x.md', source, false, 'OQ')).toThrow(/OQ-900-x\.md.*unrecognised tier 'urgent'/s)
   })
 })
 
@@ -296,7 +327,7 @@ describe('OQ-49/AC-7: what counts as an empty Open questions section', () => {
       '*(must be empty to dispatch)*',
       '',
     ].join('\n')
-    const story = buildStory('OQ-9001-fixture.md', source, false)
+    const story = buildStory('OQ-9001-fixture.md', source, false, 'OQ')
     expect(deriveStatus(story, new Set()).status).toBe('ready')
   })
 
@@ -321,7 +352,7 @@ describe('OQ-49/AC-7: what counts as an empty Open questions section', () => {
       '',
     ].join('\n')
 
-    const story = buildStory('/fake/OQ-49-read-story-queue.md', source, false)
+    const story = buildStory('/fake/OQ-49-read-story-queue.md', source, false, 'OQ')
     const status = deriveStatus(story, new Set())
 
     expect(story.openQuestionsEmpty).toBe(true)
@@ -360,7 +391,7 @@ describe('OQ-49/AC-8: section boundaries ignore fenced code blocks', () => {
   it('derives ready from the real section, where a naive parser reads the fence and says draft', async () => {
     const fixturePath = path.join(repoRoot, 'stories', 'done', 'OQ-51-story-injection-boundary.md')
     const source = await readFile(fixturePath, 'utf8')
-    const story = buildStory(fixturePath, source, false)
+    const story = buildStory(fixturePath, source, false, 'OQ')
 
     // Stronger than the `draft` this asserted while OQ-51 had an open question.
     // Then both a naive and a fence-aware parser said `draft`, and only the

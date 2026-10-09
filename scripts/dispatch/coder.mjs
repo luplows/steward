@@ -77,14 +77,15 @@ async function gitOrNull(cwd, args) {
  * The queue as it stands at `ref`, built with `queue.mjs`'s own parsing,
  * status derivation and ordering. Only regular files count (`loadQueue` skips
  * anything else, so a symlink named like a story is not one here either).
+ * `prefix` is the project's story-id prefix (OQ-126).
  */
-async function loadQueueAt(repoDir, ref) {
+async function loadQueueAt(repoDir, ref, prefix) {
   const listing = await git(repoDir, ['ls-tree', ref, 'stories/', 'stories/done/'])
   const built = []
   for (const line of listing.split(/\r?\n/)) {
     const m = line.match(/^(\d+) blob [0-9a-f]+\t(stories\/(?:done\/)?([^/]+))$/)
-    if (!m || !m[1].startsWith('100') || !isStoryFilename(m[3])) continue
-    built.push(buildStory(m[2], await git(repoDir, ['show', `${ref}:${m[2]}`]), m[2].startsWith('stories/done/')))
+    if (!m || !m[1].startsWith('100') || !isStoryFilename(m[3], prefix)) continue
+    built.push(buildStory(m[2], await git(repoDir, ['show', `${ref}:${m[2]}`]), m[2].startsWith('stories/done/'), prefix))
   }
   const doneIds = new Set(built.filter((story) => story.isDone).map((story) => story.id))
   return orderStories(built.map((story) => ({ ...story, ...deriveStatus(story, doneIds) })))
@@ -318,9 +319,10 @@ export async function dispatchCoder({
 
   // The queue is read from the tip just fetched, and the worktree is made from
   // that same commit, so the story chosen is the story the coder is handed.
+  const { storyPrefix } = await readSettings(repoDir)
   await git(repoDir, ['fetch', REMOTE, BASE])
   const mainSha = (await git(repoDir, ['rev-parse', `${REMOTE}/${BASE}`])).trim()
-  const queue = await loadQueueAt(repoDir, mainSha)
+  const queue = await loadQueueAt(repoDir, mainSha, storyPrefix)
   let chosen
   if (storyId) {
     chosen = queue.find((s) => s.id === storyId)

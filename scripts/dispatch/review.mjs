@@ -46,7 +46,7 @@ import {
 } from './github.mjs'
 import { installDependencies } from './install.mjs'
 import { ROLE_DEFAULTS } from './invocation.mjs'
-import { parseFrontmatter, STORY_FILENAME_RE } from './queue.mjs'
+import { parseFrontmatter, storyFilenameRe } from './queue.mjs'
 import { readSettings } from './settings.mjs'
 import { spawnSession } from './spawn.mjs'
 
@@ -83,10 +83,14 @@ const NO_STORY_TEXT = '*(none — this PR implements no story; items 16–19 do 
  * story the diff does not move is a coder that forgot item 19, reported as
  * `branch-only` rather than reviewed against a story the diff never touched.
  *
+ * `prefix` is the project's story-id prefix (OQ-126): nothing falls back to a
+ * default when it is missing.
+ *
  * Returns `{ kind: 'moved', file, id }`, `{ kind: 'ambiguous', files }`,
  * `{ kind: 'branch-only', id }` or `{ kind: 'none' }`.
  */
-export function resolveStory({ nameStatus, branch }) {
+export function resolveStory({ nameStatus, branch, prefix }) {
+  const filenameRe = storyFilenameRe(prefix)
   const deleted = new Set()
   const added = []
   for (const line of nameStatus.split(/\r?\n/)) {
@@ -94,13 +98,14 @@ export function resolveStory({ nameStatus, branch }) {
     if (!file) continue
     const open = file.match(/^stories\/([^/]+)$/)
     const done = file.match(/^stories\/done\/([^/]+)$/)
-    if (status === 'D' && open && STORY_FILENAME_RE.test(open[1])) deleted.add(open[1])
-    if (status === 'A' && done && STORY_FILENAME_RE.test(done[1])) added.push(done[1])
+    if (status === 'D' && open && filenameRe.test(open[1])) deleted.add(open[1])
+    if (status === 'A' && done && filenameRe.test(done[1])) added.push(done[1])
   }
   const moved = added.filter((name) => deleted.has(name))
-  if (moved.length === 1) return { kind: 'moved', file: moved[0], id: moved[0].match(/^(OQ-\d+)-/)[1] }
+  const idRe = new RegExp(`^(${prefix}-\\d+)-`)
+  if (moved.length === 1) return { kind: 'moved', file: moved[0], id: moved[0].match(idRe)[1] }
   if (moved.length > 1) return { kind: 'ambiguous', files: moved }
-  const named = /^story\/(OQ-\d+)-/.exec(branch ?? '')
+  const named = new RegExp(`^story/(${prefix}-\\d+)-`).exec(branch ?? '')
   return named ? { kind: 'branch-only', id: named[1] } : { kind: 'none' }
 }
 
@@ -243,6 +248,7 @@ export async function reviewPullRequest({
   rereview = false, install = installDependencies, scratchRoot = tmpdir(),
 }) {
   const template = promptTemplate ?? readFileSync(REVIEWER_PROMPT, 'utf8')
+  const { storyPrefix } = await readSettings(repoDir)
   const pr = await getPullRequestState(ctx, number)
   if (!SHA_RE.test(pr.headSha) || !pr.headRef || !pr.baseRef) {
     throw new Error(`pull request #${number} did not resolve a head SHA, head branch and base branch`)
@@ -284,7 +290,7 @@ export async function reviewPullRequest({
     const nameStatus = await git(repoDir, [
       'diff', '--name-status', '--no-renames', `${REMOTE}/${pr.baseRef}...${pr.headSha}`,
     ])
-    const resolved = resolveStory({ nameStatus, branch: pr.headRef })
+    const resolved = resolveStory({ nameStatus, branch: pr.headRef, prefix: storyPrefix })
     if (resolved.kind === 'branch-only') {
       return {
         status: 'story-not-moved',

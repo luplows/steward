@@ -54,6 +54,7 @@ function makeRepo(root) {
   const repoDir = path.join(root, 'clone')
   git(root, 'clone', origin, repoDir)
   writeFileSync(path.join(repoDir, 'README.md'), 'init\n')
+  writeFileSync(path.join(repoDir, 'steward.config.json'), JSON.stringify({ repo: 'luplows/tower-workshop-paths', storyPrefix: 'OQ' }))
   git(repoDir, 'add', '.')
   git(repoDir, 'commit', '-m', 'init')
   git(repoDir, 'push', 'origin', 'main')
