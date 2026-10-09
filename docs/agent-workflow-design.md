@@ -1682,6 +1682,10 @@ deciding what is next. It is the harness's product outline, and moves with this 
   steward's copies, and OQ-132 and OQ-134 remove the copies here. The held observations on #240,
   #241 and #244, stale numbers in their merged pull requests' Verification sections, are left as
   they are: the current figures are in the same sections, and no repository content is wrong.
+- **The fresh dry run's three findings are settled** (decided 2026-10-09 by the owner, from the
+  dry run at `09147c3`): a literal rule rewrites the one `#122/#123`, which the second rule left
+  half-rewritten; `scripts/no-project-literals.test.mjs` (OQ-129) is extracted; and steward's
+  copy of this document drops OQ-137's marker as it drops OQ-115's. See R1.
 
 ### The move, in order
 
@@ -1810,6 +1814,7 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   | The logic of `review-gate.yml` and `land-approved.yml`, and the containment step in `ci.yml` | Thin workflow files that call it (R2), `ci.yml`'s product checks, `deploy-pages.yml`, `detect-drift.yml`, `update-screenshots.yml` |
   | Added 2026-10-08 by the owner, after the dry run: `test/fixtures/`, the four built stories the moved tests read as fixtures (OQ-51, OQ-68, OQ-69, OQ-70; they become test fixtures in steward, not stories), `.github/pull_request_template.md`, `.oxlintrc.json` and `.gitignore` | The originals of all of these |
   | Added 2026-10-08 by the owner, refining OQ-115: `docs/steward-bootstrap.md`, the record of how steward was made | Nothing: OQ-134 removes it here |
+  | Added 2026-10-09 by the owner, after the fresh dry run: `scripts/no-project-literals.test.mjs` (OQ-129), which reads only moved files | Nothing: OQ-132 removes it here |
 
   The prompts' project-specific lines are few. In `coder.md`: the repository name, the testing
   frameworks and screenshot-baseline rules, and `mytower.app` being reachable. In `reviewer.md`:
@@ -1855,7 +1860,9 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   copy before its first push, rather than left for a steward story. Steward's `CLAUDE.md` keeps
   the testing rules that hold for it (CI is required, tests go alongside new logic, in Vitest, no
   coverage tooling, green CI is not sufficient) and drops Playwright, screenshot baselines and the
-  buy-order algorithm (decided 2026-10-08 by the owner).
+  buy-order algorithm (decided 2026-10-08 by the owner). OQ-137's **Planned** marker, under "What
+  CI runs", is reworded without a marker in steward's copy, as OQ-115's is: that work is this
+  repository's. The passage itself stays (decided 2026-10-09 by the owner).
 
   **The history moves with the code** (decided 2026-10-08 by the owner): the moved paths are
   extracted with their git history, for example with `git filter-repo`, so `git log` on a moved
@@ -1875,14 +1882,23 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   because the paths they touch (`review.yml`, `Open-Questions.md`) do not move. So the fresh dry
   run lists every `#N` the rules rewrite, and checks each against this repository's pull requests.
   If any is not one, the bootstrap stops until the rule leaves it alone.
+  **A literal rule first, for `#122/#123`** (decided 2026-10-09 by the owner, after the fresh dry
+  run at `09147c3`): every one of the 167 numbers the rules rewrite there was this repository's
+  pull request, but the commit of #124 says `#122/#123` twice, and the second rule leaves a `#N`
+  after a `/` alone, giving `tower-workshop-paths PR 122/#123`. A first rule,
+  `#122/#123` to `#122 and #123`, lets the other two rewrite both numbers. The check lists only
+  the numbers that are rewritten, so it could not have found this one.
 
   **Only tests of files that move go to steward** (decided 2026-10-08 by the owner, after the
   reviewer's observation on #217, and widened by the owner the same day). A test that covers this
   repository's own flows stays here, even where it sits in a moved test file. The case found so
   far is `scripts/dispatch/ci.test.mjs`: OQ-117's tests read this repository's `ci.yml` Playwright
   steps, `update-screenshots.yml` and `package-lock.json`'s `@playwright/test`, and OQ-124's also
-  read `deploy-pages.yml`, none of which steward has. Steward's copy drops them. OQ-118's tests,
-  which read steward's own `ci.yml`, move. OQ-132 keeps the tests that stay, in a new
+  read `deploy-pages.yml`, none of which steward has. Steward's copy drops them, and of OQ-124's,
+  only the `deploy-pages.yml` cases. The fresh dry run (2026-10-09) found OQ-136's too: its tests in
+  `ci.test.mjs`, and all of `install-cleanup.alone.test.mjs`, read the Playwright install step,
+  and one reads `vite.config.js` (`steward-bootstrap.md`, B7a). OQ-118's tests, which read
+  steward's own `ci.yml`, move. OQ-132 keeps the tests that stay, in a new
   `scripts/ci-workflows.test.mjs`, when it removes the moved code from this repository.
 - **R2. How a project uses it.** Proposed by Session A, 2026-10-07; **decided 2026-10-07 by the
   owner, as proposed, with the git-tag pin** (below):
