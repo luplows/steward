@@ -474,8 +474,9 @@ verdict.
 It runs them from a worktree of its own at a detached `origin/main`, never from the repository's
 main checkout (decided 2026-10-06 by the owner, replacing the main checkout). Before each dispatch
 it fetches `origin` and checks out `origin/main`, detached, as the loop's `updateCheckout` does.
-The scripts run against the checkout they are loaded from (`DISPATCHER_ROOT`, `coder.mjs`), so the
-session runs the code that has landed, and the main checkout is left free for whoever else is
+The scripts take the project from the working directory and their prompts from the checkout they
+are loaded from (`ENGINE_ROOT`, `coder.mjs`; OQ-123, OQ-130), and the session runs them in that
+worktree, so both are what has landed, and the main checkout is left free for whoever else is
 working. This is a rule, not a mechanism: only the loop's `main` refuses a checkout with a branch
 checked out (`requireOwnWorktree`, `scripts/dispatch/loop.mjs`).
 
@@ -1733,8 +1734,9 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   (`scripts/dispatch/settings.mjs`, OQ-122, OQ-125), read in `coder.mjs`, `land.mjs`, `loop.mjs`,
   `review.mjs`, `story.mjs` and `scripts/report/review-verdicts.mjs`. Each also takes `--repo` to
   override it.
-- The scripts run against the checkout they are loaded from (`DISPATCHER_ROOT`), and read this
-  repository's `stories/` and `.claude/prompts/`.
+- The scripts take the project from the working directory (OQ-123, OQ-130), but their prompts from
+  the checkout they are loaded from (`ENGINE_ROOT`), and those prompts are this repository's own
+  `.claude/prompts/`.
 - The gate is this repository's own workflows. `ci.yml` runs `scripts/dispatch/story-containment.mjs`.
   `land-approved.yml` runs `scripts/land/select-candidates.mjs`, `check-author.mjs` and
   `delete-merged-heads.mjs`. `review-gate.yml` derives `review/agent`.
@@ -1881,7 +1883,7 @@ Checked on 2026-10-07 against `main` at `66c578d`:
     minutes on a sweep that landed nothing.
   - The scripts stop finding the project relative to their own location (`DISPATCHER_ROOT`).
     They take the project from the working directory and its configuration (R3), and their
-    prompts from the package.
+    prompts from the package. Built here by OQ-123 and OQ-130: `DISPATCHER_ROOT` is gone.
 
   **Decided 2026-10-07 by the owner: the git-tag pin**, to keep it simple. Publishing to npm is not
   planned. The rest of R2 was accepted as proposed the same day: the loop runs from the project's
