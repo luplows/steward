@@ -44,6 +44,7 @@ import { buildGetPullRequestState, createContext, createPullRequest, parsePullRe
 import { installDependencies } from './install.mjs'
 import { RETRY_SOURCES } from './invocation.mjs'
 import { buildStory, deriveStatus, dispatchable, isStoryFilename, orderStories, parseFrontmatter } from './queue.mjs'
+import { readSettings } from './settings.mjs'
 import { spawnSession } from './spawn.mjs'
 
 const execFileAsync = promisify(execFile)
@@ -52,7 +53,6 @@ const DISPATCH_DIR = path.dirname(fileURLToPath(import.meta.url))
 const DISPATCHER_ROOT = path.resolve(DISPATCH_DIR, '..', '..')
 const CODER_PROMPT = path.join(DISPATCHER_ROOT, '.claude', 'prompts', 'coder.md')
 
-const DEFAULT_REPO = 'luplows/tower-workshop-paths'
 const REMOTE = 'origin'
 const BASE = 'main'
 
@@ -689,10 +689,10 @@ async function main(argv) {
   if (args[0] === 'retry') {
     args.shift()
     const repoAt = args.indexOf('--repo')
-    return mainRetry(args, repoAt === -1 ? DEFAULT_REPO : args.splice(repoAt, 2)[1])
+    return mainRetry(args, repoAt === -1 ? (await readSettings(DISPATCHER_ROOT)).repo : args.splice(repoAt, 2)[1])
   }
   const repoAt = args.indexOf('--repo')
-  const repo = repoAt === -1 ? DEFAULT_REPO : args.splice(repoAt, 2)[1]
+  const repo = repoAt === -1 ? (await readSettings(DISPATCHER_ROOT)).repo : args.splice(repoAt, 2)[1]
   const storyId = args.shift()
   if (args.length > 0 || (storyId !== undefined && !/^OQ-\d+$/.test(storyId))) {
     throw new Error('usage: node scripts/dispatch/coder.mjs [OQ-<n>] [--repo owner/name]')

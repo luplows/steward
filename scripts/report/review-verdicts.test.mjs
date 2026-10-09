@@ -1,7 +1,9 @@
 // @vitest-environment node
 
 import { describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import {
@@ -13,6 +15,7 @@ import {
   formatReport,
   gatherVerdicts,
   listRecentPullRequests,
+  parseArgs,
   parsePullRequests,
   tallyVerdicts,
 } from './review-verdicts.mjs'
@@ -247,5 +250,34 @@ describe('OQ-47/AC-1: end-to-end report from listings, no stored state', () => {
   it('DEFAULT_LIMIT is a positive integer the CLI falls back to', () => {
     expect(Number.isInteger(DEFAULT_LIMIT)).toBe(true)
     expect(DEFAULT_LIMIT).toBeGreaterThan(0)
+  })
+})
+
+describe('OQ-125/AC-3: the CLI\'s default repo comes from steward.config.json at projectRoot', () => {
+  async function withTempSettings(settings, fn) {
+    const dir = mkdtempSync(path.join(tmpdir(), 'tw-review-verdicts-settings-'))
+    try {
+      writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(settings))
+      return await fn(dir)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+
+  it('OQ-125/AC-3: no --repo takes the projectRoot\'s settings repo', async () => {
+    await withTempSettings({ repo: 'owner/other', storyPrefix: 'OQ' }, async (projectRoot) => {
+      expect(await parseArgs([], { projectRoot })).toEqual({ repo: 'owner/other', limit: DEFAULT_LIMIT })
+    })
+  })
+
+  it('OQ-125/AC-3: --repo overrides the settings default', async () => {
+    await withTempSettings({ repo: 'owner/other', storyPrefix: 'OQ' }, async (projectRoot) => {
+      expect(await parseArgs(['--repo', 'x/y'], { projectRoot })).toEqual({ repo: 'x/y', limit: DEFAULT_LIMIT })
+    })
+  })
+
+  it('OQ-125/AC-3: with this repository\'s own settings, the default is unchanged', async () => {
+    const repoRoot = path.resolve(here, '..', '..')
+    expect(await parseArgs([], { projectRoot: repoRoot })).toEqual({ repo: 'luplows/tower-workshop-paths', limit: DEFAULT_LIMIT })
   })
 })

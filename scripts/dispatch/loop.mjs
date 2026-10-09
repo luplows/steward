@@ -52,6 +52,7 @@ import { STUCK_AFTER_MS, branchFor, claimAgeMs, claimPushArgs, machineLabel, rem
 import { createContext, createIssue, listIssuesByLabels, listOpenPullRequestsForHead } from './github.mjs'
 import { createLandContext } from './land.mjs'
 import { dispatchable, loadQueue } from './queue.mjs'
+import { readSettings } from './settings.mjs'
 import { reviewAndLandWriterPullRequests } from './writer-prs.mjs'
 
 const execFileAsync = promisify(execFile)
@@ -60,7 +61,6 @@ const DISPATCH_DIR = path.dirname(fileURLToPath(import.meta.url))
 const DISPATCHER_ROOT = path.resolve(DISPATCH_DIR, '..', '..')
 const STORY_MJS = path.join(DISPATCH_DIR, 'story.mjs')
 
-const DEFAULT_REPO = 'luplows/tower-workshop-paths'
 const REMOTE = 'origin'
 const BASE = 'main'
 
@@ -284,7 +284,15 @@ export function parseMaxStories(raw) {
  *   repoDir      the loop's own worktree, updated to a detached
  *                `origin/main` between stories (`updateCheckout`) and handed
  *                to each story's process
- *   repo         `owner/name`, passed to each story's process
+ *   repo         `owner/name`, passed to each story's process. Defaults to
+ *                the `repo` named in `<projectRoot>/steward.config.json`
+ *                (OQ-122, OQ-125)
+ *   projectRoot  where the default `repo` is read from when `repo` is
+ *                omitted; defaults to `DISPATCHER_ROOT`, the directory this
+ *                module runs from in production. Distinct from `repoDir` so a
+ *                test can give `repoDir` an ephemeral git fixture with no
+ *                `steward.config.json` while still controlling the default
+ *                `repo`
  *   maxStories   caps the number of stories *started*; a skipped story does
  *                not count. Uncapped when omitted
  *   ctx          a `github.mjs` context. OQ-112's stuck-issue limit and
@@ -315,8 +323,9 @@ export function parseMaxStories(raw) {
  * `'process-error'`, `'story-stopped'`, or `'stuck-limit'` (OQ-112's AC-6).
  */
 export async function runLoop({
-  repoDir = DISPATCHER_ROOT, repo = DEFAULT_REPO, maxStories, ctx, landCtx, baseEnv = process.env, deps = {},
+  repoDir = DISPATCHER_ROOT, repo, projectRoot = DISPATCHER_ROOT, maxStories, ctx, landCtx, baseEnv = process.env, deps = {},
 } = {}) {
+  if (repo === undefined) repo = (await readSettings(projectRoot)).repo
   const d = {
     updateCheckout, pickStory, runStoryProcess,
     listIssuesByLabels, createIssue, listOpenPullRequestsForHead, claimAgeMs,
@@ -474,10 +483,16 @@ export async function requireOwnWorktree(repoDir) {
  * flag whose own value has already been taken), an unrecognised flag, or a
  * `--max-stories` value `parseMaxStories` rejects. Throws before `main` ever
  * touches `repoDir` or the network, so a bad invocation starts nothing (AC-6).
+ * Those checks all happen before `repo` is resolved, so they still throw
+ * without reading anything from disk.
+ *
+ * `repo` defaults to the `repo` named in `<projectRoot>/steward.config.json`
+ * (OQ-122, OQ-125) when `--repo` is absent. `projectRoot` defaults to
+ * `DISPATCHER_ROOT`; a test overrides it to point at a fixture.
  *
  * `--init` is handled separately in `main`, before `parseArgs` is reached.
  */
-export function parseArgs(argv) {
+export async function parseArgs(argv, { projectRoot = DISPATCHER_ROOT } = {}) {
   const args = [...argv]
   const take = (name) => {
     const at = args.indexOf(name)
@@ -485,11 +500,12 @@ export function parseArgs(argv) {
     if (at === args.length - 1) throw new Error(`${name} requires a value`)
     return args.splice(at, 2)[1]
   }
-  const repo = take('--repo') ?? DEFAULT_REPO
+  const repoFlag = take('--repo')
   const maxStoriesRaw = take('--max-stories')
   const usage = 'usage: node scripts/dispatch/loop.mjs [--repo owner/name] [--max-stories N]'
   if (args.length > 0) throw new Error(usage)
   const maxStories = parseMaxStories(maxStoriesRaw)
+  const repo = repoFlag ?? (await readSettings(projectRoot)).repo
   return { repo, maxStories }
 }
 
@@ -501,7 +517,7 @@ async function main(argv) {
     return
   }
 
-  const { repo, maxStories } = parseArgs(argv)
+  const { repo, maxStories } = await parseArgs(argv)
   await requireOwnWorktree(DISPATCHER_ROOT)
 
   const result = await runLoop({ repo, maxStories, ctx: createContext({ repo }), landCtx: createLandContext({ repo }) })

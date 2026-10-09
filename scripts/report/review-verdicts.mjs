@@ -44,9 +44,9 @@
 import { existsSync, realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { buildListComments, parseComments } from '../dispatch/github.mjs'
+import { readSettings } from '../dispatch/settings.mjs'
 
 const API = 'https://api.github.com'
-const DEFAULT_REPO = 'luplows/tower-workshop-paths'
 export const DEFAULT_LIMIT = 60
 
 // The associations review-gate.yml honours a marker from (its `ASSOC` case).
@@ -237,13 +237,26 @@ export function formatReport(tally) {
 
 // --------------------------------------------------------------------- CLI
 
-async function main(argv) {
+/**
+ * Parses the CLI's argv into `{ repo, limit }`, or throws on a non-positive
+ * or non-integer `--limit`. `repo` defaults to the `repo` named in
+ * `<projectRoot>/steward.config.json` (OQ-122) -- `projectRoot` defaults to
+ * the working directory, where `queue.mjs` and `lint-stories.mjs` already
+ * find their project, and a test overrides it to point at a fixture.
+ */
+export async function parseArgs(argv, { projectRoot = process.cwd() } = {}) {
   const args = [...argv]
   const repoAt = args.indexOf('--repo')
-  const repo = repoAt === -1 ? DEFAULT_REPO : args.splice(repoAt, 2)[1]
+  const repoFlag = repoAt === -1 ? undefined : args.splice(repoAt, 2)[1]
   const limitAt = args.indexOf('--limit')
   const limit = limitAt === -1 ? DEFAULT_LIMIT : Number(args.splice(limitAt, 2)[1])
   if (!Number.isInteger(limit) || limit <= 0) throw new Error('--limit must be a positive integer')
+  const repo = repoFlag ?? (await readSettings(projectRoot)).repo
+  return { repo, limit }
+}
+
+async function main(argv) {
+  const { repo, limit } = await parseArgs(argv)
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || null
   const ctx = createContext({ repo, token })
   const perPullRequest = await gatherVerdicts(ctx, { limit })

@@ -108,14 +108,14 @@ One file per story. **OQ numbering is preserved** — those identifiers are refe
 codebase, workflow comments, and `Completed-Questions.md`, and the "never reused, never renumbered"
 rule stays. Only the container changes.
 
-**Planned (OQ-125, OQ-126, OQ-127, OQ-128, OQ-129):** the prefix is a project setting, not part
+**Planned (OQ-126, OQ-127, OQ-128, OQ-129):** the prefix is a project setting, not part
 of the code. A project's `steward.config.json` names its repository and its story prefix (`OQ`
 here), and every story-id pattern the scripts use is built from it, so the same code can run a
 queue numbered `ST-<n>` (decided 2026-10-08 by the owner, as the first step of moving the workflow
 to its own repository). `scripts/dispatch/settings.mjs` reads and validates that file (OQ-122).
-OQ-125 takes the default repository from it, in five modules under `scripts/dispatch/` and in
-`scripts/report/review-verdicts.mjs`; OQ-126, OQ-127 and OQ-128 take the prefix from it in the
-queue reader, the story lint, and `coder.mjs`'s and `story.mjs`'s story-id checks; OQ-129 fails a
+The default repository comes from it in five modules under `scripts/dispatch/` and in
+`scripts/report/review-verdicts.mjs` (OQ-125); OQ-126, OQ-127 and OQ-128 take the prefix from it in
+the queue reader, the story lint, and `coder.mjs`'s and `story.mjs`'s story-id checks; OQ-129 fails a
 test if either comes back into the code (split from OQ-122 on 2026-10-08 by the owner;
 `review-verdicts.mjs`, and OQ-129 in this marker, added the same day from #222's review).
 
@@ -1679,9 +1679,10 @@ Checked on 2026-10-07 against `main` at `66c578d`:
 
 ### What ties the workflow to this repository today
 
-- `DEFAULT_REPO` is `luplows/tower-workshop-paths` in `coder.mjs`, `land.mjs`, `loop.mjs`,
-  `review.mjs` and `story.mjs`, and in `scripts/report/review-verdicts.mjs`. Each also takes
-  `--repo`.
+- The default repository comes from this repository's own `steward.config.json`
+  (`scripts/dispatch/settings.mjs`, OQ-122, OQ-125), read in `coder.mjs`, `land.mjs`, `loop.mjs`,
+  `review.mjs`, `story.mjs` and `scripts/report/review-verdicts.mjs`. Each also takes `--repo` to
+  override it.
 - The scripts run against the checkout they are loaded from (`DISPATCHER_ROOT`), and read this
   repository's `stories/` and `.claude/prompts/`.
 - The gate is this repository's own workflows. `ci.yml` runs `scripts/dispatch/story-containment.mjs`.

@@ -47,6 +47,7 @@ import {
 import { installDependencies } from './install.mjs'
 import { ROLE_DEFAULTS } from './invocation.mjs'
 import { parseFrontmatter, STORY_FILENAME_RE } from './queue.mjs'
+import { readSettings } from './settings.mjs'
 import { spawnSession } from './spawn.mjs'
 
 const execFileAsync = promisify(execFile)
@@ -55,7 +56,6 @@ const DISPATCH_DIR = path.dirname(fileURLToPath(import.meta.url))
 const DISPATCHER_ROOT = path.resolve(DISPATCH_DIR, '..', '..')
 const REVIEWER_PROMPT = path.join(DISPATCHER_ROOT, '.claude', 'prompts', 'reviewer.md')
 
-const DEFAULT_REPO = 'luplows/tower-workshop-paths'
 const REMOTE = 'origin'
 
 // The author associations review-gate.yml's "Apply verdict from marker" step
@@ -426,7 +426,7 @@ const NON_FAILURES = ['recorded', 'no-verdict', 'already-reviewed']
 async function main(argv) {
   const args = [...argv]
   const repoAt = args.indexOf('--repo')
-  const repo = repoAt === -1 ? DEFAULT_REPO : args.splice(repoAt, 2)[1]
+  const repo = repoAt === -1 ? (await readSettings(DISPATCHER_ROOT)).repo : args.splice(repoAt, 2)[1]
   const rereviewAt = args.indexOf('--rereview')
   const rereview = rereviewAt !== -1
   if (rereview) args.splice(rereviewAt, 1)

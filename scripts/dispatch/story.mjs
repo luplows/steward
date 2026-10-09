@@ -42,11 +42,11 @@ import {
 import { createLandContext, landPullRequest } from './land.mjs'
 import { parseFrontmatter } from './queue.mjs'
 import { HONOURED_ASSOCIATIONS, reviewPullRequest } from './review.mjs'
+import { readSettings } from './settings.mjs'
 
 const execFileAsync = promisify(execFile)
 
 const DISPATCHER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-const DEFAULT_REPO = 'luplows/tower-workshop-paths'
 const REMOTE = 'origin'
 
 // The bound on each kind of round (AC-3, AC-4). The round a retry is given is
@@ -418,7 +418,8 @@ async function main(argv) {
     const at = args.indexOf(name)
     return at === -1 ? undefined : args.splice(at, 2)[1]
   }
-  const repo = take('--repo') ?? DEFAULT_REPO
+  const repoFlag = take('--repo')
+  const repo = repoFlag ?? (await readSettings(DISPATCHER_ROOT)).repo
   const pr = take('--pr')
   const storyId = args.shift()
   const usage = 'usage: node scripts/dispatch/story.mjs OQ-<n> [--pr <number>] [--repo owner/name]'

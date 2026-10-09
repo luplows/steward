@@ -22,6 +22,21 @@ import {
 
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8' })
 
+/**
+ * Builds a temporary directory holding only `steward.config.json`, runs `fn`
+ * with its path, and removes it afterwards -- for OQ-125/AC-3, which needs a
+ * project root distinct from any git fixture a test also uses.
+ */
+async function withTempSettings(settings, fn) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'tw-loop-settings-'))
+  try {
+    writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(settings))
+    return await fn(dir)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
 // A minimal `ready` story: frontmatter queue.mjs requires, plus an empty
 // Open questions section (stories/README.md's readiness test).
 const story = (id, title = 'A story', { tier = 'normal', dependsOn = [], blocked = 'null' } = {}) =>
@@ -617,20 +632,57 @@ describe('OQ-86/AC-6: --max-stories caps how many stories a run starts', () => {
     expect(parseMaxStories('12')).toBe(12)
   })
 
-  it('OQ-86/AC-6: a trailing --max-stories with no value is refused by the CLI parser, not silently uncapped', () => {
+  it('OQ-86/AC-6: a trailing --max-stories with no value is refused by the CLI parser, not silently uncapped', async () => {
     // Exercises parseArgs, the function main() calls before touching repoDir
     // or the network -- not parseMaxStories alone, which a value of undefined
     // (indistinguishable from the flag being absent) would pass straight
     // through as "uncapped".
-    expect(() => parseArgs(['--max-stories'])).toThrow()
+    await expect(parseArgs(['--max-stories'])).rejects.toThrow()
     // --repo takes its value first, leaving --max-stories trailing with
     // nothing of its own -- the flag must not silently steal --repo's value.
-    expect(() => parseArgs(['--max-stories', '--repo', 'x/y'])).toThrow()
+    await expect(parseArgs(['--max-stories', '--repo', 'x/y'])).rejects.toThrow()
   })
 
-  it('OQ-86/AC-6: parseArgs accepts a well-formed invocation', () => {
-    expect(parseArgs(['--max-stories', '3', '--repo', 'x/y'])).toEqual({ repo: 'x/y', maxStories: 3 })
-    expect(parseArgs([])).toEqual({ repo: 'luplows/tower-workshop-paths', maxStories: undefined })
+  it('OQ-86/AC-6: parseArgs accepts a well-formed invocation', async () => {
+    expect(await parseArgs(['--max-stories', '3', '--repo', 'x/y'])).toEqual({ repo: 'x/y', maxStories: 3 })
+    // No --repo: this repository's own steward.config.json names
+    // luplows/tower-workshop-paths (OQ-125), read because parseArgs' default
+    // projectRoot is DISPATCHER_ROOT and this test supplies none of its own.
+    expect(await parseArgs([])).toEqual({ repo: 'luplows/tower-workshop-paths', maxStories: undefined })
+  })
+
+  it('OQ-125/AC-3: parseArgs takes the default repo from steward.config.json at projectRoot, not --repo', async () => {
+    await withTempSettings({ repo: 'owner/other', storyPrefix: 'OQ' }, async (projectRoot) => {
+      expect(await parseArgs([], { projectRoot })).toEqual({ repo: 'owner/other', maxStories: undefined })
+      expect(await parseArgs(['--repo', 'x/y'], { projectRoot })).toEqual({ repo: 'x/y', maxStories: undefined })
+    })
+  })
+})
+
+describe('OQ-125/AC-3: runLoop takes the default repo from steward.config.json at projectRoot', () => {
+  const oneReady = () => {
+    let i = 0
+    return async () => (i++ === 0 ? { story: { id: 'OQ-1', branch: 'story/OQ-1-x' }, skipped: [] } : { story: null, skipped: [] })
+  }
+  const updated = async () => ({ status: 'updated' })
+  const merged = async () => ({ status: 'ran', result: { status: 'merged' } })
+
+  it('OQ-125/AC-3: with no repo, the story process is given the projectRoot\'s settings repo', async () => {
+    await withTempSettings({ repo: 'owner/other', storyPrefix: 'OQ' }, async (projectRoot) => {
+      const repos = []
+      const runStoryProcess = async ({ repo }) => (repos.push(repo), merged())
+      await runLoop({ projectRoot, deps: { updateCheckout: updated, pickStory: oneReady(), runStoryProcess } })
+      expect(repos).toEqual(['owner/other'])
+    })
+  })
+
+  it('OQ-125/AC-3: an explicit repo wins over the settings default', async () => {
+    await withTempSettings({ repo: 'owner/other', storyPrefix: 'OQ' }, async (projectRoot) => {
+      const repos = []
+      const runStoryProcess = async ({ repo }) => (repos.push(repo), merged())
+      await runLoop({ projectRoot, repo: 'x/y', deps: { updateCheckout: updated, pickStory: oneReady(), runStoryProcess } })
+      expect(repos).toEqual(['x/y'])
+    })
   })
 })
 
