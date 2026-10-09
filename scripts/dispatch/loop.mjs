@@ -39,6 +39,12 @@
  * moved to `stories/done/` is seen in the same run. This is gated on both
  * `ctx` and `landCtx` being supplied, for the same reason as OQ-112's above.
  *
+ * The loop works on the project in the working directory, not on the
+ * checkout it is loaded from: `repoDir` and `projectRoot` both default to
+ * `process.cwd()`, and only `STORY_MJS` -- each story's child process -- comes
+ * from the engine root, found from this module's own location (OQ-130, same
+ * split as OQ-123's for `coder.mjs`, `review.mjs`, `story.mjs` and `land.mjs`).
+ *
  * Usage:
  *   node scripts/dispatch/loop.mjs --init [path]
  *   node scripts/dispatch/loop.mjs [--repo owner/name] [--max-stories N]
@@ -58,7 +64,8 @@ import { reviewAndLandWriterPullRequests } from './writer-prs.mjs'
 const execFileAsync = promisify(execFile)
 
 const DISPATCH_DIR = path.dirname(fileURLToPath(import.meta.url))
-const DISPATCHER_ROOT = path.resolve(DISPATCH_DIR, '..', '..')
+// The engine root: where this module and story.mjs live, found from its own
+// location (OQ-130). Not the project -- see `repoDir` and `projectRoot` below.
 const STORY_MJS = path.join(DISPATCH_DIR, 'story.mjs')
 
 const REMOTE = 'origin'
@@ -237,7 +244,9 @@ export async function pickStory(repoDir) {
 /**
  * AC-2: runs `storyId` as its own child process of `story.mjs`, in `repoDir`,
  * so it loads the dispatch modules and prompts as they are on disk at that
- * moment -- never this process's already-loaded copies.
+ * moment -- never this process's already-loaded copies. The process itself is
+ * always the engine's own `STORY_MJS`, found from this module's own location
+ * (OQ-130); `repoDir`, the project root, is only its working directory.
  *
  * `story.mjs` prints its JSON result and exits non-zero for any status but
  * `merged`, which is the ordinary outcome of a stop, not a process failure;
@@ -288,11 +297,11 @@ export function parseMaxStories(raw) {
  *                the `repo` named in `<projectRoot>/steward.config.json`
  *                (OQ-122, OQ-125)
  *   projectRoot  where the default `repo` is read from when `repo` is
- *                omitted; defaults to `DISPATCHER_ROOT`, the directory this
- *                module runs from in production. Distinct from `repoDir` so a
- *                test can give `repoDir` an ephemeral git fixture with no
- *                `steward.config.json` while still controlling the default
- *                `repo`
+ *                omitted; defaults to `process.cwd()`, the project root
+ *                (OQ-130), same as `repoDir`'s default. Distinct from
+ *                `repoDir` so a test can give `repoDir` an ephemeral git
+ *                fixture with no `steward.config.json` while still
+ *                controlling the default `repo`
  *   maxStories   caps the number of stories *started*; a skipped story does
  *                not count. Uncapped when omitted
  *   ctx          a `github.mjs` context. OQ-112's stuck-issue limit and
@@ -323,7 +332,7 @@ export function parseMaxStories(raw) {
  * `'process-error'`, `'story-stopped'`, or `'stuck-limit'` (OQ-112's AC-6).
  */
 export async function runLoop({
-  repoDir = DISPATCHER_ROOT, repo, projectRoot = DISPATCHER_ROOT, maxStories, ctx, landCtx, baseEnv = process.env, deps = {},
+  repoDir = process.cwd(), repo, projectRoot = process.cwd(), maxStories, ctx, landCtx, baseEnv = process.env, deps = {},
 } = {}) {
   if (repo === undefined) repo = (await readSettings(projectRoot)).repo
   const d = {
@@ -488,11 +497,11 @@ export async function requireOwnWorktree(repoDir) {
  *
  * `repo` defaults to the `repo` named in `<projectRoot>/steward.config.json`
  * (OQ-122, OQ-125) when `--repo` is absent. `projectRoot` defaults to
- * `DISPATCHER_ROOT`; a test overrides it to point at a fixture.
+ * `process.cwd()` (OQ-130); a test overrides it to point at a fixture.
  *
  * `--init` is handled separately in `main`, before `parseArgs` is reached.
  */
-export async function parseArgs(argv, { projectRoot = DISPATCHER_ROOT } = {}) {
+export async function parseArgs(argv, { projectRoot = process.cwd() } = {}) {
   const args = [...argv]
   const take = (name) => {
     const at = args.indexOf(name)
@@ -513,12 +522,12 @@ async function main(argv) {
   if (argv[0] === '--init') {
     const rest = argv.slice(1)
     if (rest.length > 1) throw new Error('usage: node scripts/dispatch/loop.mjs --init [path]')
-    await initWorktree(DISPATCHER_ROOT, rest[0] !== undefined ? path.resolve(rest[0]) : undefined)
+    await initWorktree(process.cwd(), rest[0] !== undefined ? path.resolve(rest[0]) : undefined)
     return
   }
 
   const { repo, maxStories } = await parseArgs(argv)
-  await requireOwnWorktree(DISPATCHER_ROOT)
+  await requireOwnWorktree(process.cwd())
 
   const result = await runLoop({ repo, maxStories, ctx: createContext({ repo }), landCtx: createLandContext({ repo }) })
   console.log(JSON.stringify(result, null, 2))

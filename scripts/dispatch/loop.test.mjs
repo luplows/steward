@@ -1,9 +1,10 @@
 // @vitest-environment node
 
 import { execFileSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createContext } from './github.mjs'
 import {
@@ -19,6 +20,9 @@ import {
   runStoryProcess,
   updateCheckout,
 } from './loop.mjs'
+
+const here = path.dirname(fileURLToPath(import.meta.url))
+const SOURCE = readFileSync(path.join(here, 'loop.mjs'), 'utf8')
 
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8' })
 
@@ -648,7 +652,8 @@ describe('OQ-86/AC-6: --max-stories caps how many stories a run starts', () => {
     expect(await parseArgs(['--max-stories', '3', '--repo', 'x/y'])).toEqual({ repo: 'x/y', maxStories: 3 })
     // No --repo: this repository's own steward.config.json names
     // luplows/tower-workshop-paths (OQ-125), read because parseArgs' default
-    // projectRoot is DISPATCHER_ROOT and this test supplies none of its own.
+    // projectRoot is process.cwd() (OQ-130) -- this repository, running the
+    // test suite -- and this test supplies none of its own.
     expect(await parseArgs([])).toEqual({ repo: 'luplows/tower-workshop-paths', maxStories: undefined })
   })
 
@@ -1149,4 +1154,77 @@ describe('OQ-83/AC-6: a writer\'s pull request is reviewed and landed as part of
     ])
     expect(scanCalls).toBe(2)
   }, LOOP_TEST_TIMEOUT)
+})
+
+describe('OQ-130: the project root is the working directory, not the engine root', () => {
+  it('OQ-130/AC-1: DISPATCHER_ROOT is gone from the module', () => {
+    expect(SOURCE).not.toMatch(/DISPATCHER_ROOT/)
+  })
+
+  it(
+    "OQ-130/AC-2, AC-3: runStoryProcess runs the engine's own story.mjs, with the project root as the child's working directory",
+    async () => {
+      // No steward.config.json here. story.mjs's own main() (this checkout's
+      // real file, since no scriptPath is given) reads settings from
+      // process.cwd() before anything else, so the error naming *this*
+      // directory's own settings path -- rather than the engine checkout's,
+      // which has one -- proves both that the child process really is
+      // STORY_MJS (only it exhibits this settings-reading failure) and that
+      // its working directory was the project root, not the engine root.
+      const projectRoot = mkdtempSync(path.join(tmpdir(), 'tw-loop-engine-root-'))
+      try {
+        const result = await runStoryProcess({ repoDir: projectRoot, repo: 'x/y', storyId: 'OQ-1' })
+        expect(result.status).toBe('process-error')
+        expect(result.reason).toContain(path.join(projectRoot, 'steward.config.json'))
+        expect(result.reason).toContain('file not found')
+      } finally {
+        rmSync(projectRoot, { recursive: true, force: true })
+      }
+    },
+    LOOP_TEST_TIMEOUT,
+  )
+
+  it(
+    'OQ-130/AC-3: runLoop, given neither repoDir nor repo, uses the project root and the repo named in its settings',
+    async () => {
+      const projectRoot = mkdtempSync(path.join(tmpdir(), 'tw-loop-defaults-'))
+      try {
+        writeFileSync(path.join(projectRoot, 'steward.config.json'), JSON.stringify({ repo: 'owner/other', storyPrefix: 'OQ' }))
+        // runLoop itself cannot be called in-process with a chosen process.cwd()
+        // (process.chdir is unavailable in this suite's worker pool), so a small
+        // child script imports it and calls it directly, started with its cwd
+        // set to projectRoot -- a real default, not one simulated in-process.
+        const scriptPath = path.join(projectRoot, 'capture-defaults.mjs')
+        const loopUrl = JSON.stringify(pathToFileURL(path.join(here, 'loop.mjs')).href)
+        writeFileSync(
+          scriptPath,
+          [
+            `import { runLoop } from ${loopUrl}`,
+            'let captured',
+            'let picked = false',
+            "const updateCheckout = async () => ({ status: 'updated' })",
+            'const pickStory = async () => {',
+            '  if (picked) return { story: null, skipped: [] }',
+            '  picked = true',
+            "  return { story: { id: 'OQ-1', branch: 'story/OQ-1-x' }, skipped: [] }",
+            '}',
+            'const runStoryProcess = async ({ repoDir, repo }) => {',
+            '  captured = { repoDir, repo }',
+            "  return { status: 'ran', result: { status: 'merged' } }",
+            '}',
+            'await runLoop({ deps: { updateCheckout, pickStory, runStoryProcess } })',
+            'process.stdout.write(JSON.stringify(captured))',
+            '',
+          ].join('\n'),
+        )
+        const out = execFileSync('node', [scriptPath], { cwd: projectRoot, encoding: 'utf8' })
+        const captured = JSON.parse(out)
+        expect(path.resolve(captured.repoDir)).toBe(path.resolve(projectRoot))
+        expect(captured.repo).toBe('owner/other')
+      } finally {
+        rmSync(projectRoot, { recursive: true, force: true })
+      }
+    },
+    LOOP_TEST_TIMEOUT,
+  )
 })
