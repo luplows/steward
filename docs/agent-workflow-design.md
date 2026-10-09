@@ -454,8 +454,13 @@ step of moving the workflow to its own repository). For `loop.mjs`, only `story.
 story's child process -- still comes from the engine root; `--init`'s worktree, the loop's own
 working tree, and the settings it reads all come from the project.
 
-**Planned (OQ-131):** one entry point, `scripts/dispatch/cli.mjs`, that runs each command (split
-from OQ-123 on 2026-10-08 by the owner).
+`scripts/dispatch/cli.mjs` (OQ-131, split from OQ-123 on 2026-10-08 by the owner) is one entry point
+for every command: `node scripts/dispatch/cli.mjs <command> [arguments]` starts the named module
+(`coder.mjs`, `review.mjs`, `story.mjs`, `land.mjs`, `loop.mjs`, `queue.mjs`, `lint-stories.mjs` or
+`review-verdicts.mjs`) as its own process with the same argv, so a project with the workflow
+installed as a dependency has one command to call and this repository's own package can point
+`bin` at it. Running a module directly still works; `cli.mjs` adds a front door rather than
+replacing the back one.
 
 This also materially improves the self-marking problem. The thing that posts a verdict is
 version-controlled, reviewable, testable code that can only report what the reviewer returned.
