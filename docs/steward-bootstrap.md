@@ -21,9 +21,8 @@ change these files before then.
       Of those, the move needs OQ-118, OQ-117, OQ-122 to OQ-131 (design doc, "The move, in
       order", step 1). OQ-116 and OQ-121 were ahead of them in the queue, and were built on
       2026-10-08.
-- [ ] **P2.** No open pull request changes a moving path, except #209 (OQ-73), which stays parked.
-- [ ] **P3.** `git ls-remote --heads origin` shows no `story/` branch for a moving story, except
-      `story/OQ-73-coder-machine-credentials`.
+- [ ] **P2.** No open pull request changes a moving path.
+- [ ] **P3.** `git ls-remote --heads origin` shows no `story/` branch for a moving story.
 - [ ] **P4.** The loop is not running, and the dispatcher session has nothing in flight, so `main`
       does not move during the extraction. Record the `main` SHA extracted from.
 - [ ] **P5.** `git filter-repo --version` runs. It is installed with `pip install --user`, in the
@@ -109,7 +108,7 @@ checkout. Each is its own commit, so the direct push in section 6 is reviewable 
       | ST-5 | OQ-64 | `[]` | `null` |
       | ST-6 | OQ-66 | `[]` | `null` |
       | ST-7 | OQ-71 | `[]` | `null` |
-      | ST-8 | OQ-73 | `[]` (OQ-84 is built here) | **set**: see decision D-4 |
+      | ST-8 | OQ-73 | `[]` | kept, less "held until the move": see decision D-4 |
       | ST-9 | OQ-88 | `[]` | cleared (R4) |
       | ST-10 | OQ-89 | `[]` | cleared (R4) |
       | ST-11 | OQ-98 | `[]` | cleared (R4) |
@@ -226,9 +225,9 @@ section (R1 and R4) and its "Decided so far".
   sufficient) and **drops** Playwright, screenshot baselines and the buy-order algorithm (B10).
 - **D-3. The additions to R1's list in section 2** (`test/fixtures/`, the four fixture stories, the
   PR template, `.oxlintrc.json`, `.gitignore`): **added** to R1's table.
-- **D-4. ST-8 (OQ-73):** **`blocked:` is set** in steward, saying it is to be rewritten as
-  containers (R5). Its file reads `ready` on this repository's `main`, so copied as it is,
-  steward's loop would dispatch the Windows-account version at once (B1).
+- **D-4. ST-8 (OQ-73):** **its `blocked:` is kept** in steward, less "held until the move": it
+  is a spike the owner runs with Session A, not dispatched (revised 2026-10-09 by the owner, when
+  OQ-73 was rewritten here as that spike; design doc, R5).
 - **D-5. The order of steward's first stories:** steward's own first stories (the prompts'
   `{{REPO}}` slot and project section, closing `REVIEW.md`'s gaps, and `init` with the thin
   workflow files) are **written at tier `next` before its loop first runs**, so they come before

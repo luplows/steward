@@ -1560,7 +1560,7 @@ deciding what is next. It is the harness's product outline, and moves with this 
 - **The move comes before OQ-73 and before OQ-101, after OQ-118 and OQ-117 are built** (decided
   2026-10-07, revised 2026-10-08 by the owner). See R5.
 - **Planned (OQ-73): coder sessions are isolated in a container** (decided 2026-10-08 by the
-  owner), built after the move as OQ-73's rewrite. See R5.
+  owner). OQ-73, a spike, finds out how, and the stories it recommends build it. See R5.
 - **A project takes the workflow as a package pinned by git tag**, with no npm publishing planned,
   runs the loop from its own worktree, and keeps thin gate workflow files written by an `init`
   command (decided 2026-10-07 by the owner). See R2.
@@ -1601,8 +1601,8 @@ deciding what is next. It is the harness's product outline, and moves with this 
 - **The bootstrap checklist is agreed**, [`steward-bootstrap.md`](steward-bootstrap.md), with its
   six decisions (decided 2026-10-08 by the owner). Steward's copies of this document and of
   `CLAUDE.md` are stripped of this repository's own content at the bootstrap, and R1's list gains
-  the files the dry run found missing (R1). ST-8, the copy of OQ-73, is held in steward until it
-  is rewritten, and steward's own first stories outrank the moved ones (R4).
+  the files the dry run found missing (R1). ST-8, the copy of OQ-73, keeps its `blocked:` in
+  steward, and steward's own first stories outrank the moved ones (R4).
 - **After the sweep lands a pull request, CI and the Pages deploy run on `main` by `workflow_run`,
   and skip when the sweep did not move `main`** (decided 2026-10-08 by the owner, from four
   options: the sweep starting them by `workflow_dispatch`, which needs `actions: write`; this; a
@@ -1612,6 +1612,12 @@ deciding what is next. It is the harness's product outline, and moves with this 
   the plan's included minutes. Built here (OQ-124), a `fix` story, before the move; steward's
   `ci.yml` gets the same trigger at the bootstrap (`steward-bootstrap.md`, B6), and a project's thin
   files get it from `init` (R2).
+- **OQ-73 is rewritten in place as a spike only** (decided 2026-10-09 by the owner): run by the
+  owner with Session A, not dispatched, and held until the move, with `blocked:` saying both. Its
+  outcome is a recommended split into the stories that build coder sessions in a container, which
+  Session A writes with the owner. #209, OQ-73's earlier coder pull request, was closed unmerged
+  and its branch deleted. The container runtime is left open, as the spike's open question. See
+  R5.
 
 ### The move, in order
 
@@ -1634,7 +1640,7 @@ from the day it exists. Today the `OQ` prefix is hardcoded in five modules, so i
    protect `main`, and give the repository its own CI, review gate and landing, running the engine
    from its own checkout. The steps are in [`steward-bootstrap.md`](steward-bootstrap.md).
 3. **In steward:** `init` and the thin gate workflow files (R2); the second project's gate-only
-   start (R6, R7); then OQ-73 as containers, and OQ-101.
+   start (R6, R7); then OQ-73's container spike and the stories it recommends, and OQ-101.
 4. **Here:** adopting steward (split 2026-10-08, "Decided so far"). OQ-115, the cut-over, by hand:
    pin steward and switch to the thin workflow files, then start the loop with steward's command.
    Then OQ-132 (the moved code), OQ-133 (the rule files) and OQ-134 (the moved documents), run on
@@ -1708,7 +1714,8 @@ Checked on 2026-10-07 against `main` at `66c578d`:
 - **M2. Which role first.** **Decided 2026-10-08 by the owner: the reviewer.** Goal 2's value is largest there, and a
   reviewer that cannot write is a smaller guarantee to re-establish than a coder's.
 - **M3. Guarantees before use.** **Decided 2026-10-08 by the owner:** no tool runs a role until that role's guarantees are
-  shown to hold for it by tests, in the way OQ-73's AC-1 tests the coder's.
+  shown to hold for it by tests, in the way the guarantee checks in OQ-73's Context test the
+  coder's.
 - **M4. How a story or role names its model.** Today a bare Claude model name. It needs the tool as
   well. OQ-54 (one declared default coder model) would be reworked or folded in. **Left open for
   the workflow's own repository** (owner, 2026-10-08): it works best as configurable for the
@@ -1870,12 +1877,12 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   scope).
 
   **In steward, two exceptions and an order** (decided 2026-10-08 by the owner, agreeing the
-  bootstrap checklist). ST-8, the copy of OQ-73, carries `blocked:` saying it is to be rewritten
-  as containers (R5): it reads `ready` on this repository's `main`, so copied as it is, steward's
-  loop would dispatch the Windows-account version at once. ST-18, the copy of OQ-108, keeps the
-  owner's own `blocked:`. And steward's own first stories (the prompts' `{{REPO}}` slot and project
-  section, closing `REVIEW.md`'s numbering gaps, and `init` with the thin workflow files) are
-  written at tier `next` before its loop first runs, so they come before the moved stories.
+  bootstrap checklist; ST-8's revised 2026-10-09). ST-8, the copy of OQ-73, keeps the `blocked:`
+  it has here, less "held until the move": it is a spike the owner runs with Session A, not
+  dispatched (R5). ST-18, the copy of OQ-108, keeps the owner's own `blocked:`. And steward's own
+  first stories (the prompts' `{{REPO}}` slot and project section, closing `REVIEW.md`'s numbering
+  gaps, and `init` with the thin workflow files) are written at tier `next` before its loop first
+  runs, so they come before the moved stories.
 - **R5. When.** **Revised 2026-10-08 by the owner: the move comes before OQ-73**, once the story
   pull requests #204 to #208 (OQ-117 to OQ-121) have landed, and still before OQ-101. OQ-73's coder
   (#209) found that its candidate mechanism, a separate Windows account for spawns, needs an
@@ -1896,15 +1903,17 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   in, so no host keyring, `~/.ssh` or user profile is reachable. The reason is portability: a new
   machine needs one standard install (a container runtime) rather than account management, and
   the same image runs on Windows, macOS and Linux. It may also give the reviewer its read-only
-  mount (OQ-62). OQ-73 is parked until after the move: #209 stays a draft with its `blocked:`, and
-  the story is rewritten in the workflow's repository as a spike, a build, and OQ-73's own checks
-  as the proof. Known questions for the spike: a git worktree's `.git` file holds an absolute host
-  path, and `node_modules` on a bind mount from Windows is slow.
+  mount (OQ-62). **Revised 2026-10-09 by the owner:** OQ-73 is rewritten here, in place, as a
+  spike only, run by the owner with Session A rather than dispatched, and held until the move.
+  Its outcome is a recommended split into the stories that build this; the old story's checks
+  stay in its Context as their proof. #209 was closed unmerged and its branch deleted the same
+  day, and its findings are in the spike's Context. The container runtime is left open, as the
+  spike's open question. Known questions for the spike: a git worktree's `.git` file holds an
+  absolute host path, and `node_modules` on a bind mount from Windows is slow.
   The **Planned (OQ-73)** markers here and under "Decided so far" were added on 2026-10-08 at the
-  owner's decision, after #199's review. OQ-73's story file does not yet have the acceptance
-  criterion that resolves them, as this document's "Reading this document" note asks: OQ-73 is in
-  flight (#209), so its file is not edited here. Its rewrite in the workflow's repository adds that
-  criterion, and the markers take the rewritten story's `ST-<n>` when it is renumbered.
+  owner's decision, after #199's review. The spike builds nothing, so its AC-5 leaves them in
+  place, and the stories written from its recommendation take them over (its AC-4). They take
+  those stories' `ST-<n>` once written in steward.
 
   Superseded: **decided 2026-10-07 by the owner: after OQ-73, before OQ-101.** The owner's build
   order is OQ-80 (landed as #203 on 2026-10-07), then OQ-73, then OQ-101, so the move comes after OQ-80 and

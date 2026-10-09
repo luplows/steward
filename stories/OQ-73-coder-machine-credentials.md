@@ -1,138 +1,145 @@
 ---
 id: OQ-73
-title: Put the owner's stored GitHub token out of a coder session's reach
+title: "Spike: find out how to run a coder session in a container that cannot reach the owner's credentials"
 tier: next
 kind: workflow
-depends_on: [OQ-84]
+depends_on: []
 model: sonnet
-blocked: null
+blocked: "Owner-run with Session A, not dispatched (owner, 2026-10-09), and held until the move: it is run in steward (design doc, R4 and R5)."
 ---
 
 ## Intent
 
-As the owner of the review gate, I need a spawned coder to be unable to obtain
-a GitHub API token from the machine it runs on, not only from its environment,
-so that OQ-63's guarantee (a coder cannot set its own `review/agent` status or
-dispatch `land-approved.yml`) holds against a coder that goes looking, and not
-only against one that happens not to.
+As the owner, I want to know, from trials on my own machine rather than from
+reading, whether and how a coder session can run in a container that holds only
+the work and the agent tool's login, so that the stories that put coder sessions
+there are written from what works. The guarantee they serve is OQ-63's: a
+spawned coder cannot obtain a GitHub token from the machine it runs on, not only
+from its environment. **This is a spike. Its output is written findings and a
+recommended split into stories, not code.** It is run by the owner with Session
+A, by hand, not dispatched.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — In a session spawned exactly as a coder is spawned
-      (`coderEnv` environment, `coderAllowedTools` allowlist), the owner's
-      stored `gh` token cannot be read. On the owner's Windows machines that
-      token is the Credential Manager entries `gh:github.com:` and
-      `gh:github.com:<login>`. A test makes the attempt from a child process of
-      `node -e`, which bypasses the tool allowlist entirely, and asserts it
-      fails **because the credential is absent or unreadable to that process**,
-      not because a command was denied. The test must never print, log or
-      assert on the secret's value. Checking that a value came back is enough.
-- [ ] **AC-2** — The same holds for any git credential helper that session can
-      invoke. `git -c credential.helper=manager credential fill` for
-      `https://github.com`, run non-interactively from inside the spawn, returns
-      no password. The session's own `-c` override is what makes a global
-      config setting insufficient on its own.
-- [ ] **AC-3** — The coder can still do its job: it commits on its assigned
-      branch, and `npm test`, `npm run lint` and `npm run build` still run
-      inside the spawn. The coder does not push (OQ-84), so the push that must
-      still work is the dispatcher's. That is demonstrated, not assumed, by a
-      real push of a throwaway branch through OQ-84's push function, run from
-      outside the spawn after this story's change.
-- [ ] **AC-4** — The owner's own `gh`, as used by whatever spawns the coder,
-      still authenticates afterwards. A fix that works by logging the machine
-      out breaks the dispatcher, which needs that credential (see
-      `docs/agent-workflow-design.md`, "Credential minimalism").
-- [ ] **AC-5** — Every copy of the claim this story finds false says what is
-      then true:
-      - `docs/agent-workflow-design.md`, "Invocation shape": the paragraph
-        ending *"none of those paths can read a token that was never in the
-        environment"*
-      - `docs/agent-workflow-design.md`, "Credential minimalism": the paragraph
-        beginning *"So the coder's credential is scoped rather than removed"*
-      - `.claude/prompts/coder.md`, the preamble paragraph headed *"The coder
-        holds no GitHub API credential"*, including *"none of them can conjure
-        a token that was never in the environment to begin with"*
-      - `.claude/prompts/coder.md`, Environment: *"no GitHub API credential is
-        reachable from this session"*
-      - `REVIEW.md`, "For the coder: opening a PR": *"The coder holds no
-        credential capable of a commit status…"*
-      - `scripts/dispatch/coder-env.mjs`, the header comment, and `coderEnv`'s
-        own doc comment, which leaves *"a credential helper's own storage"*
-        untouched on purpose and presents that as safe. After AC-2 it must say
-        what keeps that storage out of reach.
-      Grep for further copies before calling this done. A copy found under
-      `stories/` is not edited in this pull request, because story
-      containment (`scripts/dispatch/story-containment.mjs`, OQ-82) fails a
-      story's pull request that changes another file there. The PR body
-      lists each such copy, with file and line, for Session A to correct
-      afterwards, or says that none was found.
-      The `coder.md` edits go through the emit-a-diff route, because a spawned
-      coder cannot write to `.claude/prompts/`.
+- [ ] **AC-1** — **Only findings are committed.** The pull request's diff
+      changes `docs/agent-workflow-design.md`, plus this story's move to
+      `stories/done/` and its ticks, and nothing else. Any script, image
+      definition or configuration used for the trials lives outside the
+      repository's tree and is not committed. Its full text is given in the
+      pull request body.
+- [ ] **AC-2** — A new subsection under "Platform constraints" in
+      `docs/agent-workflow-design.md`, titled "A coder session in a
+      container", records the trials. For each trial it gives:
+      - the container runtime and its version, and the host's Windows version;
+      - the image the trial ran, by its definition's text in the pull request
+        body;
+      - the command run, and what came back, quoted verbatim;
+      - for timings, the same step's time on the host.
+- [ ] **AC-3** — The trials answer each of these, and the subsection states
+      each answer next to the trial that shows it:
+      - **Q1, the runtime:** what it took on the owner's machine to install
+        and start the runtime chosen under Open questions, and which steps
+        needed an administrator.
+      - **Q2, the agent tool:** does a session started with
+        `buildInvocation`'s arguments for the coder (`claude -p`) run inside
+        the container and return its JSON result? Which file or variable of
+        the agent tool's login has to be passed in, and what else does that
+        expose to the session?
+      - **Q3, the work:** with the worktree mounted, can the session commit on
+        its branch? A git worktree's `.git` file holds an absolute host path:
+        what breaks, and what fixes it?
+      - **Q4, the checks:** do `npm ci`, `npm test`, `npm run lint` and
+        `npm run build` run inside, and how long does each take against the
+        host? With `node_modules` on a bind mount and on a volume.
+      - **Q5, the credential:** from a `node -e` child inside the container,
+        can the Windows Credential Manager entries `gh:github.com:` and
+        `gh:github.com:<login>` be read? Does
+        `git -c credential.helper=manager credential fill` for
+        `https://github.com` return a password? Are the owner's `~/.ssh`, user
+        profile or any keyring reachable? Each check asserts only whether a
+        value came back.
+      - **Q6, the dispatcher:** with the session run through the runtime,
+        does `spawn.mjs` still see its streamed output (the stall check,
+        OQ-76), and does a timeout or kill stop it? Is the container gone
+        afterwards?
+      - **Q7, the reviewer:** can the same image give a reviewer session a
+        read-only mount of the worktree (OQ-62)?
+
+      If a question cannot be answered, the subsection says so and why. That
+      AC is then ticked only if the reason is stated.
+- [ ] **AC-4** — The subsection ends with a **Recommendation**: the stories
+      that build coder sessions in a container, in order, each with its intent
+      and the acceptance criteria it would carry, naming the trial each rests
+      on. Between them they carry every guarantee check listed under Context.
+      It also says which story takes over OQ-101's dependency on OQ-73, and
+      which takes over the **Planned (OQ-73)** markers. It is a recommendation
+      only. Writing the stories is Session A's, with the owner.
+- [ ] **AC-5** — The **Planned (OQ-73)** markers in
+      `docs/agent-workflow-design.md` are left in place, since this story
+      builds nothing. The pull request body says so, and that the stories
+      written from AC-4 take them over.
 
 ## Out of scope
 
-- **The reviewer.** OQ-62 is the reviewer's half of this problem, and its AC-3
-  already names keyrings and credential helpers. The two will probably share a
-  mechanism, and whichever lands second should reuse the first's. This story
-  does not deliver OQ-62, and OQ-62 does not wait for it.
-- **A second GitHub identity.** That is open question 10 in the design doc and
-  is the complete answer to self-marking. This story is narrower. It may choose
-  a separate *operating-system* account for spawns, but not a separate GitHub
-  account.
-- **Other secrets on the machine.** SSH keys, browser sessions and other
-  services' tokens are all reachable by a same-user process too. This story is
-  about the credential that can clear this repository's gate. Name anything
-  else found along the way instead of fixing it.
-- **Platforms the loop does not run on.** The loop runs on the owner's Windows
-  machines. macOS Keychain and Linux Secret Service have the same shape and
-  are not in scope.
+- **Building it**: any change to code, prompts, tests, settings or workflows,
+  `coder-env.mjs`, `invocation.mjs` and `spawn.mjs` included. That is the
+  stories AC-4 recommends.
+- **Changes to the owner's machine** made by anyone but the owner. Installing
+  or configuring the runtime is the owner's, by hand, and Q1 records it.
+- **A second GitHub identity** (the design doc's open question 10).
+- **Other secrets beyond those Q5 names.** Name anything else found reachable
+  instead of pursuing it.
+- **macOS and Linux hosts.** The trials run on the owner's Windows machine.
+  The container was chosen partly so the same image runs elsewhere (R5); the
+  findings say what was not tried.
 
 ## Constraints
 
-- Nothing in the repository may store, cache or print the token, including in
-  test output or fixtures.
-- The fix cannot be "remove `node` from the allowlist". The coder needs it, and
-  OQ-63's reasoning about why a command denial is not containment applies
-  unchanged.
+- Nothing may store, cache or print the token or the agent tool's login,
+  including in the pull request body or the design doc.
 
 ## Context
 
-Found on 2026-09-23 while setting up a second machine for the loop.
-
-- **What `coderEnv` does and does not do.** It deletes `GH_TOKEN`,
-  `GITHUB_TOKEN` and `GH_ENTERPRISE_TOKEN`, and points `GH_CONFIG_DIR` at an
-  empty directory. That stops `gh` from *finding* the owner's login, because
-  `gh` looks the login up through its config. It does not stop another process
-  from reading the stored token directly. `gh auth status` on the owner's
-  machine reports the token as stored in the **keyring**, and `cmdkey /list`
-  shows it as the two entries AC-1 names.
-- **Believed, not yet demonstrated.** Windows Credential Manager generic
-  entries are readable by any process running as the same user (Win32
-  `CredRead`), with no prompt. A coder can reach that API by starting
-  PowerShell through `node -e`. The first part of AC-1 is to confirm this. If
-  it turns out to be false, this story narrows to AC-2 and AC-5, and the
-  context here should be corrected rather than dispatched as written.
-- **The credential helper half.** Git for Windows configures Git Credential
-  Manager system-wide. The second machine's clone initially used an HTTPS
-  `origin`, so GCM was the push path. The clone has since been switched to SSH,
-  and `credential.https://github.com.helper` was set to empty in the owner's
-  global config. That removes the easy path, but not a session's own
-  `git -c credential.helper=manager`, hence AC-2. That machine change is setup,
-  not a deliverable, and is recorded here so AC-2 is not mistaken for already
-  done.
-- **Candidate mechanism, not a requirement:** run spawns as a separate local
-  Windows account with nothing in its Credential Manager. Since OQ-84 the
-  coder does not push, so that account needs no SSH key either; the dispatcher,
-  running as the owner, pushes. That is also the shape the design doc names for the
-  reviewer ("a reviewer that runs with no SSH agent, no keyring access and no
-  push-capable credential").
-- `scripts/dispatch/coder-env.mjs`: `coderEnv`
-- OQ-63, in `stories/done/`: the guarantee this story makes true
-- OQ-62: the reviewer's counterpart
-- `docs/agent-workflow-design.md`, "`GH_TOKEN=""` does not remove a
-  credential": a previous instance of a de-credentialing step that looked
-  complete and was not
+- **Rewritten on 2026-10-09 as a spike**, at the owner's decision. The story
+  before the rewrite (`git show eb84893:stories/OQ-73-coder-machine-credentials.md`)
+  had a separate Windows account as its candidate mechanism. On 2026-10-08 the
+  owner chose a container instead (design doc, R5), and on 2026-10-09 chose to
+  find out how by a spike, run by the owner with Session A, whose outcome is
+  the stories that build it.
+- **What #209 found** (OQ-73's coder, 2026-10-08, closed unmerged on
+  2026-10-09): a `CredRead` of `gh:github.com:` from a `node -e` child of a
+  session spawned as a coder returned the credential, with no prompt, which
+  confirmed the risk; and `net user /add` was refused (System error 5), so the
+  separate account needed an administrator.
+- **The guarantee checks the build must pass**: the pre-rewrite story's AC-1
+  to AC-5, kept as the proof.
+  - The owner's stored `gh` token cannot be read from a session spawned as a
+    coder, by a child process of `node -e`, because it is absent or
+    unreadable to that process, not because a command was denied.
+  - `git -c credential.helper=manager credential fill` for
+    `https://github.com`, run from that session, returns no password.
+  - The coder still commits on its branch and runs `npm test`, `npm run lint`
+    and `npm run build`; the dispatcher's push through OQ-84's push function
+    still works.
+  - The owner's own `gh` still authenticates.
+  - Every copy of the claim that a coder holds no reachable credential says
+    what is then true. The pre-rewrite AC-5 lists them, in the design doc,
+    `.claude/prompts/coder.md`, `REVIEW.md` and `scripts/dispatch/coder-env.mjs`.
+- **The runtime on 2026-10-09:** Docker Desktop's command-line tool 29.7.2 is
+  installed per user, under `AppData\Local\Programs\DockerDesktop`. Its engine
+  was not running, and WSL was not installed. Docker Desktop on Windows needs
+  WSL 2 or Hyper-V under it.
+- **Why it is owner-run:** `docker` is not on the coder's allowlist
+  (`coderAllowedTools`, `scripts/dispatch/coder-env.mjs`), and Q1 may need an
+  administrator.
+- `scripts/dispatch/coder-env.mjs`: `coderEnv`, which removes the token from
+  the environment but leaves a credential helper's own storage reachable.
+- OQ-62: the reviewer's counterpart (Q7). OQ-101 depends on OQ-73 (AC-4).
+- `docs/agent-workflow-design.md`, R5: the container decision and its known
+  questions (Q3, Q4).
 
 ## Open questions
 
-*(none)*
+- **Which container runtime** (left open by the owner on 2026-10-09). Docker
+  Desktop is installed but not set up (Context); Podman is the other candidate
+  named. Settled before the spike is run.
