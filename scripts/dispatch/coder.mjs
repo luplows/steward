@@ -50,8 +50,10 @@ import { spawnSession } from './spawn.mjs'
 const execFileAsync = promisify(execFile)
 
 const DISPATCH_DIR = path.dirname(fileURLToPath(import.meta.url))
-const DISPATCHER_ROOT = path.resolve(DISPATCH_DIR, '..', '..')
-const CODER_PROMPT = path.join(DISPATCHER_ROOT, '.claude', 'prompts', 'coder.md')
+// The engine root: where this module and its prompt live, found from its own
+// location (OQ-123). Not the project -- see `repoDir` below.
+const ENGINE_ROOT = path.resolve(DISPATCH_DIR, '..', '..')
+const CODER_PROMPT = path.join(ENGINE_ROOT, '.claude', 'prompts', 'coder.md')
 
 const REMOTE = 'origin'
 const BASE = 'main'
@@ -284,10 +286,11 @@ async function cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded }) {
  * Runs the coder half for the next ready story.
  *
  *   ctx            a `github.mjs` context (`createContext`)
- *   repoDir        the dispatcher's own checkout: its object store supplies the
- *                  queue and the worktree, both taken from the freshly fetched
- *                  `origin/main`, never from its working tree. Defaults to this
- *                  file's repo
+ *   repoDir        the project root: its object store supplies the queue and
+ *                  the worktree, both taken from the freshly fetched
+ *                  `origin/main`, never from its working tree. Also where
+ *                  `steward.config.json` is read from. Defaults to the
+ *                  current working directory
  *   install        `({ cwd, env })`, the dependency install run in the worktree
  *                  before the coder starts; defaults to `npm ci`. It gets the
  *                  coder's own credential-free environment
@@ -312,7 +315,7 @@ async function cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded }) {
  * a failure.
  */
 export async function dispatchCoder({
-  ctx, repoDir = DISPATCHER_ROOT, storyId, promptTemplate, baseEnv = process.env, sessionOptions = {},
+  ctx, repoDir = process.cwd(), storyId, promptTemplate, baseEnv = process.env, sessionOptions = {},
   install = installDependencies,
 }) {
   const template = promptTemplate ?? readFileSync(CODER_PROMPT, 'utf8')
@@ -535,7 +538,7 @@ async function hasStoryFile(repoDir, ref, filename, storyId) {
  * `draft` (the coder's choice, or null with no valid block) and `blocked`.
  */
 export async function retryStory({
-  ctx, repoDir = DISPATCHER_ROOT, storyId, prNumber, findings, source, round, roundsRemaining,
+  ctx, repoDir = process.cwd(), storyId, prNumber, findings, source, round, roundsRemaining,
   promptTemplate, baseEnv = process.env, sessionOptions = {}, install = installDependencies,
 }) {
   const { storyPrefix } = await readSettings(repoDir)
@@ -691,7 +694,7 @@ async function mainRetry(args, repo, storyPrefix) {
 
 async function main(argv) {
   const args = [...argv]
-  const { repo: settingsRepo, storyPrefix } = await readSettings(DISPATCHER_ROOT)
+  const { repo: settingsRepo, storyPrefix } = await readSettings(process.cwd())
   if (args[0] === 'retry') {
     args.shift()
     const repoAt = args.indexOf('--repo')

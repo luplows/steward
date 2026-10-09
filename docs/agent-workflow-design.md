@@ -446,13 +446,14 @@ Not a Haiku agent — **a script, with no model in it at all.** It reads the sto
 state from git and `gh`, invokes `claude -p`, parses structured output, and posts a commit status.
 Every one of those is deterministic.
 
-**Planned (OQ-123, OQ-130, OQ-131):** the script works on the project in the working directory,
-not on the checkout it is loaded from: the engine (the scripts and the prompts) and the project
+`coder.mjs`, `review.mjs`, `story.mjs` and `land.mjs` work on the project in the working directory,
+not on the checkout they are loaded from: the engine (the scripts and the prompts) and the project
 (its settings, stories and repository) can be in different places, so a project can run the
-workflow installed as a dependency. One entry point, `scripts/dispatch/cli.mjs`, runs each command
-(decided 2026-10-08 by the owner, as a step of moving the workflow to its own repository). OQ-123
-does it for `coder.mjs`, `review.mjs`, `story.mjs` and `land.mjs`, OQ-130 for `loop.mjs`, and
-OQ-131 adds `cli.mjs` (split from OQ-123 on 2026-10-08 by the owner).
+workflow installed as a dependency (OQ-123, decided 2026-10-08 by the owner, as a step of moving
+the workflow to its own repository).
+
+**Planned (OQ-130, OQ-131):** the same for `loop.mjs`, and one entry point,
+`scripts/dispatch/cli.mjs`, that runs each command (split from OQ-123 on 2026-10-08 by the owner).
 
 This also materially improves the self-marking problem. The thing that posts a verdict is
 version-controlled, reviewable, testable code that can only report what the reviewer returned.

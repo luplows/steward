@@ -53,8 +53,10 @@ import { spawnSession } from './spawn.mjs'
 const execFileAsync = promisify(execFile)
 
 const DISPATCH_DIR = path.dirname(fileURLToPath(import.meta.url))
-const DISPATCHER_ROOT = path.resolve(DISPATCH_DIR, '..', '..')
-const REVIEWER_PROMPT = path.join(DISPATCHER_ROOT, '.claude', 'prompts', 'reviewer.md')
+// The engine root: where this module and its prompt live, found from its own
+// location (OQ-123). Not the project -- see `repoDir` below.
+const ENGINE_ROOT = path.resolve(DISPATCH_DIR, '..', '..')
+const REVIEWER_PROMPT = path.join(ENGINE_ROOT, '.claude', 'prompts', 'reviewer.md')
 
 const REMOTE = 'origin'
 
@@ -217,8 +219,9 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
  *
  *   number         the pull request
  *   ctx            a `github.mjs` context (`createContext`)
- *   repoDir        the dispatcher's own checkout, whose object store the
- *                  review checkout is made from; defaults to this file's repo
+ *   repoDir        the project root, whose object store the review checkout is
+ *                  made from, and where `steward.config.json` is read from;
+ *                  defaults to the current working directory
  *   promptTemplate reviewer.md's text; defaults to the copy beside this file
  *   baseEnv        the environment to derive the session's from; defaults to
  *                  `process.env`, with every GitHub credential removed
@@ -244,7 +247,7 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
  * left it changed, there is no second session and nothing is reset.
  */
 export async function reviewPullRequest({
-  number, ctx, repoDir = DISPATCHER_ROOT, promptTemplate, baseEnv = process.env, sessionOptions = {},
+  number, ctx, repoDir = process.cwd(), promptTemplate, baseEnv = process.env, sessionOptions = {},
   rereview = false, install = installDependencies, scratchRoot = tmpdir(),
 }) {
   const template = promptTemplate ?? readFileSync(REVIEWER_PROMPT, 'utf8')
@@ -432,7 +435,7 @@ const NON_FAILURES = ['recorded', 'no-verdict', 'already-reviewed']
 async function main(argv) {
   const args = [...argv]
   const repoAt = args.indexOf('--repo')
-  const repo = repoAt === -1 ? (await readSettings(DISPATCHER_ROOT)).repo : args.splice(repoAt, 2)[1]
+  const repo = repoAt === -1 ? (await readSettings(process.cwd())).repo : args.splice(repoAt, 2)[1]
   const rereviewAt = args.indexOf('--rereview')
   const rereview = rereviewAt !== -1
   if (rereview) args.splice(rereviewAt, 1)

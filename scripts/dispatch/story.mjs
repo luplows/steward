@@ -46,7 +46,6 @@ import { readSettings } from './settings.mjs'
 
 const execFileAsync = promisify(execFile)
 
-const DISPATCHER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const REMOTE = 'origin'
 
 // The bound on each kind of round (AC-3, AC-4). The round a retry is given is
@@ -181,7 +180,7 @@ const storyPaths = (branch) => {
  * The `blocked:` value of the story file at `ref` on `branch`, wherever the
  * file is, or `{ unreadable }` when it cannot be read there.
  */
-export async function readBlockedAt({ repoDir = DISPATCHER_ROOT, branch, ref }) {
+export async function readBlockedAt({ repoDir = process.cwd(), branch, ref }) {
   await git(repoDir, ['fetch', REMOTE, `+refs/heads/${branch}:refs/remotes/${REMOTE}/${branch}`])
   for (const candidate of storyPaths(branch)) {
     const source = await gitOrNull(repoDir, ['show', `${ref ?? `${REMOTE}/${branch}`}:${candidate}`])
@@ -215,7 +214,7 @@ export function withBlocked(source, reason) {
  * `already-blocked`, or a failure (`local-branch-exists`, `story-unreadable`,
  * or `pushBranch`'s `push-failed` and the like), with `reason`.
  */
-export async function recordBlocked({ repoDir = DISPATCHER_ROOT, branch, reason }) {
+export async function recordBlocked({ repoDir = process.cwd(), branch, reason }) {
   if (await gitOrNull(repoDir, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])) {
     return { status: 'local-branch-exists', reason: `${branch} already exists locally, and this checkout's copy is not the one to commit on` }
   }
@@ -280,7 +279,9 @@ function findingsOf(comment) {
  *   ctx            a `github.mjs` context; `ciCtx` a `ci.mjs` context; `landCtx`
  *                  a `land.mjs` context
  *   prNumber       resume the story's open pull request instead of dispatching (AC-9)
- *   repoDir        the dispatcher's checkout, for the coder, the review and the stop commit
+ *   repoDir        the project root, for the coder, the review and the stop
+ *                  commit, and where `steward.config.json` is read from;
+ *                  defaults to the current working directory
  *   options        `{ coder, reviewer }`: extra options for `dispatchCoder` and `retryStory`,
  *                  and for `reviewPullRequest` (`promptTemplate`, `baseEnv`,
  *                  `sessionOptions`, `install`). The two roles have different prompts
@@ -291,7 +292,7 @@ function findingsOf(comment) {
  * the modules are not caught: a run that dies resumes from the pull request (AC-9).
  */
 export async function runStory({
-  storyId, prNumber, ctx, ciCtx, landCtx, repoDir = DISPATCHER_ROOT, options = {}, deps = {},
+  storyId, prNumber, ctx, ciCtx, landCtx, repoDir = process.cwd(), options = {}, deps = {},
 }) {
   const { storyPrefix } = await readSettings(repoDir)
   if (!new RegExp(`^${storyPrefix}-\\d+$`).test(storyId ?? '')) {
@@ -421,7 +422,7 @@ async function main(argv) {
     const at = args.indexOf(name)
     return at === -1 ? undefined : args.splice(at, 2)[1]
   }
-  const { repo: settingsRepo, storyPrefix } = await readSettings(DISPATCHER_ROOT)
+  const { repo: settingsRepo, storyPrefix } = await readSettings(process.cwd())
   const repoFlag = take('--repo')
   const repo = repoFlag ?? settingsRepo
   const pr = take('--pr')

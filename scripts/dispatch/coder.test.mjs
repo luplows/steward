@@ -680,8 +680,58 @@ describe('OQ-70/AC-7b: a prompt diff is reported, not applied', () => {
     expect(SOURCE).not.toMatch(/\b(writeFile|writeFileSync|appendFile|appendFileSync|copyFile|cp|cpSync|rename|renameSync)\b/)
     // The one mention of `.claude` is the read of the prompt template.
     const mentions = SOURCE.split('\n').filter((l) => l.includes("'.claude'"))
-    expect(mentions).toEqual(["const CODER_PROMPT = path.join(DISPATCHER_ROOT, '.claude', 'prompts', 'coder.md')"])
+    expect(mentions).toEqual(["const CODER_PROMPT = path.join(ENGINE_ROOT, '.claude', 'prompts', 'coder.md')"])
     expect(SOURCE).toMatch(/readFileSync\(CODER_PROMPT/)
+  })
+})
+
+describe('OQ-123: the project root is the working directory, not the engine root', () => {
+  it('OQ-123/AC-1: DISPATCHER_ROOT is gone from the module', () => {
+    expect(SOURCE).not.toMatch(/DISPATCHER_ROOT/)
+  })
+
+  it('OQ-123/AC-2, AC-3: the default repoDir reads settings from the current working directory', () => {
+    const dir = mkdtempSync(path.join(root, 'cwd-'))
+    try {
+      const filePath = path.join(dir, 'steward.config.json')
+      let threw
+      try {
+        execFileSync('node', [path.join(here, 'coder.mjs')], { cwd: dir, encoding: 'utf8' })
+      } catch (error) {
+        threw = error
+      }
+      expect(threw).toBeTruthy()
+      // Engine root (this checkout) has its own steward.config.json; the error
+      // naming `dir`'s path proves settings came from the working directory
+      // (the project root), not from the engine's own.
+      expect(threw.stderr).toContain(filePath)
+      expect(threw.stderr).toContain('file not found')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("OQ-123/AC-1, AC-3: the coder's prompt is still read from the engine root under a foreign project root", () => {
+    const dir = mkdtempSync(path.join(root, 'project-'))
+    try {
+      git(dir, 'init', '-q', '-b', 'main')
+      writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify({ repo: 'owner/other', storyPrefix: 'ST' }))
+      let threw
+      try {
+        execFileSync('node', [path.join(here, 'coder.mjs')], { cwd: dir, encoding: 'utf8' })
+      } catch (error) {
+        threw = error
+      }
+      expect(threw).toBeTruthy()
+      // Settings (ST, read from `dir`) and the prompt (engine root) both resolved;
+      // the run only then fails on the git fetch, `dir` having no `origin`. Had
+      // the prompt instead been sought under `dir`, the failure would name
+      // `.claude` -- it does not.
+      expect(threw.stderr).not.toContain('.claude')
+      expect(threw.stderr).not.toContain('ENOENT')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
 

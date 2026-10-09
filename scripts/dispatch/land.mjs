@@ -45,7 +45,6 @@ import { readSettings } from './settings.mjs'
 const API = 'https://api.github.com'
 const WORKFLOW = 'land-approved.yml'
 const HERE = path.dirname(fileURLToPath(import.meta.url))
-const DISPATCHER_ROOT = path.resolve(HERE, '..', '..')
 export const DEFAULT_LATENCY_LOG = path.join(HERE, '..', '..', 'logs', 'land-latency.jsonl')
 
 // ------------------------------------------------------------------ bounds
@@ -315,7 +314,7 @@ async function main(argv) {
     return
   }
   const repoAt = args.indexOf('--repo')
-  const repo = repoAt === -1 ? (await readSettings(DISPATCHER_ROOT)).repo : args.splice(repoAt, 2)[1]
+  const repo = repoAt === -1 ? (await readSettings(process.cwd())).repo : args.splice(repoAt, 2)[1]
   const number = Number(args[0])
   if (args.length !== 1 || !Number.isInteger(number) || number <= 0) {
     throw new Error('usage: node scripts/dispatch/land.mjs <pr-number> [--repo owner/name]')

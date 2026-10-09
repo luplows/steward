@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { describe, expect, it } from 'vitest'
+import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -374,5 +375,28 @@ describe('OQ-50/AC-7: landing latency is observable after the fact', () => {
     expect(readFileSync(log, 'utf8').trim().split('\n')).toHaveLength(3)
     expect(await recentLandingLatencies(5, path.join(dir, 'absent.jsonl'))).toEqual([])
     rmSync(dir, { recursive: true, force: true })
+  })
+})
+
+describe('OQ-123: the project root is the working directory, not the engine root', () => {
+  it('OQ-123/AC-2: the default repoDir reads settings from the current working directory', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'tw-land-cwd-'))
+    try {
+      const filePath = path.join(dir, 'steward.config.json')
+      let threw
+      try {
+        execFileSync('node', [path.join(here, 'land.mjs'), '7'], { cwd: dir, encoding: 'utf8' })
+      } catch (error) {
+        threw = error
+      }
+      expect(threw).toBeTruthy()
+      // Engine root (this checkout) has its own steward.config.json; the error
+      // naming `dir`'s path proves settings came from the working directory
+      // (the project root), not from the engine's own.
+      expect(threw.stderr).toContain(filePath)
+      expect(threw.stderr).toContain('file not found')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

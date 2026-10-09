@@ -635,3 +635,34 @@ describe('OQ-128/AC-2: runStory takes its story-id check from settings\' storyPr
       expect(result).toMatchObject({ status: 'nothing-ready' })
     }))
 })
+
+// --------------------------------------------------- OQ-123: project root, not engine root
+
+describe('OQ-123: the project root is the working directory, not the engine root', () => {
+  const source = readFileSync(path.join(HERE, 'story.mjs'), 'utf8')
+
+  it('OQ-123/AC-1: DISPATCHER_ROOT is gone from the module', () => {
+    expect(source).not.toMatch(/DISPATCHER_ROOT/)
+  })
+
+  it('OQ-123/AC-2: the default repoDir reads settings from the current working directory', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'tw-story-cwd-'))
+    try {
+      const filePath = path.join(dir, 'steward.config.json')
+      let threw
+      try {
+        execFileSync('node', [path.join(HERE, 'story.mjs')], { cwd: dir, encoding: 'utf8' })
+      } catch (error) {
+        threw = error
+      }
+      expect(threw).toBeTruthy()
+      // Engine root (this checkout) has its own steward.config.json; the error
+      // naming `dir`'s path proves settings came from the working directory
+      // (the project root), not from the engine's own.
+      expect(threw.stderr).toContain(filePath)
+      expect(threw.stderr).toContain('file not found')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
