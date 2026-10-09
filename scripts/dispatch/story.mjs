@@ -293,7 +293,10 @@ function findingsOf(comment) {
 export async function runStory({
   storyId, prNumber, ctx, ciCtx, landCtx, repoDir = DISPATCHER_ROOT, options = {}, deps = {},
 }) {
-  if (!/^OQ-\d+$/.test(storyId ?? '')) throw new Error(`runStory requires a story id, got ${JSON.stringify(storyId)}`)
+  const { storyPrefix } = await readSettings(repoDir)
+  if (!new RegExp(`^${storyPrefix}-\\d+$`).test(storyId ?? '')) {
+    throw new Error(`runStory requires a story id of the form ${storyPrefix}-<n>, got ${JSON.stringify(storyId)}`)
+  }
   const d = {
     dispatchCoder, retryStory, waitForCi, countRedCiRounds, reviewPullRequest, landPullRequest,
     convertPullRequestToDraft, listPullRequestComments, getPullRequestLabels, readBlockedAt, recordBlocked,
@@ -418,12 +421,15 @@ async function main(argv) {
     const at = args.indexOf(name)
     return at === -1 ? undefined : args.splice(at, 2)[1]
   }
+  const { repo: settingsRepo, storyPrefix } = await readSettings(DISPATCHER_ROOT)
   const repoFlag = take('--repo')
-  const repo = repoFlag ?? (await readSettings(DISPATCHER_ROOT)).repo
+  const repo = repoFlag ?? settingsRepo
   const pr = take('--pr')
   const storyId = args.shift()
-  const usage = 'usage: node scripts/dispatch/story.mjs OQ-<n> [--pr <number>] [--repo owner/name]'
-  if (args.length > 0 || !/^OQ-\d+$/.test(storyId ?? '') || (pr !== undefined && !/^[1-9]\d*$/.test(pr))) throw new Error(usage)
+  const usage = `usage: node scripts/dispatch/story.mjs ${storyPrefix}-<n> [--pr <number>] [--repo owner/name]`
+  if (args.length > 0 || !new RegExp(`^${storyPrefix}-\\d+$`).test(storyId ?? '') || (pr !== undefined && !/^[1-9]\d*$/.test(pr))) {
+    throw new Error(usage)
+  }
   const result = await runStory({
     storyId,
     prNumber: pr === undefined ? undefined : Number(pr),

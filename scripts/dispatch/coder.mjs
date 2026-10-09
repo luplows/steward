@@ -538,7 +538,10 @@ export async function retryStory({
   ctx, repoDir = DISPATCHER_ROOT, storyId, prNumber, findings, source, round, roundsRemaining,
   promptTemplate, baseEnv = process.env, sessionOptions = {}, install = installDependencies,
 }) {
-  if (!/^OQ-\d+$/.test(storyId ?? '')) throw new Error(`retryStory requires a story id, got ${JSON.stringify(storyId)}`)
+  const { storyPrefix } = await readSettings(repoDir)
+  if (!new RegExp(`^${storyPrefix}-\\d+$`).test(storyId ?? '')) {
+    throw new Error(`retryStory requires a story id of the form ${storyPrefix}-<n>, got ${JSON.stringify(storyId)}`)
+  }
   if (!RETRY_SOURCES.includes(source)) throw new Error(`retryStory source must be one of ${RETRY_SOURCES.join(', ')}`)
   const template = promptTemplate ?? readFileSync(CODER_PROMPT, 'utf8')
 
@@ -653,15 +656,15 @@ export async function retryStory({
 // `install-failed` is deliberately absent: it is a failure.
 const NON_FAILURES = ['opened', 'nothing-ready', 'retried', 'body-replaced']
 
-const USAGE = 'usage: node scripts/dispatch/coder.mjs [OQ-<n>] [--repo owner/name]\n' +
-  '       node scripts/dispatch/coder.mjs retry OQ-<n> --pr <number> --findings-file <path> --source review|ci --round <n> --remaining <n> [--repo owner/name]'
+const usage = (prefix) => `usage: node scripts/dispatch/coder.mjs [${prefix}-<n>] [--repo owner/name]\n` +
+  `       node scripts/dispatch/coder.mjs retry ${prefix}-<n> --pr <number> --findings-file <path> --source review|ci --round <n> --remaining <n> [--repo owner/name]`
 
 function takeOption(args, name) {
   const at = args.indexOf(name)
   return at === -1 ? undefined : args.splice(at, 2)[1]
 }
 
-async function mainRetry(args, repo) {
+async function mainRetry(args, repo, storyPrefix) {
   const pr = takeOption(args, '--pr')
   const file = takeOption(args, '--findings-file')
   const source = takeOption(args, '--source')
@@ -669,9 +672,9 @@ async function mainRetry(args, repo) {
   const remaining = takeOption(args, '--remaining')
   const storyId = args.shift()
   const number = (v) => (/^\d+$/.test(v ?? '') ? Number(v) : NaN)
-  if (args.length > 0 || !/^OQ-\d+$/.test(storyId ?? '') || !file || !RETRY_SOURCES.includes(source) ||
+  if (args.length > 0 || !new RegExp(`^${storyPrefix}-\\d+$`).test(storyId ?? '') || !file || !RETRY_SOURCES.includes(source) ||
       !Number.isInteger(number(pr)) || !Number.isInteger(number(round)) || !Number.isInteger(number(remaining))) {
-    throw new Error(USAGE)
+    throw new Error(usage(storyPrefix))
   }
   const result = await retryStory({
     ctx: createContext({ repo }),
@@ -688,16 +691,17 @@ async function mainRetry(args, repo) {
 
 async function main(argv) {
   const args = [...argv]
+  const { repo: settingsRepo, storyPrefix } = await readSettings(DISPATCHER_ROOT)
   if (args[0] === 'retry') {
     args.shift()
     const repoAt = args.indexOf('--repo')
-    return mainRetry(args, repoAt === -1 ? (await readSettings(DISPATCHER_ROOT)).repo : args.splice(repoAt, 2)[1])
+    return mainRetry(args, repoAt === -1 ? settingsRepo : args.splice(repoAt, 2)[1], storyPrefix)
   }
   const repoAt = args.indexOf('--repo')
-  const repo = repoAt === -1 ? (await readSettings(DISPATCHER_ROOT)).repo : args.splice(repoAt, 2)[1]
+  const repo = repoAt === -1 ? settingsRepo : args.splice(repoAt, 2)[1]
   const storyId = args.shift()
-  if (args.length > 0 || (storyId !== undefined && !/^OQ-\d+$/.test(storyId))) {
-    throw new Error('usage: node scripts/dispatch/coder.mjs [OQ-<n>] [--repo owner/name]')
+  if (args.length > 0 || (storyId !== undefined && !new RegExp(`^${storyPrefix}-\\d+$`).test(storyId))) {
+    throw new Error(usage(storyPrefix))
   }
   const result = await dispatchCoder({ ctx: createContext({ repo }), storyId })
   console.log(JSON.stringify(result, null, 2))

@@ -1493,3 +1493,30 @@ describe("OQ-112/AC-2: a claim's age", () => {
     expect(await claimAgeMs(world.repoDir, 'story/OQ-99-second', now)).toBeLessThan(STUCK_AFTER_MS)
   })
 })
+
+// --------------------------------------------------- OQ-128: id prefix from settings
+
+/** A directory holding only a `steward.config.json` with the given `storyPrefix`. */
+function withSettings(storyPrefix, fn) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'tw-coder-settings-'))
+  writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify({ repo: REPO, storyPrefix }))
+  return fn(dir).finally(() => rmSync(dir, { recursive: true, force: true }))
+}
+
+describe('OQ-128/AC-1: retryStory takes its story-id check from settings\' storyPrefix', () => {
+  it('refuses OQ-3 with the "requires a story id" error, under a project whose settings say ST', () =>
+    withSettings('ST', async (dir) => {
+      await expect(retryStory({
+        ctx: {}, repoDir: dir, storyId: 'OQ-3', prNumber: 7, findings: 'x', source: 'review', round: 1, roundsRemaining: 1,
+      })).rejects.toThrow('retryStory requires a story id of the form ST-<n>, got "OQ-3"')
+    }))
+
+  it('accepts ST-3, going on past the story-id check, under the same settings', () =>
+    withSettings('ST', async (dir) => {
+      // An invalid `source` is the next check `retryStory` makes; reaching its
+      // error (rather than the story-id one) shows ST-3 passed the id check.
+      await expect(retryStory({
+        ctx: {}, repoDir: dir, storyId: 'ST-3', prNumber: 7, findings: 'x', source: 'not-a-real-source', round: 1, roundsRemaining: 1,
+      })).rejects.toThrow(/retryStory source must be one of/)
+    }))
+})

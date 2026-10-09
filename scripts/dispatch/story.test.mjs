@@ -606,3 +606,32 @@ describe('OQ-48/AC-9: resuming an existing pull request', () => {
     for (const h of [closed, wrong]) untouched(h)
   })
 })
+
+// --------------------------------------------------- OQ-128: id prefix from settings
+
+/** A directory holding only a `steward.config.json` with the given `storyPrefix`. */
+function withSettings(storyPrefix, fn) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'tw-story-settings-'))
+  writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify({ repo: REPO, storyPrefix }))
+  return fn(dir).finally(() => rmSync(dir, { recursive: true, force: true }))
+}
+
+describe('OQ-128/AC-2: runStory takes its story-id check from settings\' storyPrefix', () => {
+  it('refuses OQ-3 with the "requires a story id" error, under a project whose settings say ST', () =>
+    withSettings('ST', async (dir) => {
+      await expect(runStory({ storyId: 'OQ-3', repoDir: dir, ctx: {}, ciCtx: {}, landCtx: {} }))
+        .rejects.toThrow('runStory requires a story id of the form ST-<n>, got "OQ-3"')
+    }))
+
+  it('accepts ST-3, going on past the story-id check, under the same settings', () =>
+    withSettings('ST', async (dir) => {
+      // Reaching dispatchCoder (rather than the story-id error) shows ST-3 passed the check.
+      const calls = []
+      const result = await runStory({
+        storyId: 'ST-3', repoDir: dir, ctx: {}, ciCtx: {}, landCtx: {},
+        deps: { dispatchCoder: async (args) => (calls.push(args), { status: 'nothing-ready' }) },
+      })
+      expect(calls).toHaveLength(1)
+      expect(result).toMatchObject({ status: 'nothing-ready' })
+    }))
+})
