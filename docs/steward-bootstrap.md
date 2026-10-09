@@ -126,7 +126,9 @@ checkout. Each is its own commit, so the direct push in section 6 is reviewable 
       with `fetch-depth: 0`, Node 22, `npm ci`, lint, Vitest, and the story containment step. No
       build and no Playwright. Its setup steps keep the `Setup: ` name prefix, because
       `ci.test.mjs` ("OQ-118/AC-3") reads steward's own `ci.yml` and fails otherwise. OQ-117's time
-      limits are kept.
+      limits are kept. OQ-124's `workflow_run` trigger on `Land approved PRs`, and its job
+      condition, are kept, so steward's `main` is checked after each landing (design doc,
+      "Portability", "Decided so far").
 - [ ] **B7. `review-gate.yml` and `land-approved.yml`, unchanged.** Neither names this repository:
       they take `github.repository`, and run `node scripts/land/…` without `npm ci`.
 - [ ] **B8. The prompts, stripped by hand** (R1, "steward starts clean"): in `coder.md` this

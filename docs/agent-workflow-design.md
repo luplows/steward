@@ -1466,7 +1466,14 @@ not finishing, and 30 minutes is shorter than a real story needs.
   branch; `issue_comment`, `schedule`, `workflow_dispatch` run from the **default branch**, so they
   cannot be tested on the PR that introduces them. **Mitigation: move logic out of `run:` blocks
   into committed scripts with unit tests.** The untestable surface shrinks to YAML wiring.
-- **`GITHUB_TOKEN` pushes do not trigger further workflows.**
+- **`GITHUB_TOKEN` pushes do not trigger further workflows.** The exceptions are
+  `workflow_dispatch` and `repository_dispatch` (GitHub's documentation, read 2026-10-08). So the
+  sweep's merges, made with `github.token`, start no `push` run of `ci.yml` or `deploy-pages.yml`:
+  the last ones were on 2026-09-28. **Planned (OQ-124):** both workflows also run on `workflow_run`
+  of `Land approved PRs`, and each job with no `needs:` skips unless the sweep moved `main`
+  (`github.event.workflow_run.head_sha != github.sha`), so a sweep that landed nothing costs no
+  runner. The sweep itself gains no permission, token or secret (decided 2026-10-08 by the owner;
+  see "Portability", "Decided so far").
 - **Converting a PR to draft is GraphQL only.** REST's "Update a pull request" takes `title`,
   `body`, `state`, `base` and `maintainer_can_modify`, with no `draft`; the GraphQL mutation
   `convertPullRequestToDraft` does it (checked 2026-09-25). `github.mjs`
@@ -1561,6 +1568,15 @@ deciding what is next. It is the harness's product outline, and moves with this 
   `CLAUDE.md` are stripped of this repository's own content at the bootstrap, and R1's list gains
   the files the dry run found missing (R1). ST-8, the copy of OQ-73, is held in steward until it
   is rewritten, and steward's own first stories outrank the moved ones (R4).
+- **After the sweep lands a pull request, CI and the Pages deploy run on `main` by `workflow_run`,
+  and skip when the sweep did not move `main`** (decided 2026-10-08 by the owner, from four
+  options: the sweep starting them by `workflow_dispatch`, which needs `actions: write`; this; a
+  GitHub App token for the merge, which needs a secret per repository; and a personal access
+  token, ruled out as a stored owner credential). Each project opts in in its own workflow files,
+  and the sweep is unchanged. The skip matters for the owner's private repository, which draws on
+  the plan's included minutes. **Planned (OQ-124)** here, a `fix` story, built before the move;
+  steward's `ci.yml` gets the same trigger at the bootstrap (`steward-bootstrap.md`, B6), and a
+  project's thin files get it from `init` (R2).
 
 ### The move, in order
 
@@ -1727,6 +1743,10 @@ Checked on 2026-10-07 against `main` at `66c578d`:
     then one step running the package's command. An `init` command writes them. This is preferred
     over GitHub's reusable workflows because the gate's logic already lives in scripts, and because
     each project keeps control of its own triggers, permissions and secrets.
+    The files `init` writes include the after-sweep trigger and its skip condition (OQ-124's
+    `workflow_run` on `Land approved PRs`; noted 2026-10-08 at the owner's decision, under
+    "Decided so far"), so that a project's `main` is checked after each landing without spending
+    minutes on a sweep that landed nothing.
   - The scripts stop finding the project relative to their own location (`DISPATCHER_ROOT`).
     They take the project from the working directory and its configuration (R3), and their
     prompts from the package.
