@@ -6,8 +6,8 @@
  * as constants in the scripts, so the same code can run a queue numbered
  * `ST-<n>` (`docs/agent-workflow-design.md`, "The story artifact", "Format").
  *
- * Nothing yet calls this from outside its own tests -- see the story's Out of
- * scope.
+ * Its callers are the dispatch scripts, the story lint and the verdict
+ * report, each passing the project root it works on.
  */
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'

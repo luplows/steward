@@ -110,8 +110,10 @@ what each run did.
     2026-10-01 the owner added GitHub issues for stuck stories (OQ-110, since split into OQ-110 to OQ-112), and
     gave the loop its own worktree (OQ-109);
   - before the task is switched on, OQ-81 and OQ-82 must be built (nothing
-    automatic lands without them), and so must OQ-73 and OQ-80. Hence
-    `depends_on`.
+    automatic lands without them), and so must OQ-80 and the stories that
+    put coder sessions in a container. OQ-73 is now the spike that recommends
+    those stories (rewritten 2026-10-09); its `depends_on` entry stands for
+    them until Session A repoints it (OQ-73's AC-4). Hence `depends_on`.
 - What an interrupted run leaves, stage by stage, is in
   `docs/agent-workflow-design.md`'s failure table ("The dispatcher is
   interrupted mid-story") and OQ-86's AC-4. `dispatchCoder` creates its local

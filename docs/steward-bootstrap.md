@@ -17,10 +17,10 @@ change these files before then.
 
 ## 1. Before starting
 
-- [ ] **P1.** OQ-116, OQ-117, OQ-118, OQ-121, OQ-122 to OQ-131 are in `stories/done/` on `main`.
-      Of those, the move needs OQ-118, OQ-117, OQ-122 to OQ-131 (design doc, "The move, in
-      order", step 1). OQ-116 and OQ-121 were ahead of them in the queue, and were built on
-      2026-10-08.
+- [ ] **P1.** OQ-116, OQ-117, OQ-118, OQ-121, OQ-122 to OQ-131, OQ-135 and OQ-136 are in
+      `stories/done/` on `main`. Of those, the move needs OQ-118, OQ-117, OQ-122 to OQ-131 (design
+      doc, "The move, in order", step 1), and the `fix` stories OQ-135 and OQ-136, written since.
+      OQ-116 and OQ-121 were ahead of them in the queue, and were built on 2026-10-08.
 - [ ] **P2.** No open pull request changes a moving path.
 - [ ] **P3.** `git ls-remote --heads origin` shows no `story/` branch for a moving story.
 - [ ] **P4.** The loop is not running, and the dispatcher session has nothing in flight, so `main`
@@ -51,10 +51,10 @@ and OQ-115's clean-up stories OQ-132 to OQ-134.
 | `.github/pull_request_template.md`, `.oxlintrc.json`, `.gitignore` | Not in R1: steward's lint, PRs and ignores |
 | `docs/steward-bootstrap.md` | Added to R1 on 2026-10-08 (D-9): the record of how steward was made |
 
-**The 21 moving stories**, as of `7169d85`, assuming OQ-116, OQ-121, OQ-122 and OQ-123 are built
-by then, and OQ-124 to OQ-131, written since (P1): OQ-46, 54, 59, 62, 64, 66, 71, 73, 88, 89, 98,
-99, 100, 101, 102, 103, 105, 108, 114, 119 and 120. Each is extracted at its path under
-`stories/`, so its history moves with it.
+**The 21 moving stories**, as of `7169d85`, assuming OQ-116, OQ-121, OQ-122 and OQ-123 are built by
+then, and OQ-124 to OQ-131, OQ-135 and OQ-136, written since (P1): OQ-46, 54, 59, 62, 64, 66, 71,
+73, 88, 89, 98, 99, 100, 101, 102, 103, 105, 108, 114, 119 and 120. Each is extracted at its path
+under `stories/`, so its history moves with it.
 
 **Commit messages** (R1, "Commit messages name this repository's pull requests in plain text";
 must not drift from it). The rule file, written with a heredoc, not `printf`, which mangles `\1`:

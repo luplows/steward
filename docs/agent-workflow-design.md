@@ -1507,7 +1507,8 @@ not finishing, and 30 minutes is shorter than a real story needs.
 - **`GITHUB_TOKEN` pushes do not trigger further workflows.** The exceptions are
   `workflow_dispatch` and `repository_dispatch` (GitHub's documentation, read 2026-10-08). So the
   sweep's merges, made with `github.token`, started no `push` run of `ci.yml` or `deploy-pages.yml`
-  on their own: the last ones made that way were on 2026-09-28. Both workflows (OQ-124) also run on
+  on their own. The `push` runs on `main` for #155 (2026-09-28) came from the owner's own merge,
+  triggered by `luplows`, not from the sweep. Both workflows (OQ-124) also run on
   `workflow_run` of `Land approved PRs`, and each job with no `needs:` skips unless the sweep moved
   `main` (`github.event.workflow_run.head_sha != github.sha`), so a sweep that landed nothing costs
   no runner. The sweep itself gains no permission, token or secret (decided 2026-10-08 by the
@@ -1662,7 +1663,8 @@ deciding what is next. It is the harness's product outline, and moves with this 
 
 Decided 2026-10-08 by the owner. The engine is made project-neutral here first, where the loop
 and gate already work, so that the workflow's repository can dispatch its own `ST-<n>` stories
-from the day it exists. Today the `OQ` prefix is hardcoded in five modules, so it could not.
+from the day it exists. When this was decided, the `OQ` prefix was hardcoded in five modules, so it
+could not; OQ-126 to OQ-129 made it a project setting.
 
 1. **Here, built by the loop:** OQ-118 then OQ-117 (CI), OQ-122 (a settings file with the
    repository and the story prefix, #210) and the stories split from it on 2026-10-08: OQ-125
@@ -1899,7 +1901,9 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   consolidates are in the workflow's documents. A story built before the move stays in
   `stories/done/` here, as history. A moved story takes the new repository's next number (R9) and
   names its old OQ id. OQ-124 to OQ-131, written on 2026-10-08, are built here before the move
-  ("The move, in order", step 1), so they stay, as OQ-117 and OQ-118 do.
+  ("The move, in order", step 1), so they stay, as OQ-117 and OQ-118 do. So do OQ-135 and
+  OQ-136, `fix` stories written on 2026-10-08 and 2026-10-09 for defects in this repository's CI
+  and tests.
 
   **OQ-115 stays, and OQ-114 moves** (decided 2026-10-08 by the owner; OQ-115's clean-up stories,
   OQ-132 to OQ-134, stay with it, added 2026-10-08 when it was split). OQ-115 is this
