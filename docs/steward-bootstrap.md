@@ -5,20 +5,22 @@ The hand-run procedure for "The move, in order", step 2, in
 from this repository. It is run by the owner with Session A. It is not a story, and nothing
 dispatches from it.
 
-**Status: agreed by the owner on 2026-10-08, with the six decisions in section 9.** Nothing below
-has been run except the dry run in section 3. It runs once P1 to P6 hold. The decisions
-themselves live in the design doc's Portability section; this file is the procedure, and where it
-restates a decision it names the one it must not drift from.
+**Status: agreed by the owner on 2026-10-08, with the six decisions in section 9 (D-1 to D-6; D-7
+and D-8 were added the same day).** Nothing below has been run except the dry run in section 3.
+It runs once P1 to P6 hold. The decisions themselves live in the design doc's Portability section;
+this file is the procedure, and where it restates a decision it names the one it must not drift
+from.
 
 Every count and line number here was taken on `main` at `7169d85`, or at `d86080c` for the dry
-run, and **must be re-derived at the time of the run**: OQ-117, OQ-121, OQ-122 and OQ-123 change
-these files before then.
+run, and **must be re-derived at the time of the run**: OQ-117, OQ-121, and OQ-122 to OQ-131
+change these files before then.
 
 ## 1. Before starting
 
-- [ ] **P1.** OQ-116, OQ-117, OQ-118, OQ-121, OQ-122 and OQ-123 are in `stories/done/` on `main`.
-      Of those, the move needs OQ-118, OQ-117, OQ-122 and OQ-123 (design doc, "The move, in
-      order", step 1). The other two are first in the queue.
+- [ ] **P1.** OQ-116, OQ-117, OQ-118, OQ-121, OQ-122 to OQ-131 are in `stories/done/` on `main`.
+      Of those, the move needs OQ-118, OQ-117, OQ-122 to OQ-131 (design doc, "The move, in
+      order", step 1). OQ-116 and OQ-121 were ahead of them in the queue, and were built on
+      2026-10-08.
 - [ ] **P2.** No open pull request changes a moving path, except #209 (OQ-73), which stays parked.
 - [ ] **P3.** `git ls-remote --heads origin` shows no `story/` branch for a moving story, except
       `story/OQ-73-coder-machine-credentials`.
@@ -49,8 +51,9 @@ rule in R4: every unbuilt `kind: workflow` story, except OQ-72, OQ-94, OQ-115, O
 | `.github/pull_request_template.md`, `.oxlintrc.json`, `.gitignore` | Not in R1: steward's lint, PRs and ignores |
 
 **The 21 moving stories**, as of `7169d85`, assuming OQ-116, OQ-121, OQ-122 and OQ-123 are built
-by then: OQ-46, 54, 59, 62, 64, 66, 71, 73, 88, 89, 98, 99, 100, 101, 102, 103, 105, 108, 114, 119
-and 120. Each is extracted at its path under `stories/`, so its history moves with it.
+by then, and OQ-124 to OQ-131, written since (P1): OQ-46, 54, 59, 62, 64, 66, 71, 73, 88, 89, 98,
+99, 100, 101, 102, 103, 105, 108, 114, 119 and 120. Each is extracted at its path under
+`stories/`, so its history moves with it.
 
 **Commit messages** (R1, "Commit messages name this repository's pull requests in plain text";
 must not drift from it). The rule file, written with a heredoc, not `printf`, which mangles `\1`:
@@ -59,6 +62,15 @@ must not drift from it). The rule file, written with a heredoc, not `printf`, wh
 regex:\(#([0-9]+)\)==>(tower-workshop-paths PR \1)
 regex:(?m)(^|[^A-Za-z0-9/&])#([0-9]+)==>\1tower-workshop-paths PR \2
 ```
+
+The fresh dry run lists every `#N` these rules rewrite, and checks each against this
+repository's pull requests with `gh api`. If any is not one, the bootstrap stops until the rule
+leaves it alone (D-7). At `d86080c` every one was; `44b8afa` and `9f4ffb7` cite an upstream
+`#1614`, and are left out only because their paths do not move.
+
+**Not extracted, though a moved test reads them:** `.github/workflows/update-screenshots.yml` and
+`package-lock.json`, read by OQ-117's tests in `scripts/dispatch/ci.test.mjs`. Only tests of files
+that move go to steward, so those tests are removed from steward's copy (B7a, D-8).
 
 ## 3. The dry run (done 2026-10-08)
 
@@ -115,7 +127,7 @@ checkout. Each is its own commit, so the direct push in section 6 is reviewable 
       point the tests that read them there.
 - [ ] **B3. `steward.config.json`:** `{ "repo": "luplows/steward", "storyPrefix": "ST" }`.
 - [ ] **B4. `package.json`.** Name `steward`, `"type": "module"`, `"private": true`, and a `bin`
-      entry `steward` pointing at `scripts/dispatch/cli.mjs` (OQ-123), which needs a
+      entry `steward` pointing at `scripts/dispatch/cli.mjs` (OQ-131), which needs a
       `#!/usr/bin/env node` line. Scripts `lint` (`oxlint`) and `test` (`vitest run`).
       `devDependencies`: `vitest` and `oxlint` only, at this repository's ranges (`^5.0.0` and
       `^1.79.0` at `7169d85`). `package-lock.json` from `npm install`.
@@ -131,6 +143,11 @@ checkout. Each is its own commit, so the direct push in section 6 is reviewable 
       "Portability", "Decided so far").
 - [ ] **B7. `review-gate.yml` and `land-approved.yml`, unchanged.** Neither names this repository:
       they take `github.repository`, and run `node scripts/land/…` without `npm ci`.
+- [ ] **B7a. Tests of files that stay here, removed from steward's copy** (D-8). Re-derive them at
+      the run: every test in a moved test file that reads a file not on the list in section 2.
+      Known at `0a9254b`: OQ-117's tests in `scripts/dispatch/ci.test.mjs`, with the constants
+      and helpers only they use. OQ-124's tests of `deploy-pages.yml`, if it adds any, are removed
+      too. OQ-118's tests are kept in steward's copy. This repository keeps all of its own.
 - [ ] **B8. The prompts, stripped by hand** (R1, "steward starts clean"): in `coder.md` this
       repository's name, Vitest and Playwright, the screenshot-baseline rules, `mytower.app`, and
       the pointer to `Completed-Questions.md`; in `reviewer.md` this repository's name. The name
@@ -194,7 +211,7 @@ checkout. Each is its own commit, so the direct push in section 6 is reviewable 
 
 ## 9. Decisions
 
-All six were made by the owner on 2026-10-08, and are recorded in the design doc's Portability
+All eight were made by the owner on 2026-10-08, and are recorded in the design doc's Portability
 section (R1 and R4) and its "Decided so far".
 
 - **D-1. This repository's passages in steward's copy of the design doc** (Pages as the alpha
@@ -214,3 +231,10 @@ section (R1 and R4) and its "Decided so far".
   the moved stories. Writing them is Session A's, in steward (section 8).
 - **D-6. The checkouts:** `E:\Source\steward-extract` for the extraction, and `E:\Source\steward`
   with the loop's worktree beside it.
+- **D-7. A `#N` that is not this repository's pull request** (from the reviewer's observation on
+  #215): the fresh dry run checks every rewritten `#N`, and the bootstrap stops on one that is
+  not (section 2).
+- **D-8. Tests** (from the reviewer's observation on #217, widened by the owner the same day):
+  **only tests of files that move go to steward.** A test of this repository's own flows stays
+  here, such as OQ-117's, which read this repository's Playwright steps,
+  `update-screenshots.yml` and `package-lock.json`. OQ-118's move (B7a).
