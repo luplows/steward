@@ -33,7 +33,7 @@ change these files before then.
 
 The design doc's R1 table, with the gaps the dry run found. Re-derive the moving stories with the
 rule in R4: every unbuilt `kind: workflow` story, except OQ-72, OQ-94, OQ-115, OQ-117, OQ-118,
-and OQ-115's clean-up stories OQ-132 to OQ-134.
+OQ-137, and OQ-115's clean-up stories OQ-132 to OQ-134.
 
 **Paths (28, with `steward.config.json` and this checklist):**
 

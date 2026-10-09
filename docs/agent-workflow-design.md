@@ -887,6 +887,11 @@ test that runs this clean-up for real is in a file of its own, `*.alone.test.mjs
 leaves out and CI runs in a step of its own after it, so that no other test's processes are
 running for the clean-up to stop (decided 2026-10-09 by the owner).
 
+**Planned (OQ-137):** the step's worst case counts the clean-up after the first try, with a
+5-second allowance that the clean-up test checks: 2 × 120 + 5 + 30 + 20 = 295 seconds of the 300
+(decided 2026-10-09 by the owner, from #243's review). The clean-up after the second try is not
+counted: the step fails then whatever happens.
+
 **Definition of green:** it builds, lint is clean, every AC has a named test, Vitest passes,
 Playwright passes without retries, no pre-existing test was modified without story authorization,
 and the story file validates.
@@ -1666,6 +1671,17 @@ deciding what is next. It is the harness's product outline, and moves with this 
   move: it unblocks OQ-130. When #241's review then blocked on the wait's lock probe, the owner
   amended AC-2 to AC-4 again (the same day) and kept the exception for Session A to make the fix,
   because OQ-136 blocks the move, while saying such exceptions are not to become the rule.
+- **#243's held review observation becomes OQ-137** (decided 2026-10-09 by the owner): the install
+  step's worst case counts the clean-up after the first try, and the clean-up test checks its
+  allowance ("What CI runs"). #242's two held observations were already resolved by OQ-136's own
+  pull request, #241. OQ-137 stays here, as a story about this repository's CI (R4), and is built
+  after OQ-132, which now also carries OQ-136's tests and its clean-up test out of
+  `scripts/dispatch/` (decided the same day by the owner). OQ-131's held observation, that this
+  document and `cli.mjs` say "this repository's own package" will point `bin` at `cli.mjs` though
+  the package is steward's (`steward-bootstrap.md`, B4), is left as it is: the words are true in
+  steward's copies, and OQ-132 and OQ-134 remove the copies here. The held observations on #240,
+  #241 and #244, stale numbers in their merged pull requests' Verification sections, are left as
+  they are: the current figures are in the same sections, and no repository content is wrong.
 
 ### The move, in order
 
@@ -1912,7 +1928,8 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   names its old OQ id. OQ-124 to OQ-131, written on 2026-10-08, are built here before the move
   ("The move, in order", step 1), so they stay, as OQ-117 and OQ-118 do. So do OQ-135 and
   OQ-136, `fix` stories written on 2026-10-08 and 2026-10-09 for defects in this repository's CI
-  and tests.
+  and tests. OQ-137, written on 2026-10-09 for this repository's install step, stays too, though
+  it is built after the move (decided 2026-10-09 by the owner).
 
   **OQ-115 stays, and OQ-114 moves** (decided 2026-10-08 by the owner; OQ-115's clean-up stories,
   OQ-132 to OQ-134, stay with it, added 2026-10-08 when it was split). OQ-115 is this
