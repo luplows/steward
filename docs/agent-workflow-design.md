@@ -1585,17 +1585,18 @@ deciding what is next. It is the harness's product outline, and moves with this 
 - **Adopting steward is a hand-run cut-over, then dispatched clean-up** (decided 2026-10-08 by
   the owner, refining OQ-115). OQ-115 becomes the cut-over, owner-run with `blocked:` saying so:
   one pull request through the gate that pins steward and switches the gate's files to it, after
-  which the owner starts the loop with steward's command. Then, on steward's engine, OQ-132
-  removes the moved code, OQ-133 cuts `CLAUDE.md`, `REVIEW.md` and the stories README to this
-  project's own rules, and OQ-134 removes the moved documents. Retiring the moved stories is
-  Session A's, as soon as the bootstrap fixes the OQ-to-ST mapping. The tests that stay go to a
-  new `scripts/ci-workflows.test.mjs`, which takes the setup-step prefix from the pinned package.
-  The passages about this project go to `README.md` and `Project-Outline.md`: no project needs a
-  document about steward (R1). Which rules are steward's and which this project's is settled; how
-  steward's reach a project's sessions, and the form of this project's review items, are decided
-  once steward is built. `docs/steward-bootstrap.md` moves to steward with its history (R1).
-  OQ-115's old AC-1, a second project running the workflow, is dropped: that is steward's (R6,
-  R7).
+  which the owner starts the loop with steward's command. Then, on steward's engine and in this
+  order, OQ-133 cuts `CLAUDE.md`, `REVIEW.md` and the stories README to this project's own rules,
+  OQ-132 removes the moved code, and OQ-134 removes the moved documents (the order set on
+  2026-10-09 by the owner, from #223's review: each needs what the one before it removes gone).
+  Retiring the moved stories is Session A's, as soon as the bootstrap fixes the OQ-to-ST mapping.
+  The tests that stay go to a new `scripts/ci-workflows.test.mjs`, which takes the setup-step prefix
+  from the pinned package. The passages about this project go to `README.md` and
+  `Project-Outline.md`: no project needs a document about steward (R1). Which rules are steward's
+  and which this project's is settled; how steward's reach a project's sessions, and the form of
+  this project's review items, are decided once steward is built. `docs/steward-bootstrap.md` moves
+  to steward with its history (R1). OQ-115's old AC-1, a second project running the workflow, is
+  dropped: that is steward's (R6, R7).
 - **The bootstrap checklist gains D-7 and D-8** (decided 2026-10-08 by the owner): a rewritten `#N`
   is checked at the real run, and only tests of files that move go to steward. See R1.
 - **The bootstrap checklist is agreed**, [`steward-bootstrap.md`](steward-bootstrap.md), with its
@@ -1643,8 +1644,9 @@ from the day it exists. Today the `OQ` prefix is hardcoded in five modules, so i
    start (R6, R7); then OQ-73's container spike and the stories it recommends, and OQ-101.
 4. **Here:** adopting steward (split 2026-10-08, "Decided so far"). OQ-115, the cut-over, by hand:
    pin steward and switch to the thin workflow files, then start the loop with steward's command.
-   Then OQ-132 (the moved code), OQ-133 (the rule files) and OQ-134 (the moved documents), run on
-   steward's engine. Session A retires the moved stories with a note naming each one's `ST-<n>`.
+   Then OQ-133 (the rule files), OQ-132 (the moved code) and OQ-134 (the moved documents), in
+   that order, run on steward's engine. Session A retires the moved stories with a note naming
+   each one's `ST-<n>`.
 
 ### What adopting steward needs from it
 
