@@ -11,7 +11,5 @@
 
 ## Docs check
 
-<!-- Per CLAUDE.md, the outcome for README.md, Open-Questions.md and
-     Project-Outline.md: what you updated, or why none needed updating.
-     If this resolves an open question, note its move to
-     Completed-Questions.md with the Resolved in: [#N] link. -->
+<!-- Per CLAUDE.md, the outcome for README.md: what you updated, or why it
+     needed no update. -->
