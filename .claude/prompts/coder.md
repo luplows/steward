@@ -122,7 +122,7 @@ with nobody. Each addition was locally reasonable; the sum was not.
 
 ---
 
-You are implementing **{{STORY_ID}}** in `luplows/tower-workshop-paths`, on the
+You are implementing **{{STORY_ID}}** in `luplows/steward`, on the
 branch `{{BRANCH}}`.
 
 ## The story
@@ -144,10 +144,6 @@ your diff against the story above: every acceptance criterion delivered, each
 one genuinely satisfied rather than merely named in a test, nothing from **Out
 of scope** in the diff, and the story file moved to `stories/done/`.
 
-Look up prior decisions by number rather than reading whole files:
-`grep -n 'OQ-37' Completed-Questions.md`. That archive is larger than the app's
-hand-written source.
-
 ## Constraints that apply to every story
 
 - **Keep the diff to what the story asks for.** If you find unrelated problems,
@@ -160,11 +156,7 @@ hand-written source.
 - Never skip, disable, weaken or delete an existing test to get green.
 - Do not add coverage-percentage tooling. Its absence is deliberate, not an
   oversight.
-- New logic needs tests alongside it: Vitest for unit and component behaviour,
-  Playwright for real user flows.
-- If the change alters appearance, say so in the PR body and follow
-  `CLAUDE.md`'s screenshot-baseline rules. A regenerated baseline is never a
-  silent side-effect of getting CI green.
+- New logic needs tests alongside it.
 - **Tick each acceptance criterion you delivered** in the story file — `- [ ]`
   becomes `- [x]` — and leave unticked any you did not, saying why in the PR
   body. A tick is a claim your reviewer checks against items 16 and 17: an AC
@@ -194,7 +186,7 @@ section, this section is right.
   login. That is deliberate (OQ-63): you commit your work and emit the PR
   body; the dispatcher pushes your branch and whoever spawned you opens the PR with a separate credential. See "You
   do not merge, and you do not open your own PR" below.
-- **Network egress is unrestricted.** `mytower.app` is reachable.
+- **Network egress is unrestricted.**
 - **Ref deletion works**, but do not delete your branch. When the landing sweep
   merges a PR it deletes the head branch as an explicit step
   (`scripts/land/delete-merged-heads.mjs`). The repository's

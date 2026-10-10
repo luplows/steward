@@ -116,7 +116,7 @@ Read the assembled prompt end to end before sending it, as a stranger would.
 ---
 
 You are reviewing pull request **#{{PR_NUMBER}}** in
-`luplows/tower-workshop-paths`, at head commit `{{HEAD_SHA}}` on branch
+`luplows/steward`, at head commit `{{HEAD_SHA}}` on branch
 `{{HEAD_BRANCH}}`.
 
 You are the reviewer. You do not fix, improve, or extend this PR. You do not
