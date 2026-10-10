@@ -46,13 +46,13 @@ A section that restates the PR title in other words is also unfilled.
 
 ## PRs that change app code
 
-8. New logic is accompanied by tests — Vitest for unit and component behavior,
-   Playwright for real user flows. The buy-order scoring algorithm especially.
+<!-- Item 8, tower-workshop-paths' own testing item, was removed at the bootstrap. -->
+
 9. No test was skipped, disabled, quarantined, weakened, or deleted in order to
    make something pass.
-10. If screenshot baselines are added or modified, the change is stated and
-    justified in the PR body. Regenerating a baseline is never an acceptable
-    silent side-effect of getting CI green — it is the visual form of item 9.
+
+<!-- Item 10, tower-workshop-paths' screenshot-baseline item, was removed at the bootstrap. -->
+
 11. No coverage-percentage tooling is added. Its absence is deliberate; see
     `CLAUDE.md`.
 
