@@ -6,10 +6,15 @@ from this repository. It is run by the owner with Session A. It is not a story, 
 dispatches from it.
 
 **Status: agreed by the owner on 2026-10-08, with the six decisions in section 9 (D-1 to D-6; D-7
-to D-9 were added the same day, and D-10 to D-12 on 2026-10-09).** Nothing below has been run
-except the two dry runs in section 3. It runs once P1 to P6 hold. The decisions themselves live in
-the design doc's Portability section; this file is the procedure, and where it restates a decision
-it names the one it must not drift from.
+to D-9 were added the same day, D-10 to D-12 on 2026-10-09, and D-13 and D-14 on 2026-10-10).**
+Nothing below has been run except the two dry runs and the stopped real extraction in section 3.
+It runs once P1 to P6 hold.
+The decisions themselves live in the design doc's Portability section; this file is the
+procedure, and where it restates a decision it names the one it must not drift from.
+
+**Paused 2026-10-09 by the owner**, during the real extraction, before A1: steward is to be defined
+first (design doc, "Portability", "Decided so far"). What the extraction ran and found is in
+section 3.
 
 Every count and line number here was re-derived on `main` at `09147c3` for the fresh dry run
 (section 3), unless it names another commit, and **is checked again at the real extraction**: the
@@ -33,7 +38,9 @@ pull request that records the fresh dry run moves `main` itself.
 
 The design doc's R1 table, with the gaps the dry run found. Re-derive the moving stories with the
 rule in R4: every unbuilt `kind: workflow` story, except OQ-72, OQ-94, OQ-115, OQ-117, OQ-118,
-OQ-137, and OQ-115's clean-up stories OQ-132 to OQ-134.
+OQ-137, OQ-115's clean-up stories OQ-132 to OQ-134, and, since 2026-10-10, OQ-46, OQ-100 and
+OQ-105 (D-13). This repository keeps its own copies of the story tooling among the paths below
+(D-13).
 
 **Paths (29, with `steward.config.json`, this checklist and OQ-129's test):**
 
@@ -52,9 +59,10 @@ OQ-137, and OQ-115's clean-up stories OQ-132 to OQ-134.
 | `docs/steward-bootstrap.md` | Added to R1 on 2026-10-08 (D-9): the record of how steward was made |
 | `scripts/no-project-literals.test.mjs` | Added to R1 on 2026-10-09 (D-11): OQ-129's test, which reads only moved files |
 
-**The 21 moving stories**, re-derived with the rule above at `09147c3`, where every P1 story is
-built: OQ-46, 54, 59, 62, 64, 66, 71, 73, 88, 89, 98, 99, 100, 101, 102, 103, 105, 108, 114, 119
-and 120. Each is extracted at its path under `stories/`, so its history moves with it.
+**The 17 moving stories**, re-derived with the rule above on 2026-10-10, on #248's branch
+with OQ-66 retired: OQ-54, 59, 62, 64, 71, 73, 88, 89, 98, 99, 101, 102, 103, 108, 114, 119 and
+120. Each is extracted at its path under `stories/`, so its history moves with it. (Until
+2026-10-10 there were 21: these, and OQ-46, OQ-66, OQ-100 and OQ-105.)
 
 **Commit messages** (R1, "Commit messages name this repository's pull requests in plain text";
 must not drift from it). The rule file, written with a heredoc, not `printf`, which mangles `\1`:
@@ -118,6 +126,38 @@ paths and all three rules, after D-10.
   `5eb868f`", to that commit's hash in the new history.
 - `scripts/no-project-literals.test.mjs` was found off the list (D-11).
 
+### The real extraction (stopped 2026-10-09)
+
+From `main` at `b2a02bf`, P1 to P6 checked and P4 confirmed by the dispatcher session, into
+`E:\Source\steward-extract`. Nothing was pushed, and `luplows/steward` was not created. The
+extract is kept on the owner's machine as a record.
+
+- `git filter-repo`, with the 29 paths, the 21 stories and the three rules: 158 of 250 commits kept,
+  and 102 files, every one on the list. Per-file commit counts matched for all 102. D-7: 168
+  distinct numbers rewritten (the extra one is #247), every one this repository's pull request.
+- B1 to B14 were committed in the extract, with one commit not in this checklist: a `.gitattributes`
+  holding `* text=auto eol=lf`, since without it a checkout on a machine with `core.autocrlf=true`
+  gets CRLF files.
+- B15: `npm ci`, `npm run lint`, the story lint and the queue passed; the queue listed only the 21
+  `ST-` stories, ST-8 and ST-18 `blocked` as B1 sets them. **`npm test`: 38 of 751 tests failed, in
+  5 of 25 files.**
+  - `scripts/dispatch/story.test.mjs` (33): its harness calls `runStory` without a `repoDir`, so it
+    reads the settings of the directory it runs in, and rejects its story id `OQ-9` (line 29) once
+    that project's prefix is `ST`.
+  - `scripts/dispatch/settings.test.mjs`, `scripts/dispatch/loop.test.mjs` and
+    `scripts/report/review-verdicts.test.mjs` (one each): they read the committed
+    `steward.config.json` and expect this repository's values.
+  - `scripts/dispatch/invocation.test.mjs` (2): they read `.claude/settings.json` (line 229), which
+    does not move. B7a's rule already covered them, and the re-derivation missed them.
+- What the engine itself assumes about a project, found while looking at those failures:
+  - its CI: `.github/workflows/ci.yml` is CI, and a setup step is named with `Setup: `
+    (`scripts/dispatch/ci.mjs`, lines 26 and 31), which OQ-118's tests check in a real `ci.yml`;
+  - its screenshots: `SCREENSHOT_DIR = 'e2e/__screenshots__/'` (`coder.mjs`, line 128);
+  - its name: the dispatch commits as `dispatch@tower-workshop-paths.invalid` (`coder.mjs`, line
+    385);
+  - its rule files: `coder.md` reads `CLAUDE.md` and `REVIEW.md` from the project (line 140), and
+    `reviewer.md` reads `REVIEW.md` and assumes `npm test`.
+
 ## 4. The bootstrap commits
 
 On top of the extracted history, in a fresh clone at `E:\Source\steward-extract`, never a working
@@ -126,31 +166,29 @@ checkout. Each is its own commit, so the direct push in section 6 is reviewable 
 - [ ] **B1. Renumber the stories.** `git mv` each moving story to `ST-<n>`, numbered in ascending
       order of OQ id (R4, R9), and set its `id:`. Add a line to its Context: "Formerly
       tower-workshop-paths OQ-<n>." References to OQ stories that stay here keep their numbers.
-      The mapping, re-derived at `09147c3` (unchanged from `7169d85`):
+      The mapping, revised on 2026-10-10 for the 17 stories (D-13). "Held" means this `blocked:`,
+      replacing any the story has here (D-14):
+      `"Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"`.
 
       | ST | OQ | `depends_on` in steward | `blocked:` in steward |
       |---|---|---|---|
-      | ST-1 | OQ-46 | `[]` | `null` |
-      | ST-2 | OQ-54 | `[]` (OQ-61 is built here) | cleared (R4) |
-      | ST-3 | OQ-59 | `[]` (OQ-49 is built here) | cleared (R4) |
-      | ST-4 | OQ-62 | `[]` | cleared (R4) |
-      | ST-5 | OQ-64 | `[]` | `null` |
-      | ST-6 | OQ-66 | `[]` | `null` |
-      | ST-7 | OQ-71 | `[]` | `null` |
-      | ST-8 | OQ-73 | `[]` | kept, less "held until the move": see decision D-4 |
-      | ST-9 | OQ-88 | `[]` | cleared (R4) |
-      | ST-10 | OQ-89 | `[]` | cleared (R4) |
-      | ST-11 | OQ-98 | `[]` | cleared (R4) |
-      | ST-12 | OQ-99 | `[]` | cleared (R4) |
-      | ST-13 | OQ-100 | `[]` | cleared (R4) |
-      | ST-14 | OQ-101 | `[ST-8]` (the other nine are built here) | `null` |
-      | ST-15 | OQ-102 | `[ST-14]` (OQ-83 and OQ-86 are built here) | `null` |
-      | ST-16 | OQ-103 | `[]` | cleared (R4) |
-      | ST-17 | OQ-105 | `[]` | cleared (R4) |
-      | ST-18 | OQ-108 | `[]` (OQ-107 is built here) | kept: parked by the owner |
-      | ST-19 | OQ-114 | `[]` (R4: `OQ-115` dropped) | `null` |
-      | ST-20 | OQ-119 | `[]` | cleared (R4) |
-      | ST-21 | OQ-120 | `[]` | cleared (R4) |
+      | ST-1 | OQ-54 | `[]` (OQ-61 is built here) | held (D-13) |
+      | ST-2 | OQ-59 | `[]` (OQ-49 is built here) | held (D-13) |
+      | ST-3 | OQ-62 | `[]` | held (D-13) |
+      | ST-4 | OQ-64 | `[]` | held (D-13) |
+      | ST-5 | OQ-71 | `[]` | held (D-13) |
+      | ST-6 | OQ-73 | `[]` | kept, less "held until the move": see decision D-4 |
+      | ST-7 | OQ-88 | `[]` | held (D-13) |
+      | ST-8 | OQ-89 | `[]` | held (D-13) |
+      | ST-9 | OQ-98 | `[]` | held (D-13) |
+      | ST-10 | OQ-99 | `[]` | held (D-13) |
+      | ST-11 | OQ-101 | `[ST-6]` (the other nine are built here) | held (D-13) |
+      | ST-12 | OQ-102 | `[ST-11]` (OQ-83 and OQ-86 are built here) | held (D-13) |
+      | ST-13 | OQ-103 | `[]` | held (D-13) |
+      | ST-14 | OQ-108 | `[]` (OQ-107 is built here) | kept: parked by the owner |
+      | ST-15 | OQ-114 | `[]` (R4: `OQ-115` dropped) | held (D-13) |
+      | ST-16 | OQ-119 | `[]` | held (D-13) |
+      | ST-17 | OQ-120 | `[]` | held (D-13) |
 
       A dropped dependency is recorded in that story's Context, naming the built OQ story.
 - [ ] **B2. Move the fixtures.** `git mv` the four built stories to `test/fixtures/stories/`, and
@@ -172,7 +210,10 @@ checkout. Each is its own commit, so the direct push in section 6 is reviewable 
       limits are kept. OQ-124's `workflow_run` trigger on `Land approved PRs`, and its job
       condition, are kept, so steward's `main` is checked after each landing (design doc,
       "Portability", "Decided so far"). OQ-124/AC-1's test, which moves, matches the `on:` block
-      exactly: `pull_request` then `push`, each with `branches: [main]`.
+      exactly: `pull_request` then `push`, each with `branches: [main]`. The story containment
+      step passes the head branch name through an `env:` entry, referenced as a quoted shell
+      variable, so no `${{ github.head_ref }}` appears in its `run:` (D-14; OQ-105's AC-5, which
+      stays here, does the same for this repository's `ci.yml`).
 - [ ] **B7. `review-gate.yml` and `land-approved.yml`, unchanged.** Neither names this repository:
       they take `github.repository`, and run `node scripts/land/…` without `npm ci`.
 - [ ] **B7a. Tests of files that stay here, removed from steward's copy** (D-8). Re-derive them at
@@ -182,10 +223,25 @@ checkout. Each is its own commit, so the direct push in section 6 is reviewable 
         AC-4, which read the Playwright install step and `vite.config.js`), and OQ-124's cases of
         `deploy-pages.yml` (AC-2, AC-3's second case, and AC-4's `deploy-pages.yml` case);
       - all of `scripts/dispatch/install-cleanup.alone.test.mjs` (OQ-136), which reads the
-        Playwright install step of `ci.yml` and `update-screenshots.yml`.
+        Playwright install step of `ci.yml` and `update-screenshots.yml`;
+      - found at the real extraction from `b2a02bf` (section 3): the two cases in
+        `scripts/dispatch/invocation.test.mjs` that read `.claude/settings.json` (line 229), which
+        does not move.
 
       OQ-118's tests, and OQ-124's cases of `ci.yml`, are kept in steward's copy. This repository
       keeps all of its own.
+- [ ] **B7b. Tests that read the project they run in, fixed in steward's copy** (D-14). The real
+      extraction's other 36 failures (section 3). Re-derive them at the run; known at `b2a02bf`:
+      - `scripts/dispatch/story.test.mjs` (33): its harness calls `runStory` without a `repoDir`
+        (line 83), so `runStory` reads the settings of the directory the tests run in. The harness
+        passes a temporary `repoDir` whose `steward.config.json` matches the tests' story ids.
+      - `scripts/dispatch/settings.test.mjs` line 53, `scripts/dispatch/loop.test.mjs` line 657
+        and `scripts/report/review-verdicts.test.mjs` line 281: each reads the committed
+        `steward.config.json` and expects this repository's values. Each reads a temporary
+        settings fixture instead, except where the test's point is the committed file itself
+        (`settings.test.mjs`, "OQ-122/AC-2"), which expects steward's values from B3.
+
+      This repository's copies are unchanged: they pass here.
 - [ ] **B8. The prompts, stripped by hand** (R1, "steward starts clean"): in `coder.md` this
       repository's name, Vitest and Playwright, the screenshot-baseline rules, `mytower.app`, and
       the pointer to `Completed-Questions.md`; in `reviewer.md` this repository's name. The name
@@ -198,14 +254,15 @@ checkout. Each is its own commit, so the direct push in section 6 is reviewable 
       - One note at the top of each: an `OQ-<n>` means a tower-workshop-paths story, found in its
         `stories/done/` or `Completed-Questions.md`.
       - Its **Planned** markers that name a moved story take that story's `ST-<n>`. At `09147c3`
-        those are OQ-73 (3), OQ-101 (2), OQ-102, OQ-105, OQ-108, OQ-114 and OQ-119. The markers
-        naming OQ-115 (with OQ-132 to OQ-134) and OQ-137 are reworded without a marker, since that
-        work is this repository's (D-12).
+        those are OQ-73 (3), OQ-101 (2), OQ-102, OQ-108, OQ-114 and OQ-119, the same at #248's
+        head on 2026-10-10. The markers naming OQ-115 (with OQ-132 to OQ-134), OQ-137 and, since
+        2026-10-10, OQ-105 are reworded without a marker, since that work is this repository's
+        (D-12, D-13).
       - This repository's passages, listed in R1 under "This document", and the example story:
         removed or replaced (D-1).
 - [ ] **B12. Links to files that stay here**, made into plain text or links to this repository.
       Five at `09147c3`, as at `d86080c`: `CLAUDE.md` lines 62 and 90, `stories/README.md`
-      lines 14 and 18, and ST-7's (OQ-71's) line 69.
+      lines 14 and 18, and ST-5's (OQ-71's) line 69.
 - [ ] **B13. `.github/pull_request_template.md`**: its Docs check names `README.md`,
       `Open-Questions.md` and `Project-Outline.md`, which steward does not have.
 - [ ] **B14. A short `README.md`**: what steward is, with a pointer to `docs/harness-outline.md`.
@@ -243,18 +300,23 @@ checkout. Each is its own commit, so the direct push in section 6 is reviewable 
       `node scripts/dispatch/cli.mjs loop --init <path>`. `TW_MACHINE_LABEL` exported.
 - [ ] Steward's own first stories written at tier `next`, on `write-story/` branches in steward,
       before its loop first runs (D-5). The design doc's "What adopting steward needs from it"
-      lists what this repository's adoption (OQ-115) needs from them.
+      lists what this repository's adoption (OQ-115) needs from them. Revised 2026-10-10 by the
+      owner: steward starts with the gate only, and its first stories get its coder working (design
+      doc, "Decided so far").
 - [ ] A first, small pull request on steward (for example, its first story), reviewed and landed
-      through steward's own gate, which shows `test`, `review/agent` and the sweep working.
+      through steward's own gate, which shows `test`, `review/agent` and the sweep working. Until
+      steward's review loop is built, a dispatcher session runs `review.mjs` and `land.mjs` for
+      its pull requests, as for this repository's (decided 2026-10-10 by the owner; design doc,
+      "Decided so far").
 - [ ] Record the outcome: in steward's design doc, through a steward pull request; and here, in R4,
       the OQ-to-ST mapping, through a `write-story/` pull request, in which Session A also
       retires the moved stories here, each naming its `ST-<n>` (OQ-115's Out of scope).
 
 ## 9. Decisions
 
-D-1 to D-9 were made by the owner on 2026-10-08, and D-10 to D-12 on 2026-10-09, after the fresh
-dry run. All are recorded in the design doc's Portability section (R1 and R4) and its "Decided so
-far".
+D-1 to D-9 were made by the owner on 2026-10-08, D-10 to D-12 on 2026-10-09, after the fresh dry
+run, and D-13 and D-14 on 2026-10-10, while defining steward. All are recorded in the design doc's
+Portability section (R1 and R4) and its "Decided so far".
 
 - **D-1. This repository's passages in steward's copy of the design doc** (Pages as the alpha
   channel, the buy-order examples, scraped-data validation, the production target, `mytower.app`,
@@ -264,13 +326,15 @@ far".
   sufficient) and **drops** Playwright, screenshot baselines and the buy-order algorithm (B10).
 - **D-3. The additions to R1's list in section 2** (`test/fixtures/`, the four fixture stories, the
   PR template, `.oxlintrc.json`, `.gitignore`): **added** to R1's table.
-- **D-4. ST-8 (OQ-73):** **its `blocked:` is kept** in steward, less "held until the move": it
-  is a spike the owner runs with Session A, not dispatched (revised 2026-10-09 by the owner, when
-  OQ-73 was rewritten here as that spike; design doc, R5).
+- **D-4. ST-6 (OQ-73; ST-8 until 2026-10-10):** **its `blocked:` is kept** in steward, less
+  "held until the move": it is a spike the owner runs with Session A, not dispatched (revised
+  2026-10-09 by the owner, when OQ-73 was rewritten here as that spike; design doc, R5).
 - **D-5. The order of steward's first stories:** steward's own first stories (the prompts'
   `{{REPO}}` slot and project section, closing `REVIEW.md`'s gaps, and `init` with the thin
   workflow files) are **written at tier `next` before its loop first runs**, so they come before
-  the moved stories. Writing them is Session A's, in steward (section 8).
+  the moved stories. Writing them is Session A's, in steward (section 8). **Revised 2026-10-10 by
+  the owner:** steward starts with the gate only, and the stories that get its coder working come
+  first, ahead of these (design doc, "Decided so far").
 - **D-6. The checkouts:** `E:\Source\steward-extract` for the extraction, and `E:\Source\steward`
   with the loop's worktree beside it.
 - **D-7. A `#N` that is not this repository's pull request** (from the reviewer's observation on
@@ -291,3 +355,16 @@ far".
 - **D-12. OQ-137's Planned marker** (owner, 2026-10-09, after the fresh dry run): in steward's copy
   of the design doc it **is reworded without a marker**, as OQ-115's is (B11). The passage it is
   in, under "What CI runs", stays.
+- **D-13. Which stories move, and how they are held** (owner, 2026-10-10, while defining steward;
+  design doc, "Portability", "Decided so far"): **17 stories move** (section 2). OQ-46, OQ-100
+  and OQ-105 stay here, and OQ-66 is retired. Every moved story **is held** in steward until its
+  coder works, so nothing is ready there on its first day (B1). All 29 paths move, and this
+  repository keeps its own story tooling in full (`scripts/lint-stories.mjs` and its test,
+  `scripts/dispatch/story-containment.mjs`, `stories/README.md` and `stories/_TEMPLATE.md`).
+- **D-14. What the stopped extraction needs before it is retried** (owner, 2026-10-10, from
+  Session A's proposal): the 38 failing tests are dealt with in the bootstrap commits, not by
+  `fix` stories here, which would need a dispatch: the two `invocation.test.mjs` cases are removed
+  under D-8 (B7a), and the other 36 are fixed in steward's copy (B7b). B1's held `blocked:` text
+  is as B1 gives it. Steward's `ci.yml` passes the head branch name through `env:` (B6), rather
+  than leaving that for a steward story. The retry waits for #248 to land, since it changes
+  moving paths (P2) and holds these decisions.
