@@ -11,11 +11,11 @@ Copy [`_TEMPLATE.md`](_TEMPLATE.md) to start one.
 
 | | What it holds | Dispatches? |
 |---|---|---|
-| [`../Open-Questions.md`](../Open-Questions.md) | The **idea backlog** — unrefined. Prose stories, open questions still open, no acceptance criteria. | **No.** |
+| `Open-Questions.md`, in tower-workshop-paths | The **idea backlog** — unrefined. Prose stories, open questions still open, no acceptance criteria. | **No.** |
 | `stories/` | **Refined** stories with enumerated acceptance criteria, ready to hand to a coder. | Yes. |
 | `stories/done/` | Completed stories, moved here by the PR that completed them. | — |
 | `stories/retired/` | Stories dropped without being built, moved here by a Session A PR with the date and reason in their Context. | **No.** |
-| [`../Completed-Questions.md`](../Completed-Questions.md) | The **historical archive**, going back to OQ-1. Grepped by number (`grep -n 'OQ-37' ../Completed-Questions.md`), never read whole. | — |
+| `Completed-Questions.md`, in tower-workshop-paths | The **historical archive**, going back to OQ-1. Grepped by number (`grep -n 'OQ-37' Completed-Questions.md`), never read whole. | — |
 
 **Nothing dispatches from `Open-Questions.md`.** It is input to a planning
 session, not to the loop. Refining an entry means moving it into a file here
