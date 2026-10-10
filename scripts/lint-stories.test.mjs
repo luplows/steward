@@ -251,9 +251,9 @@ describe('OQ-61/AC-5: acceptance-criterion numbering', () => {
     expect(violations.some((v) => v.rule === 'AC-5' && /not a well-formed/.test(v.message))).toBe(true)
   })
 
-  it("stories/done/OQ-68, OQ-69 and OQ-70's real suffixed ids (AC-3b, AC-6b, AC-7b) pass", async () => {
+  it("test/fixtures/stories/OQ-68, OQ-69 and OQ-70's real suffixed ids (AC-3b, AC-6b, AC-7b) pass", async () => {
     for (const filename of ['OQ-68-github-operations.md', 'OQ-69-reviewer-dispatch.md', 'OQ-70-coder-dispatch.md']) {
-      const filePath = path.join(repoRoot, 'stories', 'done', filename)
+      const filePath = path.join(repoRoot, 'test', 'fixtures', 'stories', filename)
       const source = await readFile(filePath, 'utf8')
       const violations = lintStory(filePath, source, 'OQ').filter((v) => v.rule === 'AC-5')
       expect(violations, `${filename}: ${JSON.stringify(violations)}`).toEqual([])

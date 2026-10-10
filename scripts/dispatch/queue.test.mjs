@@ -361,8 +361,8 @@ describe('OQ-49/AC-7: what counts as an empty Open questions section', () => {
 })
 
 describe('OQ-49/AC-8: section boundaries ignore fenced code blocks', () => {
-  it('reads the real Open questions section of stories/done/OQ-51-*.md, not the fake heading inside its fence', async () => {
-    const fixturePath = path.join(repoRoot, 'stories', 'done', 'OQ-51-story-injection-boundary.md')
+  it('reads the real Open questions section of test/fixtures/stories/OQ-51-*.md, not the fake heading inside its fence', async () => {
+    const fixturePath = path.join(repoRoot, 'test', 'fixtures', 'stories', 'OQ-51-story-injection-boundary.md')
     const source = await readFile(fixturePath, 'utf8')
     const { body } = parseFrontmatter(source, fixturePath)
     const sections = parseSections(body)
@@ -389,7 +389,7 @@ describe('OQ-49/AC-8: section boundaries ignore fenced code blocks', () => {
   })
 
   it('derives ready from the real section, where a naive parser reads the fence and says draft', async () => {
-    const fixturePath = path.join(repoRoot, 'stories', 'done', 'OQ-51-story-injection-boundary.md')
+    const fixturePath = path.join(repoRoot, 'test', 'fixtures', 'stories', 'OQ-51-story-injection-boundary.md')
     const source = await readFile(fixturePath, 'utf8')
     const story = buildStory(fixturePath, source, false, 'OQ')
 

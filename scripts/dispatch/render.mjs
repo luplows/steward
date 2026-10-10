@@ -14,7 +14,7 @@
  * any structural construct at all), whatever it contains. It also carries a
  * per-call random nonce that the content cannot have anticipated, so no
  * forged marker line inside the content can pass as the real close. See
- * stories/done/OQ-51-story-injection-boundary.md.
+ * test/fixtures/stories/OQ-51-story-injection-boundary.md.
  *
  * The history this replaced is worth keeping straight, because the lesson is
  * in the shape of it. Round 1 demoted ATX headings and handled nothing else.

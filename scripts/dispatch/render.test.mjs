@@ -461,7 +461,7 @@ describe('OQ-51/AC-4: hostile fixtures, not just well-behaved ones, exercise AC-
 describe('OQ-51/AC-5: assembling either prompt against a real story leaves no unsubstituted placeholder', () => {
   it('renders coder.md against OQ-51\'s own story with every used placeholder substituted', async () => {
     const template = await readPrompt('coder.md')
-    const storySource = await readFile(path.join(repoRoot, 'stories', 'done', 'OQ-51-story-injection-boundary.md'), 'utf8')
+    const storySource = await readFile(path.join(repoRoot, 'test', 'fixtures', 'stories', 'OQ-51-story-injection-boundary.md'), 'utf8')
 
     // Deliberately does not scan `text` for `{{...}}` afterwards -- this
     // story's own body quotes `{{STORY}}` and `{{PR_BODY}}` as literal
@@ -482,7 +482,7 @@ describe('OQ-51/AC-5: assembling either prompt against a real story leaves no un
 
   it('renders reviewer.md against OQ-51\'s own story and a PR body that legitimately quotes real placeholder syntax (the OQ-63 scenario)', async () => {
     const template = await readPrompt('reviewer.md')
-    const storySource = await readFile(path.join(repoRoot, 'stories', 'done', 'OQ-51-story-injection-boundary.md'), 'utf8')
+    const storySource = await readFile(path.join(repoRoot, 'test', 'fixtures', 'stories', 'OQ-51-story-injection-boundary.md'), 'utf8')
     const prBodyQuotingPlaceholders = [
       '## What changed',
       '',
@@ -533,7 +533,7 @@ describe('OQ-51/AC-5: assembling either prompt against a real story leaves no un
     // single regex pass over the original template can't do that -- there is
     // no "later iteration" to re-scan inserted text with.
     const template = await readPrompt('reviewer.md')
-    const storySource = await readFile(path.join(repoRoot, 'stories', 'done', 'OQ-51-story-injection-boundary.md'), 'utf8')
+    const storySource = await readFile(path.join(repoRoot, 'test', 'fixtures', 'stories', 'OQ-51-story-injection-boundary.md'), 'utf8')
     expect(storySource).toContain('{{PR_BODY}}')
 
     const { text } = render(template, {
