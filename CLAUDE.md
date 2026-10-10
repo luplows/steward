@@ -1,4 +1,4 @@
-# tower-workshop-paths
+# steward
 
 Instructions only. Rationale, mechanism and history live in the files listed under
 **Where things are documented**.
@@ -16,8 +16,8 @@ Instructions only. Rationale, mechanism and history live in the files listed und
 - Read [`REVIEW.md`](REVIEW.md) before opening a pull request.
 - Fill all three sections of [`.github/pull_request_template.md`](.github/pull_request_template.md).
   An empty section is a missing one. **Verification** gives the commands run and their real results.
-- Check whether `README.md`, `Open-Questions.md` and `Project-Outline.md` need updating as a result
-  of the change. Include any such updates in the same pull request.
+- Check whether `README.md` needs updating as a result of the change. Include any such update in
+  the same pull request.
 - Open a pull request as a draft if it is not finished. Mark it ready when it is. Session A is the
   exception: it opens every pull request as a draft and marks it ready only when the owner says so
   (see [`docs/session-a.md`](docs/session-a.md)).
@@ -67,27 +67,20 @@ recalled — in story files, docs, commit messages, pull request bodies and revi
 - Record a design decision in `docs/agent-workflow-design.md` in the pull request that makes it,
   marked as not yet built. The story that builds it removes the mark. See that document's "Reading
   this document" note.
-- Look things up in `Completed-Questions.md` by OQ number rather than reading it whole.
+- An `OQ-<n>` is a tower-workshop-paths story. Look it up there by number, in its `stories/done/` or
+  `Completed-Questions.md`, rather than reading either whole.
 
 ## Testing
 
-- CI runs lint, Vitest (`npm test`), the build, and Playwright (`npm run test:e2e`) on every pull
-  request, and is a required check.
-- Add tests alongside new logic: Vitest for unit and component behaviour, Playwright for user flows.
-  The buy-order scoring algorithm is the highest priority.
-- A pull request that changes how the tool behaves extends the Playwright suite rather than relying
-  on a manual check.
+- CI runs lint and Vitest (`npm test`) on every pull request, and is a required check.
+- Add tests alongside new logic, in Vitest.
 - Do not add coverage-percentage tooling such as `@vitest/coverage-v8`. Its absence is deliberate.
 - Green CI is necessary and not sufficient.
-- Never generate screenshot baselines locally. `.github/workflows/update-screenshots.yml` creates
-  missing ones on a CI runner and never rewrites an existing one. For an intentional appearance
-  change, delete the stale images in your pull request and say in the body what changed and why.
 
 ## Where things are documented
 
 | File | What it is |
 |---|---|
-| [`Project-Outline.md`](Project-Outline.md) | **The product's design of record** — goals, scope, definitions. |
 | [`docs/agent-workflow-design.md`](docs/agent-workflow-design.md) | **The workflow's design of record** — roles, the gate, deliberate exclusions, platform facts. Read it before proposing a change to how work flows through this repository. |
 | [`REVIEW.md`](REVIEW.md) | The enumerated checklist a pull request is reviewed against. |
 | [`stories/README.md`](stories/README.md) | Story schema, status derivation, ordering, readiness test. |
@@ -95,5 +88,4 @@ recalled — in story files, docs, commit messages, pull request bodies and revi
 | [`docs/migration-plan.md`](docs/migration-plan.md) | The phased sequence for building the workflow, and its status. Not a design document. |
 | [`docs/gap-analysis.md`](docs/gap-analysis.md) | A dated snapshot, kept for its reasoning. Not a design document, and not current. |
 | [`docs/harness-outline.md`](docs/harness-outline.md) | The workflow's product outline, as a product of its own (steward): who it is for, why, what it must never do. Moves with the workflow. |
-| [`docs/steward-bootstrap.md`](docs/steward-bootstrap.md) | The hand-run checklist for creating `luplows/steward` from this repository. A procedure, not a design document. |
-| `Completed-Questions.md` | Archive of resolved stories. |
+| [`docs/steward-bootstrap.md`](docs/steward-bootstrap.md) | The hand-run checklist for creating `luplows/steward` from tower-workshop-paths. A procedure, not a design document. |
