@@ -1,0 +1,17 @@
+{
+  "name": "steward",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "bin": {
+    "steward": "scripts/dispatch/cli.mjs"
+  },
+  "scripts": {
+    "lint": "oxlint",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "oxlint": "^1.79.0",
+    "vitest": "^5.0.0"
+  }
+}
