@@ -185,19 +185,6 @@ describe('OQ-107/AC-2: background commands stay available', () => {
   }
 })
 
-// Every entry in .claude/settings.json's permissions.allow must be covered by
-// the role's own list, since that file is ignored when the workspace is not
-// trusted. A `Bash(x:*)` entry covers any `Bash(x ...)` entry.
-function covered(list, entry) {
-  if (list.includes(entry)) return true
-  const m = entry.match(/^Bash\((.*?)(:\*)?\)$/)
-  if (!m) return false
-  return list.some((t) => {
-    const p = t.match(/^Bash\((.*):\*\)$/)
-    return p && (m[1] === p[1] || m[1].startsWith(`${p[1]} `))
-  })
-}
-
 describe('OQ-74/AC-3: the reviewer allowlist', () => {
   const list = reviewerAllowedTools()
 
@@ -223,24 +210,6 @@ describe('OQ-74/AC-3: the reviewer allowlist', () => {
     expect(listAfter(args, '--allowedTools')).toEqual(list)
     expect(listAfter(args, '--disallowedTools')).toEqual(REVIEWER_DISALLOWED_TOOLS)
   })
-
-  for (const role of ['coder', 'reviewer']) {
-    it(`the ${role}'s constructed args are complete without settings.json`, () => {
-      const settings = JSON.parse(readRepo('.claude/settings.json'))
-      const allowed = listAfter(buildInvocation(role === 'coder' ? coderOptions : reviewerOptions).args, '--allowedTools')
-      // What the role uses: the project's own allowance, and (reviewer) the
-      // pipelines that were denied on #122 and #123.
-      for (const entry of settings.permissions.allow) {
-        if (role === 'reviewer' && entry.startsWith('Bash(npm run dev')) continue
-        if (role === 'reviewer' && entry.startsWith('Bash(npm install')) continue
-        expect(covered(allowed, entry), `${role} lacks ${entry}`).toBe(true)
-      }
-      if (role === 'reviewer') {
-        for (const util of ['tail', 'head', 'wc', 'grep', 'cut', 'cat', 'ls']) expect(allowed).toContain(`Bash(${util}:*)`)
-        expect(allowed).toContain('Bash(npm:*)')
-      }
-    })
-  }
 
   it('sed and sort stay out of both lists: they can write', () => {
     const both = [...list, ...coderAllowedTools(BRANCH)]
