@@ -10,33 +10,36 @@ from this repository. It is run by the owner with Session A. It is not a story, 
 dispatches from it.
 
 **Status: agreed by the owner on 2026-10-08, with the six decisions in section 9 (D-1 to D-6; D-7
-to D-9 were added the same day, D-10 to D-12 on 2026-10-09, and D-13 and D-14 on 2026-10-10).**
-Nothing below has been run except the two dry runs and the stopped real extraction in section 3.
-It runs once P1 to P6 hold.
+to D-9 were added the same day, D-10 to D-12 on 2026-10-09, and D-13 to D-15 on 2026-10-10).**
+Sections 1, 2 and 4 to 7 were run on 2026-10-10, in the retried extraction (section 3): steward
+exists, with its history pushed and its `main` protected. Section 8 has not been run.
 The decisions themselves live in the design doc's Portability section; this file is the
 procedure, and where it restates a decision it names the one it must not drift from.
 
 **Paused 2026-10-09 by the owner**, during the real extraction, before A1: steward is to be defined
 first (design doc, "Portability", "Decided so far"). What the extraction ran and found is in
-section 3.
+section 3. **Retried 2026-10-10**, from `main` at `688c3c2`, after #248 recorded that definition.
+The local checks (B15) passed, and the owner then authorised A1 and A2 (sections 5 to 7).
 
 Every count and line number here was re-derived on `main` at `09147c3` for the fresh dry run
-(section 3), unless it names another commit, and **is checked again at the real extraction**: the
-pull request that records the fresh dry run moves `main` itself.
+(section 3), unless it names another commit, and was checked again at the retried extraction, at
+`688c3c2`.
 
 ## 1. Before starting
 
-- [ ] **P1.** OQ-116, OQ-117, OQ-118, OQ-121, OQ-122 to OQ-131, OQ-135 and OQ-136 are in
+Ticked at the retried extraction, on 2026-10-10 (section 3).
+
+- [x] **P1.** OQ-116, OQ-117, OQ-118, OQ-121, OQ-122 to OQ-131, OQ-135 and OQ-136 are in
       `stories/done/` on `main`. Of those, the move needs OQ-118, OQ-117, OQ-122 to OQ-131 (design
       doc, "The move, in order", step 1), and the `fix` stories OQ-135 and OQ-136, written since.
       OQ-116 and OQ-121 were ahead of them in the queue, and were built on 2026-10-08.
-- [ ] **P2.** No open pull request changes a moving path.
-- [ ] **P3.** `git ls-remote --heads origin` shows no `story/` branch for a moving story.
-- [ ] **P4.** The loop is not running, and the dispatcher session has nothing in flight, so `main`
+- [x] **P2.** No open pull request changes a moving path.
+- [x] **P3.** `git ls-remote --heads origin` shows no `story/` branch for a moving story.
+- [x] **P4.** The loop is not running, and the dispatcher session has nothing in flight, so `main`
       does not move during the extraction. Record the `main` SHA extracted from.
-- [ ] **P5.** `git filter-repo --version` runs. It is installed with `pip install --user`, in the
+- [x] **P5.** `git filter-repo --version` runs. It is installed with `pip install --user`, in the
       Python user `Scripts` directory, which is not on `PATH`.
-- [ ] **P6.** `gh repo view luplows/steward` still reports no such repository.
+- [x] **P6.** `gh repo view luplows/steward` still reports no such repository.
 
 ## 2. What is extracted
 
@@ -162,12 +165,76 @@ extract is kept on the owner's machine as a record.
   - its rule files: `coder.md` reads `CLAUDE.md` and `REVIEW.md` from the project (line 140), and
     `reviewer.md` reads `REVIEW.md` and assumes `npm test`.
 
+### The retried extraction (done 2026-10-10)
+
+From `main` at `688c3c2` (#248), into a fresh clone at `E:\Source\steward-extract-2` (D-6).
+`E:\Source\steward-extract` was left untouched. Sections 1, 2 and 4 are below; sections 5 to 7,
+run once the owner had authorised A1 and then A2, are at the end of this entry.
+
+- P1 to P6 held. P4 was confirmed by the dispatcher session, for this machine: no loop, story,
+  coder, review or landing process and no scheduled task, nothing in flight or queued, and no
+  open pull request. It cannot see the owner's other machine.
+- `git filter-repo`, with the 29 paths, the 17 stories and the three rules: 157 of 251 commits
+  kept, and 98 files, every one on the list, and every path on the list matched a file. Per-file
+  commit counts matched the original for all 98. The history starts at this repository's first
+  commit (2026-09-10). The clone had no branch but `main`.
+- Commit subjects ending `(#N)`: 154 of 157 rewritten, the other three as in the fresh dry run.
+  D-7: 169 distinct numbers rewritten: the stopped run's 168, every one of them, and #248. Each
+  was checked against the list of this repository's pull requests from `gh api` (248, numbered 1
+  to 248): every one is one. Left alone: only `action#1614`.
+- B12's five links were at the same lines at `688c3c2`. `CLAUDE.md` line 90, the
+  `Project-Outline.md` row of its documents table, goes with that row in B10, and ST-5's line 69
+  quotes its link inside a code span, which renders as text already, so B12 changes the other
+  three.
+- The bootstrap commits: B0 (`.gitattributes`, D-15) and B1 to B14, with B7a and B7b, one commit
+  each, 16 in all; B7 changes nothing, so it has no commit. The 17 moving stories and every
+  moved file except the three documents #248 changed (the design doc, `harness-outline.md` and
+  this checklist) were byte-identical to the stopped run's, so B2 to B5, B8 to B10 and B12 to
+  B14 were taken from the stopped run's commits and checked against this checklist; B1, B6, B7a
+  and B11 were redone, and B7b is new. The B7a and B7b line numbers above held at `688c3c2`.
+  - B7a also removes the `covered` helper, which only the two `invocation.test.mjs` cases used.
+    One of those cases also checked that the reviewer's list holds seven read-only shell
+    utilities and `npm`; that check goes with it.
+  - B7b: `loop.test.mjs` and `review-verdicts.test.mjs` read a temporary fixture holding the
+    values they already expected, so their assertions are unchanged. The loop test changes into
+    the fixture for its one call, since its point is that `parseArgs` defaults to the working
+    directory (OQ-130).
+- B15, with Node 24.21.0 and npm 11.19.0, at the extract's `e77fc29`: `npm ci` (exit 0, 0
+  vulnerabilities), `npm run lint` (exit 0, no findings), `npm test` (25 of 25 files, 749 of 749
+  tests passed: the stopped run's 751 less B7a's two), `node scripts/dispatch/cli.mjs lint` (exit
+  0, no output) and `node scripts/dispatch/cli.mjs queue`: 17 rows, ST-1 to ST-17, every one
+  `blocked`. `package-lock.json` was unchanged by a fresh `npm install`.
+- A1, authorised by the owner. `luplows/steward` was created public, with no initial commit
+  (`gh repo create luplows/steward --public`, at 2026-10-11T01:47:48Z, which was 2026-10-10 on
+  the owner's machine). Section 5's settings were set and read back. This repository's settings,
+  read again first, were as section 5 records. `delete_branch_on_merge`, which this repository
+  has on and section 5 does not list, was left at GitHub's default, off: the sweep deletes heads
+  (`CLAUDE.md`). The two labels were created with this repository's colours and descriptions.
+  GitHub's default labels were left in place: ten, `accessibility` among them (corrected in
+  steward on 2026-10-10 from "nine", read back with `gh api repos/luplows/steward/labels`).
+- A2, authorised by the owner. The first try used an HTTPS remote. It waited on a credential
+  manager sign-in, which was cancelled, and nothing was pushed. On the owner's word the push was
+  made over SSH, as this repository's remote is, with `git@github.com:luplows/steward.git`. One
+  `git push origin main` created `main` at `e77fc29`, steward's only branch.
+- The `ci.yml` run the push triggered, run 38104261972, was green: job `test`, with lint and
+  `npm test` (25 of 25 files, 749 of 749 tests); the containment step was skipped, as it runs on
+  pull requests only.
+- Section 7: this repository's protection was read again, and applied to steward's `main` with
+  the two required checks bound to GitHub Actions (`app_id` 15368), as this repository's are.
+  Read back with `gh api`, every field compared (required checks, strictness, the review
+  settings, signatures, `enforce_admins`, linear history, force pushes, deletions, creations,
+  conversation resolution, lock, fork syncing and restrictions) is the same as this
+  repository's.
+
 ## 4. The bootstrap commits
 
-On top of the extracted history, in a fresh clone at `E:\Source\steward-extract`, never a working
-checkout. Each is its own commit, so the direct push in section 6 is reviewable commit by commit.
+On top of the extracted history, in a fresh clone (`E:\Source\steward-extract-2` for the retried
+extraction; D-6), never a working checkout. Each is its own commit, so the direct push in section
+6 is reviewable commit by commit. Ticked at the retried extraction, on 2026-10-10 (section 3).
 
-- [ ] **B1. Renumber the stories.** `git mv` each moving story to `ST-<n>`, numbered in ascending
+- [x] **B0. `.gitattributes`**, holding the one line `* text=auto eol=lf`, committed before B1 so
+      that every later step works on LF files (D-15).
+- [x] **B1. Renumber the stories.** `git mv` each moving story to `ST-<n>`, numbered in ascending
       order of OQ id (R4, R9), and set its `id:`. Add a line to its Context: "Formerly
       tower-workshop-paths OQ-<n>." References to OQ stories that stay here keep their numbers.
       The mapping, revised on 2026-10-10 for the 17 stories (D-13). "Held" means this `blocked:`,
@@ -195,19 +262,19 @@ checkout. Each is its own commit, so the direct push in section 6 is reviewable 
       | ST-17 | OQ-120 | `[]` | held (D-13) |
 
       A dropped dependency is recorded in that story's Context, naming the built OQ story.
-- [ ] **B2. Move the fixtures.** `git mv` the four built stories to `test/fixtures/stories/`, and
+- [x] **B2. Move the fixtures.** `git mv` the four built stories to `test/fixtures/stories/`, and
       point the tests that read them there.
-- [ ] **B3. `steward.config.json`:** `{ "repo": "luplows/steward", "storyPrefix": "ST" }`.
-- [ ] **B4. `package.json`.** Name `steward`, `"type": "module"`, `"private": true`, and a `bin`
+- [x] **B3. `steward.config.json`:** `{ "repo": "luplows/steward", "storyPrefix": "ST" }`.
+- [x] **B4. `package.json`.** Name `steward`, `"type": "module"`, `"private": true`, and a `bin`
       entry `steward` pointing at `scripts/dispatch/cli.mjs` (OQ-131), which already starts with
       a `#!/usr/bin/env node` line. Scripts `lint` (`oxlint`) and `test` (`vitest run`).
       `devDependencies`: `vitest` and `oxlint` only, at this repository's ranges (`^5.0.0` and
       `^1.79.0` at `09147c3`). `package-lock.json` from `npm install`.
-- [ ] **B5. A Vitest config** with `environment: 'node'` and no setup file. Seven of the moved test
+- [x] **B5. A Vitest config** with `environment: 'node'` and no setup file. Seven of the moved test
       files have no `@vitest-environment node` line and rely on this repository's jsdom default
       and `src/test/setup.js`, neither of which moves: `coder-env`, `outcome` and `settings` in
       `scripts/dispatch/`, and the four in `scripts/land/` (at `09147c3`).
-- [ ] **B6. `ci.yml`, rewritten.** One job named `test`, so it matches the required check: checkout
+- [x] **B6. `ci.yml`, rewritten.** One job named `test`, so it matches the required check: checkout
       with `fetch-depth: 0`, Node 22, `npm ci`, lint, Vitest, and the story containment step. No
       build and no Playwright. Its setup steps keep the `Setup: ` name prefix, because
       `ci.test.mjs` ("OQ-118/AC-3") reads steward's own `ci.yml` and fails otherwise. OQ-117's time
@@ -218,9 +285,9 @@ checkout. Each is its own commit, so the direct push in section 6 is reviewable 
       step passes the head branch name through an `env:` entry, referenced as a quoted shell
       variable, so no `${{ github.head_ref }}` appears in its `run:` (D-14; OQ-105's AC-5, which
       stays here, does the same for this repository's `ci.yml`).
-- [ ] **B7. `review-gate.yml` and `land-approved.yml`, unchanged.** Neither names this repository:
+- [x] **B7. `review-gate.yml` and `land-approved.yml`, unchanged.** Neither names this repository:
       they take `github.repository`, and run `node scripts/land/…` without `npm ci`.
-- [ ] **B7a. Tests of files that stay here, removed from steward's copy** (D-8). Re-derive them at
+- [x] **B7a. Tests of files that stay here, removed from steward's copy** (D-8). Re-derive them at
       the run: every test in a moved test file that reads a file not on the list in section 2.
       Known at `09147c3`, with the constants and helpers only they use:
       - in `scripts/dispatch/ci.test.mjs`, OQ-117's tests (AC-1 to AC-4), OQ-136's (AC-1 to
@@ -234,7 +301,7 @@ checkout. Each is its own commit, so the direct push in section 6 is reviewable 
 
       OQ-118's tests, and OQ-124's cases of `ci.yml`, are kept in steward's copy. This repository
       keeps all of its own.
-- [ ] **B7b. Tests that read the project they run in, fixed in steward's copy** (D-14). The real
+- [x] **B7b. Tests that read the project they run in, fixed in steward's copy** (D-14). The real
       extraction's other 36 failures (section 3). Re-derive them at the run; known at `b2a02bf`:
       - `scripts/dispatch/story.test.mjs` (33): its harness calls `runStory` without a `repoDir`
         (line 83), so `runStory` reads the settings of the directory the tests run in. The harness
@@ -246,15 +313,15 @@ checkout. Each is its own commit, so the direct push in section 6 is reviewable 
         (`settings.test.mjs`, "OQ-122/AC-2"), which expects steward's values from B3.
 
       This repository's copies are unchanged: they pass here.
-- [ ] **B8. The prompts, stripped by hand** (R1, "steward starts clean"): in `coder.md` this
+- [x] **B8. The prompts, stripped by hand** (R1, "steward starts clean"): in `coder.md` this
       repository's name, Vitest and Playwright, the screenshot-baseline rules, `mytower.app`, and
       the pointer to `Completed-Questions.md`; in `reviewer.md` this repository's name. The name
       becomes `luplows/steward`.
-- [ ] **B9. `REVIEW.md`**: items 8 and 10 removed, leaving the gaps (R1).
-- [ ] **B10. `CLAUDE.md`**: the workflow rules stay. This repository's "Testing" rules (Playwright,
+- [x] **B9. `REVIEW.md`**: items 8 and 10 removed, leaving the gaps (R1).
+- [x] **B10. `CLAUDE.md`**: the workflow rules stay. This repository's "Testing" rules (Playwright,
       screenshot baselines, the buy-order algorithm) go, and the documents table loses the files
       that stay here. See D-2.
-- [ ] **B11. The design doc and the other moved documents.**
+- [x] **B11. The design doc and the other moved documents.**
       - One note at the top of each: an `OQ-<n>` means a tower-workshop-paths story, found in its
         `stories/done/` or `Completed-Questions.md`.
       - Its **Planned** markers that name a moved story take that story's `ST-<n>`. At `09147c3`
@@ -264,38 +331,41 @@ checkout. Each is its own commit, so the direct push in section 6 is reviewable 
         (D-12, D-13).
       - This repository's passages, listed in R1 under "This document", and the example story:
         removed or replaced (D-1).
-- [ ] **B12. Links to files that stay here**, made into plain text or links to this repository.
+- [x] **B12. Links to files that stay here**, made into plain text or links to this repository.
       Five at `09147c3`, as at `d86080c`: `CLAUDE.md` lines 62 and 90, `stories/README.md`
       lines 14 and 18, and ST-5's (OQ-71's) line 69.
-- [ ] **B13. `.github/pull_request_template.md`**: its Docs check names `README.md`,
+- [x] **B13. `.github/pull_request_template.md`**: its Docs check names `README.md`,
       `Open-Questions.md` and `Project-Outline.md`, which steward does not have.
-- [ ] **B14. A short `README.md`**: what steward is, with a pointer to `docs/harness-outline.md`.
-- [ ] **B15. Local checks**, with their real output kept for the record: `npm ci`, `npm run lint`,
+- [x] **B14. A short `README.md`**: what steward is, with a pointer to `docs/harness-outline.md`.
+- [x] **B15. Local checks**, with their real output kept for the record: `npm ci`, `npm run lint`,
       `npm test`, `node scripts/dispatch/cli.mjs lint`, and `node scripts/dispatch/cli.mjs queue`.
       The queue should list only `ST-` stories, with the statuses in B1.
 
+Sections 5 to 7 were ticked at the retried extraction, on 2026-10-10 (section 3).
+
 ## 5. Create the repository
 
-- [ ] **A1. The owner authorises creating `luplows/steward`, public**, with no initial commit.
-- [ ] Settings, mirroring this repository's as read on 2026-10-08: squash, merge-commit and rebase
+- [x] **A1. The owner authorises creating `luplows/steward`, public**, with no initial commit.
+- [x] Settings, mirroring this repository's as read on 2026-10-08: squash, merge-commit and rebase
       merging allowed (the sweep squashes); issues on; default workflow permissions `read`;
       Actions may not approve pull requests.
-- [ ] Labels: `review-blocked` and `loop-stuck`, which this repository has. `breaker-override` is
+- [x] Labels: `review-blocked` and `loop-stuck`, which this repository has. `breaker-override` is
       read by `land-approved.yml` but this repository has no such label either.
 
 ## 6. The one direct push
 
-- [ ] **A2. The owner authorises the push explicitly, at that moment.** It is made before any
+- [x] **A2. The owner authorises the push explicitly, at that moment.** It is made before any
       protection exists (design doc, "The move, in order", step 2).
-- [ ] Push `main` only: `git push origin main`. No other branch, no tags.
-- [ ] The `ci.yml` run triggered by the push is green.
+- [x] Push `main` only: `git push origin main`. No other branch, no tags. Over SSH, as this
+      repository pushes (section 3).
+- [x] The `ci.yml` run triggered by the push is green.
 
 ## 7. Protect `main`
 
-- [ ] Mirror this repository's protection, as read on 2026-10-08: required checks `test` and
+- [x] Mirror this repository's protection, as read on 2026-10-08: required checks `test` and
       `review/agent`, not strict; `enforce_admins: true`; pull requests required, with 0
       approvals; no force pushes, no deletions.
-- [ ] Read the protection back with `gh api repos/luplows/steward/branches/main/protection` and
+- [x] Read the protection back with `gh api repos/luplows/steward/branches/main/protection` and
       check each setting.
 
 ## 8. Steward's own loop, and the first pull request
@@ -319,8 +389,9 @@ checkout. Each is its own commit, so the direct push in section 6 is reviewable 
 ## 9. Decisions
 
 D-1 to D-9 were made by the owner on 2026-10-08, D-10 to D-12 on 2026-10-09, after the fresh dry
-run, and D-13 and D-14 on 2026-10-10, while defining steward. All are recorded in the design doc's
-Portability section (R1 and R4) and its "Decided so far".
+run, D-13 and D-14 on 2026-10-10, while defining steward, and D-15 the same day, for the retried
+extraction. All are recorded in the design doc's Portability section (R1 and R4) and its "Decided
+so far".
 
 - **D-1. This repository's passages in steward's copy of the design doc** (Pages as the alpha
   channel, the buy-order examples, scraped-data validation, the production target, `mytower.app`,
@@ -340,7 +411,10 @@ Portability section (R1 and R4) and its "Decided so far".
   the owner:** steward starts with the gate only, and the stories that get its coder working come
   first, ahead of these (design doc, "Decided so far").
 - **D-6. The checkouts:** `E:\Source\steward-extract` for the extraction, and `E:\Source\steward`
-  with the loop's worktree beside it.
+  with the loop's worktree beside it. **Revised 2026-10-10 by the owner:** the retried extraction
+  goes into a fresh clone at `E:\Source\steward-extract-2`. `E:\Source\steward-extract` is kept
+  untouched, never modified, deleted or pushed, as the record of the stopped run. The other option
+  was to reuse that folder, which would have lost the record.
 - **D-7. A `#N` that is not this repository's pull request** (from the reviewer's observation on
   #215): the fresh dry run checks every rewritten `#N`, and the bootstrap stops on one that is
   not (section 2).
@@ -372,3 +446,10 @@ Portability section (R1 and R4) and its "Decided so far".
   is as B1 gives it. Steward's `ci.yml` passes the head branch name through `env:` (B6), rather
   than leaving that for a steward story. The retry waits for #248 to land, since it changes
   moving paths (P2) and holds these decisions.
+- **D-15. A `.gitattributes` in steward** (owner, 2026-10-10, before the retried extraction):
+  steward **gets one**, holding `* text=auto eol=lf`, as its own bootstrap commit (B0), as the
+  stopped run made it (section 3). The owner's reason: this repository's `.gitattributes`, which
+  does not move, starts with that line, and the owner's machine has `core.autocrlf=true`, so
+  without it steward's checkouts there get CRLF files. The other option was to leave it out, as
+  this checklist did until now. Its other lines, for this repository's snapshots and screenshot
+  baselines, do not go.
