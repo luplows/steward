@@ -369,6 +369,61 @@ otherwise; what is still open says so.
   - Open: whether GitHub's rulesets are available where branch protection is not. Only the branch
     protection limit is recorded (design doc, R6).
 
+### Settings
+
+Decided 2026-10-11 by the owner, from Session A's proposals, unless a line says otherwise. The
+key names are Session A's working names; the story that builds each settles it.
+
+- **One file, `steward.config.json`, flat for now**, with no default for any key: a missing or
+  unknown key is an error that names it, as `settings.mjs` does today. Grouping keys (for example,
+  `setup` and `check` under one heading) is left until the coder's keys make the groups clear.
+  What follows, accepted by the owner: a key that becomes required breaks a project until it adds
+  it, which a project meets only when it moves its pin, and which each version's update notes
+  must name. Required keys are hoped to be added rarely (owner). Not chosen for now: a version
+  field in the file.
+- **`storyPrefix` leaves steward's settings** (owner, 2026-10-11): the core does not depend on how
+  a project formats its units. What follows (Session A, 2026-10-11): `review.mjs`'s
+  `resolveStory` goes with the unit link (Review, above); steward's own story lint and story
+  containment are its own convention (design doc, "Decided so far", 2026-10-10), so they keep the
+  prefix in tooling of their own; `scripts/no-project-literals.test.mjs`, which keeps the prefix
+  out of the code, changes with it; and how a coder finds ready units waits for the coder's
+  readiness setting (Loops, below).
+- **`setup` and `check`: one command each, run through the platform's shell**, with a project
+  encouraged to point each at a script of its own (such as `npm run check`) rather than chain
+  commands, since only simple forms behave alike in Windows' `cmd` and in `sh`. Not chosen: an
+  argument list run without a shell. `null` is allowed for either, written explicitly: for
+  `setup`, the project needs nothing but the worktree; for `check`, there is no check, which
+  suits only a project without a coder.
+  - `setup` is run by the dispatcher, in the session's environment without credentials, before
+    a reviewer or a coder session starts, in the checkout that session will use. A failure starts
+    no session. The reviewer always gets it, since its narrower commands need what it prepares.
+  - `check` is run by the coder session itself (Land, above), so it is in effect a line of the
+    coder's prompt. What follows (Session A, 2026-10-11): its program must be one the coder's
+    allowlist admits, which today means `npm`, `npx` or `node`.
+  - **Each has a time limit, set in the settings.** Session A's suggestion for what `init`
+    writes, accepted for `setup`: 5 minutes. For `check`: open. What follows (Session A,
+    2026-10-11): the coder runs `check` as one shell call, and a shell call is cut off at 10
+    minutes (`SHELL_TIMEOUT_MS`, `scripts/dispatch/invocation.mjs`), so a longer check limit also
+    needs that bound raised, and the stall interval with it (`DEFAULT_STALL_MS`,
+    `scripts/dispatch/spawn.mjs`). ST-7 plans a time limit for today's install; it is reworded for
+    `setup`.
+- **`landWhen`: which checks must be green before the lander merges**, either every check on the
+  head (what `init` writes, as decided on 2026-10-10) or a list of check names.
+- **A project can turn steward's landing off** (owner, 2026-10-11, asked whether `review/agent`
+  should be optional for projects with other gating rules). Steward still reviews and posts
+  `review/agent`, but does not merge; the project merges by its own rules. Steward then never
+  merges without a verdict, because it never merges there (Never, above). Considered and not
+  chosen: a setting that turns off the lander's need for a passing verdict, which would make the
+  first of the three rules a project's choice.
+- **`unitLinks` and `rulesFile`**: as decided under Review, above.
+- **Kept out of the settings:** the cap on reviews per pass, a command-line option (Loops,
+  below); the machine label, which belongs to a machine, so stays `TW_MACHINE_LABEL`; and the
+  base branch, the remote and the stories directory, constants until a project needs otherwise
+  (design doc, R3).
+- **Later: which commands the reviewer and the coder may run** (owner, 2026-10-11). It probably
+  needs to be a setting, for a project that is not built with Node, and may look different once
+  coder and reviewer sessions run in containers (design doc, R5).
+
 ### Loops
 
 - **A review loop and a coding loop, separately** (the owner's idea, 2026-10-09; decided by the
