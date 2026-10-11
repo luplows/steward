@@ -227,6 +227,21 @@ otherwise; what is still open says so.
     project's choice goes). What follows (Session A, 2026-10-10): the reviewer can read only the
     CI results that have finished when it looks.
   - **The reviewer may read the CI results, but does not run CI itself**: GitHub already does.
+  - **Revised 2026-10-11 by the owner: the review and CI are two peer checks on the same head,
+    joined at the merge.** Neither feeds the other. CI answers whether the head builds and its
+    checks pass; the reviewer answers whether it does what its unit asked, by the project's rules;
+    and the lander merges only once the checks the settings name, `review/agent` among them, are
+    green. Asked how the reviewer and CI work in tandem, after Session A noted that GitHub has no
+    notion of CI of its own, only checks on a commit (check runs, such as each GitHub Actions job,
+    and commit statuses), and that `review/agent` is already one: `review-gate.yml` posts it as a
+    commit status, beside the `test` job of the workflow this repository names `CI` (`ci.yml`).
+    Considered and not chosen (Session A's proposal): the dispatcher handing the reviewer a
+    snapshot of the head's checks, with a log excerpt for each failed job, as it hands it the pull
+    request body. What follows (Session A, 2026-10-11): the reviewer is not given CI results, and
+    a red check the settings name stops the merge whatever the verdict. Open: whether the reviewer
+    still runs the project's whole check command to test a claim of passing checks, as
+    `reviewer.md` tells it to run `npm test` today ("Verify rather than accept", line 219), or
+    only narrower commands.
   - **The coder runs the project's check command before its work is pushed**, which also makes the
     wait before the review matter less. For reference (Session A, at `4f2f0fd`): in
     tower-workshop-paths the coder session commits and the dispatcher pushes (`pushBranch`,
