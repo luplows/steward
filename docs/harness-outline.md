@@ -238,10 +238,16 @@ otherwise; what is still open says so.
     Considered and not chosen (Session A's proposal): the dispatcher handing the reviewer a
     snapshot of the head's checks, with a log excerpt for each failed job, as it hands it the pull
     request body. What follows (Session A, 2026-10-11): the reviewer is not given CI results, and
-    a red check the settings name stops the merge whatever the verdict. Open: whether the reviewer
-    still runs the project's whole check command to test a claim of passing checks, as
-    `reviewer.md` tells it to run `npm test` today ("Verify rather than accept", line 219), or
-    only narrower commands.
+    a red check the settings name stops the merge whatever the verdict.
+  - **The reviewer does not run the project's whole check command; it runs only the narrower
+    commands that settle a particular claim**, such as one test file, a search or a diff of one
+    path (owner, 2026-10-11, from Session A's recommendation). CI, as the peer check, already shows
+    whether the checks pass, and on a bigger project the whole command can take a long time. The
+    owner accepts what follows: a pull request body that claims a count of passing tests is no
+    longer checked against a run of its own by the reviewer, and a false count is stopped only at
+    the merge, by the red check, not reported as a finding. Considered and not chosen: the
+    reviewer running the whole check command, as `reviewer.md` tells it to run `npm test` today
+    ("Verify rather than accept", line 219).
   - **The coder runs the project's check command before its work is pushed**, which also makes the
     wait before the review matter less. For reference (Session A, at `4f2f0fd`): in
     tower-workshop-paths the coder session commits and the dispatcher pushes (`pushBranch`,
