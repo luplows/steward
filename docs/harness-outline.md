@@ -419,6 +419,15 @@ key names are Session A's working names; the story that builds each settles it.
     limit for today's install; it is reworded for `setup`.
 - **`landWhen`: which checks must be green before the lander merges**, either every check on the
   head (what `init` writes, as decided on 2026-10-10) or a list of check names.
+  - **When GitHub reports a pull request `blocked` though the checks `landWhen` names are green,
+    steward does not ask the sweep to merge it, says so in what it reports, and tries again
+    later** (owner, 2026-10-11): "if the state is readable before spawning the land process, we
+    should respect that it isn't ready". `blocked` then means branch protection requires
+    something `landWhen` does not name, such as another required check or an approval, and
+    GitHub would refuse the merge anyway. Steward's own rule stays `landWhen`. Considered and not
+    chosen: triggering the sweep regardless, which is just as safe, since GitHub refuses the
+    merge, but fails a sweep run on every pass until the requirement clears; and treating
+    `blocked` as a rule of steward's own.
 - **A project can turn steward's landing off** (owner, 2026-10-11, asked whether `review/agent`
   should be optional for projects with other gating rules). Steward still reviews and posts
   `review/agent`, but does not merge; the project merges by its own rules. Steward then never

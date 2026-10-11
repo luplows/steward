@@ -29,9 +29,11 @@ with no branch protection, where GitHub's `mergeable_state` says nothing about r
       check must be present and green, and one absent is waiting.
 - [ ] **AC-2** — `land.mjs` decides landability with AC-1's function, for the settings'
       `landWhen`, in place of requiring `mergeable_state` to be `clean`. It still requires
-      `review/agent` to be `success`, no `review-blocked` label, not a draft, and a
-      `mergeable_state` of `clean` or `unstable` (`dirty` is a conflict; `blocked` with the named
-      checks green means GitHub requires something more, and is not landable). Its request
+      `review/agent` to be `success`, no `review-blocked` label, and not a draft. A
+      `mergeable_state` of `dirty` is a conflict, as today. A `mergeable_state` of `blocked` with
+      the named checks green means GitHub requires something `landWhen` does not name, and GitHub
+      would refuse the merge: the sweep is not triggered, and the result is a distinct
+      `github-blocked`, which a later call may try again. Its request
       allowlist gains one read, the head's check runs (`GET
       /repos/<repo>/commits/<sha>/check-runs`), and nothing else.
 - [ ] **AC-3** — `land-approved.yml` decides the same way: it reads the head's check runs and
