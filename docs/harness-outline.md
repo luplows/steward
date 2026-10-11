@@ -303,6 +303,44 @@ otherwise; what is still open says so.
   from `main` at `b2a02bf`): today one run of `story.mjs` takes a story through coder, CI, review
   and retry, and `writer-prs.mjs` already reviews and lands the open pull requests the loop did not
   open.
+- **The review side is a review-and-land dispatcher, not a loop that keeps running** (owner,
+  2026-10-11, asked how the review loop is shaped). It decides which pull requests get a reviewer
+  and spawns them, and lands what has passed. It runs on a defined trigger, one **pass** per run,
+  and does not run all the time, so that each run picks up updates to steward. Considered and not
+  chosen: a process that keeps running and polls, which keeps the code it loaded at start. Which
+  trigger is open; until one is built, the dispatcher session starts each run. A pass, as Session
+  A defined it the same day and the owner accepted:
+  1. Bring the dispatcher's own worktree to `origin/main`, detached, and stop if it has anything
+     uncommitted.
+  2. List the open pull requests against `main` once. One opened later waits for the next pass.
+  3. Oldest first, review each that is not a draft, is from an author the gate honours, and has
+     no verdict at its current head, up to a cap on reviews per pass (below).
+  4. Land each pull request with a passing verdict at its head that is safe to merge at that
+     moment, one at a time, since the sweep lands one per run. One whose checks are still running
+     or are red is left alone.
+  5. Exit, carrying nothing forward: the next pass derives everything again from GitHub.
+- **Landing never waits** (owner, 2026-10-11). A pass checks once whether each passed pull
+  request is safe to merge, and leaves one that is not for a later pass. Landing can be retried
+  freely, by any later pass, for as long as the pull request is reported safe to merge.
+  Considered and not chosen: waiting, as `land.mjs` does today, polling until the pull request is
+  landable within its bounds (`BLOCKED_BOUND_MS`, `MAX_TOTAL_WAIT_MS`). What follows (Session A,
+  2026-10-11): once reviews stop waiting for CI, a pull request can pass review before its checks
+  finish. In `writer-prs.mjs` as it is, a pull request whose landing gave up would never be landed,
+  since a later call skips any pull request that has a verdict at its head; retrying the landing
+  in every pass closes that.
+- **A pass reviews at most a set number of pull requests** (owner, 2026-10-11), so that a whole
+  pass, not only each session, has a ceiling on what it spends. Session A suggested 5, set on the
+  command line. The owner expects rarely to have more than a couple of pull requests in flight.
+- **One machine runs the review side, for now** (owner, 2026-10-11). Several machines are wanted
+  later, and the pass is built so that adding them is small. Ideas kept for then, none decided:
+  - landing is already safe across machines: each trigger names its pull request, and the sweep
+    re-checks it before merging;
+  - reviewing is the exposure, since two machines could review the same head and both pay, though
+    `review.mjs` notices the race before recording a verdict. A pass could first post a claim
+    comment naming its machine (`TW_MACHINE_LABEL`), the head and the time, and other passes
+    would skip a head with a fresh claim (Session A, 2026-10-11);
+  - or one machine runs the one authoritative dispatcher, which farms reviewer and coder sessions
+    out to other machines (the owner's idea, 2026-10-11).
 - **A pull request does not belong to a coder** (the owner's view, 2026-10-09, asked how a coder
   picks up the reviewer's feedback): any coder can take a pull request, read its linked unit and
   its review findings, and make the changes asked for. So a pull request whose latest verdict is a
