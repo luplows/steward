@@ -210,7 +210,8 @@ run once the owner had authorised A1 and then A2, are at the end of this entry.
   read again first, were as section 5 records. `delete_branch_on_merge`, which this repository
   has on and section 5 does not list, was left at GitHub's default, off: the sweep deletes heads
   (`CLAUDE.md`). The two labels were created with this repository's colours and descriptions.
-  GitHub's nine default labels were left in place.
+  GitHub's default labels were left in place: ten, `accessibility` among them (corrected in
+  steward on 2026-10-10 from "nine", read back with `gh api repos/luplows/steward/labels`).
 - A2, authorised by the owner. The first try used an HTTPS remote. It waited on a credential
   manager sign-in, which was cancelled, and nothing was pushed. On the owner's word the push was
   made over SSH, as this repository's remote is, with `git@github.com:luplows/steward.git`. One
