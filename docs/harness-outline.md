@@ -218,6 +218,10 @@ otherwise; what is still open says so.
     (R6); and describing it in the rules file, which steward itself cannot act on.
   - **`init` writes default entries, then explores the repository to surface options, as a
     deterministic script**, so it does not learn from prose. What it explores is open.
+  - **Two ways to set up, later: one declarative, which runs without AI, and one meant to be run
+    with an AI helper** (owner, 2026-10-11), since steward is meant to be used with AI tools. Noted
+    for later and not yet refined: what each covers, and how the second sits with the bullet
+    above, which makes `init` a deterministic script.
   - **The lander waits for the checks the settings name**: kept, as the next bullet says.
   - **Steward does not wait for CI before it starts a review, and does wait for all checks before
     it lands** (owner, 2026-10-10, after first being on the fence: a coder's work almost always
