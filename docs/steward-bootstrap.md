@@ -405,7 +405,8 @@ so far".
   "held until the move": it is a spike the owner runs with Session A, not dispatched (revised
   2026-10-09 by the owner, when OQ-73 was rewritten here as that spike; design doc, R5).
 - **D-5. The order of steward's first stories:** steward's own first stories (the prompts'
-  `{{REPO}}` slot and project section, closing `REVIEW.md`'s gaps, and `init` with the thin
+  `{{REPO}}` slot and project section, closing `REVIEW.md`'s gaps (dropped on 2026-10-11; design
+  doc, R1), and `init` with the thin
   workflow files) are **written at tier `next` before its loop first runs**, so they come before
   the moved stories. Writing them is Session A's, in steward (section 8). **Revised 2026-10-10 by
   the owner:** steward starts with the gate only, and the stories that get its coder working come
