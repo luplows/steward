@@ -183,6 +183,43 @@ otherwise; what is still open says so.
   `b2a02bf`): in tower-workshop-paths the diff is the pointer. `review.mjs`'s `resolveStory` takes
   the unit to be the story file the diff moves into `stories/done/`, refuses a pull request whose
   `story/` branch names a story its diff does not move, and refuses one that moves two.
+- **Refined 2026-10-11 by the owner: how the link is written and read.**
+  - **The dispatcher finds the link deterministically**, by parsing the pull request body, so that
+    no model is involved: a line `Unit: <link>`, or, for an issue, one of GitHub's closing keywords
+    (`Closes #n`). Considered and not chosen: going on inferring the unit from the diff, as
+    `resolveStory` does today. It could be deterministic too, but it fits only one project's story
+    convention.
+  - **A file unit is a path in the repository, read from `main`**, not from the pull request's
+    head: the unit as it stood before the work, which the pull request cannot edit into agreement
+    with itself. The reviewer still sees any edit to it in the diff. A path means steward stores
+    nothing about where a project keeps its units.
+  - **The link may point only into this repository**: a file in it, or one of its issues.
+  - **A pull request whose link is missing is still reviewed, and the review does not pass. The
+    reviewer decides that, not the dispatcher**, by the project's rules, as the bullet above has
+    it (owner, 2026-10-11, asked whether steward should record the block itself): only judgment
+    can tell a code change from a docs change, and a pull request that writes the document it
+    would link to has nothing to link. The dispatcher tells the reviewer, deterministically, which
+    of four it found: a link it read, a link it could not read and why, `Unit: none`, or no
+    `Unit:` line at all. Considered and not chosen: the dispatcher recording `block` itself for
+    any pull request with no readable link.
+  - **`Unit: none` says the pull request implements no unit** (owner, 2026-10-11), so the reviewer
+    judges only whether that is believable for the diff, rather than guessing. Open: whether and
+    how the line is required. Session A's options: the pull request template carries it; the
+    dispatcher always writes it on a pull request it opens; or a check on the pull request body,
+    posted by steward's gate, fails without it, which would sit with "Steward enforces nothing
+    about CI" (Land, below).
+  - **A setting lists the kinds of link a project uses** (owner, 2026-10-11): `issue` (`Unit: #n`
+    or a closing keyword), `file` (`Unit: <path>`) and `other` (`Unit:` and any text, which the
+    dispatcher passes to the reviewer unread, so that a link into another tracker works without an
+    integration). A list, not one value, since a project may use more than one kind. An empty list
+    means the project links no units: the reviewer works from the pull request body and the rules.
+    A missing setting is an error that names it, as every setting is in `settings.mjs` today,
+    so that "never decided" is not taken for "no units". This is not one of the lookups considered
+    on 2026-10-09 (bullet above): the pull request still points at its unit, and the setting says
+    only which kinds of pointer steward reads. What follows (Session A, 2026-10-11): a coder can
+    take work only from `issue` or `file`, since coder work always needs a unit it can read
+    (Loops, below), so a project with only `other`, or none, is review-only. Open: the default
+    `init` writes.
 - **A pull request that implements no unit is still reviewed, against the project's own rules**
   (owner, 2026-10-09, raised for a write-story pull request; tower-workshop-paths could not work
   otherwise). In tower-workshop-paths today such a pull request is reviewed against `REVIEW.md`'s
