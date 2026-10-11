@@ -448,8 +448,13 @@ key names are Session A's working names; the story that builds each settles it.
   2026-10-11, asked how the review loop is shaped). It decides which pull requests get a reviewer
   and spawns them, and lands what has passed. It runs on a defined trigger, one **pass** per run,
   and does not run all the time, so that each run picks up updates to steward. Considered and not
-  chosen: a process that keeps running and polls, which keeps the code it loaded at start. Which
-  trigger is open; until one is built, the dispatcher session starts each run. A pass, as Session
+  chosen: a process that keeps running and polls, which keeps the code it loaded at start. **The
+  trigger, to start with, is an agent session: the dispatcher session starts each run** (owner,
+  2026-10-11). Other triggers, such as a scheduled task (ST-11) or a GitHub event, are left for a
+  later discussion. The owner would accept as the MVP a dispatcher session that triggers both
+  coder runs and review-and-land passes. What follows (Session A, 2026-10-11): that reads "Keeping
+  going" (What matters most, above) as working through ready work without the owner's hands, not
+  without any session attending, so a scheduled task is not needed for the MVP. A pass, as Session
   A defined it the same day and the owner accepted:
   1. Bring the dispatcher's own worktree to `origin/main`, detached, and stop if it has anything
      uncommitted.
