@@ -376,7 +376,8 @@ Sections 5 to 7 were ticked at the retried extraction, on 2026-10-10 (section 3)
       before its loop first runs (D-5). The design doc's "What adopting steward needs from it"
       lists what this repository's adoption (OQ-115) needs from them. Revised 2026-10-10 by the
       owner: steward starts with the gate only, and its first stories get its coder working (design
-      doc, "Decided so far").
+      doc, "Decided so far"). Revised 2026-10-11 by the owner: the review side's stories come
+      first, then the coder's, built by hand until the coder works (design doc, "Decided so far").
 - [ ] A first, small pull request on steward (for example, its first story), reviewed and landed
       through steward's own gate, which shows `test`, `review/agent` and the sweep working. Until
       steward's review loop is built, a dispatcher session runs `review.mjs` and `land.mjs` for
@@ -410,6 +411,7 @@ so far".
   first runs**, so they come before the moved stories. Writing them is Session A's, in steward
   (section 8). **Revised 2026-10-10 by the owner:** steward starts with the gate only, and the
   stories that get its coder working come first, ahead of these (design doc, "Decided so far").
+  **Revised 2026-10-11 by the owner:** the review side's stories come before the coder's.
 - **D-6. The checkouts:** `E:\Source\steward-extract` for the extraction, and `E:\Source\steward`
   with the loop's worktree beside it. **Revised 2026-10-10 by the owner:** the retried extraction
   goes into a fresh clone at `E:\Source\steward-extract-2`. `E:\Source\steward-extract` is kept

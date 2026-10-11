@@ -1703,7 +1703,8 @@ deciding what is next. It is the harness's product outline, and moves with this 
   this repository's), also taken the same day (the entry after next); and what this repository
   runs until it adopts steward, taken the same day too (the third entry after this one).
 - **Steward starts with the gate only, and its first stories get its coder working** (decided
-  2026-10-10 by the owner, from Session A's proposal). On its first day steward reviews and lands
+  2026-10-10 by the owner, from Session A's proposal; revised 2026-10-11 by the owner: the review
+  side's stories come first, then the coder's, below). On its first day steward reviews and lands
   its own pull requests, written in the owner's interactive sessions, and runs no coder, as R6
   decided for the second project. The first follow-ups in steward are the stories that get its
   coder working to its outline. Considered and not chosen: steward dispatching its own `ST-<n>`
@@ -1780,6 +1781,37 @@ deciding what is next. It is the harness's product outline, and moves with this 
   push (A2), made over SSH. Steward's first CI run was green, and its `main` is protected as this
   repository's is. What is left is steward's own loop and its first pull request
   (`steward-bootstrap.md`, section 8).
+- **Steward's review side comes first, then its coder, and both are built by hand until the coder
+  works** (decided 2026-10-11 by the owner, while planning steward's first stories with Session
+  A). This revises the entry above, "Steward starts with the gate only, and its first stories get
+  its coder working": the review side's stories come before the coder's. Until steward has a
+  coder, each story is built in one of the owner's interactive sessions, or by an agent that
+  session spawns with a prompt written there, and carries a `blocked:` saying so, so that nothing
+  dispatches it. A new dispatcher session, steward's own, reviews and lands steward's pull
+  requests (**The dispatcher session**, above). Considered and not chosen: holding the stories
+  until the coder works, which the order makes circular; and running this engine's `story.mjs`
+  coder on them, against the entry above. The review side's design is in `harness-outline.md`,
+  "Defining steward" (Review, Land, Settings and Loops), decided the same day; each part is built
+  by the story named:
+  - **Planned (ST-18):** the settings keys `setup`, `check`, `landWhen`, `land`, `unitLinks` and
+    `rulesFile`, each required, with no default in the code.
+  - **Planned (ST-7):** the project's `setup` command, within its time limit, in place of
+    `npm ci`.
+  - **Planned (ST-19):** finding a pull request's unit from the link in its body, and reading it
+    from `main`.
+  - **Planned (ST-20):** reading the rules file from `main`, in sections that each say when they
+    apply and number their own items.
+  - **Planned (ST-21):** the reviewer judged by those rules, naming every section applied or not,
+    and citing each finding by section and item; `REVIEW.md` holding rules only.
+  - **Planned (ST-22):** the reviewer given the linked unit and the note on what was found, and
+    verifying with narrower commands rather than the whole check.
+  - **Planned (ST-23):** landing in one look, without waiting, and a project able to turn
+    steward's landing off.
+  - **Planned (ST-24):** landing when the checks `landWhen` names are green, in the lander and the
+    sweep, rather than on `mergeable_state` `clean`.
+  - **Planned (ST-25):** the review-and-land pass, one command per pass, started by the dispatcher
+    session for now.
+  - **Planned (ST-26):** a `Unit:` line in steward's pull request template.
 
 ### The move, in order
 
@@ -1806,9 +1838,10 @@ starts with the gate only, and dispatches no stories until its coder works ("Dec
    before any protection exists; then protect `main`, and give the repository its own CI, review
    gate and landing, running the engine from its own checkout. The steps are in
    [`steward-bootstrap.md`](steward-bootstrap.md).
-3. **In steward:** first the stories that get its coder working (revised 2026-10-10 by the owner,
-   "Decided so far"); `init` and the thin gate workflow files (R2); the second project's gate-only
-   start (R6, R7); then OQ-73's container spike and the stories it recommends, and OQ-101.
+3. **In steward:** first the stories that build its review side, then those that get its coder
+   working (revised 2026-10-10 and 2026-10-11 by the owner, "Decided so far"); `init` and the
+   thin gate workflow files (R2); the second project's gate-only start (R6, R7); then OQ-73's
+   container spike and the stories it recommends, and OQ-101.
 4. **Here:** adopting steward (split 2026-10-08, "Decided so far"). OQ-115, the cut-over, by hand:
    pin steward and switch to the thin workflow files, then start the loop with steward's command.
    Then OQ-133 (the rule files), OQ-132 (the moved code) and OQ-134 (the moved documents), in
@@ -2080,7 +2113,8 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   gaps, and `init` with the thin workflow files) are written at tier `next` before its loop first
   runs, so they come before the moved stories. **Revised 2026-10-10 by the owner:** steward starts
   with the gate only, and the stories that get its coder working come first, ahead of these
-  ("Decided so far"). Closing `REVIEW.md`'s numbering gaps was dropped on 2026-10-11 (R1).
+  ("Decided so far"); revised again on 2026-10-11: the review side's stories come before the
+  coder's. Closing `REVIEW.md`'s numbering gaps was dropped on 2026-10-11 (R1).
 - **R5. When.** **Revised 2026-10-08 by the owner: the move comes before OQ-73**, once the story
   pull requests #204 to #208 (OQ-117 to OQ-121) have landed, and still before OQ-101. OQ-73's coder
   (#209) found that its candidate mechanism, a separate Windows account for spawns, needs an
