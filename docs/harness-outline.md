@@ -374,9 +374,13 @@ otherwise; what is still open says so.
 Decided 2026-10-11 by the owner, from Session A's proposals, unless a line says otherwise. The
 key names are Session A's working names; the story that builds each settles it.
 
-- **One file, `steward.config.json`, flat for now**, with no default for any key: a missing or
-  unknown key is an error that names it, as `settings.mjs` does today. Grouping keys (for example,
-  `setup` and `check` under one heading) is left until the coder's keys make the groups clear.
+- **One file, `steward.config.json`, flat for now, apart from each command (below).** Steward's
+  code holds no default for any key: `init` writes a starting value for each into the file, where
+  the project sees it, and a missing or unknown key is an error that names it, as `settings.mjs`
+  does today (owner, 2026-10-11, asked whether the time limits start with defaults: "I want to
+  write in the limit, not store it in code"). Considered and not chosen: optional keys with
+  defaults in steward's code. Grouping other keys is left until the coder's keys make the groups
+  clear.
   What follows, accepted by the owner: a key that becomes required breaks a project until it adds
   it, which a project meets only when it moves its pin, and which each version's update notes
   must name. Required keys are hoped to be added rarely (owner). Not chosen for now: a version
@@ -400,13 +404,19 @@ key names are Session A's working names; the story that builds each settles it.
   - `check` is run by the coder session itself (Land, above), so it is in effect a line of the
     coder's prompt. What follows (Session A, 2026-10-11): its program must be one the coder's
     allowlist admits, which today means `npm`, `npx` or `node`.
-  - **Each has a time limit, set in the settings.** Session A's suggestion for what `init`
-    writes, accepted for `setup`: 5 minutes. For `check`: open. What follows (Session A,
-    2026-10-11): the coder runs `check` as one shell call, and a shell call is cut off at 10
-    minutes (`SHELL_TIMEOUT_MS`, `scripts/dispatch/invocation.mjs`), so a longer check limit also
-    needs that bound raised, and the stall interval with it (`DEFAULT_STALL_MS`,
-    `scripts/dispatch/spawn.mjs`). ST-7 plans a time limit for today's install; it is reworded for
-    `setup`.
+  - **Each command is written with its own time limit, as one value**, so that `null` leaves no
+    time limit behind with nothing to time, and every command added later takes the same shape:
+    `"setup": { "command": "npm ci", "timeoutMinutes": 5 }`, or `"setup": null`. Given a
+    command, its time limit is required, and missing is an error naming it (owner, 2026-10-11,
+    from Session A's proposal, after the owner noted that a required time limit beside a `null`
+    command would be strange). Considered and not chosen: a time limit as a key of its own,
+    required only when its command is not `null`; and one always required, even beside `null`.
+    What `init` writes, Session A's suggestion accepted by the owner: 5 minutes for `setup`, and
+    10 minutes for `check`. What follows (Session A, 2026-10-11): the coder runs `check` as one
+    shell call, and a shell call is cut off at 10 minutes (`SHELL_TIMEOUT_MS`,
+    `scripts/dispatch/invocation.mjs`), so a longer limit also needs that bound raised, and the
+    stall interval with it (`DEFAULT_STALL_MS`, `scripts/dispatch/spawn.mjs`). ST-7 plans a time
+    limit for today's install; it is reworded for `setup`.
 - **`landWhen`: which checks must be green before the lander merges**, either every check on the
   head (what `init` writes, as decided on 2026-10-10) or a list of check names.
 - **A project can turn steward's landing off** (owner, 2026-10-11, asked whether `review/agent`
