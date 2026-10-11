@@ -1,5 +1,9 @@
 # Steward bootstrap checklist
 
+> **OQ numbers.** This document was written in tower-workshop-paths, and moved to steward with its
+> history. An `OQ-<n>` in it means a tower-workshop-paths story, found in that repository's
+> `stories/done/` or `Completed-Questions.md`. Steward's own stories are numbered `ST-<n>`.
+
 The hand-run procedure for "The move, in order", step 2, in
 [`agent-workflow-design.md`](agent-workflow-design.md), "Portability": creating `luplows/steward`
 from this repository. It is run by the owner with Session A. It is not a story, and nothing

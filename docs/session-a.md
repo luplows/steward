@@ -1,5 +1,9 @@
 # Session A
 
+> **OQ numbers.** This document was written in tower-workshop-paths, and moved to steward with its
+> history. An `OQ-<n>` in it means a tower-workshop-paths story, found in that repository's
+> `stories/done/` or `Completed-Questions.md`. Steward's own stories are numbered `ST-<n>`.
+
 Instructions for the session that writes and refines stories with the owner.
 Session B, the release review, follows them too when it writes a story
 (`docs/agent-workflow-design.md`, "Session B is Session A wearing a different

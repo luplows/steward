@@ -1,5 +1,9 @@
 # Steward: harness outline
 
+> **OQ numbers.** This document was written in tower-workshop-paths, and moved to steward with its
+> history. An `OQ-<n>` in it means a tower-workshop-paths story, found in that repository's
+> `stories/done/` or `Completed-Questions.md`. Steward's own stories are numbered `ST-<n>`.
+
 **Status:** draft, being refined with the owner from 2026-10-07: in pull request #199, which
 merged on 2026-10-08, and now in #248.
 

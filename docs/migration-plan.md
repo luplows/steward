@@ -1,5 +1,9 @@
 # Migration plan — getting the designed loop running
 
+> **OQ numbers.** This document was written in tower-workshop-paths, and moved to steward with its
+> history. An `OQ-<n>` in it means a tower-workshop-paths story, found in that repository's
+> `stories/done/` or `Completed-Questions.md`. Steward's own stories are numbered `ST-<n>`.
+
 **Date:** 2026-09-18
 **Companion to:** [`agent-workflow-design.md`](agent-workflow-design.md) · [`gap-analysis.md`](gap-analysis.md)
 **Target:** `luplows/tower-workshop-paths`

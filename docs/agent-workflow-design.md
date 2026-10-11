@@ -2,7 +2,7 @@
 
 **Status:** Design v2 — architecture settled, implementation sequenced in [`migration-plan.md`](migration-plan.md)
 **Last updated:** 2026-09-18
-**Target:** `luplows/tower-workshop-paths`
+**Target:** `luplows/steward`
 
 > v2 supersedes the first draft. It incorporates the gap analysis against `origin/main @ e06e677`,
 > adopts the mechanisms the existing repo got right, and revises three things the first draft got
@@ -20,6 +20,10 @@
 > from 2026-09-25. Passages written before then may describe unbuilt parts without a marker; the
 > migration plan tracks those. `scripts/lint-stories.mjs` fails CI if a marker names a story whose
 > file is already in `stories/done/`, or a numeric id with no story file at all.
+
+> **OQ numbers.** This document was written in tower-workshop-paths, and moved to steward with its
+> history. An `OQ-<n>` in it means a tower-workshop-paths story, found in that repository's
+> `stories/done/` or `Completed-Questions.md`. Steward's own stories are numbered `ST-<n>`.
 
 ---
 
@@ -81,7 +85,7 @@ draft of this document did.)*
   │  → posts verdict status → lets the gate land it             │
   └────────────────────────┬───────────────────────────────────┘
                            │ lands on
-                         main ──────────► alpha channel (Pages)
+                         main
                            │
   ┌────────────────────────▼───────────────────────────────────┐
   │  SESSION B (human, periodic)                                │
@@ -124,12 +128,12 @@ day from #222's review).
 
 ```
 stories/
-  OQ-49-import-player-info.md      ← open
-  OQ-50-share-levels-via-link.md
+  ST-49-queue-json.md              ← open
+  ST-50-lint-summary.md
   done/
-    OQ-42-agent-review-gate.md     ← completed, moved by its own PR
+    ST-42-review-gate.md           ← completed, moved by its own PR
   retired/
-    OQ-55-declare-story-mechanisms.md  ← dropped unbuilt, moved by Session A
+    ST-55-declare-story-mechanisms.md  ← dropped unbuilt, moved by Session A
 ```
 
 A story the owner decides not to build is retired, not deleted (decided 2026-10-07 by the owner).
@@ -138,32 +142,33 @@ It keeps its file and its number in a directory nothing dispatches from, so revi
 
 ```markdown
 ---
-id: OQ-49
-title: Import current levels from playerInfo.dat
+id: ST-49
+title: Print the queue as JSON
 tier: normal               # fix | next | normal | later — priority only
-kind: product              # product | workflow — never read by the dispatcher
-depends_on: []             # [OQ-45] — dispatcher skips until those are done
+kind: workflow             # product | workflow — never read by the dispatcher
+depends_on: []             # [ST-45] — dispatcher skips until those are done
 model: sonnet              # per-story escalation
 blocked: null              # null | "reason text" — set by a kickback
 ---
 
 ## Intent
 
-As a player, I want to import my Workshop and Enhancement levels straight from the
-game's save data, so that I don't have to type in every level to get started.
+As the owner, I want the queue printed as JSON on request, so that another tool can
+read it without parsing the table.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — A file picker accepts a `playerInfo.dat` and reports a clear error
-      for an unparseable one.
-- [ ] **AC-2** — Workshop levels present in the file replace the entered values.
-- [ ] **AC-3** — Enhancement levels present in the file replace the entered values.
-- [ ] **AC-4** — Levels absent from the file are left untouched, not zeroed.
+- [ ] **AC-1** — `queue.mjs --json` prints one JSON array, with one object per story
+      holding its id, title, tier and status.
+- [ ] **AC-2** — Without `--json`, the output is unchanged.
+- [ ] **AC-3** — The array lists the stories in the table's order.
+- [ ] **AC-4** — A story file that does not parse is in the array with its error,
+      not left out.
 
 ## Out of scope
 
-- Interaction with OQ-22's Clear button — file separately if it matters.
-- Any server-side parsing. Client-only per `Project-Outline.md`.
+- Any other output format — file separately if it matters.
+- Changing the table's columns.
 
 ## Constraints
 
@@ -171,8 +176,8 @@ game's save data, so that I don't have to type in every level to get started.
 
 ## Context
 
-- `src/state/` — where entered levels live today
-- OQ-24 — the original investigation, in `Completed-Questions.md`
+- `scripts/dispatch/queue.mjs` — where the table is printed today
+- `stories/README.md` — the statuses the queue derives
 
 ## Open questions
 
@@ -186,7 +191,7 @@ game's save data, so that I don't have to type in every level to get started.
   A single 12 KB prose file gives neither.
 - **Completion is a `git mv`** inside the story's own PR, not a cut-and-paste into an 82 KB
   archive. The move is visible in the diff and checkable by the reviewer.
-- **Per-story history.** `git log stories/OQ-49-*.md` is the refinement trail.
+- **Per-story history.** `git log stories/ST-49-*.md` is the refinement trail.
 
 `Completed-Questions.md` stays exactly as it is — a historical archive, grepped by OQ number. It is
 not migrated. Only the handful of currently-open stories move.
@@ -316,10 +321,11 @@ than relaxed.
    (OQ-83; `scripts/dispatch/writer-prs.mjs`). Only a pull request from an account with write
    access is reviewed at all, let alone landed (OQ-81). CI fails a coder's own
    pull request if it changes `stories/` beyond its own story's move, ticks and `blocked:` edit
-   (OQ-82; `scripts/dispatch/story-containment.mjs`). **Planned (OQ-105):** it also fails one whose
-   head branch names a `story/OQ-<n>-…` other than the story its diff moves.
+   (OQ-82; `scripts/dispatch/story-containment.mjs`). In tower-workshop-paths, its OQ-105 plans
+   for CI also to fail one whose head branch names a `story/OQ-<n>-…` other than the story its
+   diff moves.
 2. Dispatcher picks the highest-tier, lowest-id ready story; creates a worktree and the branch
-   `story/OQ-49-import-player-info`. The loop (`scripts/dispatch/loop.mjs`, OQ-86) skips a ready
+   `story/ST-49-queue-json`. The loop (`scripts/dispatch/loop.mjs`, OQ-86) skips a ready
    story whose `story/OQ-<n>-*` branch already exists on `origin` (`stories/README.md`'s
    `in-progress`), so a story stopped after its PR was opened, which still reads `ready` on `main`,
    is never dispatched again. A story that stops before it has a PR stops the loop instead, since
@@ -432,7 +438,7 @@ Verified on the owner's Windows machine: `claude` CLI 2.1.273, `gh` 2.100.0 auth
 | | Cloud session | Local |
 |---|---|---|
 | `gh` CLI | absent | **present** |
-| Network egress | policy-limited; `mytower.app` unreachable | **unrestricted** |
+| Network egress | policy-limited | **unrestricted** |
 | Ref deletion | refused (HTTP 403) | **works** |
 | Mid-flight control | cannot be messaged | **ordinary process** |
 | Death at $0 | observed | **not applicable** |
@@ -511,10 +517,10 @@ instruction to the session, lifted when the owner says so, and not part of this 
 Decided 2026-09-28 by the owner, planning how Session A's pull requests reach the queue without a
 dispatcher session in between.
 
-- **Planned (OQ-101):** a Windows scheduled task starts the loop every 15 minutes while the machine
+- **Planned (ST-11):** a Windows scheduled task starts the loop every 15 minutes while the machine
   is on, on mains power only. The task is a script: a run with nothing ready starts no model
   session. GitHub's cron is not used (**Watchdog**, below).
-- **Planned (OQ-101):** a run takes a lock that a dead holder does not keep, and appends one line to
+- **Planned (ST-11):** a run takes a lock that a dead holder does not keep, and appends one line to
   a local run log. That log is how the owner hears about the loop's own stops. A leftover
   `tw-coder-*` worktree from an interrupted run is raised as a GitHub issue, as OQ-112 raises a
   stuck story, and the run goes on (decided 2026-10-01 by the owner). A blocked story pull request is also reported by
@@ -541,7 +547,7 @@ dispatcher session in between.
   anything is claimed, installed or spawned.
 - `--max-stories N` caps how many stories one run starts (`scripts/dispatch/loop.mjs`, OQ-86); a
   story the loop skips as `in-progress` does not count against it.
-- **Planned (OQ-102):** past a usage threshold, the loop starts no coder session, first dispatch or
+- **Planned (ST-12):** past a usage threshold, the loop starts no coder session, first dispatch or
   retry, but reviews and landing carry on, so every pull request ends with a review posted. A
   story that would have been retried is paused, and resumes on a later run under the threshold.
   What is measured, and over what window, is open.
@@ -565,7 +571,7 @@ Sketches, not literal — the prompts are rendered from files with the story inj
 # (the dispatcher pushes, OQ-84); gh is neither allowlisted nor authenticated
 # (OQ-63). The allowlist, read-only shell utilities included, is
 # coderAllowedTools's alone (OQ-67).
-claude -p "$(render .claude/prompts/coder.md OQ-49)" \
+claude -p "$(render .claude/prompts/coder.md ST-49)" \
   --model "$STORY_MODEL" --effort medium \
   --permission-mode acceptEdits \
   --permission-prompts none \
@@ -576,7 +582,7 @@ claude -p "$(render .claude/prompts/coder.md OQ-49)" \
   --output-format stream-json --verbose
 
 # Reviewer — handed no credentials, denied the obvious write paths (see OQ-62)
-claude -p "$(render .claude/prompts/reviewer.md OQ-49 $PR)" \
+claude -p "$(render .claude/prompts/reviewer.md ST-49 $PR)" \
   --model opus --effort high \
   --disallowedTools Edit Write NotebookEdit "Bash(git push:*)" "Bash(gh:*)" \
   --allowedTools $(reviewerAllowedTools) \
@@ -843,7 +849,7 @@ Additions that earn their place now:
 AC ids appear in test names directly:
 
 ```js
-test('OQ-49/AC-4: levels absent from the file are left untouched', ...)
+test('ST-49/AC-4: a story file that does not parse is in the array with its error', ...)
 ```
 
 **Coverage stays absent.** A percentage floor produces coverage-shaped tests that assert nothing,
@@ -887,10 +893,10 @@ test that runs this clean-up for real is in a file of its own, `*.alone.test.mjs
 leaves out and CI runs in a step of its own after it, so that no other test's processes are
 running for the clean-up to stop (decided 2026-10-09 by the owner).
 
-**Planned (OQ-137):** the step's worst case counts the clean-up after the first try, with a
-5-second allowance that the clean-up test checks: 2 × 120 + 5 + 30 + 20 = 295 seconds of the 300
-(decided 2026-10-09 by the owner, from #243's review). The clean-up after the second try is not
-counted: the step fails then whatever happens.
+In tower-workshop-paths, its OQ-137 plans for the step's worst case to count the clean-up after the
+first try, with a 5-second allowance that the clean-up test checks: 2 × 120 + 5 + 30 + 20 = 295
+seconds of the 300 (decided 2026-10-09 by the owner, from #243's review). The clean-up after the
+second try is not counted: the step fails then whatever happens.
 
 **Definition of green:** it builds, lint is clean, every AC has a named test, Vitest passes,
 Playwright passes without retries, no pre-existing test was modified without story authorization,
@@ -940,7 +946,7 @@ A **required status check keyed to the head SHA**, posted by the dispatcher:
 # NOT available in spawned cloud sessions.
 gh api -X POST "repos/$REPO/statuses/$SHA" \
   -f state=success -f context=review/agent \
-  -f description='OQ-49: pass' -f target_url="$FINDINGS_URL"
+  -f description='ST-49: pass' -f target_url="$FINDINGS_URL"
 ```
 
 Why a status rather than a PR review: GitHub forbids approving your own PR, which deadlocks a
@@ -998,7 +1004,7 @@ be kept essentially as-is:
 
 `review-blocked` is applied automatically when a pull request reaches the round bound, by
 `review-gate.yml`, with the bound derived from the PR's own `block` verdicts rather than
-remembered (OQ-80). **Planned (OQ-119):** removing the label by hand means "I have seen the cost,
+remembered (OQ-80). **Planned (ST-16):** removing the label by hand means "I have seen the cost,
 proceed", so after a removal only blocks recorded since the latest removal count towards applying
 it again, read from the pull request's `unlabeled` events (decided 2026-10-08 by the owner).
 
@@ -1026,26 +1032,15 @@ Three things to get right:
 ## Branching and releases
 
 ```
-main ──────────────────────────────────────►  alpha channel (GitHub Pages)
- │                                             continuous, automatic
- ├─ story/OQ-49-import-player-info
- ├─ fix/OQ-51-date-format
+main
+ │
+ ├─ story/ST-49-queue-json
+ ├─ fix/ST-51-date-format
  │
  └─ tag v0.4.0  ← Session B accepted this batch
 ```
 
-`main` is the integration trunk. Story branches cut from it and squash-merge back. **Pages is the
-alpha channel** — a preview shared with a few people for feedback, not the production target.
-
-### Tags mark reviewed checkpoints
-
-There is no production deployment target today. A tag therefore means *"Session B walked this batch
-and accepted it"* — a reviewed checkpoint, not a deploy. When a production channel exists, it
-deploys **from tags**, and the design does not otherwise change.
-
-This is the correction to v1, which assumed Pages was production and prescribed either a `develop`
-trunk or a tag-gated deploy. Neither is needed: an alpha channel *should* receive everything
-continuously, because rough edges there are the point.
+`main` is the integration trunk. Story branches cut from it and squash-merge back.
 
 ### Release branches are optional and deferred
 
@@ -1056,7 +1051,7 @@ parallel dispatch arrives.
 
 ### Mechanics
 
-- `story/OQ-49-slug` and `fix/OQ-51-slug` — parseable both ways, so any component can find the
+- `story/ST-49-slug` and `fix/ST-51-slug` — parseable both ways, so any component can find the
   story from the branch and vice versa.
 - **Squash-merge.** One story = one commit on main, which makes `git log <tag>..HEAD` a direct list
   of completed stories — Session B's input assembles itself.
@@ -1098,7 +1093,7 @@ Organised by **user-visible capability**, not by PR or story. Several stories of
 capability. Doing that grouping is Session B's first real piece of work.
 
 Per capability: what it does now that it didn't before, in user language — then **put it on screen**,
-driving the alpha deployment or a local dev server. That is the difference between reviewing work
+driving a deployment or a local dev server. That is the difference between reviewing work
 and reviewing a summary of work. Then: contributing stories, what the reviewer flagged but let
 through, and known gaps.
 
@@ -1144,16 +1139,10 @@ spots. Built into the model allocation above.
 caught this?* A frontmatter field on the fix story. The only signal measuring the whole system.
 
 **3. Property-based testing.** The direct attack on coder-writes-both — a generator finds cases the
-coder didn't think of, *including ones revealing it misread the story*. `fast-check`. This domain
-has unusually natural invariants: a buy-order is always a valid purchase sequence, cost is monotonic,
-the rollup view is a strict group-by of the granular view, identical input gives identical output.
+coder didn't think of, *including ones revealing it misread the story*. `fast-check`.
 
-**4. Golden tests for computed output.** Appearance is already guarded by screenshot baselines;
-extending the same idea to buy-order output catches unintended changes nobody wrote an assertion for.
-
-**5. Boundary validation on scraped data.** Fixtures are frozen; `mytower.app` is not. Every test
-can pass while live data has drifted. The existing `detect-drift.yml` covers Workshop costs;
-OQ-45 extends it to Enhancement data.
+**4. Golden tests for computed output.** Comparing computed output against a recorded copy catches
+unintended changes nobody wrote an assertion for.
 
 Later if wanted: mutation testing, differential testing for refactors.
 
@@ -1178,7 +1167,7 @@ shipped documentation instructing agents to do impossible things; both read perf
 |---|---|---|
 | `gh` CLI | present, authed | **absent** — MCP tools or REST |
 | Ref deletion | works | **refused** (HTTP 403) |
-| Network egress | unrestricted | policy-limited; `mytower.app` unreachable |
+| Network egress | unrestricted | policy-limited |
 | GitHub Actions runner | — | `gh` **is** present there |
 
 *Known live defect:* `REVIEW.md` tells the reviewer to get the head SHA with `gh pr view`, while
@@ -1485,7 +1474,7 @@ guarantee. `buildInvocation` pins `BASH_DEFAULT_TIMEOUT_MS` and `BASH_MAX_TIMEOU
 for both roles (`SHELL_TIMEOUT_MS` in `scripts/dispatch/invocation.mjs`), and removes
 `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` if the dispatcher's environment carries it (items 2 to 4,
 with the default changed as item 6 says). `coder.md` and `reviewer.md` tell a session never to end
-its turn while a command runs (item 5). **Planned (OQ-108):** a coder session that completes with
+its turn while a command runs (item 5). **Planned (ST-14):** a coder session that completes with
 work left uncommitted is resumed once and told so. The resumed session's outcome, report and
 commits are then used exactly as a first session's would be, so its report supplies the PR. That is the
 backstop for a session that ends its turn anyway, whatever the story. Items 4 and 6 describe
@@ -1590,16 +1579,17 @@ deciding what is next. It is the harness's product outline, and moves with this 
 ### Decided so far
 
 - **The move comes first** (decided 2026-10-07 by the owner).
-  **Planned (OQ-115, OQ-132, OQ-133, OQ-134):** the workflow moves to a repository of its own, and
-  this repository uses it. **Planned (OQ-114):** once moved, coder and reviewer sessions run
-  through an adapter per agent tool, so that a role can be given another company's model. OQ-114
-  is a draft, to be split before it is dispatched; OQ-115 was split on 2026-10-08 (below).
+  The workflow has moved to a repository of its own, steward; tower-workshop-paths adopting it is
+  that repository's own work (its OQ-115, OQ-132, OQ-133 and OQ-134). **Planned (ST-15):** once
+  moved, coder and reviewer sessions run through an adapter per agent tool, so that a role can be
+  given another company's model. OQ-114 is a draft, to be split before it is dispatched; OQ-115
+  was split on 2026-10-08 (below).
 - **Goal 3 is about AI model companies, not GitHub** (decided 2026-10-07 by the owner). The gate
   stays on GitHub. Moving the hosting would be a far larger migration, and would depend on the
   target platform's rules much more than switching models does.
 - **The move comes before OQ-73 and before OQ-101, after OQ-118 and OQ-117 are built** (decided
   2026-10-07, revised 2026-10-08 by the owner). See R5.
-- **Planned (OQ-73): coder sessions are isolated in a container** (decided 2026-10-08 by the
+- **Planned (ST-6): coder sessions are isolated in a container** (decided 2026-10-08 by the
   owner). OQ-73, a spike, finds out how, and the stories it recommends build it. See R5.
 - **A project takes the workflow as a package pinned by git tag**, with no npm publishing planned,
   runs the loop from its own worktree, and keeps thin gate workflow files written by an `init`
@@ -2094,7 +2084,7 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   built here; OQ-121 still is, ahead of OQ-122 in the queue.
 
   **OQ-73's mechanism is a container** (decided 2026-10-08 by the owner, replacing the separate
-  Windows account in OQ-73's Context). **Planned (OQ-73):** coder sessions run in a container whose
+  Windows account in OQ-73's Context). **Planned (ST-6):** coder sessions run in a container whose
   image the workflow's repository defines, with only the work and the agent tool's own login passed
   in, so no host keyring, `~/.ssh` or user profile is reachable. The reason is portability: a new
   machine needs one standard install (a container runtime) rather than account management, and
@@ -2106,7 +2096,7 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   day, and its findings are in the spike's Context. The container runtime is left open, as the
   spike's open question. Known questions for the spike: a git worktree's `.git` file holds an
   absolute host path, and `node_modules` on a bind mount from Windows is slow.
-  The **Planned (OQ-73)** markers here and under "Decided so far" were added on 2026-10-08 at the
+  The **Planned (ST-6)** markers here and under "Decided so far" were added on 2026-10-08 at the
   owner's decision, after #199's review. The spike builds nothing, so its AC-5 leaves them in
   place, and the stories written from its recommendation take them over (its AC-4). They take
   those stories' `ST-<n>` once written in steward.
@@ -2203,7 +2193,7 @@ Checked on 2026-10-07 against `main` at `66c578d`:
 - **A model in the dispatcher.** If it needs judgment, the schema is underspecified.
 - **Merging without a recorded verdict.**
 - **Coverage-percentage tooling.**
-- **A `develop` trunk.** Unnecessary once Pages is understood as alpha.
+- **A `develop` trunk.** `main` is the integration trunk.
 
 ---
 
@@ -2219,7 +2209,6 @@ Checked on 2026-10-07 against `main` at `66c578d`:
 | 6 | Story sizing proxies | **Resolved:** guideline, not a cap. Session A's judgment governs readiness, and carries an obligation to push back when scope is too large. Better proxy is distinct mechanisms than criterion count — see [Sizing is a judgment](#sizing-is-a-judgment-and-it-is-session-as). |
 | 7 | Verdict mechanism | **Resolved:** `review/agent` status, SHA-keyed. Already built and required. |
 | 8 | What CI runs | **Resolved:** current suite plus schema lint, AC traceability, existing-test flag. No tiering at 70 s. |
-| 9 | Production deployment target | Open. None today; Pages is alpha. Tags are checkpoints until one exists. |
 | 10 | Second GitHub identity | Open. The only thing that fully closes self-marking. Cost: a machine account or App. |
 | 11 | Other companies' models | Open. Goals decided 2026-10-07, and comes after the move; questions M1–M6 under [Portability](#portability-other-projects-other-companies-models). OQ-114. |
 | 12 | The workflow in a repository of its own | Open. Goals decided 2026-10-07, and comes first; questions R1–R10 under [Portability](#portability-other-projects-other-companies-models). OQ-115. |
