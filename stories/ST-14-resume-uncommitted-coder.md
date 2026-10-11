@@ -1,9 +1,9 @@
 ---
-id: OQ-108
+id: ST-14
 title: Resume a coder session once when it ends with work left uncommitted, instead of discarding it
 tier: normal
 kind: workflow
-depends_on: [OQ-107]
+depends_on: []
 model: sonnet
 blocked: "Parked by the owner until a dispatch after OQ-107 is seen to lose uncommitted work (nothing-committed or uncommitted-changes with paths). The first time that happens, Session A clears this."
 ---
@@ -93,6 +93,9 @@ one backstop for every story, with no special case for any of them.
 - Unit tests do not invoke `claude`. AC-5's check is run by hand, once.
 
 ## Context
+
+Formerly tower-workshop-paths OQ-108. Its `depends_on` also named OQ-107, which
+is tower-workshop-paths' own, so it was dropped at the move (built there).
 
 - `scripts/dispatch/coder.mjs`: `pushBranch`, `sessionSummary`, `cleanUp`, and
   the `finally` blocks of `dispatchCoder` and `retryStory` that remove the

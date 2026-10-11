@@ -1,11 +1,11 @@
 ---
-id: OQ-99
+id: ST-10
 title: Have the verdict report cover every pull request by default, and say when a limit cut it short
 tier: later
 kind: workflow
 depends_on: []
 model: sonnet
-blocked: "Held for the move to steward, decided 2026-10-08 by the owner (docs/agent-workflow-design.md, Portability, R4)"
+blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
 ---
 
 ## Intent
@@ -65,6 +65,8 @@ looks complete.
 *(none)*
 
 ## Context
+
+Formerly tower-workshop-paths OQ-99.
 
 - `scripts/report/review-verdicts.mjs` (OQ-47, #169):
   - `DEFAULT_LIMIT` is 60.

@@ -1,11 +1,11 @@
 ---
-id: OQ-64
+id: ST-4
 title: Make the reviewer block on defects rather than recording them as observations
 tier: fix
 kind: workflow
 depends_on: []
 model: sonnet
-blocked: null
+blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
 ---
 
 ## Intent
@@ -60,6 +60,8 @@ evidence the reviewer was reluctant.
 *(none)*
 
 ## Context
+
+Formerly tower-workshop-paths OQ-64.
 
 Raised after #109, which took five review rounds. The first four returned
 `pass-with-observations` across seven findings, and **the author fixed every one

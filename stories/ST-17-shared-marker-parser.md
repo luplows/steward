@@ -1,11 +1,11 @@
 ---
-id: OQ-120
+id: ST-17
 title: Count review-blocked's blocks with github.mjs's marker parser, not a copy of it
 tier: normal
 kind: workflow
 depends_on: []
 model: sonnet
-blocked: "Held for the move to steward, decided 2026-10-08 by the owner (docs/agent-workflow-design.md, Portability, R4)"
+blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
 ---
 
 ## Intent
@@ -65,6 +65,8 @@ today, but nothing would fail if one changed and the other did not.
 *(none)*
 
 ## Context
+
+Formerly tower-workshop-paths OQ-120.
 
 - `scripts/land/apply-review-blocked.mjs`: `MARKER_RE` (lines 34–35),
   `lastVerdict` (lines 37–40), `countBlockingVerdicts` (lines 43–49).

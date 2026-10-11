@@ -1,11 +1,11 @@
 ---
-id: OQ-114
+id: ST-15
 title: Run coder and reviewer sessions through an adapter per agent tool, so a role can use another company's model
 tier: normal
 kind: workflow
-depends_on: [OQ-115]
+depends_on: []
 model: sonnet
-blocked: null
+blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
 ---
 
 ## Intent
@@ -42,6 +42,10 @@ the real ones come from the answers to the open questions.
 *(none)*
 
 ## Context
+
+Formerly tower-workshop-paths OQ-114. Its `depends_on` also named OQ-115, which
+is tower-workshop-paths' own, so it was dropped at the move (design doc, R4: it
+only meant "after the move").
 
 - `docs/agent-workflow-design.md`, "Portability": the goals, what ties the
   workflow to the Claude Code CLI today, and the open questions.

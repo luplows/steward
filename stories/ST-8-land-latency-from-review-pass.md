@@ -1,11 +1,11 @@
 ---
-id: OQ-89
+id: ST-8
 title: Measure landing latency from when the review gate passed, not from when land.mjs first looked
 tier: normal
 kind: workflow
 depends_on: []
 model: sonnet
-blocked: "Held for the move to steward, decided 2026-10-08 by the owner (docs/agent-workflow-design.md, Portability, R4)"
+blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
 ---
 
 ## Intent
@@ -59,6 +59,8 @@ hours late records a wait of seconds.
 *(none)*
 
 ## Context
+
+Formerly tower-workshop-paths OQ-89.
 
 - `scripts/dispatch/land.mjs`: `landPullRequest` sets `times.landableAt ??=
   now()` in the iteration that first sees the pull request landable, and

@@ -1,11 +1,11 @@
 ---
-id: OQ-101
+id: ST-11
 title: Run the loop on a Windows scheduled task, with a lock, a startup check and a run log
 tier: next
 kind: workflow
-depends_on: [OQ-73, OQ-80, OQ-81, OQ-82, OQ-83, OQ-86, OQ-109, OQ-110, OQ-111, OQ-112]
+depends_on: [ST-6]
 model: sonnet
-blocked: null
+blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
 ---
 
 ## Intent
@@ -100,6 +100,10 @@ what each run did.
   story delivers `install`; it does not run it.
 
 ## Context
+
+Formerly tower-workshop-paths OQ-101. Its `depends_on` also named OQ-80, OQ-81,
+OQ-82, OQ-83, OQ-86, OQ-109, OQ-110, OQ-111 and OQ-112, which are
+tower-workshop-paths' own, so they were dropped at the move (built there).
 
 - Decided by the owner on 2026-09-28, in the dispatcher session, while
   planning how Session A's pull requests reach the queue:

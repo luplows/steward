@@ -1,11 +1,11 @@
 ---
-id: OQ-71
+id: ST-5
 title: Give each cross-referenced claim one authoritative home
 tier: next
 kind: workflow
 depends_on: []
 model: sonnet
-blocked: null
+blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
 ---
 
 ## Intent
@@ -96,6 +96,8 @@ me on the current version rather than a superseded copy of it.
   obvious way to fail it.
 
 ## Context
+
+Formerly tower-workshop-paths OQ-71.
 
 Written after [#119](https://github.com/luplows/tower-workshop-paths/pull/119),
 whose review found four documentation-consistency defects, three of which were

@@ -1,11 +1,11 @@
 ---
-id: OQ-62
+id: ST-3
 title: Remove the reviewer's capability to write, rather than denying the command
 tier: normal
 kind: workflow
 depends_on: []
 model: sonnet
-blocked: "Held for the move to steward, decided 2026-10-08 by the owner (docs/agent-workflow-design.md, Portability, R4)"
+blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
 ---
 
 ## Intent
@@ -67,6 +67,8 @@ instruction.
   reviewer would appear de-credentialed and be fully authenticated.
 
 ## Context
+
+Formerly tower-workshop-paths OQ-62.
 
 Found reviewing [#109](https://github.com/luplows/tower-workshop-paths/pull/109),
 whose own round-4 verdict established it: the reviewer's allowlist grants

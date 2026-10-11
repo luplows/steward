@@ -1,11 +1,11 @@
 ---
-id: OQ-102
+id: ST-12
 title: Stop starting coder sessions once a usage threshold is reached, and let reviews finish
 tier: next
 kind: workflow
-depends_on: [OQ-83, OQ-86, OQ-101]
+depends_on: [ST-11]
 model: sonnet
-blocked: null
+blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
 ---
 
 ## Intent
@@ -79,6 +79,10 @@ up again once usage is back under the threshold.
 - Node, ESM, no new runtime dependencies.
 
 ## Context
+
+Formerly tower-workshop-paths OQ-102. Its `depends_on` also named OQ-83 and
+OQ-86, which are tower-workshop-paths' own, so they were dropped at the move
+(built there).
 
 - Decided by the owner on 2026-09-28, in the dispatcher session: past the
   threshold, no new coder session starts, retries included, and reviews carry

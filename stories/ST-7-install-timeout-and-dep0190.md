@@ -1,11 +1,11 @@
 ---
-id: OQ-88
+id: ST-7
 title: Bound the dispatch install with a timeout, and start it on Windows without DEP0190
 tier: normal
 kind: workflow
 depends_on: []
 model: sonnet
-blocked: "Held for the move to steward, decided 2026-10-08 by the owner (docs/agent-workflow-design.md, Portability, R4)"
+blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
 ---
 
 ## Intent
@@ -57,6 +57,8 @@ noise and it does not depend on a pattern Node has deprecated.
 - Node, ESM, no new runtime dependencies.
 
 ## Context
+
+Formerly tower-workshop-paths OQ-88.
 
 - `scripts/dispatch/install.mjs` runs
   `execFile('npm', ['ci'], { shell: process.platform === 'win32', … })` with

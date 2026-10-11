@@ -1,11 +1,11 @@
 ---
-id: OQ-119
+id: ST-16
 title: After review-blocked is removed by hand, count only the blocks recorded since
 tier: normal
 kind: workflow
 depends_on: []
 model: sonnet
-blocked: "Held for the move to steward, decided 2026-10-08 by the owner (docs/agent-workflow-design.md, Portability, R4)"
+blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
 ---
 
 ## Intent
@@ -69,6 +69,8 @@ should count towards applying it again.
 *(none)*
 
 ## Context
+
+Formerly tower-workshop-paths OQ-119.
 
 - `scripts/land/apply-review-blocked.mjs` (OQ-80): `decideReviewBlocked`,
   `countBlockingVerdicts`, `applyReviewBlocked`, which reads comments with

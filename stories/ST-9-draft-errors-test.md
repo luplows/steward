@@ -1,11 +1,11 @@
 ---
-id: OQ-98
+id: ST-9
 title: Pin that a GraphQL error fails a draft conversion even when the response says it is a draft
 tier: normal
 kind: workflow
 depends_on: []
 model: sonnet
-blocked: "Held for the move to steward, decided 2026-10-08 by the owner (docs/agent-workflow-design.md, Portability, R4)"
+blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
 ---
 
 ## Intent
@@ -45,6 +45,8 @@ draft.
 *(none)*
 
 ## Context
+
+Formerly tower-workshop-paths OQ-98.
 
 - `scripts/dispatch/github.mjs`, `convertPullRequestToDraft` (OQ-87, #153):
   after the mutation, it throws if `json.errors` is a non-empty array, then

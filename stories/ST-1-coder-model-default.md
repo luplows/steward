@@ -1,11 +1,11 @@
 ---
-id: OQ-54
+id: ST-1
 title: Resolve the coder model from a single declared default
 tier: normal
 kind: workflow
-depends_on: [OQ-61]
+depends_on: []
 model: sonnet
-blocked: "Held for the move to steward, decided 2026-10-08 by the owner (docs/agent-workflow-design.md, Portability, R4)"
+blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
 ---
 
 ## Intent
@@ -60,6 +60,9 @@ model is a one-line edit rather than an edit to every story file.
   coder spawns only.
 
 ## Context
+
+Formerly tower-workshop-paths OQ-54. Its `depends_on` also named OQ-61, which is
+tower-workshop-paths' own, so it was dropped at the move (built there).
 
 - `stories/OQ-61-story-schema-lint.md` — the lint AC-3 tightens. Its AC-2
   constrains `id`, `tier`, `depends_on` and `blocked` by value but requires only

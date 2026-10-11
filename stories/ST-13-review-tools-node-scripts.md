@@ -1,11 +1,11 @@
 ---
-id: OQ-103
+id: ST-13
 title: Let the reviewer's helper run a repository script with node, and still refuse node's flags
 tier: normal
 kind: workflow
 depends_on: []
 model: sonnet
-blocked: "Held for the move to steward, decided 2026-10-08 by the owner (docs/agent-workflow-design.md, Portability, R4)"
+blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
 ---
 
 ## Intent
@@ -66,6 +66,8 @@ exit code.
   widens nothing.
 
 ## Context
+
+Formerly tower-workshop-paths OQ-103.
 
 - `scripts/dispatch/review-tools.mjs` (OQ-92):
   - `allowedPrefixes()` takes the `Bash(<prefix>:*)` entries of

@@ -1,11 +1,11 @@
 ---
-id: OQ-59
+id: ST-2
 title: Promote a starved story ahead of its tier
 tier: normal
 kind: workflow
-depends_on: [OQ-49]
+depends_on: []
 model: sonnet
-blocked: "Held for the move to steward, decided 2026-10-08 by the owner (docs/agent-workflow-design.md, Portability, R4)"
+blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
 ---
 
 ## Intent
@@ -62,6 +62,9 @@ stories most likely to be starved are the ones nobody is advocating for.
 - Node, ESM, no new runtime dependencies.
 
 ## Context
+
+Formerly tower-workshop-paths OQ-59. Its `depends_on` also named OQ-49, which is
+tower-workshop-paths' own, so it was dropped at the move (built there).
 
 - OQ-49 — `queue.mjs`, the module this extends. Its AC-4 currently states
   ordering as "by tier, then lowest id first; stable across runs" and needs

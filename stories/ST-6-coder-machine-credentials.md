@@ -1,11 +1,11 @@
 ---
-id: OQ-73
+id: ST-6
 title: "Spike: find out how to run a coder session in a container that cannot reach the owner's credentials"
 tier: next
 kind: workflow
 depends_on: []
 model: sonnet
-blocked: "Owner-run with Session A, not dispatched (owner, 2026-10-09), and held until the move: it is run in steward (design doc, R4 and R5)."
+blocked: "Owner-run with Session A, not dispatched (owner, 2026-10-09; design doc, R4 and R5)."
 ---
 
 ## Intent
@@ -99,6 +99,8 @@ A, by hand, not dispatched.
   including in the pull request body or the design doc.
 
 ## Context
+
+Formerly tower-workshop-paths OQ-73.
 
 - **Rewritten on 2026-10-09 as a spike**, at the owner's decision. The story
   before the rewrite (`git show eb84893:stories/OQ-73-coder-machine-credentials.md`)
