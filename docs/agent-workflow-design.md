@@ -1632,8 +1632,9 @@ deciding what is next. It is the harness's product outline, and moves with this 
 - **The bootstrap checklist is agreed**, [`steward-bootstrap.md`](steward-bootstrap.md), with its
   six decisions (decided 2026-10-08 by the owner). Steward's copies of this document and of
   `CLAUDE.md` are stripped of this repository's own content at the bootstrap, and R1's list gains
-  the files the dry run found missing (R1). ST-6 (ST-8 until 2026-10-10), the copy of OQ-73, keeps
-  its `blocked:` in steward, and steward's own first stories outrank the moved ones (R4).
+  the files the dry run found missing (R1). ST-6 (ST-8 until 2026-10-10, a number of the stopped
+  extraction's; R4), the copy of OQ-73, keeps its `blocked:` in steward, and steward's own first
+  stories outrank the moved ones (R4).
 - **After the sweep lands a pull request, CI and the Pages deploy run on `main` by `workflow_run`,
   and skip when the sweep did not move `main`** (decided 2026-10-08 by the owner, from four
   options: the sweep starting them by `workflow_dispatch`, which needs `actions: write`; this; a
@@ -2108,7 +2109,10 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   bootstrap checklist; ST-6's revised 2026-10-09). ST-6, the copy of OQ-73, keeps the `blocked:`
   it has here, less "held until the move": it is a spike the owner runs with Session A, not
   dispatched (R5). ST-14, the copy of OQ-108, keeps the owner's own `blocked:`. (These were ST-8
-  and ST-18 until 2026-10-10, when four stories stopped moving.) And steward's own
+  and ST-18 until 2026-10-10, when four stories stopped moving. Those numbers were the stopped
+  extraction's, which was never pushed, so neither story ever existed in steward under them. In
+  steward, ST-8 is OQ-89's copy, and ST-18 is a story written there on 2026-10-11, the number
+  kept by the owner's decision.) And steward's own
   first stories (the prompts' `{{REPO}}` slot and project section, closing `REVIEW.md`'s numbering
   gaps, and `init` with the thin workflow files) are written at tier `next` before its loop first
   runs, so they come before the moved stories. **Revised 2026-10-10 by the owner:** steward starts

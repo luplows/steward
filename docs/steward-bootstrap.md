@@ -146,8 +146,9 @@ extract is kept on the owner's machine as a record.
   holding `* text=auto eol=lf`, since without it a checkout on a machine with `core.autocrlf=true`
   gets CRLF files.
 - B15: `npm ci`, `npm run lint`, the story lint and the queue passed; the queue listed only the 21
-  `ST-` stories, ST-8 and ST-18 `blocked` as B1 sets them. **`npm test`: 38 of 751 tests failed, in
-  5 of 25 files.**
+  `ST-` stories, ST-8 and ST-18 `blocked` as B1 sets them (this run's numbers for OQ-73 and
+  OQ-108, never pushed; in steward they are ST-6 and ST-14, and ST-8 and ST-18 name other
+  stories). **`npm test`: 38 of 751 tests failed, in 5 of 25 files.**
   - `scripts/dispatch/story.test.mjs` (33): its harness calls `runStory` without a `repoDir`, so it
     reads the settings of the directory it runs in, and rejects its story id `OQ-9` (line 29) once
     that project's prefix is `ST`.
@@ -402,7 +403,8 @@ so far".
   sufficient) and **drops** Playwright, screenshot baselines and the buy-order algorithm (B10).
 - **D-3. The additions to R1's list in section 2** (`test/fixtures/`, the four fixture stories, the
   PR template, `.oxlintrc.json`, `.gitignore`): **added** to R1's table.
-- **D-4. ST-6 (OQ-73; ST-8 until 2026-10-10):** **its `blocked:` is kept** in steward, less
+- **D-4. ST-6 (OQ-73; ST-8 until 2026-10-10, in the stopped extraction's numbering, which was
+  never pushed; ST-8 is now OQ-89's copy):** **its `blocked:` is kept** in steward, less
   "held until the move": it is a spike the owner runs with Session A, not dispatched (revised
   2026-10-09 by the owner, when OQ-73 was rewritten here as that spike; design doc, R5).
 - **D-5. The order of steward's first stories:** steward's own first stories (the prompts'
