@@ -239,6 +239,41 @@ otherwise; what is still open says so.
   (owner, 2026-10-09). Considered and not chosen: steward's default sections shipped in the package,
   which a project's file extends or switches off.
 - **What the example rules file contains is left for later** (owner, 2026-10-09).
+- **The rules file's shape** (owner, 2026-10-11, from Session A's proposals):
+  - **The reviewer reads the rules from `main`**, put into its prompt by the dispatcher, not from
+    the pull request's head, so that a pull request cannot loosen the rules it is judged by. A
+    change to the rules is still in the diff for the reviewer to see. For reference (Session A,
+    2026-10-11): today `reviewer.md` tells the reviewer to read `REVIEW.md` in its checkout (line
+    171), which is the pull request's head.
+  - **The file holds rules only.** How steward works (the verdict marker, the three verdicts, a
+    review with no verdict, what the gate's workflow enforces, how the coder's pull request is
+    opened) goes in the reviewer's prompt and steward's own documents. The owner's reason: today's
+    `REVIEW.md` grew those parts because it was the living process the reviewer was built from.
+    "Reading the PR body" is a rule, so it stays, as a section of the example file.
+  - **A section is a heading, then one `Applies when:` line in plain words, then its items.** The
+    reviewer judges the line, and a section without one always applies.
+  - **Each section numbers its own items, and a finding cites the section and the item** (owner,
+    2026-10-11). Steward cannot control how a project adds its own rules to the file, so it does
+    not impose one numbering across it. Considered and not chosen (Session A's proposal): integers
+    across the whole file, never renumbered, which would have kept the verdict format as it is.
+    What follows (Session A, 2026-10-11): the verdict's `item`, an integer `review.mjs` checks
+    today (line 170), becomes a section and an item; and the story that was to close `REVIEW.md`'s
+    numbering gaps (design doc, R1) has nothing left to do once its sections are numbered on their
+    own.
+  - **The reviewer's comment lists every section, marked applied or not, with a one-line reason for
+    each not applied**, so that a section skipped wrongly is visible.
+  - **A setting names the rules file's path.** `init` copies steward's example there, as a default
+    and an example of the format, and does not overwrite a file already at that path. A missing
+    setting is an error, as for every setting.
+  - **A rules file that is missing from `main`, or does not parse, is an error: steward records no
+    verdict, the pull request stays pending, and the pass reports it** (Session A's judgement, to
+    which the owner deferred, 2026-10-11). The other option was a quiet skip, which leaves the pull
+    request just as pending but tells nobody. A file does not parse when, for example, it has no
+    sections, a section has no items, or a section numbers two items the same. The dispatcher
+    parses it before starting a reviewer, so a bad file costs no review. Session A's further
+    proposal, not yet decided: the same parser as a command a project may run in its own CI, so
+    that a pull request that breaks the file is caught before it lands, since otherwise every
+    review after it stops.
 
 ### Land
 
