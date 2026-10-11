@@ -1711,9 +1711,9 @@ deciding what is next. It is the harness's product outline, and moves with this 
   engine's single loop, which the outline replaces with two (`harness-outline.md`, "Loops"). This
   revises the order of steward's first stories in R4 and in `steward-bootstrap.md` (D-5 and
   section 8): the prompts' slot, closing `REVIEW.md`'s gaps (dropped on 2026-10-11, R1) and `init`
-  now come after the coder's stories. Until steward's review loop is built, its reviews are started by a dispatcher session
-  running `review.mjs` and `land.mjs`, as this repository's are (**The dispatcher session**,
-  above; decided the same day by the owner).
+  now come after the coder's stories. Until steward's review loop is built, its reviews are
+  started by a dispatcher session running `review.mjs` and `land.mjs`, as this repository's are
+  (**The dispatcher session**, above; decided the same day by the owner).
 - **Which stories and paths move, re-sorted against the outline** (decided 2026-10-10 by the
   owner, from Session A's proposal):
   - **Steward's own repository is a project that uses steward, and it and this repository each
