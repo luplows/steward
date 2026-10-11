@@ -31,6 +31,16 @@ const BRANCH = 'story/OQ-9-a-story'
 const SHAS = ['a', 'b', 'c', 'd', 'e', 'f'].map((c) => c.repeat(40))
 const [H1, H2, H3, H4] = SHAS
 
+// runStory reads the project's settings from repoDir. The harness passes a
+// directory of its own, whose prefix matches STORY, so the tests do not
+// depend on the settings of the checkout they run in.
+const SETTINGS_DIR = mkdtempSync(path.join(tmpdir(), 'tw-story-settings-'))
+writeFileSync(
+  path.join(SETTINGS_DIR, 'steward.config.json'),
+  JSON.stringify({ repo: REPO, storyPrefix: 'OQ' }),
+)
+afterAll(() => rmSync(SETTINGS_DIR, { recursive: true, force: true }))
+
 function comment(id, verdict, head, { association = 'OWNER', text = 'A finding.' } = {}) {
   const body = `${text}\n\n<!-- agent-review head=${head} verdict=${verdict} -->`
   return { id, authorAssociation: association, body, marker: parseMarkerComment(body) }
@@ -80,7 +90,7 @@ function harness({
     getPullRequestLabels: async () => state.labels,
   }
   const ctx = { repo: REPO, send: async () => state.pr }
-  const run = (extra = {}) => runStory({ storyId: STORY, ctx, ciCtx: {}, landCtx: {}, deps, ...extra })
+  const run = (extra = {}) => runStory({ storyId: STORY, ctx, ciCtx: {}, landCtx: {}, repoDir: SETTINGS_DIR, deps, ...extra })
   return { deps, state, calls, run, names: () => calls.map((c) => c[0]) }
 }
 

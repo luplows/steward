@@ -276,8 +276,9 @@ describe('OQ-125/AC-3: the CLI\'s default repo comes from steward.config.json at
     })
   })
 
-  it('OQ-125/AC-3: with this repository\'s own settings, the default is unchanged', async () => {
-    const repoRoot = path.resolve(here, '..', '..')
-    expect(await parseArgs([], { projectRoot: repoRoot })).toEqual({ repo: 'luplows/tower-workshop-paths', limit: DEFAULT_LIMIT })
+  it('OQ-125/AC-3: with tower-workshop-paths\' settings, the default is unchanged', async () => {
+    await withTempSettings({ repo: 'luplows/tower-workshop-paths', storyPrefix: 'OQ' }, async (projectRoot) => {
+      expect(await parseArgs([], { projectRoot })).toEqual({ repo: 'luplows/tower-workshop-paths', limit: DEFAULT_LIMIT })
+    })
   })
 })

@@ -52,7 +52,7 @@ describe('withTempProject', () => {
 describe('readSettings', () => {
   it('OQ-122/AC-2 - reads this repository\'s own steward.config.json as the committed values', async () => {
     const settings = await readSettings(REPO_ROOT)
-    expect(settings).toEqual({ repo: 'luplows/tower-workshop-paths', storyPrefix: 'OQ' })
+    expect(settings).toEqual({ repo: 'luplows/steward', storyPrefix: 'ST' })
   })
 
   it('OQ-135/AC-3 - throws naming the file and the problem when steward.config.json is missing', async () => {

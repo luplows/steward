@@ -650,11 +650,19 @@ describe('OQ-86/AC-6: --max-stories caps how many stories a run starts', () => {
 
   it('OQ-86/AC-6: parseArgs accepts a well-formed invocation', async () => {
     expect(await parseArgs(['--max-stories', '3', '--repo', 'x/y'])).toEqual({ repo: 'x/y', maxStories: 3 })
-    // No --repo: this repository's own steward.config.json names
-    // luplows/tower-workshop-paths (OQ-125), read because parseArgs' default
-    // projectRoot is process.cwd() (OQ-130) -- this repository, running the
-    // test suite -- and this test supplies none of its own.
-    expect(await parseArgs([])).toEqual({ repo: 'luplows/tower-workshop-paths', maxStories: undefined })
+    // No --repo: the settings fixture names luplows/tower-workshop-paths
+    // (OQ-125), read because parseArgs' default projectRoot is process.cwd()
+    // (OQ-130) -- the fixture, for this call -- and this test supplies none of
+    // its own.
+    await withTempSettings({ repo: 'luplows/tower-workshop-paths', storyPrefix: 'OQ' }, async (dir) => {
+      const cwd = process.cwd()
+      process.chdir(dir)
+      try {
+        expect(await parseArgs([])).toEqual({ repo: 'luplows/tower-workshop-paths', maxStories: undefined })
+      } finally {
+        process.chdir(cwd)
+      }
+    })
   })
 
   it('OQ-125/AC-3: parseArgs takes the default repo from steward.config.json at projectRoot, not --repo', async () => {
