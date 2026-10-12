@@ -238,7 +238,18 @@ otherwise; what is still open says so.
   a project's rules file with the example in the version it pins is a possibility, not decided
   (owner, 2026-10-09). Considered and not chosen: steward's default sections shipped in the package,
   which a project's file extends or switches off.
-- **What the example rules file contains is left for later** (owner, 2026-10-09).
+- **What the example rules file contains is left for later** (owner, 2026-10-09). **Begun
+  2026-10-11 by the owner**, going through steward's own `REVIEW.md` section by section with
+  Session A: the example leaves out what is one project's choice, which a project adds to its
+  own copy, while steward's own `REVIEW.md` keeps it. Left out of the example so far:
+  - a Docs check on named files: steward's keeps it for `README.md`, since steward's README is to
+    be a large part of what it delivers. The owner's reason for leaving it out: the drift it
+    guarded against in tower-workshop-paths has mostly gone, now that other places record what
+    used to drift;
+  - no coverage tooling, which is a project's own rule;
+  - a particular way of marking a unit done, such as ticking acceptance criteria or moving a
+    story file into `stories/done/`, since steward does not impose how a project manages
+    completed units.
 - **The rules file's shape** (owner, 2026-10-11, from Session A's proposals):
   - **The reviewer reads the rules from `main`**, put into its prompt by the dispatcher, not from
     the pull request's head, so that a pull request cannot loosen the rules it is judged by. A
