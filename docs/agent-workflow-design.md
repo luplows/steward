@@ -1853,7 +1853,7 @@ deciding what is next. It is the harness's product outline, and moves with this 
   it is configured (owner, 2026-10-12, above). Its first stories are the review side's, ST-18 to
   ST-26 with ST-7 rewritten, at tier `next`, landed in #4. Its first pull request through its own
   gate was #1, landed on 2026-10-11: `review/agent` passed at its head, the sweep merged it, its
-  head branch was deleted, and CI ran on `main` by `workflow_run`. #2 to #4 landed the same way.
+  head branch was deleted, and CI ran on `main` by `workflow_run`. #2 to #5 landed the same way.
   Section 8's other half, R4's OQ-to-ST mapping and retiring the moved stories in
   tower-workshop-paths, is that repository's planning session's.
 

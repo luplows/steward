@@ -397,7 +397,7 @@ Sections 5 to 7 were ticked at the retried extraction, on 2026-10-10 (section 3)
       copy. `review/agent` was `success` at its head, `ac7a823`, at 06:09:11Z; a sweep run started
       by `workflow_dispatch` at 06:09:25Z merged it at 06:09:38Z as `4d230cf`, by `github-actions`;
       its head branch was deleted; and `ci.yml` ran on `main` by `workflow_run` at 06:09:46Z, and
-      passed. #2 to #4 landed the same way.
+      passed. #2 to #5 landed the same way.
 - [ ] Record the outcome: in steward's design doc, through a steward pull request; and here, in R4,
       the OQ-to-ST mapping, through a `write-story/` pull request, in which the planning session
       also retires the moved stories here, each naming its `ST-<n>` (OQ-115's Out of scope).
