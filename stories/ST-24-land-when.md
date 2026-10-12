@@ -3,7 +3,7 @@ id: ST-24
 title: Land when the checks the settings name are green, in both the lander and the sweep
 tier: next
 kind: workflow
-depends_on: [ST-18]
+depends_on: [ST-18, ST-23]
 model: sonnet
 blocked: null
 ---
@@ -33,9 +33,9 @@ with no branch protection, where GitHub's `mergeable_state` says nothing about r
       `mergeable_state` of `dirty` is a conflict, as today. A `mergeable_state` of `blocked` with
       the named checks green means GitHub requires something `landWhen` does not name, and GitHub
       would refuse the merge: the sweep is not triggered, and the result is a distinct
-      `github-blocked`, which a later call may try again. Its request
-      allowlist gains one read, the head's check runs (`GET
-      /repos/<repo>/commits/<sha>/check-runs`), and nothing else.
+      `github-blocked`, which a later call may try again. With ST-23's `once: true`, that case
+      returns `github-blocked` rather than `not-landable`. Its request allowlist gains one read,
+      the head's check runs (`GET /repos/<repo>/commits/<sha>/check-runs`), and nothing else.
 - [ ] **AC-3** — `land-approved.yml` decides the same way: it reads the head's check runs and
       statuses with `gh api`, and `landWhen` from `steward.config.json` in its checkout of `main`,
       and runs AC-1's function through a script under `scripts/land/` instead of its
