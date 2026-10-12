@@ -32,9 +32,8 @@ pull request" section included, except where this file says otherwise.
 - Set `blocked:` only where something stops the story being built, with the reason. Until steward's
   coder works, a story is built by hand, and that alone is not a reason (owner, 2026-10-12;
   `docs/agent-workflow-design.md`, "Portability", "Decided so far").
-- Record a design decision the story makes in `docs/agent-workflow-design.md`, in the same pull
-  request, marked as that document's "Reading this document" note says. The story that builds it
-  removes the mark.
+- Record a design decision the story makes as `AGENTS.md`, "Stories", says: in the same pull
+  request, marked as not yet built.
 - Record each decision as the owner's statement, dated, with the options considered, and correct
   every other copy of a claim it revises.
 - Before opening the pull request, run `node scripts/lint-stories.mjs` and
