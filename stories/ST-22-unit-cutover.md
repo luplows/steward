@@ -35,6 +35,10 @@ project's whole check, which CI already runs as a peer check.
       to run only the narrower commands that settle a particular claim, such as one test file, a
       search or a diff of one path, and that CI's checks are a peer check the reviewer neither
       reads nor reruns.
+- [ ] **AC-3a** — `REVIEW.md`'s "Every pull request" section gains an item, numbered after its
+      last: a change to code links the unit it implements, and `Unit: none` is accepted only where
+      no unit could exist, such as a pull request that writes the unit itself. The reviewer is
+      told the four cases by the note (AC-1); this item is how the rules judge them.
 - [ ] **AC-4** — The reviewer's model is `ROLE_DEFAULTS.reviewer.model` when the unit gives no
       model. When the unit is a file with frontmatter naming a `model:`, `chooseReviewerModel`
       still picks a different one, as today.

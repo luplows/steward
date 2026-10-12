@@ -41,15 +41,28 @@ rules only.
       line. The marker line is unchanged, so `review-gate.yml`, `apply-review-blocked.mjs` and
       `review-verdicts.mjs` read it as before.
 - [ ] **AC-5** — `REVIEW.md` is converted into the form ST-20 parses, holding rules only, in these
-      sections, each with its own numbering from 1: "Reading the pull request body" (always),
-      "Every pull request" (always), "Changes to code" (applies when the diff changes code or
-      tests), "Integrity" (always), "Conformance to the unit" (applies when the pull request
-      implements a unit) and "Changes to stories" (applies when the pull request adds or changes
-      a file under `stories/` without implementing one). Every rule of today's items 1 to 7, 9 and
-      11 to 25 is kept, worded as today except: item 3 names `README.md` only; item 4, about
-      `Open-Questions.md`, is removed; and item 5 checks `stories/` (with `done/` and `retired/`)
-      and the branches on `origin`. The pull request body gives the mapping from each old item
-      number to its new section and item.
+      sections, in this order, each numbering its items from 1. Rules kept are worded as today
+      except where this says otherwise:
+      1. "Reading the pull request body" (no condition): today's opening "Reading the PR body"
+         text; then item 2 (the template's sections filled); then item 3, naming `README.md` only.
+      2. "Every pull request" (no condition): item 6 (commit granularity); item 7 (the diff
+         matches "What changed"); and a new item: statements the pull request adds about how
+         the repository works, in documents, comments, commit messages or its body (what a file
+         says, counts, which component does what), are true at its head.
+      3. "Changes to code" (applies when the diff changes code, tests, workflow files or
+         prompts): item 9 (no test weakened to pass); item 11 (no coverage tooling).
+      4. "Integrity" (no condition): items 12 to 15.
+      5. "Conformance to the unit" (applies when the pull request implements a unit): items 16 to
+         18, saying "unit" where they do not mean a story file; and item 19, applying when the
+         unit is a story file. The ticks in item 16 and the move in item 19 are kept.
+      6. "Changes to stories" (applies when the pull request adds or changes a file under
+         `stories/` without implementing one): item 5, checking `stories/` (with `done/` and
+         `retired/`) and the branches on `origin` for the next unused `ST-<n>`; then items 20 to
+         25.
+
+      Today's item 1 (a feature branch, nothing pushed to `main`) and item 4 (about
+      `Open-Questions.md`) are removed. The pull request body gives the mapping from each old
+      item number to its new section and item, or to "removed".
 - [ ] **AC-6** — What `REVIEW.md` held about how steward works ("For the reviewer: reporting a
       verdict", with its subsections, and "For the coder: opening a PR") moves to a new
       `docs/review-mechanics.md`, which `CLAUDE.md`'s "Where things are documented" table lists,

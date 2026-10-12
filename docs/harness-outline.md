@@ -250,6 +250,24 @@ otherwise; what is still open says so.
   - a particular way of marking a unit done, such as ticking acceptance criteria or moving a
     story file into `stories/done/`, since steward does not impose how a project manages
     completed units.
+
+  Decided the same day for steward's own `REVIEW.md` (owner, from Session A's proposals; its
+  sections are ST-21's AC-5):
+  - today's item 1, "the work is on a feature branch with a pull request; nothing was pushed
+    directly to `main`", is dropped: a reviewer only ever sees a pull request, and a direct push
+    is never reviewed, so it can neither break nor catch it. Branch protection, or on a
+    repository without it the watchdog, is what guards `main`; `CLAUDE.md` keeps the rule for
+    sessions;
+  - "Every pull request" gains a claims item: statements a pull request adds about how the
+    repository works, in documents, comments, commit messages or its body, are true at its
+    head. Today only a story's claims are checked (item 22). Considered and not chosen: leaving
+    the body's statements to "Integrity" alone. Not in the example: it is the discipline
+    steward's own project chose (`CLAUDE.md`, "Claims about this repository");
+  - "Changes to code" applies to workflow files and prompts as well as code and tests, to start
+    with;
+  - a code change must link its unit, `Unit: none` being accepted only where no unit could
+    exist, such as a pull request that writes the unit; added once the reviewer is given the
+    unit note (ST-22).
 - **The rules file's shape** (owner, 2026-10-11, from Session A's proposals):
   - **The reviewer reads the rules from `main`**, put into its prompt by the dispatcher, not from
     the pull request's head, so that a pull request cannot loosen the rules it is judged by. A
