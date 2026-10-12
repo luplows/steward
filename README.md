@@ -9,7 +9,8 @@ verdict. The owner keeps the decisions: what to build, and what is fit to releas
   what it must never do.
 - [`docs/agent-workflow-design.md`](docs/agent-workflow-design.md): how it works, and why. The
   design of record.
-- [`CLAUDE.md`](CLAUDE.md): the rules every session here follows.
+- [`AGENTS.md`](AGENTS.md): the rules every session here follows, whatever tool runs it.
+  `CLAUDE.md` imports it for Claude Code.
 - [`stories/README.md`](stories/README.md): the story queue, `ST-<n>`.
 
 steward was moved out of [tower-workshop-paths](https://github.com/luplows/tower-workshop-paths)

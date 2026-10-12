@@ -49,8 +49,8 @@ puts it into the review.
 
 - Giving the rules to the reviewer, the verdict format, and converting steward's own `REVIEW.md`:
   ST-21.
-- A command that runs the parser for a project's own CI: proposed by Session A on 2026-10-11 and
-  not decided (`docs/harness-outline.md`, "The rules file's shape").
+- A command that runs the parser for a project's own CI: proposed by the planning session on
+  2026-10-11 and not decided (`docs/harness-outline.md`, "The rules file's shape").
 - Judging whether a section applies, which is the reviewer's.
 - What the example rules file contains (left for later by the owner).
 

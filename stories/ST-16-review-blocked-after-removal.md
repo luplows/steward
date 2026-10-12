@@ -57,7 +57,7 @@ should count towards applying it again.
 - **What `story.mjs` does at the bound.** It counts every honoured block on
   the pull request (`countBlockingVerdicts`, `MAX_ROUNDS`) and stops the
   story; a label removal does not change that. Carrying on a stopped story is
-  still Session A's, by clearing `blocked:`.
+  still the planning session's, by clearing `blocked:`.
 - **Who removed the label.** Any `unlabeled` event counts.
 - **Comments edited after the removal.** A comment counts by its
   `created_at`, not by when it was last edited.

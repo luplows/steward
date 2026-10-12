@@ -203,8 +203,9 @@ export function machineLabel(env) {
 
 /**
  * What `git status --porcelain -z` reports, split into changes that block a
- * push and untracked screenshot baselines that do not (`CLAUDE.md` forbids
- * committing one generated locally, so a coder that follows it leaves them).
+ * push and untracked screenshot baselines that do not (tower-workshop-paths'
+ * `CLAUDE.md` forbids committing one generated locally, so a coder that
+ * follows it leaves them).
  */
 function classifyStatus(porcelainZ) {
   const entries = porcelainZ.split('\0').filter((e) => e !== '')

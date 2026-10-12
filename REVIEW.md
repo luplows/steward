@@ -54,7 +54,7 @@ A section that restates the PR title in other words is also unfilled.
 <!-- Item 10, tower-workshop-paths' screenshot-baseline item, was removed at the bootstrap. -->
 
 11. No coverage-percentage tooling is added. Its absence is deliberate; see
-    `CLAUDE.md`.
+    `AGENTS.md`.
 
 ## Integrity
 
@@ -104,7 +104,7 @@ standard it was supposed to meet.
 ## PRs that add or change a story
 
 These apply to a PR that writes or edits files under `stories/` without
-implementing one: Session A's work. A story that lands `ready` is work the
+implementing one: the planning session's work. A story that lands `ready` is work the
 dispatch loop will carry out unattended, so it is reviewed as carefully as
 code.
 
@@ -118,7 +118,7 @@ code.
     questions, which keeps it `draft`.
 22. **Claims** — every statement the story makes about the repository is true
     at the PR's head: files, functions, line numbers, counts, behaviour, and
-    what another story says. Check each one (`CLAUDE.md`, "Claims about this
+    what another story says. Check each one (`AGENTS.md`, "Claims about this
     repository").
 23. **Stable ids** — a story that is already in flight (a `story/OQ-<n>-*`
     branch exists on `origin`; check with `git ls-remote`) does not have its
@@ -265,8 +265,8 @@ feeds was the gap OQ-63 closed: with the owner's `repo`-scoped token, a coder
 could set `review/agent` to `success` on its own head and then dispatch
 `land-approved.yml`, breaking two rules that nothing but prose enforced: a
 session does not clear its own gate, and no session but the dispatcher session
-running `land.mjs` triggers the sweep (`CLAUDE.md`, "Branches and pull
-requests").
+running `land.mjs` triggers the sweep (`AGENTS.md`, "Every
+session").
 
 **The coder holds no credential capable of a commit status, a workflow
 dispatch, or a pull-request write.** `scripts/dispatch/coder-env.mjs`

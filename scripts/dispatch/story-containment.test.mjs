@@ -194,7 +194,7 @@ describe('OQ-82/AC-3: a story-writing PR is not restricted', () => {
     write('stories/OQ-202-added.md', STORY('OQ-202'))
     write('stories/OQ-90-other.md', STORY('OQ-90').replace('- [ ] **AC-1**', '- [x] **AC-1**'))
     git(repo, 'add', '-A')
-    git(repo, 'commit', '-q', '-m', 'session a writes stories')
+    git(repo, 'commit', '-q', '-m', 'the planning session writes stories')
     const head = git(repo, 'rev-parse', 'HEAD')
     git(repo, 'checkout', '-q', 'main')
 

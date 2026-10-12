@@ -5,7 +5,7 @@
  * `stories/done/`, acceptance-criterion lines ticking `- [ ]` to `- [x]`
  * and nothing else on those lines, and its `blocked:` frontmatter line
  * (`coder.md`; OQ-70's AC-8). A pull request that implements no story is not
- * restricted -- that is Session A's territory, covered by `REVIEW.md`'s
+ * restricted -- that is the planning session's territory, covered by `REVIEW.md`'s
  * "PRs that add or change a story" items instead.
  *
  * `resolveStory` (review.mjs) decides whether a diff implements a story --

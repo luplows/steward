@@ -65,14 +65,14 @@ rules only.
       item number to its new section and item, or to "removed".
 - [ ] **AC-6** — What `REVIEW.md` held about how steward works ("For the reviewer: reporting a
       verdict", with its subsections, and "For the coder: opening a PR") moves to a new
-      `docs/review-mechanics.md`, which `CLAUDE.md`'s "Where things are documented" table lists,
+      `docs/review-mechanics.md`, which `AGENTS.md`'s "Where things are documented" table lists,
       except what the reviewer itself must follow, which is in `reviewer.md` already or added
       there.
-- [ ] **AC-7** — Every reference to a `REVIEW.md` item number in `CLAUDE.md`,
-      `docs/session-a.md`, `stories/README.md`, `.claude/prompts/coder.md`,
-      `.claude/prompts/reviewer.md`, and the comments and messages of `scripts/dispatch/` and
-      `scripts/land/`, names the section and item instead. `grep -rn "item [0-9]" ` over those
-      paths, given in the pull request body, shows what remains and why.
+- [ ] **AC-7** — Every reference to a `REVIEW.md` item number in `stories/README.md`,
+      `.claude/prompts/coder.md`, `.claude/prompts/reviewer.md`, and the comments and messages of
+      `scripts/dispatch/` and `scripts/land/`, names the section and item instead.
+      `grep -rn "item [0-9]" ` over those paths, given in the pull request body, shows what
+      remains and why.
 - [ ] **AC-8** — Tests: `review.test.mjs` covers AC-1 (missing and unparseable rules, with no
       session spawned), AC-3 (each rejection, and a valid verdict accepted) and AC-4 (the
       comment's text); `ST-21/AC-5`, in a test file of its choosing, parses the committed
@@ -103,15 +103,15 @@ rules only.
 - `docs/harness-outline.md`, "Defining steward", "Review", "The rules file's shape": the
   decisions this story builds. Section names must be unique so that a finding's `section` names
   one (ST-20's AC-2).
-- Sizing (Session A, 2026-10-11): this is one cut-over rather than three stories because the
-  prompt's output, the parser and the file's form only work together.
+- Sizing (the planning session, 2026-10-11): this is one cut-over rather than three stories because
+  the prompt's output, the parser and the file's form only work together.
 - `scripts/dispatch/review.mjs`: `parseReviewerVerdict` requires an integer `item` (line 170) and
   `formatFindings` writes `**Item <n>**`.
 - `.claude/prompts/reviewer.md` line 171 tells the reviewer to read `REVIEW.md` in its checkout,
   which is the pull request's head.
-- `grep -rln -E "items? [0-9]+"` on 2026-10-11 found item numbers in `docs/session-a.md`,
-  `stories/README.md`, both prompts, `coder-env.mjs`, `invocation.mjs` (a different list's item)
-  and `review.mjs`.
+- `grep -rln -E "items? [0-9]+"` on 2026-10-11 found item numbers in `docs/session-a.md` (whose
+  references went when it became `docs/planning-session.md`, on 2026-10-12), `stories/README.md`,
+  both prompts, `coder-env.mjs`, `invocation.mjs` (a different list's item) and `review.mjs`.
 - A spawned coder session cannot edit `.claude/prompts/` (`docs/agent-workflow-design.md`, "A
   spawned session cannot edit `.claude/prompts/`"); this story is built by hand.
 

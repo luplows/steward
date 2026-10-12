@@ -6,8 +6,8 @@
 
 The hand-run procedure for "The move, in order", step 2, in
 [`agent-workflow-design.md`](agent-workflow-design.md), "Portability": creating `luplows/steward`
-from this repository. It is run by the owner with Session A. It is not a story, and nothing
-dispatches from it.
+from this repository. It is run by the owner with the planning session. It is not a story, and
+nothing dispatches from it.
 
 **Status: agreed by the owner on 2026-10-08, with the six decisions in section 9 (D-1 to D-6; D-7
 to D-9 were added the same day, D-10 to D-12 on 2026-10-09, and D-13 to D-15 on 2026-10-10).**
@@ -97,9 +97,9 @@ removed from steward's copy (D-8).
 
 ### The first (done 2026-10-08)
 
-On a fresh clone of `main` at `d86080c`, in Session A's scratch folder, with the paths above
-less `steward.config.json`, which did not exist yet (26 paths and the 21 stories, 47 in all), and
-both rules. Nothing was pushed.
+On a fresh clone of `main` at `d86080c`, in the planning session's scratch folder, with the paths
+above less `steward.config.json`, which did not exist yet (26 paths and the 21 stories, 47 in all),
+and both rules. Nothing was pushed.
 
 - `git filter-repo` ran in about a second, and its own fresh-clone check passed.
 - 127 of 216 commits kept, and 94 files, every one on the list.
@@ -113,9 +113,9 @@ both rules. Nothing was pushed.
 
 ### The fresh one (done 2026-10-09)
 
-On fresh clones of `main` at `09147c3`, in Session A's scratch folder, with the 28 paths then on
-the list and the 21 stories (49 in all). Nothing was pushed. One clone took the paths alone, to
-list the `#N`s in the original messages; one took the paths and the two regex rules; a third, the
+On fresh clones of `main` at `09147c3`, in the planning session's scratch folder, with the 28 paths
+then on the list and the 21 stories (49 in all). Nothing was pushed. One clone took the paths alone,
+to list the `#N`s in the original messages; one took the paths and the two regex rules; a third, the
 paths and all three rules, after D-10.
 
 - `git filter-repo` ran in about a second. 157 of 249 commits kept, and 101 files, every one on
@@ -385,8 +385,8 @@ Sections 5 to 7 were ticked at the retried extraction, on 2026-10-10 (section 3)
       its pull requests, as for this repository's (decided 2026-10-10 by the owner; design doc,
       "Decided so far").
 - [ ] Record the outcome: in steward's design doc, through a steward pull request; and here, in R4,
-      the OQ-to-ST mapping, through a `write-story/` pull request, in which Session A also
-      retires the moved stories here, each naming its `ST-<n>` (OQ-115's Out of scope).
+      the OQ-to-ST mapping, through a `write-story/` pull request, in which the planning session
+      also retires the moved stories here, each naming its `ST-<n>` (OQ-115's Out of scope).
 
 ## 9. Decisions
 
@@ -405,14 +405,14 @@ so far".
   PR template, `.oxlintrc.json`, `.gitignore`): **added** to R1's table.
 - **D-4. ST-6 (OQ-73; ST-8 until 2026-10-10, in the stopped extraction's numbering, which was
   never pushed; ST-8 is now OQ-89's copy):** **its `blocked:` is kept** in steward, less
-  "held until the move": it is a spike the owner runs with Session A, not dispatched (revised
-  2026-10-09 by the owner, when OQ-73 was rewritten here as that spike; design doc, R5).
+  "held until the move": it is a spike the owner runs with the planning session, not dispatched
+  (revised 2026-10-09 by the owner, when OQ-73 was rewritten here as that spike; design doc, R5).
 - **D-5. The order of steward's first stories:** steward's own first stories (the prompts'
   `{{REPO}}` slot and project section, closing `REVIEW.md`'s gaps (dropped on 2026-10-11; design
   doc, R1), and `init` with the thin workflow files) are **written at tier `next` before its loop
-  first runs**, so they come before the moved stories. Writing them is Session A's, in steward
-  (section 8). **Revised 2026-10-10 by the owner:** steward starts with the gate only, and the
-  stories that get its coder working come first, ahead of these (design doc, "Decided so far").
+  first runs**, so they come before the moved stories. Writing them is the planning session's, in
+  steward (section 8). **Revised 2026-10-10 by the owner:** steward starts with the gate only, and
+  the stories that get its coder working come first, ahead of these (design doc, "Decided so far").
   **Revised 2026-10-11 by the owner:** the review side's stories come before the coder's.
 - **D-6. The checkouts:** `E:\Source\steward-extract` for the extraction, and `E:\Source\steward`
   with the loop's worktree beside it. **Revised 2026-10-10 by the owner:** the retried extraction
@@ -444,10 +444,10 @@ so far".
   repository keeps its own story tooling in full (`scripts/lint-stories.mjs` and its test,
   `scripts/dispatch/story-containment.mjs`, `stories/README.md` and `stories/_TEMPLATE.md`).
 - **D-14. What the stopped extraction needs before it is retried** (owner, 2026-10-10, from
-  Session A's proposal): the 38 failing tests are dealt with in the bootstrap commits, not by
-  `fix` stories here, which would need a dispatch: the two `invocation.test.mjs` cases are removed
-  under D-8 (B7a), and the other 36 are fixed in steward's copy (B7b). B1's held `blocked:` text
-  is as B1 gives it. Steward's `ci.yml` passes the head branch name through `env:` (B6), rather
+  the planning session's proposal): the 38 failing tests are dealt with in the bootstrap commits,
+  not by `fix` stories here, which would need a dispatch: the two `invocation.test.mjs` cases are
+  removed under D-8 (B7a), and the other 36 are fixed in steward's copy (B7b). B1's held `blocked:`
+  text is as B1 gives it. Steward's `ci.yml` passes the head branch name through `env:` (B6), rather
   than leaving that for a steward story. The retry waits for #248 to land, since it changes
   moving paths (P2) and holds these decisions.
 - **D-15. A `.gitattributes` in steward** (owner, 2026-10-10, before the retried extraction):

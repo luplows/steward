@@ -137,12 +137,15 @@ The story file itself is at `{{STORY_PATH}}`.
 
 ## Before you write anything
 
-Read `CLAUDE.md` and `REVIEW.md`, both current on your branch. `CLAUDE.md` is
-the workflow you are held to. `REVIEW.md` is the enumerated checklist your PR is
-marked against — read it as the standard, not as background. Items 16–19 check
-your diff against the story above: every acceptance criterion delivered, each
-one genuinely satisfied rather than merely named in a test, nothing from **Out
-of scope** in the diff, and the story file moved to `stories/done/`.
+Read `AGENTS.md` and `REVIEW.md`, both current on your branch. `AGENTS.md` holds
+the rules every session here is held to. Its "Opening a pull request" section is
+not yours: how your work reaches a pull request is in this prompt, under "You do
+not merge, and you do not open your own PR". `REVIEW.md` is the enumerated
+checklist your PR is marked against — read it as the standard, not as
+background. Items 16–19 check your diff against the story above: every
+acceptance criterion delivered, each one genuinely satisfied rather than merely
+named in a test, nothing from **Out of scope** in the diff, and the story file
+moved to `stories/done/`.
 
 ## Constraints that apply to every story
 
