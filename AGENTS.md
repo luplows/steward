@@ -66,6 +66,9 @@ These hold for every pull request's content, whoever writes it, the coder includ
   file. See `stories/README.md`, "Acceptance criteria and tests".
 - A pull request implementing a story moves that story file to `stories/done/` in the same pull
   request, and is reviewed against the story.
+- Record a design decision in `docs/agent-workflow-design.md` in the pull request that makes it,
+  marked as not yet built. The story that builds it removes the mark. See that document's "Reading
+  this document" note.
 - An `OQ-<n>` is a tower-workshop-paths story. Look it up there by number, in its `stories/done/` or
   `Completed-Questions.md`, rather than reading either whole.
 

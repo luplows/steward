@@ -393,7 +393,8 @@ execution eliminates wholesale.
 
 **Two queues coexist during the drain.** `Open-Questions.md` and `stories/` both hold work for a
 while. Mitigated by documenting in `CLAUDE.md` that **nothing dispatches from `Open-Questions.md`**
-— it is input to the planning session, not to the loop.
+— it is input to the planning session, not to the loop. (In steward the rule is in
+`stories/README.md` only, since 2026-10-12.)
 
 **Review quality drops when the checklist grows.** Items 16–18 are judgment; 1–15 are mostly
 mechanical. As Phase 2 moves the mechanical ones into CI, delete them from `REVIEW.md` rather than
