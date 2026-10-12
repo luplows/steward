@@ -85,7 +85,9 @@ rules only.
 - How the unit is found: ST-19 and ST-22. `resolveStory` and the `{{STORY}}` placeholders are
   unchanged here.
 - The reviewer's narrower commands in place of the whole check: ST-22.
-- Changing any rule's substance beyond AC-5's three exceptions.
+- Changing any rule's substance beyond the changes AC-5 names: item 3 naming `README.md` only;
+  the new claims item; items 16 to 18 saying "unit"; item 5 checking `stories/` and `origin`'s
+  branches for the next `ST-<n>`; and removing items 1 and 4.
 - What steward's example rules file for other projects contains, and `init`.
 - `docs/gap-analysis.md`, `docs/migration-plan.md`, `docs/steward-bootstrap.md` and the fixtures
   under `test/fixtures/`, which are records of their time and keep their item numbers.

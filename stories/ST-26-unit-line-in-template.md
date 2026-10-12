@@ -30,6 +30,8 @@ request with no unit meant to have one.
       successor after ST-21) is unchanged in substance: the `Unit:` line is not a fourth required
       section, and whether a missing one fails a review is for the rules to say (ST-21, ST-22).
 - [ ] **AC-4** — `node scripts/dispatch/cli.mjs lint` and the full suite pass.
+- [ ] **AC-5** — The `**Planned (ST-26)**` marker in `docs/agent-workflow-design.md` loses
+      `ST-26`, and the passage is corrected wherever what was built differs.
 
 ## Out of scope
 
