@@ -238,7 +238,36 @@ otherwise; what is still open says so.
   a project's rules file with the example in the version it pins is a possibility, not decided
   (owner, 2026-10-09). Considered and not chosen: steward's default sections shipped in the package,
   which a project's file extends or switches off.
-- **What the example rules file contains is left for later** (owner, 2026-10-09).
+- **What the example rules file contains is left for later** (owner, 2026-10-09). **Begun
+  2026-10-11 by the owner**, going through steward's own `REVIEW.md` section by section with
+  Session A: the example leaves out what is one project's choice, which a project adds to its
+  own copy, while steward's own `REVIEW.md` keeps it. Left out of the example so far:
+  - a Docs check on named files: steward's keeps it for `README.md`, since steward's README is to
+    be a large part of what it delivers. The owner's reason for leaving it out: the drift it
+    guarded against in tower-workshop-paths has mostly gone, now that other places record what
+    used to drift;
+  - no coverage tooling, which is a project's own rule;
+  - a particular way of marking a unit done, such as ticking acceptance criteria or moving a
+    story file into `stories/done/`, since steward does not impose how a project manages
+    completed units.
+
+  Decided the same day for steward's own `REVIEW.md` (owner, from Session A's proposals; its
+  sections are ST-21's AC-5):
+  - today's item 1, "the work is on a feature branch with a pull request; nothing was pushed
+    directly to `main`", is dropped: a reviewer only ever sees a pull request, and a direct push
+    is never reviewed, so it can neither break nor catch it. Branch protection, or on a
+    repository without it the watchdog, is what guards `main`; `CLAUDE.md` keeps the rule for
+    sessions;
+  - "Every pull request" gains a claims item: statements a pull request adds about how the
+    repository works, in documents, comments, commit messages or its body, are true at its
+    head. Today only a story's claims are checked (item 22). Considered and not chosen: leaving
+    the body's statements to "Integrity" alone. Not in the example: it is the discipline
+    steward's own project chose (`CLAUDE.md`, "Claims about this repository");
+  - "Changes to code" applies to workflow files and prompts as well as code and tests, to start
+    with;
+  - a code change must link its unit, `Unit: none` being accepted only where no unit could
+    exist, such as a pull request that writes the unit; added once the reviewer is given the
+    unit note (ST-22).
 - **The rules file's shape** (owner, 2026-10-11, from Session A's proposals):
   - **The reviewer reads the rules from `main`**, put into its prompt by the dispatcher, not from
     the pull request's head, so that a pull request cannot loosen the rules it is judged by. A
@@ -419,6 +448,15 @@ key names are Session A's working names; the story that builds each settles it.
     limit for today's install; it is reworded for `setup`.
 - **`landWhen`: which checks must be green before the lander merges**, either every check on the
   head (what `init` writes, as decided on 2026-10-10) or a list of check names.
+  - **When GitHub reports a pull request `blocked` though the checks `landWhen` names are green,
+    steward does not ask the sweep to merge it, says so in what it reports, and tries again
+    later** (owner, 2026-10-11): "if the state is readable before spawning the land process, we
+    should respect that it isn't ready". `blocked` then means branch protection requires
+    something `landWhen` does not name, such as another required check or an approval, and
+    GitHub would refuse the merge anyway. Steward's own rule stays `landWhen`. Considered and not
+    chosen: triggering the sweep regardless, which is just as safe, since GitHub refuses the
+    merge, but fails a sweep run on every pass until the requirement clears; and treating
+    `blocked` as a rule of steward's own.
 - **A project can turn steward's landing off** (owner, 2026-10-11, asked whether `review/agent`
   should be optional for projects with other gating rules). Steward still reviews and posts
   `review/agent`, but does not merge; the project merges by its own rules. Steward then never
