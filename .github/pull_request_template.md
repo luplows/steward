@@ -11,5 +11,5 @@
 
 ## Docs check
 
-<!-- Per CLAUDE.md, the outcome for README.md: what you updated, or why it
+<!-- Per AGENTS.md, the outcome for README.md: what you updated, or why it
      needed no update. -->
