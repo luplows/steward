@@ -12,7 +12,8 @@ nothing dispatches from it.
 **Status: agreed by the owner on 2026-10-08, with the six decisions in section 9 (D-1 to D-6; D-7
 to D-9 were added the same day, D-10 to D-12 on 2026-10-09, and D-13 to D-15 on 2026-10-10).**
 Sections 1, 2 and 4 to 7 were run on 2026-10-10, in the retried extraction (section 3): steward
-exists, with its history pushed and its `main` protected. Section 8 has not been run.
+exists, with its history pushed and its `main` protected. Section 8 was settled on 2026-10-12: its
+outcome is recorded against each of its items.
 The decisions themselves live in the design doc's Portability section; this file is the
 procedure, and where it restates a decision it names the one it must not drift from.
 
@@ -373,20 +374,35 @@ Sections 5 to 7 were ticked at the retried extraction, on 2026-10-10 (section 3)
 
 - [ ] A checkout of steward at `E:\Source\steward`, and the loop's own worktree made from it with
       `node scripts/dispatch/cli.mjs loop --init <path>`. `TW_MACHINE_LABEL` exported.
-- [ ] Steward's own first stories written at tier `next`, on `write-story/` branches in steward,
+      **Superseded, 2026-10-12:** the checkout exists, but the loop's worktree was not made.
+      Steward runs no loop: its review side is run by the dispatcher session from its own worktree,
+      with `review.mjs` and `land.mjs` until the pass (ST-25) is built (`harness-outline.md`,
+      "Loops"), and `loop.mjs` is not to be run on steward as it is configured (owner,
+      2026-10-12). `TW_MACHINE_LABEL` names the machine in a coder's claim (`machineLabel`,
+      `scripts/dispatch/coder.mjs`), so it waits for steward's coder.
+- [x] Steward's own first stories written at tier `next`, on `write-story/` branches in steward,
       before its loop first runs (D-5). The design doc's "What adopting steward needs from it"
       lists what this repository's adoption (OQ-115) needs from them. Revised 2026-10-10 by the
       owner: steward starts with the gate only, and its first stories get its coder working (design
       doc, "Decided so far"). Revised 2026-10-11 by the owner: the review side's stories come
       first, then the coder's, built by hand until the coder works (design doc, "Decided so far").
-- [ ] A first, small pull request on steward (for example, its first story), reviewed and landed
+      **Done, 2026-10-12:** the review side's stories, ST-18 to ST-26, with ST-7 rewritten, all
+      at tier `next`, written on `write-story/review-side-stories` and landed in #4.
+- [x] A first, small pull request on steward (for example, its first story), reviewed and landed
       through steward's own gate, which shows `test`, `review/agent` and the sweep working. Until
       steward's review loop is built, a dispatcher session runs `review.mjs` and `land.mjs` for
       its pull requests, as for this repository's (decided 2026-10-10 by the owner; design doc,
       "Decided so far").
+      **Done, 2026-10-11:** #1, which brought this checklist up to tower-workshop-paths' final
+      copy. `review/agent` was `success` at its head, `ac7a823`, at 06:09:11Z; a sweep run started
+      by `workflow_dispatch` at 06:09:25Z merged it at 06:09:38Z as `4d230cf`, by `github-actions`;
+      its head branch was deleted; and `ci.yml` ran on `main` by `workflow_run` at 06:09:46Z, and
+      passed. #2 to #5 landed the same way.
 - [ ] Record the outcome: in steward's design doc, through a steward pull request; and here, in R4,
       the OQ-to-ST mapping, through a `write-story/` pull request, in which the planning session
       also retires the moved stories here, each naming its `ST-<n>` (OQ-115's Out of scope).
+      **Steward's half done, 2026-10-12**, in the design doc's "Decided so far" ("Section 8's
+      outcome"). The half in tower-workshop-paths is that repository's planning session's.
 
 ## 9. Decisions
 

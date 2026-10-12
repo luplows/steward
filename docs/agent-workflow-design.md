@@ -1788,8 +1788,8 @@ deciding what is next. It is the harness's product outline, and moves with this 
   (D-6); and steward gets a `.gitattributes` holding `* text=auto eol=lf`, as a bootstrap commit
   of its own (D-15). The owner then authorised creating `luplows/steward` (A1) and the one direct
   push (A2), made over SSH. Steward's first CI run was green, and its `main` is protected as this
-  repository's is. What is left is steward's own loop and its first pull request
-  (`steward-bootstrap.md`, section 8).
+  repository's is. What was left, steward's own loop and its first pull request
+  (`steward-bootstrap.md`, section 8), was settled on 2026-10-12 ("Section 8's outcome", below).
 - **Steward's review side comes first, then its coder, and both are built by hand until the coder
   works** (decided 2026-10-11 by the owner, while planning steward's first stories with the
   planning session). This revises the entry above, "Steward starts with the gate only, and its first
@@ -1846,6 +1846,16 @@ deciding what is next. It is the harness's product outline, and moves with this 
   names remain only where they mean tower-workshop-paths' own session, or the file as it moved
   (`docs/session-a.md`). Considered and not chosen: renaming only instructions and current
   descriptions. What `init` gives a project of these files is left for later.
+- **Section 8's outcome** (2026-10-12; `steward-bootstrap.md`, section 8). Steward has no loop of
+  its own, and its loop's worktree (`loop --init`) was not made: its review side is run by the
+  dispatcher session from its own worktree, with `review.mjs` and `land.mjs` until the pass
+  (ST-25) is built (`harness-outline.md`, "Loops"), and `loop.mjs` is not to be run on steward as
+  it is configured (owner, 2026-10-12, above). Its first stories are the review side's, ST-18 to
+  ST-26 with ST-7 rewritten, at tier `next`, landed in #4. Its first pull request through its own
+  gate was #1, landed on 2026-10-11: `review/agent` passed at its head, the sweep merged it, its
+  head branch was deleted, and CI ran on `main` by `workflow_run`. #2 to #5 landed the same way.
+  Section 8's other half, R4's OQ-to-ST mapping and retiring the moved stories in
+  tower-workshop-paths, is that repository's planning session's.
 
 ### The move, in order
 
@@ -1864,7 +1874,8 @@ starts with the gate only, and dispatches no stories until its coder works ("Dec
    on 2026-10-08) and OQ-131 (one command-line entry point). OQ-124 (CI and the Pages deploy on
    `main` after each landing) is also built here first, as a `fix` story.
 2. **Paused 2026-10-09, and retried 2026-10-10: steward is created, pushed and protected, and its
-   own loop and first pull request are next** ("Decided so far"). **By hand, the owner with
+   first pull request has landed through its own gate; it runs no loop of its own** ("Decided so
+   far", "Section 8's outcome"). **By hand, the owner with
    the planning session (a bootstrap, not a story):** create
    `luplows/steward`, public; extract the moved paths with their history (`git filter-repo`,
    installed on the owner's machine on 2026-10-08 and tried in a dry run); renumber
