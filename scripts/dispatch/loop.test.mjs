@@ -1125,7 +1125,7 @@ describe('OQ-83/AC-6: a writer\'s pull request is reviewed and landed as part of
       scanCalls++
       if (scanCalls > 1) return { landed: false, report: [] }
       // The writer's pull request's merge adds a new ready story, the way a
-      // Session A hand-off would.
+      // planning-session hand-off would.
       const clone = path.join(sub, 'land-writer')
       git(sub, 'clone', repo.origin, clone)
       writeStory(clone, 'OQ-60', 'added-by-writer-pr')

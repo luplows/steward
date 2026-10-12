@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Reviews and lands open, non-draft pull requests against `main` that the loop
- * did not open itself -- a story Session A refined with the owner and opened
+ * did not open itself -- a story the planning session refined with the owner and opened
  * from the owner's account (OQ-83). It composes `review.mjs` and `land.mjs`
  * and reimplements neither: it never dispatches a coder and never pushes to
  * a pull request's branch, so a `block` leaves the pull request exactly

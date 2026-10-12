@@ -45,7 +45,7 @@ and well formed, and a project that leaves one out is told which.
       values.
 - [ ] **AC-6** — A new `docs/settings.md` lists every key with its form, what it is for, and
       what `init` will write, and says that an empty `unitLinks` means the project links no
-      units. `README.md` and `CLAUDE.md`'s "Where things are documented" table each point at it.
+      units. `README.md` and `AGENTS.md`'s "Where things are documented" table each point at it.
 - [ ] **AC-7** — The `**Planned (ST-18)**` marker in `docs/agent-workflow-design.md` loses
       `ST-18`, and the passage is corrected wherever what was built differs.
 

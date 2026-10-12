@@ -45,9 +45,9 @@ Everything after Phase 0 goes through the loop itself.
 **Two decisions keep the early phases cheap:**
 
 - **No big-bang backlog migration.** `Open-Questions.md` becomes the *idea backlog*; the new
-  `stories/` directory is the *refined, dispatchable queue*. Session A's job is moving items across
-  and attaching acceptance criteria. The file drains naturally as work is picked up. Nothing needs
-  rewriting up front and no traceability is lost.
+  `stories/` directory is the *refined, dispatchable queue*. The planning session's job is moving
+  items across and attaching acceptance criteria. The file drains naturally as work is picked up.
+  Nothing needs rewriting up front and no traceability is lost.
 - **`deploy-pages.yml` doesn't change at all.** Pages is the alpha channel and *should* receive
   every merge continuously. The v1 recommendation to gate it on tags was based on a wrong
   assumption about what Pages was.
@@ -314,7 +314,7 @@ checklist should shrink as CI grows.
 
 ---
 
-## Phase 3 — Session B
+## Phase 3 — The release review
 
 **Goal:** close the loop the owner actually sits in. This is the existing OQ-46.
 
@@ -393,7 +393,7 @@ execution eliminates wholesale.
 
 **Two queues coexist during the drain.** `Open-Questions.md` and `stories/` both hold work for a
 while. Mitigated by documenting in `CLAUDE.md` that **nothing dispatches from `Open-Questions.md`**
-— it is input to Session A, not to the loop.
+— it is input to the planning session, not to the loop.
 
 **Review quality drops when the checklist grows.** Items 16–18 are judgment; 1–15 are mostly
 mechanical. As Phase 2 moves the mechanical ones into CI, delete them from `REVIEW.md` rather than

@@ -104,7 +104,7 @@ standard it was supposed to meet.
 ## PRs that add or change a story
 
 These apply to a PR that writes or edits files under `stories/` without
-implementing one: Session A's work. A story that lands `ready` is work the
+implementing one: the planning session's work. A story that lands `ready` is work the
 dispatch loop will carry out unattended, so it is reviewed as carefully as
 code.
 

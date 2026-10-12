@@ -34,7 +34,7 @@
  * is covered too -- the loop reviews and lands any open, non-draft pull
  * request against `main` whose author the gate honours and that it did not
  * open itself (`writer-prs.mjs`'s `reviewAndLandWriterPullRequests`): the
- * pull request Session A opens from the owner's account once a story is
+ * pull request the planning session opens from the owner's account once a story is
  * refined. Landing one re-reads the queue before picking, so a story it just
  * moved to `stories/done/` is seen in the same run. This is gated on both
  * `ctx` and `landCtx` being supplied, for the same reason as OQ-112's above.

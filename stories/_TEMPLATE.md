@@ -5,7 +5,7 @@ tier: normal               # fix | next | normal | later — priority, nothing e
 kind: product              # product | workflow — for reading; never read by the dispatcher
 depends_on: []             # [OQ-45] — not dispatched until those are in done/
 model: sonnet              # per-story escalation; the reviewer is never this model
-blocked: null              # null | "reason text" — set by a kickback, cleared by Session A
+blocked: null              # null | "reason text" — set by a kickback, cleared by the planning session
 ---
 
 <!--
@@ -68,7 +68,7 @@ decided a thing, which file is the house style to match.
 
 <!--
 Must be empty to dispatch. Anything here beyond the marker below makes the
-story `draft`, and the dispatcher skips it. Anything here is Session A's to
+story `draft`, and the dispatcher skips it. Anything here is the planning session's to
 resolve — writing a question down and dispatching anyway is how the coder's
 guess becomes a permanent, unreviewed decision.
 

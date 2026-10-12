@@ -25,6 +25,10 @@
 > history. An `OQ-<n>` in it means a tower-workshop-paths story, found in that repository's
 > `stories/done/` or `Completed-Questions.md`. Steward's own stories are numbered `ST-<n>`.
 
+> **Session names.** The planning session was called Session A, and the release review Session B,
+> until 2026-10-12 (owner). Older commits and pull requests, and tower-workshop-paths, use those
+> names.
+
 ---
 
 ## Purpose
@@ -73,7 +77,7 @@ draft of this document did.)*
 ## The shape
 
 ```
-  ┌─ SESSION A (human, frequent) ──────────────────────────────┐
+  ┌─ PLANNING SESSION (human, frequent) ───────────────────────┐
   │  vision · refinement · story authoring · triage of kickbacks│
   └────────────────────────┬───────────────────────────────────┘
                            │ writes
@@ -88,7 +92,7 @@ draft of this document did.)*
                          main
                            │
   ┌────────────────────────▼───────────────────────────────────┐
-  │  SESSION B (human, periodic)                                │
+  │  RELEASE REVIEW (human, periodic)                           │
   │  walkthrough of accumulated main · verdicts · fix stories   │
   │  → tag vN = reviewed checkpoint                             │
   └─────────────────────────────────────────────────────────────┘
@@ -96,11 +100,11 @@ draft of this document did.)*
 
 | Role | Interaction | Model | Writes code? |
 |---|---|---|---|
-| **Session A** — planning | Frequent, conversational | Opus / high | No |
+| **Planning session** | Frequent, conversational | Opus / high | No |
 | **Dispatcher** | None | **None — it is a script** | No |
 | **Coder** | None | Sonnet (per-story override) | Yes |
 | **Reviewer** | None | Opus / high — *never the coder's model* | **No** (tool-enforced) |
-| **Session B** — release | Periodic, conversational | Opus / high | No |
+| **Release review** | Periodic, conversational | Opus / high | No |
 
 ---
 
@@ -133,7 +137,7 @@ stories/
   done/
     ST-42-review-gate.md           ← completed, moved by its own PR
   retired/
-    ST-55-declare-story-mechanisms.md  ← dropped unbuilt, moved by Session A
+    ST-55-declare-story-mechanisms.md  ← dropped unbuilt, moved by the planning session
 ```
 
 A story the owner decides not to build is retired, not deleted (decided 2026-10-07 by the owner).
@@ -223,7 +227,7 @@ Four values, highest first:
 
 | Tier | Means |
 |---|---|
-| `fix` | A defect or regression — Session B's blockers, rollback follow-ups. Absolute priority. |
+| `fix` | A defect or regression — the release review's blockers, rollback follow-ups. Absolute priority. |
 | `next` | Deliberately prioritised ahead of the default. |
 | `normal` | The default. Most stories. |
 | `later` | Refined and dispatchable, but deliberately deferred. |
@@ -275,8 +279,8 @@ unanswerable, and a promotion is indistinguishable from broken ordering.
 ### The readiness test
 
 Review is [drift detection](#reviewer), so the reviewer can only catch drift from what was
-**written down**. Anything Session A leaves unspecified is not drift — it is unspecified, and the
-coder's choice stands unreviewed permanently.
+**written down**. Anything the planning session leaves unspecified is not drift — it is unspecified,
+and the coder's choice stands unreviewed permanently.
 
 The consequence is easy to miss: **a vague story does not produce a weak review, it produces a
 review that cannot fail.** The gate silently stops working and the pipeline still shows green.
@@ -285,10 +289,10 @@ review that cannot fail.** The gate silently stops working and the pipeline stil
 
 If no, the story is not ready. This is checkable while writing, which "is this story good?" is not.
 
-### Sizing is a judgment, and it is Session A's
+### Sizing is a judgment, and it is the planning session's
 
-The counts — ≲ 5 files, ≲ 5 ACs — are a guideline, never a cap. A story is ready when Session A
-agrees it is sized appropriately; the number informs that judgment rather than replacing it.
+The counts — ≲ 5 files, ≲ 5 ACs — are a guideline, never a cap. A story is ready when the planning
+session agrees it is sized appropriately; the number informs that judgment rather than replacing it.
 
 Making it a rule makes stories worse, and the failure is specific: an author held to "≤ 5 ACs"
 complies by *merging* criteria into one that asserts two things — which is exactly what the
@@ -300,12 +304,12 @@ workflow are three stories wearing one id.
 
 > **Is this one mechanism, or several that happen to ship together?**
 
-**The obligation runs both ways.** Session A both authors the story and judges its size, and
-nothing downstream checks that judgment — the reviewer compares the diff to the story and never
+**The obligation runs both ways.** The planning session both authors the story and judges its size,
+and nothing downstream checks that judgment — the reviewer compares the diff to the story and never
 asks whether the story was too big; the schema lint counts structure, not scope. An oversized story
-passes every gate in the system. So Session A must say so when scope is too large and propose the
-split. Advisory, because the human decides — but not optional, or the cap has been deleted rather
-than relaxed.
+passes every gate in the system. So the planning session must say so when scope is too large and
+propose the split. Advisory, because the human decides — but not optional, or the cap has been
+deleted rather than relaxed.
 
 ---
 
@@ -313,17 +317,17 @@ than relaxed.
 
 ### Happy path
 
-1. Session A writes a story, with Open questions empty, and opens it as a pull request from the
-   owner's account, as a **draft**. It marks the pull request ready only when the owner says so,
-   and that is the owner's go-ahead for it to land (decided 2026-09-28; `docs/session-a.md`).
-   Before every pick, and also on a run with nothing ready, the loop itself reviews any such open,
-   non-draft pull request against `REVIEW.md`'s story-PR items and lands it on a passing verdict
-   (OQ-83; `scripts/dispatch/writer-prs.mjs`). Only a pull request from an account with write
-   access is reviewed at all, let alone landed (OQ-81). CI fails a coder's own
-   pull request if it changes `stories/` beyond its own story's move, ticks and `blocked:` edit
-   (OQ-82; `scripts/dispatch/story-containment.mjs`). In tower-workshop-paths, its OQ-105 plans
-   for CI also to fail one whose head branch names a `story/OQ-<n>-…` other than the story its
-   diff moves.
+1. The planning session writes a story, with Open questions empty, and opens it as a pull request
+   from the owner's account, as a **draft**. It marks the pull request ready only when the owner
+   says so, and that is the owner's go-ahead for it to land (decided 2026-09-28;
+   `docs/planning-session.md`). Before every pick, and also on a run with nothing ready, the loop
+   itself reviews any such open, non-draft pull request against `REVIEW.md`'s story-PR items and
+   lands it on a passing verdict (OQ-83; `scripts/dispatch/writer-prs.mjs`). Only a pull request
+   from an account with write access is reviewed at all, let alone landed (OQ-81). CI fails a
+   coder's own pull request if it changes `stories/` beyond its own story's move, ticks and
+   `blocked:` edit (OQ-82; `scripts/dispatch/story-containment.mjs`). In tower-workshop-paths, its
+   OQ-105 plans for CI also to fail one whose head branch names a `story/OQ-<n>-…` other than the
+   story its diff moves.
 2. Dispatcher picks the highest-tier, lowest-id ready story; creates a worktree and the branch
    `story/ST-49-queue-json`. The loop (`scripts/dispatch/loop.mjs`, OQ-86) skips a ready
    story whose `story/OQ-<n>-*` branch already exists on `origin` (`stories/README.md`'s
@@ -387,8 +391,8 @@ The majority of the interesting behaviour.
 | A retry reports the coder's `blocked:`, a draft request or a failure; a review records no verdict; a retry after red CI pushes no commit; landing fails | The story stops. Only the results OQ-48's AC-2 names continue the run (the `decide*` functions of `story.mjs`); every other result stops it. Every stop with an open PR makes the PR a draft first, so nothing can land it, which keeps the rule that a `blocked:` story is always a draft. Then it records `blocked:` on the branch. |
 | The reviewer's verdict does not parse | `reviewPullRequest` runs one more reviewer session, in the same worktree and with the same prompt, story, pull request, environment and model, before returning `malformed-verdict`; a second malformed reply stops the story as above, with both sessions' parse failures in the reason. Only a malformed verdict is re-run, never more than once, dependencies are not installed again, and each session keeps its own budget. Decided 2026-10-08 by the owner, so that one badly formatted reply does not stop a story. Before the second session the checkout is checked again, and if the first session changed it there is no second session and nothing is reset (decided 2026-10-08 by the owner): a reviewer that wrote to its checkout is worth seeing. Every result `reviewPullRequest` returns after running a session says how many it ran (1 or 2). |
 | The dispatcher is interrupted mid-story | The owner resumes it from its PR number (`story.mjs OQ-n --pr <number>`, OQ-48's AC-9), which derives where it was from GitHub alone. Once the run has pushed, the story's branch on `origin` keeps it `in-progress`, so the loop (OQ-86) skips it; a run killed between its push and opening the PR leaves a branch with no PR, which the owner handles by hand. Killed before its claim push, the story has no branch on `origin` and the loop picks it again, but the killed run's local branch makes the dispatch return `branch-exists`, which stops the loop (OQ-86's AC-3 and AC-4). The claim push (OQ-110, above) means a run killed after it almost always leaves a branch every machine sees, since the claim lands before the install or the session starts. The loop skips a story whose branch is only local, after pushing it (OQ-111, above), and opens a `Loop: OQ-n is stuck` issue for either kind of skip (OQ-112, above). |
-| Story was wrong, not the code | `blocked:` set with the reason → Session A |
-| Coder hits ambiguity mid-story | `blocked:` + the specific question → Session A |
+| Story was wrong, not the code | `blocked:` set with the reason → the planning session |
+| Coder hits ambiguity mid-story | `blocked:` + the specific question → the planning session |
 | Branch stale | Rebase; if it fails, kick back rather than merge against a moved world |
 | Spawn died / timed out / hit budget | Dispatcher records it and moves on; the watchdog surfaces it. A coder dispatch that ends before a PR exists (a failed install or session, nothing committed, uncommitted changes, a failed push) stops the loop (OQ-86) rather than moving on. The claim pushed before the install or the session (OQ-110, above) stays on `origin` through that stop, so the next run skips the story instead of dispatching it again, with the `Loop: OQ-n is stuck` issue that skip now opens (OQ-112, above). A dispatch that stops before a pull request exists for a reason other than another run's claim (`branch-exists`) or the story going stale (`not-ready`) opens the same issue itself, directly, rather than waiting for the next run's skip. |
 
@@ -494,8 +498,8 @@ checked out (`requireOwnWorktree`, `scripts/dispatch/loop.mjs`).
 **It may land, and only through `land.mjs`.** It runs `land.mjs`, directly or through `story.mjs`,
 for a pull request whose head has an honoured `pass` or `pass-with-observations` verdict and green
 CI. It never runs `gh workflow run land-approved.yml`, and never merges through the API or any
-other way. No other agent session triggers the sweep. `CLAUDE.md`, "Branches and pull requests",
-states the rule; this section is its rationale.
+other way. No other agent session triggers the sweep. `AGENTS.md`, "Every session", and
+`docs/dispatcher-session.md` state the rule; this section is its rationale.
 
 Why this is safe enough:
 
@@ -509,13 +513,13 @@ Why this is safe enough:
   the one dispatch and no other write.
 
 The owner can require a go-ahead before the session lands particular pull requests, for example
-ones that change `CLAUDE.md`, `REVIEW.md`, `.github/`, `.claude/` or this document. That is an
-instruction to the session, lifted when the owner says so, and not part of this design.
+ones that change `AGENTS.md`, `CLAUDE.md`, `REVIEW.md`, `.github/`, `.claude/` or this document.
+That is an instruction to the session, lifted when the owner says so, and not part of this design.
 
 ### Running unattended
 
-Decided 2026-09-28 by the owner, planning how Session A's pull requests reach the queue without a
-dispatcher session in between.
+Decided 2026-09-28 by the owner, planning how the planning session's pull requests reach the queue
+without a dispatcher session in between.
 
 - **Planned (ST-11):** a Windows scheduled task starts the loop every 15 minutes while the machine
   is on, on mains power only. The task is a script: a run with nothing ready starts no model
@@ -552,10 +556,11 @@ dispatcher session in between.
   story that would have been retried is paused, and resumes on a later run under the threshold.
   What is measured, and over what window, is open.
 - Any pull request from an account with write access (OQ-81) that passes review may land
-  unattended, including one that changes this document, `CLAUDE.md`, `.github/` or `.claude/`.
-  Marking it ready is the owner's go-ahead: Session A opens its pull requests as drafts and marks
-  one ready only on the owner's word. A dispatched story's own pull request lands on a pass, as it
-  does today: the story was the go-ahead.
+  unattended, including one that changes this document, `AGENTS.md`, `CLAUDE.md`, `.github/` or
+  `.claude/`.
+  Marking it ready is the owner's go-ahead: the planning session opens its pull requests as drafts
+  and marks one ready only on the owner's word. A dispatched story's own pull request lands on a
+  pass, as it does today: the story was the go-ahead.
 - Before the task is switched on, OQ-81 and OQ-82 are built, so nothing lands automatically from an
   outsider or changes `stories/` from inside a coder's pull request, and so are OQ-73 (a coder
   cannot read the owner's stored token) and OQ-80 (the circuit breaker counts real blocks).
@@ -751,7 +756,7 @@ reviewer correctly refused it as an injection attack. Each addition was locally 
 re-read the whole.
 
 Removing the reviewer's need to post anything **deletes that section of the prompt** rather than
-rewording it. Applies equally to Session B, which writes stories, not statuses.
+rewording it. Applies equally to the release review, which writes stories, not statuses.
 
 **The coder was first given a narrower credential rather than the same treatment, because it then
 needed to push (OQ-63); since OQ-84 the dispatcher pushes, and it does not.** This was the more urgent of the two
@@ -1037,7 +1042,7 @@ main
  ├─ story/ST-49-queue-json
  ├─ fix/ST-51-date-format
  │
- └─ tag v0.4.0  ← Session B accepted this batch
+ └─ tag v0.4.0  ← the release review accepted this batch
 ```
 
 `main` is the integration trunk. Story branches cut from it and squash-merge back.
@@ -1054,7 +1059,7 @@ parallel dispatch arrives.
 - `story/ST-49-slug` and `fix/ST-51-slug` — parseable both ways, so any component can find the
   story from the branch and vice versa.
 - **Squash-merge.** One story = one commit on main, which makes `git log <tag>..HEAD` a direct list
-  of completed stories — Session B's input assembles itself.
+  of completed stories — the release review's input assembles itself.
 - Branch protection: `test` + `review/agent` required, `enforce_admins: true`, no force-push, no
   deletions. **Already configured correctly.**
 - Coder rebases before committing for the dispatcher to push and open the PR from; cap branch age rather than
@@ -1064,15 +1069,15 @@ parallel dispatch arrives.
 
 Everything above prevents bad changes landing. This covers one landing anyway.
 
-- **Caught by Session B** → a `fix/` story, ordinary loop, prioritised ahead of the queue.
+- **Caught by the release review** → a `fix/` story, ordinary loop, prioritised ahead of the queue.
 - **Caught after a tag** → revert PR through the same loop, then a `fix/` story to redo it properly.
   Revert first, diagnose second.
-- Session B asks both questions: *is this good to ship*, and **what did we ship that we shouldn't
-  have.**
+- The release review asks both questions: *is this good to ship*, and **what did we ship that we
+  shouldn't have.**
 
 ---
 
-## Session B — the release review
+## The release review
 
 Runs when a batch worth reviewing has accumulated (currently: human call, roughly every ten merged
 PRs). This is the existing OQ-46, and it is the only thing standing between the owner and a silently
@@ -1090,7 +1095,7 @@ when a change is self-consistent.
 ### The walkthrough
 
 Organised by **user-visible capability**, not by PR or story. Several stories often compose into one
-capability. Doing that grouping is Session B's first real piece of work.
+capability. Doing that grouping is the release review's first real piece of work.
 
 Per capability: what it does now that it didn't before, in user language — then **put it on screen**,
 driving a deployment or a local dev server. That is the difference between reviewing work
@@ -1111,19 +1116,21 @@ halts all progress while waiting for a human stops being run.
 
 ### Feedback capture
 
-The owner is clicking around, notices something is off, says so in plain language. Session B turns
-that into a properly-formed story: clarifying questions, sizing, acceptance criteria, out-of-scope.
+The owner is clicking around, notices something is off, says so in plain language. The release
+review turns that into a properly-formed story: clarifying questions, sizing, acceptance criteria,
+out-of-scope.
 
-Which is what Session A does. **Session B is Session A wearing a different hat** — same
-story-authoring discipline, different trigger (observed defect vs. envisioned feature). Share the
-story-authoring skill; keep the sessions separate, since their surrounding context differs sharply.
+Which is what the planning session does. **The release review is the planning session wearing a
+different hat** — same story-authoring discipline, different trigger (observed defect vs. envisioned
+feature). Share the story-authoring skill; keep the sessions separate, since their surrounding
+context differs sharply.
 
 ### The scope-creep hazard
 
-Looking at working software generates ideas. Session B holds a hard line: *"this is broken or
-doesn't match what we agreed"* is a blocker; *"I now want more"* is a new story for Session A's
-backlog, **not this release**. Without that split, releases stop shipping — and it feels reasonable
-every single time.
+Looking at working software generates ideas. The release review holds a hard line: *"this is broken
+or doesn't match what we agreed"* is a blocker; *"I now want more"* is a new story for the planning
+session's backlog, **not this release**. Without that split, releases stop shipping — and it feels
+reasonable every single time.
 
 ---
 
@@ -1135,8 +1142,9 @@ Every automated guard here is a **regression** detector. Ranked by value per eff
 spots. Built into the model allocation above.
 
 **2. Track escaped defects.** Block rate cannot answer "is review working." What matters is what
-**got through**: every defect found at Session B or later, traced back to *which gate should have
-caught this?* A frontmatter field on the fix story. The only signal measuring the whole system.
+**got through**: every defect found at the release review or later, traced back to *which gate
+should have caught this?* A frontmatter field on the fix story. The only signal measuring the whole
+system.
 
 **3. Property-based testing.** The direct attack on coder-writes-both — a generator finds cases the
 coder didn't think of, *including ones revealing it misread the story*. `fast-check`.
@@ -1414,7 +1422,7 @@ test that case. Like the reviewer's shell check in "Invocation shape", all of th
 Claude Code 2.1.281, and another version can change it.
 
 **Recommendation.** This is a recommendation only. Acting on it is a later story, written by
-Session A.
+the planning session.
 
 1. **Set `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` in `coderEnv`** (T3, T4). A command past the
    timeout then fails as an error the session sees, instead of moving to the background and being
@@ -1542,7 +1550,7 @@ under the local execution model it no longer matters.
 
 Public repo, so Actions minutes are not a constraint; **model usage is.** A clean first pass is
 ~$3.70; worst case with two retries is ~$11. Story quality decides which you pay — *and*, per the
-readiness test, whether the gate works at all. Both arguments point at Session A.
+readiness test, whether the gate works at all. Both arguments point at the planning session.
 
 `--max-budget-usd` makes the ceiling explicit per invocation rather than discovered afterwards.
 
@@ -1619,9 +1627,9 @@ deciding what is next. It is the harness's product outline, and moves with this 
   order, OQ-133 cuts `CLAUDE.md`, `REVIEW.md` and the stories README to this project's own rules,
   OQ-132 removes the moved code, and OQ-134 removes the moved documents (the order set on
   2026-10-09 by the owner, from #223's review: each needs what the one before it removes gone).
-  Retiring the moved stories is Session A's, as soon as the bootstrap fixes the OQ-to-ST mapping.
-  The tests that stay go to a new `scripts/ci-workflows.test.mjs`, which takes the setup-step prefix
-  from the pinned package. The passages about this project go to `README.md` and
+  Retiring the moved stories is the planning session's, as soon as the bootstrap fixes the OQ-to-ST
+  mapping. The tests that stay go to a new `scripts/ci-workflows.test.mjs`, which takes the
+  setup-step prefix from the pinned package. The passages about this project go to `README.md` and
   `Project-Outline.md`: no project needs a document about steward (R1). Which rules are steward's
   and which this project's is settled; how steward's reach a project's sessions, and the form of
   this project's review items, are decided once steward is built. `docs/steward-bootstrap.md` moves
@@ -1645,23 +1653,23 @@ deciding what is next. It is the harness's product outline, and moves with this 
   `ci.yml` gets the same trigger at the bootstrap (`steward-bootstrap.md`, B6), and a project's thin
   files get it from `init` (R2).
 - **OQ-73 is rewritten in place as a spike only** (decided 2026-10-09 by the owner): run by the
-  owner with Session A, not dispatched, and held until the move, with `blocked:` saying both. Its
-  outcome is a recommended split into the stories that build coder sessions in a container, which
-  Session A writes with the owner. #209, OQ-73's earlier coder pull request, was closed unmerged
-  and its branch deleted. The container runtime is left open, as the spike's open question. See
-  R5.
-- **OQ-136 is fixed on its own pull request, #241, by Session A** (decided 2026-10-09 by the
-  owner, an exception to the rule against editing a story whose branch is on origin). Its coder's
-  run stopped at `ci-round-bound` because the Linux-only test quoted its stand-in's paths, so the
-  stand-in never ran. The fix also narrows the clean-up to the try's own processes ("What CI
+  owner with the planning session, not dispatched, and held until the move, with `blocked:` saying
+  both. Its outcome is a recommended split into the stories that build coder sessions in a
+  container, which the planning session writes with the owner. #209, OQ-73's earlier coder pull
+  request, was closed unmerged and its branch deleted. The container runtime is left open, as the
+  spike's open question. See R5.
+- **OQ-136 is fixed on its own pull request, #241, by the planning session** (decided 2026-10-09 by
+  the owner, an exception to the rule against editing a story whose branch is on origin). Its
+  coder's run stopped at `ci-round-bound` because the Linux-only test quoted its stand-in's paths,
+  so the stand-in never ran. The fix also narrows the clean-up to the try's own processes ("What CI
   runs"), and OQ-136's AC-1 and AC-4 are amended to say so, in a `write-story/` pull request,
   since a story's own pull request may not reword it (`story-containment.mjs`). Because the
   narrowed clean-up still stops a process something else starts in a new session during a try,
   OQ-136's behavioural test runs alone, in a CI step of its own, not in `npm test`; in the real
   install step only a system service started mid-try is exposed. OQ-136 is a prerequisite of the
   move: it unblocks OQ-130. When #241's review then blocked on the wait's lock probe, the owner
-  amended AC-2 to AC-4 again (the same day) and kept the exception for Session A to make the fix,
-  because OQ-136 blocks the move, while saying such exceptions are not to become the rule.
+  amended AC-2 to AC-4 again (the same day) and kept the exception for the planning session to make
+  the fix, because OQ-136 blocks the move, while saying such exceptions are not to become the rule.
 - **#243's held review observation becomes OQ-137** (decided 2026-10-09 by the owner): the install
   step's worst case counts the clean-up after the first try, and the clean-up test checks its
   allowance ("What CI runs"). #242's two held observations were already resolved by OQ-136's own
@@ -1692,22 +1700,22 @@ deciding what is next. It is the harness's product outline, and moves with this 
   (decided 2026-10-10 by the owner, while defining steward). Steward is made by extracting this
   repository's engine with its history (`steward-bootstrap.md`); which paths and stories that
   takes is one of the decisions below. Considered and not chosen:
-  starting steward fresh from the outline and bringing code over piece by piece. Session A's case
-  for extracting, put to the owner the same day: the gate already works, as do the session bounds,
-  the allowlists, the sweep and the claim, and most of what the outline changes is a change to
-  existing code. In `harness-outline.md`, "Defining steward", decisions that differ from the
-  engine say what it does today, each in a note starting "For reference". Session A proposed
-  three more decisions before the extraction resumes: what steward runs for its own pull requests
-  on its first day (Session A suggested the gate only, as R6 decided for the second project),
-  taken the same day (next entry); which stories and paths move, re-sorted against the outline
-  (since 2026-10-09 steward does not lint units, so the story lint and story containment may be
-  this repository's), also taken the same day (the entry after next); and what this repository
-  runs until it adopts steward, taken the same day too (the third entry after this one).
+  starting steward fresh from the outline and bringing code over piece by piece. The planning
+  session's case for extracting, put to the owner the same day: the gate already works, as do the
+  session bounds, the allowlists, the sweep and the claim, and most of what the outline changes is a
+  change to existing code. In `harness-outline.md`, "Defining steward", decisions that differ from
+  the engine say what it does today, each in a note starting "For reference". The planning session
+  proposed three more decisions before the extraction resumes: what steward runs for its own pull
+  requests on its first day (the planning session suggested the gate only, as R6 decided for the
+  second project), taken the same day (next entry); which stories and paths move, re-sorted against
+  the outline (since 2026-10-09 steward does not lint units, so the story lint and story containment
+  may be this repository's), also taken the same day (the entry after next); and what this
+  repository runs until it adopts steward, taken the same day too (the third entry after this one).
 - **Steward starts with the gate only, and its first stories get its coder working** (decided
-  2026-10-10 by the owner, from Session A's proposal; revised 2026-10-11 by the owner: the review
-  side's stories come first, then the coder's, below). On its first day steward reviews and lands
-  its own pull requests, written in the owner's interactive sessions, and runs no coder, as R6
-  decided for the second project. The first follow-ups in steward are the stories that get its
+  2026-10-10 by the owner, from the planning session's proposal; revised 2026-10-11 by the owner:
+  the review side's stories come first, then the coder's, below). On its first day steward reviews
+  and lands its own pull requests, written in the owner's interactive sessions, and runs no coder,
+  as R6 decided for the second project. The first follow-ups in steward are the stories that get its
   coder working to its outline. Considered and not chosen: steward dispatching its own `ST-<n>`
   stories from the day it exists, which "The move, in order" was built for; that would run the
   engine's single loop, which the outline replaces with two (`harness-outline.md`, "Loops"). This
@@ -1717,7 +1725,7 @@ deciding what is next. It is the harness's product outline, and moves with this 
   started by a dispatcher session running `review.mjs` and `land.mjs`, as this repository's are
   (**The dispatcher session**, above; decided the same day by the owner).
 - **Which stories and paths move, re-sorted against the outline** (decided 2026-10-10 by the
-  owner, from Session A's proposal):
+  owner, from the planning session's proposal):
   - **Steward's own repository is a project that uses steward, and it and this repository each
     keep the story tooling as their own convention.** Story files, the story lint
     (`scripts/lint-stories.mjs`), story containment (`scripts/dispatch/story-containment.mjs`)
@@ -1740,14 +1748,14 @@ deciding what is next. It is the harness's product outline, and moves with this 
     rather than clearing it; OQ-73 and OQ-108 keep their own. So nothing is ready in steward on its
     first day, which keeps it to the gate. As B1 was first written, the extract's queue at
     `1d995f0` listed 12 stories `ready`.
-  - Session A's reading of the moving stories against the outline, for when steward's queue is
-    refined: OQ-54 is reworded with M4; OQ-59 is revisited once priority is settled; OQ-88 is
-    reworded for the `setup` command; OQ-101 and OQ-102 are reworded for two loops; OQ-119 is
+  - The planning session's reading of the moving stories against the outline, for when steward's
+    queue is refined: OQ-54 is reworded with M4; OQ-59 is revisited once priority is settled; OQ-88
+    is reworded for the `setup` command; OQ-101 and OQ-102 are reworded for two loops; OQ-119 is
     revisited with the stop measure. The rest move as they are.
 
   OQ-100 and OQ-105 stay here, held until the extraction (next entry).
 - **Until it adopts steward, this repository runs its own engine, frozen** (decided 2026-10-10 by
-  the owner, from Session A's proposal):
+  the owner, from the planning session's proposal):
   - **Product stories dispatch** on the engine here, as they do today. When the dispatcher session
     resumes dispatching is the owner's call, apart from this decision.
   - **The engine gets no new work here**: no new workflow stories, and only `fix` stories for a
@@ -1767,11 +1775,11 @@ deciding what is next. It is the harness's product outline, and moves with this 
   coder, which needs `init`, the prompts' slot and the delivery of rules first, and splits this
   repository across two engines.
 - **What the stopped extraction needs before it is retried** (decided 2026-10-10 by the owner,
-  from Session A's proposal; `steward-bootstrap.md`, D-14). The 38 failing tests are dealt with in
-  the bootstrap commits rather than by `fix` stories here: two are removed under R1's rule that
-  only tests of files that move go to steward (B7a), and the other 36 are made independent of the
-  project they run in (B7b). B1 gives the held `blocked:` text. Steward's `ci.yml` passes the head
-  branch name through `env:` from the start (B6). Nothing else from the definition is needed
+  from the planning session's proposal; `steward-bootstrap.md`, D-14). The 38 failing tests are
+  dealt with in the bootstrap commits rather than by `fix` stories here: two are removed under R1's
+  rule that only tests of files that move go to steward (B7a), and the other 36 are made independent
+  of the project they run in (B7b). B1 gives the held `blocked:` text. Steward's `ci.yml` passes the
+  head branch name through `env:` from the start (B6). Nothing else from the definition is needed
   first: the rest is steward's own work. The retry waits for the pull request recording these
   decisions to land, since it changes moving paths.
 - **The extraction is retried, and steward exists** (2026-10-10, from `main` at `688c3c2`, after
@@ -1783,10 +1791,10 @@ deciding what is next. It is the harness's product outline, and moves with this 
   repository's is. What is left is steward's own loop and its first pull request
   (`steward-bootstrap.md`, section 8).
 - **Steward's review side comes first, then its coder, and both are built by hand until the coder
-  works** (decided 2026-10-11 by the owner, while planning steward's first stories with Session
-  A). This revises the entry above, "Steward starts with the gate only, and its first stories get
-  its coder working": the review side's stories come before the coder's. Until steward has a
-  coder, each story is built in one of the owner's interactive sessions, or by an agent that
+  works** (decided 2026-10-11 by the owner, while planning steward's first stories with the
+  planning session). This revises the entry above, "Steward starts with the gate only, and its first
+  stories get its coder working": the review side's stories come before the coder's. Until steward
+  has a coder, each story is built in one of the owner's interactive sessions, or by an agent that
   session spawns with a prompt written there. A new dispatcher session, steward's own, reviews and
   lands steward's pull requests (**The dispatcher session**, above). Considered and not chosen:
   holding the stories until the coder works, which the order makes circular; and running this
@@ -1822,6 +1830,22 @@ deciding what is next. It is the harness's product outline, and moves with this 
   - **Planned (ST-25):** the review-and-land pass, one command per pass, started by the dispatcher
     session for now.
   - **Planned (ST-26):** a `Unit:` line in steward's pull request template.
+- **Agents' instructions are split by who needs them, and written for any tool** (decided
+  2026-10-12 by the owner, from the planning session's proposal). The rules every agent here
+  follows are in `AGENTS.md`, which other companies' agent tools read by convention, and
+  `CLAUDE.md` imports it for Claude Code, since the planning session will not always run on a
+  Claude model (goals 2 and 3, above). Rules only one role needs are in that role's own file:
+  `docs/planning-session.md` and `docs/dispatcher-session.md`. The coder and the reviewer take
+  theirs from their prompts, and `coder.md` reads `AGENTS.md` in place of `CLAUDE.md`, which had
+  held the coder to pushing and opening its own pull request, which it may not do. Considered and
+  not chosen: `CLAUDE.md` staying the main file, which is simpler but written for one company's
+  tool; the dispatcher session's rules in **The dispatcher session**, above, which would mix
+  instructions with rationale; and the prompt change as a story of its own, not needed since only
+  a spawned session cannot edit `.claude/prompts/`. Session A is renamed the planning session, and
+  Session B the release review, everywhere, dated records included (owner, the same day). The old
+  names remain only where they mean tower-workshop-paths' own session, or the file as it moved
+  (`docs/session-a.md`). Considered and not chosen: renaming only instructions and current
+  descriptions. What `init` gives a project of these files is left for later.
 
 ### The move, in order
 
@@ -1841,7 +1865,7 @@ starts with the gate only, and dispatches no stories until its coder works ("Dec
    `main` after each landing) is also built here first, as a `fix` story.
 2. **Paused 2026-10-09, and retried 2026-10-10: steward is created, pushed and protected, and its
    own loop and first pull request are next** ("Decided so far"). **By hand, the owner with
-   Session A (a bootstrap, not a story):** create
+   the planning session (a bootstrap, not a story):** create
    `luplows/steward`, public; extract the moved paths with their history (`git filter-repo`,
    installed on the owner's machine on 2026-10-08 and tried in a dry run); renumber
    the moved stories `ST-<n>`, each naming its old OQ id; push `main`, the one direct push, made
@@ -1855,8 +1879,8 @@ starts with the gate only, and dispatches no stories until its coder works ("Dec
 4. **Here:** adopting steward (split 2026-10-08, "Decided so far"). OQ-115, the cut-over, by hand:
    pin steward and switch to the thin workflow files, then start the loop with steward's command.
    Then OQ-133 (the rule files), OQ-132 (the moved code) and OQ-134 (the moved documents), in
-   that order, run on steward's engine. Session A retires the moved stories with a note naming
-   each one's `ST-<n>`. Until then, this repository runs its own engine, frozen (decided
+   that order, run on steward's engine. The planning session retires the moved stories with a note
+   naming each one's `ST-<n>`. Until then, this repository runs its own engine, frozen (decided
    2026-10-10 by the owner, "Decided so far").
 
 ### What adopting steward needs from it
@@ -1868,7 +1892,7 @@ Found 2026-10-08 while refining OQ-115. Each is built in steward, before OQ-115 
 - **`init` and the thin gate files** (R2), including OQ-124's after-sweep trigger.
 - **The prompts' `{{REPO}}` slot and project section** (R1), so this project's lines come back.
 - **Delivering steward's rules and checklist to a project's sessions**, and **a project's own
-  review items to the reviewer** (R3). Before OQ-133. Today `coder.md` reads `CLAUDE.md` and
+  review items to the reviewer** (R3). Before OQ-133. Today `coder.md` reads `AGENTS.md` and
   `REVIEW.md` from the repository root, and `reviewer.md` reads `REVIEW.md` there.
 - **The setup-step prefix exported** from the package, for this repository's
   `scripts/ci-workflows.test.mjs`. Before OQ-132.
@@ -1908,7 +1932,7 @@ Checked on 2026-10-07 against `main` at `66c578d`:
 - The gate is this repository's own workflows. `ci.yml` runs `scripts/dispatch/story-containment.mjs`.
   `land-approved.yml` runs `scripts/land/select-candidates.mjs`, `check-author.mjs` and
   `delete-merged-heads.mjs`. `review-gate.yml` derives `review/agent`.
-- The rules the gate enforces mix the general with this project's own: `REVIEW.md`, `CLAUDE.md`,
+- The rules the gate enforces mix the general with this project's own: `REVIEW.md`, `AGENTS.md`,
   `stories/README.md`, `stories/_TEMPLATE.md` and this document.
 
 ### Open questions
@@ -1942,9 +1966,9 @@ Checked on 2026-10-07 against `main` at `66c578d`:
 
 **A repository of its own (OQ-115)**
 
-- **R1. What moves.** Proposed by Session A, 2026-10-07, from `main` at `21fdb52`; **decided
-  2026-10-08 by the owner, as proposed**. It is the extraction list for the bootstrap ("The move, in
-  order", step 2):
+- **R1. What moves.** Proposed by the planning session, 2026-10-07, from `main` at `21fdb52`;
+  **decided 2026-10-08 by the owner, as proposed**. It is the extraction list for the bootstrap
+  ("The move, in order", step 2):
 
   | Moves to the workflow's repository | Stays here |
   |---|---|
@@ -1985,10 +2009,10 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   `.claude/`, so a coder there could edit them directly, instead of through the emit-a-diff route
   (**A spawned session cannot edit `.claude/prompts/`**, above).
 
-  **This document** (proposed by Session A, owner agreed to record it, 2026-10-07): it moves with
-  the workflow and stays the workflow's design of record. At `66c578d` most of its 1,640 lines are
-  about the workflow. The passages about this project stay here (placed 2026-10-08 by the owner,
-  in `README.md` and `Project-Outline.md` rather than a document about the workflow; OQ-134):
+  **This document** (proposed by the planning session, owner agreed to record it, 2026-10-07): it
+  moves with the workflow and stays the workflow's design of record. At `66c578d` most of its 1,640
+  lines are about the workflow. The passages about this project stay here (placed 2026-10-08 by the
+  owner, in `README.md` and `Project-Outline.md` rather than a document about the workflow; OQ-134):
   - "Branching and releases": Pages as the alpha channel, and tags as checkpoints;
   - in "Quality beyond the gate", the buy-order examples given for items 3 and 4 (property-based
     and golden tests; the techniques themselves move), and item 5, validating scraped data;
@@ -2050,8 +2074,8 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   and one reads `vite.config.js` (`steward-bootstrap.md`, B7a). OQ-118's tests, which read
   steward's own `ci.yml`, move. OQ-132 keeps the tests that stay, in a new
   `scripts/ci-workflows.test.mjs`, when it removes the moved code from this repository.
-- **R2. How a project uses it.** Proposed by Session A, 2026-10-07; **decided 2026-10-07 by the
-  owner, as proposed, with the git-tag pin** (below):
+- **R2. How a project uses it.** Proposed by the planning session, 2026-10-07; **decided 2026-10-07
+  by the owner, as proposed, with the git-tag pin** (below):
   - **A Node package with a command-line entry point**, added as a development dependency of each
     project and pinned to a tagged version. To begin with it is installed straight from the
     workflow's public repository by git tag, so no package registry account is needed; publishing
@@ -2109,15 +2133,15 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   that the loop would otherwise reach after step 1's stories carry `blocked:` saying so, so that
   they are built in steward rather than here. They are OQ-54, OQ-59, OQ-62, OQ-88, OQ-89, OQ-98,
   OQ-100, OQ-103, OQ-105, OQ-119 and OQ-120 (`normal` tier) and OQ-99 (`later`). The steward
-  copies are renumbered with `blocked:` cleared; the copies here are retired by Session A, in a
-  `write-story/` pull request, once the bootstrap's B1 has fixed the mapping (OQ-115's Out of
-  scope). **Revised 2026-10-10 by the owner:** steward's copies keep a `blocked:` until steward's
-  coder works, and OQ-100 and OQ-105 no longer move ("Decided so far").
+  copies are renumbered with `blocked:` cleared; the copies here are retired by the planning
+  session, in a `write-story/` pull request, once the bootstrap's B1 has fixed the mapping (OQ-115's
+  Out of scope). **Revised 2026-10-10 by the owner:** steward's copies keep a `blocked:` until
+  steward's coder works, and OQ-100 and OQ-105 no longer move ("Decided so far").
 
   **In steward, two exceptions and an order** (decided 2026-10-08 by the owner, agreeing the
   bootstrap checklist; ST-6's revised 2026-10-09). ST-6, the copy of OQ-73, keeps the `blocked:`
-  it has here, less "held until the move": it is a spike the owner runs with Session A, not
-  dispatched (R5). ST-14, the copy of OQ-108, keeps the owner's own `blocked:`. (These were ST-8
+  it has here, less "held until the move": it is a spike the owner runs with the planning session,
+  not dispatched (R5). ST-14, the copy of OQ-108, keeps the owner's own `blocked:`. (These were ST-8
   and ST-18 until 2026-10-10, when four stories stopped moving. Those numbers were the stopped
   extraction's, which was never pushed, so neither story ever existed in steward under them. In
   steward, ST-8 is OQ-89's copy, and ST-18 is a story written there on 2026-10-11, the number
@@ -2149,8 +2173,8 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   machine needs one standard install (a container runtime) rather than account management, and
   the same image runs on Windows, macOS and Linux. It may also give the reviewer its read-only
   mount (OQ-62). **Revised 2026-10-09 by the owner:** OQ-73 is rewritten here, in place, as a
-  spike only, run by the owner with Session A rather than dispatched, and held until the move.
-  Its outcome is a recommended split into the stories that build this; the old story's checks
+  spike only, run by the owner with the planning session rather than dispatched, and held until the
+  move. Its outcome is a recommended split into the stories that build this; the old story's checks
   stay in its Context as their proof. #209 was closed unmerged and its branch deleted the same
   day, and its findings are in the spike's Context. The container runtime is left open, as the
   spike's open question. Known questions for the spike: a git worktree's `.git` file holds an
@@ -2223,7 +2247,7 @@ Checked on 2026-10-07 against `main` at `66c578d`:
 - **R9. Story numbering in the new repository, and the old references.** This document cites OQ
   numbers 150 times, across 43 distinct ids (`main` at `66c578d`), and every one is this
   repository's story, in `stories/done/` or `Completed-Questions.md`. If the new repository also
-  numbered its stories OQ-1 onwards, "OQ-73" would become ambiguous. Proposed (Session A,
+  numbered its stories OQ-1 onwards, "OQ-73" would become ambiguous. Proposed (the planning session,
   2026-10-07): the new repository's stories take a prefix of their own, for example `WF-<n>`.
   The OQ references this document carries over keep their numbers, with one note saying they mean
   tower-workshop-paths' stories, and where to find them. Continuing OQ numbering in the new
@@ -2265,7 +2289,7 @@ Checked on 2026-10-07 against `main` at `66c578d`:
 | 3 | Dispatcher implementation | **Resolved:** a local script, no model. |
 | 4 | Release cut trigger | Open. Human call, roughly every ten merged PRs. |
 | 5 | Fresh vs. resumed coder on retry | Open. Fresh matches the context principle; resumed may be cheaper. Untested. |
-| 6 | Story sizing proxies | **Resolved:** guideline, not a cap. Session A's judgment governs readiness, and carries an obligation to push back when scope is too large. Better proxy is distinct mechanisms than criterion count — see [Sizing is a judgment](#sizing-is-a-judgment-and-it-is-session-as). |
+| 6 | Story sizing proxies | **Resolved:** guideline, not a cap. The planning session's judgment governs readiness, and carries an obligation to push back when scope is too large. Better proxy is distinct mechanisms than criterion count — see [Sizing is a judgment](#sizing-is-a-judgment-and-it-is-the-planning-sessions). |
 | 7 | Verdict mechanism | **Resolved:** `review/agent` status, SHA-keyed. Already built and required. |
 | 8 | What CI runs | **Resolved:** current suite plus schema lint, AC traceability, existing-test flag. No tiering at 70 s. |
 | 10 | Second GitHub identity | Open. The only thing that fully closes self-marking. Cost: a machine account or App. |

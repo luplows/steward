@@ -22,9 +22,9 @@ request with no unit meant to have one.
       a story under `stories/`; `#<n>` for one of this repository's issues; or `none` when the
       pull request implements no unit. The comment says the file is read from `main`, so a story
       the pull request moves into `stories/done/` is named by its path before the move.
-- [ ] **AC-2** — `docs/session-a.md`, "Handing it over", says a story's pull request carries
-      `Unit: none`, since it writes the unit rather than implementing it, and `CLAUDE.md`'s
-      "Branches and pull requests" says every pull request fills the `Unit:` line along with the
+- [ ] **AC-2** — `docs/planning-session.md`, "Handing it over", says a story's pull request carries
+      `Unit: none`, since it writes the unit rather than implementing it, and `AGENTS.md`'s
+      "Every pull request" says every pull request fills the `Unit:` line along with the
       template's three sections.
 - [ ] **AC-3** — `REVIEW.md`'s item on the pull request body's sections (item 2 today, or its
       successor after ST-21) is unchanged in substance: the `Unit:` line is not a fourth required

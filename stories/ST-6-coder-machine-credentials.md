@@ -5,7 +5,7 @@ tier: next
 kind: workflow
 depends_on: []
 model: sonnet
-blocked: "Owner-run with Session A, not dispatched (owner, 2026-10-09; design doc, R4 and R5)."
+blocked: "Owner-run with the planning session, not dispatched (owner, 2026-10-09; design doc, R4 and R5)."
 ---
 
 ## Intent
@@ -16,8 +16,8 @@ the work and the agent tool's login, so that the stories that put coder sessions
 there are written from what works. The guarantee they serve is OQ-63's: a
 spawned coder cannot obtain a GitHub token from the machine it runs on, not only
 from its environment. **This is a spike. Its output is written findings and a
-recommended split into stories, not code.** It is run by the owner with Session
-A, by hand, not dispatched.
+recommended split into stories, not code.** It is run by the owner with the
+planning session, by hand, not dispatched.
 
 ## Acceptance criteria
 
@@ -73,7 +73,7 @@ A, by hand, not dispatched.
       on. Between them they carry every guarantee check listed under Context.
       It also says which story takes over OQ-101's dependency on OQ-73, and
       which takes over the **Planned (OQ-73)** markers. It is a recommendation
-      only. Writing the stories is Session A's, with the owner.
+      only. Writing the stories is the planning session's, with the owner.
 - [ ] **AC-5** — The **Planned (OQ-73)** markers in
       `docs/agent-workflow-design.md` are left in place, since this story
       builds nothing. The pull request body says so, and that the stories
@@ -106,7 +106,7 @@ Formerly tower-workshop-paths OQ-73.
   before the rewrite (`git show eb84893:stories/OQ-73-coder-machine-credentials.md`)
   had a separate Windows account as its candidate mechanism. On 2026-10-08 the
   owner chose a container instead (design doc, R5), and on 2026-10-09 chose to
-  find out how by a spike, run by the owner with Session A, whose outcome is
+  find out how by a spike, run by the owner with the planning session, whose outcome is
   the stories that build it.
 - **What #209 found** (OQ-73's coder, 2026-10-08, closed unmerged on
   2026-10-09): a `CredRead` of `gh:github.com:` from a `node -e` child of a

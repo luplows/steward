@@ -11,7 +11,7 @@ blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; doc
 ## Intent
 
 As the owner, I want the loop to wake itself every 15 minutes while my
-machine is on, so that a story I hand over with Session A is reviewed, landed
+machine is on, so that a story I hand over with the planning session is reviewed, landed
 and worked through without anyone starting anything. When nothing is ready, a
 run starts no model session and costs nothing. Two runs must never overlap,
 an interrupted run must not be tripped over silently, and I want a record of
@@ -106,7 +106,7 @@ OQ-82, OQ-83, OQ-86, OQ-109, OQ-110, OQ-111 and OQ-112, which are
 tower-workshop-paths' own, so they were dropped at the move (built there).
 
 - Decided by the owner on 2026-09-28, in the dispatcher session, while
-  planning how Session A's pull requests reach the queue:
+  planning how the planning session's pull requests reach the queue:
   - a Windows scheduled task every 15 minutes wakes the loop, and GitHub's
     own cron is not used, because it delivered about 5% of its runs
     (`docs/agent-workflow-design.md`, "Watchdog");
@@ -117,7 +117,7 @@ tower-workshop-paths' own, so they were dropped at the move (built there).
     automatic lands without them), and so must OQ-80 and the stories that
     put coder sessions in a container. OQ-73 is now the spike that recommends
     those stories (rewritten 2026-10-09); its `depends_on` entry stands for
-    them until Session A repoints it (OQ-73's AC-4). Hence `depends_on`.
+    them until the planning session repoints it (OQ-73's AC-4). Hence `depends_on`.
 - What an interrupted run leaves, stage by stage, is in
   `docs/agent-workflow-design.md`'s failure table ("The dispatcher is
   interrupted mid-story") and OQ-86's AC-4. `dispatchCoder` creates its local
