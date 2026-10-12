@@ -1787,11 +1787,20 @@ deciding what is next. It is the harness's product outline, and moves with this 
   A). This revises the entry above, "Steward starts with the gate only, and its first stories get
   its coder working": the review side's stories come before the coder's. Until steward has a
   coder, each story is built in one of the owner's interactive sessions, or by an agent that
-  session spawns with a prompt written there, and carries a `blocked:` saying so, so that nothing
-  dispatches it. A new dispatcher session, steward's own, reviews and lands steward's pull
-  requests (**The dispatcher session**, above). Considered and not chosen: holding the stories
-  until the coder works, which the order makes circular; and running this engine's `story.mjs`
-  coder on them, against the entry above. The review side's design is in `harness-outline.md`,
+  session spawns with a prompt written there. A new dispatcher session, steward's own, reviews and
+  lands steward's pull requests (**The dispatcher session**, above). Considered and not chosen:
+  holding the stories until the coder works, which the order makes circular; and running this
+  engine's `story.mjs` coder on them, against the entry above. **Revised 2026-10-12 by the owner:
+  a story carries `blocked:` only where something stops it, not because steward has no coder.**
+  The rest read `ready` or `waiting`, which is the truth, and nothing dispatches them, since
+  `loop.mjs` is not to be run on steward as it is configured (owner). ST-21 and ST-22 keep a
+  `blocked:`, because each changes `.claude/prompts/reviewer.md`, which a spawned coder session
+  cannot edit (**A spawned session cannot edit `.claude/prompts/`**, above), so only a person can
+  build them, which is the case `stories/README.md`'s rule on hand-built stories describes.
+  Considered and not chosen: a short `blocked:` on every story, such as "Built by hand: steward
+  has no coder yet"; and `null` on all of them, with that rule changed. The stories moved from
+  tower-workshop-paths keep their "Held until steward's coder works" until each is refined (owner,
+  2026-10-12). The review side's design is in `harness-outline.md`,
   "Defining steward" (Review, Land, Settings and Loops), decided the same day; each part is built
   by the story named:
   - **Planned (ST-18):** the settings keys `setup`, `check`, `landWhen`, `land`, `unitLinks` and

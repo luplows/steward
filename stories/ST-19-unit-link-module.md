@@ -5,7 +5,7 @@ tier: next
 kind: workflow
 depends_on: [ST-18]
 model: sonnet
-blocked: "Built by hand in an interactive session, not dispatched, until steward's coder works (decided 2026-10-11 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
+blocked: null
 ---
 
 ## Intent
