@@ -183,6 +183,43 @@ otherwise; what is still open says so.
   `b2a02bf`): in tower-workshop-paths the diff is the pointer. `review.mjs`'s `resolveStory` takes
   the unit to be the story file the diff moves into `stories/done/`, refuses a pull request whose
   `story/` branch names a story its diff does not move, and refuses one that moves two.
+- **Refined 2026-10-11 by the owner: how the link is written and read.**
+  - **The dispatcher finds the link deterministically**, by parsing the pull request body, so that
+    no model is involved: a line `Unit: <link>`, or, for an issue, one of GitHub's closing keywords
+    (`Closes #n`). Considered and not chosen: going on inferring the unit from the diff, as
+    `resolveStory` does today. It could be deterministic too, but it fits only one project's story
+    convention.
+  - **A file unit is a path in the repository, read from `main`**, not from the pull request's
+    head: the unit as it stood before the work, which the pull request cannot edit into agreement
+    with itself. The reviewer still sees any edit to it in the diff. A path means steward stores
+    nothing about where a project keeps its units.
+  - **The link may point only into this repository**: a file in it, or one of its issues.
+  - **A pull request whose link is missing is still reviewed, and the review does not pass. The
+    reviewer decides that, not the dispatcher**, by the project's rules, as the bullet above has
+    it (owner, 2026-10-11, asked whether steward should record the block itself): only judgment
+    can tell a code change from a docs change, and a pull request that writes the document it
+    would link to has nothing to link. The dispatcher tells the reviewer, deterministically, which
+    of four it found: a link it read, a link it could not read and why, `Unit: none`, or no
+    `Unit:` line at all. Considered and not chosen: the dispatcher recording `block` itself for
+    any pull request with no readable link.
+  - **`Unit: none` says the pull request implements no unit** (owner, 2026-10-11), so the reviewer
+    judges only whether that is believable for the diff, rather than guessing. Open: whether and
+    how the line is required. Session A's options: the pull request template carries it; the
+    dispatcher always writes it on a pull request it opens; or a check on the pull request body,
+    posted by steward's gate, fails without it, which would sit with "Steward enforces nothing
+    about CI" (Land, below).
+  - **A setting lists the kinds of link a project uses** (owner, 2026-10-11): `issue` (`Unit: #n`
+    or a closing keyword), `file` (`Unit: <path>`) and `other` (`Unit:` and any text, which the
+    dispatcher passes to the reviewer unread, so that a link into another tracker works without an
+    integration). A list, not one value, since a project may use more than one kind. An empty list
+    means the project links no units: the reviewer works from the pull request body and the rules.
+    A missing setting is an error that names it, as every setting is in `settings.mjs` today,
+    so that "never decided" is not taken for "no units". This is not one of the lookups considered
+    on 2026-10-09 (bullet above): the pull request still points at its unit, and the setting says
+    only which kinds of pointer steward reads. What follows (Session A, 2026-10-11): a coder can
+    take work only from `issue` or `file`, since coder work always needs a unit it can read
+    (Loops, below), so a project with only `other`, or none, is review-only. Open: the default
+    `init` writes.
 - **A pull request that implements no unit is still reviewed, against the project's own rules**
   (owner, 2026-10-09, raised for a write-story pull request; tower-workshop-paths could not work
   otherwise). In tower-workshop-paths today such a pull request is reviewed against `REVIEW.md`'s
@@ -202,6 +239,41 @@ otherwise; what is still open says so.
   (owner, 2026-10-09). Considered and not chosen: steward's default sections shipped in the package,
   which a project's file extends or switches off.
 - **What the example rules file contains is left for later** (owner, 2026-10-09).
+- **The rules file's shape** (owner, 2026-10-11, from Session A's proposals):
+  - **The reviewer reads the rules from `main`**, put into its prompt by the dispatcher, not from
+    the pull request's head, so that a pull request cannot loosen the rules it is judged by. A
+    change to the rules is still in the diff for the reviewer to see. For reference (Session A,
+    2026-10-11): today `reviewer.md` tells the reviewer to read `REVIEW.md` in its checkout (line
+    171), which is the pull request's head.
+  - **The file holds rules only.** How steward works (the verdict marker, the three verdicts, a
+    review with no verdict, what the gate's workflow enforces, how the coder's pull request is
+    opened) goes in the reviewer's prompt and steward's own documents. The owner's reason: today's
+    `REVIEW.md` grew those parts because it was the living process the reviewer was built from.
+    "Reading the PR body" is a rule, so it stays, as a section of the example file.
+  - **A section is a heading, then one `Applies when:` line in plain words, then its items.** The
+    reviewer judges the line, and a section without one always applies.
+  - **Each section numbers its own items, and a finding cites the section and the item** (owner,
+    2026-10-11). Steward cannot control how a project adds its own rules to the file, so it does
+    not impose one numbering across it. Considered and not chosen (Session A's proposal): integers
+    across the whole file, never renumbered, which would have kept the verdict format as it is.
+    What follows (Session A, 2026-10-11): the verdict's `item`, an integer `review.mjs` checks
+    today (line 170), becomes a section and an item; and the story that was to close `REVIEW.md`'s
+    numbering gaps (design doc, R1) has nothing left to do once its sections are numbered on their
+    own.
+  - **The reviewer's comment lists every section, marked applied or not, with a one-line reason for
+    each not applied**, so that a section skipped wrongly is visible.
+  - **A setting names the rules file's path.** `init` copies steward's example there, as a default
+    and an example of the format, and does not overwrite a file already at that path. A missing
+    setting is an error, as for every setting.
+  - **A rules file that is missing from `main`, or does not parse, is an error: steward records no
+    verdict, the pull request stays pending, and the pass reports it** (Session A's judgement, to
+    which the owner deferred, 2026-10-11). The other option was a quiet skip, which leaves the pull
+    request just as pending but tells nobody. A file does not parse when, for example, it has no
+    sections, a section has no items, or a section numbers two items the same. The dispatcher
+    parses it before starting a reviewer, so a bad file costs no review. Session A's further
+    proposal, not yet decided: the same parser as a command a project may run in its own CI, so
+    that a pull request that breaks the file is caught before it lands, since otherwise every
+    review after it stops.
 
 ### Land
 
@@ -218,6 +290,10 @@ otherwise; what is still open says so.
     (R6); and describing it in the rules file, which steward itself cannot act on.
   - **`init` writes default entries, then explores the repository to surface options, as a
     deterministic script**, so it does not learn from prose. What it explores is open.
+  - **Two ways to set up, later: one declarative, which runs without AI, and one meant to be run
+    with an AI helper** (owner, 2026-10-11), since steward is meant to be used with AI tools. Noted
+    for later and not yet refined: what each covers, and how the second sits with the bullet
+    above, which makes `init` a deterministic script.
   - **The lander waits for the checks the settings name**: kept, as the next bullet says.
   - **Steward does not wait for CI before it starts a review, and does wait for all checks before
     it lands** (owner, 2026-10-10, after first being on the fence: a coder's work almost always
@@ -227,6 +303,27 @@ otherwise; what is still open says so.
     project's choice goes). What follows (Session A, 2026-10-10): the reviewer can read only the
     CI results that have finished when it looks.
   - **The reviewer may read the CI results, but does not run CI itself**: GitHub already does.
+  - **Revised 2026-10-11 by the owner: the review and CI are two peer checks on the same head,
+    joined at the merge.** Neither feeds the other. CI answers whether the head builds and its
+    checks pass; the reviewer answers whether it does what its unit asked, by the project's rules;
+    and the lander merges only once the checks the settings name, `review/agent` among them, are
+    green. Asked how the reviewer and CI work in tandem, after Session A noted that GitHub has no
+    notion of CI of its own, only checks on a commit (check runs, such as each GitHub Actions job,
+    and commit statuses), and that `review/agent` is already one: `review-gate.yml` posts it as a
+    commit status, beside the `test` job of the workflow this repository names `CI` (`ci.yml`).
+    Considered and not chosen (Session A's proposal): the dispatcher handing the reviewer a
+    snapshot of the head's checks, with a log excerpt for each failed job, as it hands it the pull
+    request body. What follows (Session A, 2026-10-11): the reviewer is not given CI results, and
+    a red check the settings name stops the merge whatever the verdict.
+  - **The reviewer does not run the project's whole check command; it runs only the narrower
+    commands that settle a particular claim**, such as one test file, a search or a diff of one
+    path (owner, 2026-10-11, from Session A's recommendation). CI, as the peer check, already shows
+    whether the checks pass, and on a bigger project the whole command can take a long time. The
+    owner accepts what follows: a pull request body that claims a count of passing tests is no
+    longer checked against a run of its own by the reviewer, and a false count is stopped only at
+    the merge, by the red check, not reported as a finding. Considered and not chosen: the
+    reviewer running the whole check command, as `reviewer.md` tells it to run `npm test` today
+    ("Verify rather than accept", line 219).
   - **The coder runs the project's check command before its work is pushed**, which also makes the
     wait before the review matter less. For reference (Session A, at `4f2f0fd`): in
     tower-workshop-paths the coder session commits and the dispatcher pushes (`pushBranch`,
@@ -272,6 +369,71 @@ otherwise; what is still open says so.
   - Open: whether GitHub's rulesets are available where branch protection is not. Only the branch
     protection limit is recorded (design doc, R6).
 
+### Settings
+
+Decided 2026-10-11 by the owner, from Session A's proposals, unless a line says otherwise. The
+key names are Session A's working names; the story that builds each settles it.
+
+- **One file, `steward.config.json`, flat for now, apart from each command (below).** Steward's
+  code holds no default for any key: `init` writes a starting value for each into the file, where
+  the project sees it, and a missing or unknown key is an error that names it, as `settings.mjs`
+  does today (owner, 2026-10-11, asked whether the time limits start with defaults: "I want to
+  write in the limit, not store it in code"). Considered and not chosen: optional keys with
+  defaults in steward's code. Grouping other keys is left until the coder's keys make the groups
+  clear.
+  What follows, accepted by the owner: a key that becomes required breaks a project until it adds
+  it, which a project meets only when it moves its pin, and which each version's update notes
+  must name. Required keys are hoped to be added rarely (owner). Not chosen for now: a version
+  field in the file.
+- **`storyPrefix` leaves steward's settings** (owner, 2026-10-11): the core does not depend on how
+  a project formats its units. What follows (Session A, 2026-10-11): `review.mjs`'s
+  `resolveStory` goes with the unit link (Review, above); steward's own story lint and story
+  containment are its own convention (design doc, "Decided so far", 2026-10-10), so they keep the
+  prefix in tooling of their own; `scripts/no-project-literals.test.mjs`, which keeps the prefix
+  out of the code, changes with it; and how a coder finds ready units waits for the coder's
+  readiness setting (Loops, below).
+- **`setup` and `check`: one command each, run through the platform's shell**, with a project
+  encouraged to point each at a script of its own (such as `npm run check`) rather than chain
+  commands, since only simple forms behave alike in Windows' `cmd` and in `sh`. Not chosen: an
+  argument list run without a shell. `null` is allowed for either, written explicitly: for
+  `setup`, the project needs nothing but the worktree; for `check`, there is no check, which
+  suits only a project without a coder.
+  - `setup` is run by the dispatcher, in the session's environment without credentials, before
+    a reviewer or a coder session starts, in the checkout that session will use. A failure starts
+    no session. The reviewer always gets it, since its narrower commands need what it prepares.
+  - `check` is run by the coder session itself (Land, above), so it is in effect a line of the
+    coder's prompt. What follows (Session A, 2026-10-11): its program must be one the coder's
+    allowlist admits, which today means `npm`, `npx` or `node`.
+  - **Each command is written with its own time limit, as one value**, so that `null` leaves no
+    time limit behind with nothing to time, and every command added later takes the same shape:
+    `"setup": { "command": "npm ci", "timeoutMinutes": 5 }`, or `"setup": null`. Given a
+    command, its time limit is required, and missing is an error naming it (owner, 2026-10-11,
+    from Session A's proposal, after the owner noted that a required time limit beside a `null`
+    command would be strange). Considered and not chosen: a time limit as a key of its own,
+    required only when its command is not `null`; and one always required, even beside `null`.
+    What `init` writes, Session A's suggestion accepted by the owner: 5 minutes for `setup`, and
+    10 minutes for `check`. What follows (Session A, 2026-10-11): the coder runs `check` as one
+    shell call, and a shell call is cut off at 10 minutes (`SHELL_TIMEOUT_MS`,
+    `scripts/dispatch/invocation.mjs`), so a longer limit also needs that bound raised, and the
+    stall interval with it (`DEFAULT_STALL_MS`, `scripts/dispatch/spawn.mjs`). ST-7 plans a time
+    limit for today's install; it is reworded for `setup`.
+- **`landWhen`: which checks must be green before the lander merges**, either every check on the
+  head (what `init` writes, as decided on 2026-10-10) or a list of check names.
+- **A project can turn steward's landing off** (owner, 2026-10-11, asked whether `review/agent`
+  should be optional for projects with other gating rules). Steward still reviews and posts
+  `review/agent`, but does not merge; the project merges by its own rules. Steward then never
+  merges without a verdict, because it never merges there (Never, above). Considered and not
+  chosen: a setting that turns off the lander's need for a passing verdict, which would make the
+  first of the three rules a project's choice.
+- **`unitLinks` and `rulesFile`**: as decided under Review, above.
+- **Kept out of the settings:** the cap on reviews per pass, a command-line option (Loops,
+  below); the machine label, which belongs to a machine, so stays `TW_MACHINE_LABEL`; and the
+  base branch, the remote and the stories directory, constants until a project needs otherwise
+  (design doc, R3).
+- **Later: which commands the reviewer and the coder may run** (owner, 2026-10-11). It probably
+  needs to be a setting, for a project that is not built with Node, and may look different once
+  coder and reviewer sessions run in containers (design doc, R5).
+
 ### Loops
 
 - **A review loop and a coding loop, separately** (the owner's idea, 2026-10-09; decided by the
@@ -282,6 +444,49 @@ otherwise; what is still open says so.
   from `main` at `b2a02bf`): today one run of `story.mjs` takes a story through coder, CI, review
   and retry, and `writer-prs.mjs` already reviews and lands the open pull requests the loop did not
   open.
+- **The review side is a review-and-land dispatcher, not a loop that keeps running** (owner,
+  2026-10-11, asked how the review loop is shaped). It decides which pull requests get a reviewer
+  and spawns them, and lands what has passed. It runs on a defined trigger, one **pass** per run,
+  and does not run all the time, so that each run picks up updates to steward. Considered and not
+  chosen: a process that keeps running and polls, which keeps the code it loaded at start. **The
+  trigger, to start with, is an agent session: the dispatcher session starts each run** (owner,
+  2026-10-11). Other triggers, such as a scheduled task (ST-11) or a GitHub event, are left for a
+  later discussion. The owner would accept as the MVP a dispatcher session that triggers both
+  coder runs and review-and-land passes. What follows (Session A, 2026-10-11): that reads "Keeping
+  going" (What matters most, above) as working through ready work without the owner's hands, not
+  without any session attending, so a scheduled task is not needed for the MVP. A pass, as Session
+  A defined it the same day and the owner accepted:
+  1. Bring the dispatcher's own worktree to `origin/main`, detached, and stop if it has anything
+     uncommitted.
+  2. List the open pull requests against `main` once. One opened later waits for the next pass.
+  3. Oldest first, review each that is not a draft, is from an author the gate honours, and has
+     no verdict at its current head, up to a cap on reviews per pass (below).
+  4. Land each pull request with a passing verdict at its head that is safe to merge at that
+     moment, one at a time, since the sweep lands one per run. One whose checks are still running
+     or are red is left alone.
+  5. Exit, carrying nothing forward: the next pass derives everything again from GitHub.
+- **Landing never waits** (owner, 2026-10-11). A pass checks once whether each passed pull
+  request is safe to merge, and leaves one that is not for a later pass. Landing can be retried
+  freely, by any later pass, for as long as the pull request is reported safe to merge.
+  Considered and not chosen: waiting, as `land.mjs` does today, polling until the pull request is
+  landable within its bounds (`BLOCKED_BOUND_MS`, `MAX_TOTAL_WAIT_MS`). What follows (Session A,
+  2026-10-11): once reviews stop waiting for CI, a pull request can pass review before its checks
+  finish. In `writer-prs.mjs` as it is, a pull request whose landing gave up would never be landed,
+  since a later call skips any pull request that has a verdict at its head; retrying the landing
+  in every pass closes that.
+- **A pass reviews at most a set number of pull requests** (owner, 2026-10-11), so that a whole
+  pass, not only each session, has a ceiling on what it spends. Session A suggested 5, set on the
+  command line. The owner expects rarely to have more than a couple of pull requests in flight.
+- **One machine runs the review side, for now** (owner, 2026-10-11). Several machines are wanted
+  later, and the pass is built so that adding them is small. Ideas kept for then, none decided:
+  - landing is already safe across machines: each trigger names its pull request, and the sweep
+    re-checks it before merging;
+  - reviewing is the exposure, since two machines could review the same head and both pay, though
+    `review.mjs` notices the race before recording a verdict. A pass could first post a claim
+    comment naming its machine (`TW_MACHINE_LABEL`), the head and the time, and other passes
+    would skip a head with a fresh claim (Session A, 2026-10-11);
+  - or one machine runs the one authoritative dispatcher, which farms reviewer and coder sessions
+    out to other machines (the owner's idea, 2026-10-11).
 - **A pull request does not belong to a coder** (the owner's view, 2026-10-09, asked how a coder
   picks up the reviewer's feedback): any coder can take a pull request, read its linked unit and
   its review findings, and make the changes asked for. So a pull request whose latest verdict is a

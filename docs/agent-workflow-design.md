@@ -1710,10 +1710,10 @@ deciding what is next. It is the harness's product outline, and moves with this 
   stories from the day it exists, which "The move, in order" was built for; that would run the
   engine's single loop, which the outline replaces with two (`harness-outline.md`, "Loops"). This
   revises the order of steward's first stories in R4 and in `steward-bootstrap.md` (D-5 and
-  section 8): the prompts' slot, closing `REVIEW.md`'s gaps and `init` now come after the coder's
-  stories. Until steward's review loop is built, its reviews are started by a dispatcher session
-  running `review.mjs` and `land.mjs`, as this repository's are (**The dispatcher session**,
-  above; decided the same day by the owner).
+  section 8): the prompts' slot, closing `REVIEW.md`'s gaps (dropped on 2026-10-11, R1) and `init`
+  now come after the coder's stories. Until steward's review loop is built, its reviews are
+  started by a dispatcher session running `review.mjs` and `land.mjs`, as this repository's are
+  (**The dispatcher session**, above; decided the same day by the owner).
 - **Which stories and paths move, re-sorted against the outline** (decided 2026-10-10 by the
   owner, from Session A's proposal):
   - **Steward's own repository is a project that uses steward, and it and this repository each
@@ -1934,7 +1934,9 @@ Checked on 2026-10-07 against `main` at `66c578d`:
 
   **`REVIEW.md` items 8 and 10 are removed from steward's copy** (decided 2026-10-08 by the owner),
   leaving gaps in the numbering. A story in steward closes the gaps and updates every reference to
-  an item number.
+  an item number. **Revised 2026-10-11 by the owner:** no such story. Each section of a rules file
+  numbers its own items, and a finding cites the section and the item (`harness-outline.md`,
+  "Review", "The rules file's shape"), so the gaps are left to go with the file's restructuring.
 
   A side effect worth having: in the workflow's repository the prompts need not live under
   `.claude/`, so a coder there could edit them directly, instead of through the emit-a-diff route
@@ -2078,7 +2080,7 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   gaps, and `init` with the thin workflow files) are written at tier `next` before its loop first
   runs, so they come before the moved stories. **Revised 2026-10-10 by the owner:** steward starts
   with the gate only, and the stories that get its coder working come first, ahead of these
-  ("Decided so far").
+  ("Decided so far"). Closing `REVIEW.md`'s numbering gaps was dropped on 2026-10-11 (R1).
 - **R5. When.** **Revised 2026-10-08 by the owner: the move comes before OQ-73**, once the story
   pull requests #204 to #208 (OQ-117 to OQ-121) have landed, and still before OQ-101. OQ-73's coder
   (#209) found that its candidate mechanism, a separate Windows account for spawns, needs an
