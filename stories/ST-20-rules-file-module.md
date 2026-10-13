@@ -10,10 +10,10 @@ blocked: null
 
 ## Intent
 
-As the owner, I want steward to read a project's rules file as it stands on `main` and parse it
-into sections, each with the condition under which it applies and its own numbered items, and to
-refuse a file it cannot parse, so that a pull request is judged by rules it cannot loosen, and a
-broken rules file is caught before any review is paid for. This story builds the module; ST-21
+As a member of the crew, I want steward to read a project's rules file as it stands on `main` and
+parse it into sections, each with the condition under which it applies and its own numbered items,
+and to refuse a file it cannot parse, so that a pull request is judged by rules it cannot loosen,
+and a broken rules file is caught before any review is paid for. This story builds the module; ST-21
 puts it into the review.
 
 ## Acceptance criteria

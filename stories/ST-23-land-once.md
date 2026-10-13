@@ -10,10 +10,10 @@ blocked: null
 
 ## Intent
 
-As the owner, I want a review-and-land pass to look once at whether a passed pull request is safe
-to merge, land it if so, and otherwise leave it for a later pass, so that one pull request's slow
-checks hold up nothing and a landing that did not happen is simply tried again. I want a project
-that has turned steward's landing off never to have the sweep triggered by steward.
+As a member of the crew, I want a review-and-land pass to look once at whether a passed pull request
+is safe to merge, land it if so, and otherwise leave it for a later pass, so that one pull request's
+slow checks hold up nothing and a landing that did not happen is simply tried again. I want a
+project that has turned steward's landing off never to have the sweep triggered by steward.
 
 ## Acceptance criteria
 

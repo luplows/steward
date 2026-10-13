@@ -10,12 +10,12 @@ blocked: "Built by hand: changes .claude/prompts/reviewer.md, which a spawned co
 
 ## Intent
 
-As the owner, I want every review to be judged by the project's rules as they stand on `main`,
-given to the reviewer in its prompt, with the reviewer saying which sections it applied, which it
-did not and why, and citing each finding by section and item, so that a pull request cannot
-loosen its own rules, a skipped section is visible on the pull request, and a project can number
-its rules as it likes. I want steward's own `REVIEW.md` to be the first file in that form, holding
-rules only.
+As a member of the crew, I want every review to be judged by the project's rules as they stand on
+`main`, given to the reviewer in its prompt, with the reviewer saying which sections it applied,
+which it did not and why, and citing each finding by section and item, so that a pull request cannot
+loosen its own rules, a skipped section is visible on the pull request, and a project can number its
+rules as it likes. I want steward's own `REVIEW.md` to be the first file in that form, holding rules
+only.
 
 ## Acceptance criteria
 
@@ -70,7 +70,9 @@ rules only.
       there.
 - [ ] **AC-7** — Every reference to a `REVIEW.md` item number in `stories/README.md`,
       `.claude/prompts/coder.md`, `.claude/prompts/reviewer.md`, and the comments and messages of
-      `scripts/dispatch/` and `scripts/land/`, names the section and item instead.
+      `scripts/dispatch/` and `scripts/land/`, names the section instead, and the item within it
+      where one item is meant (`docs/agent-workflow-design.md`, "Three decisions from reviewing
+      `stories/README.md`").
       `grep -rn "item [0-9]" ` over those paths, given in the pull request body, shows what
       remains and why.
 - [ ] **AC-8** — Tests: `review.test.mjs` covers AC-1 (missing and unparseable rules, with no

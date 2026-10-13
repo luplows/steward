@@ -10,8 +10,8 @@ blocked: null
 
 ## Intent
 
-As the owner, I want `steward.config.json` to hold the settings the review side needs, each
-checked when it is read, so that the stories that use them can rely on a value being present
+As a member of the crew, I want `steward.config.json` to hold the settings the review side needs,
+each checked when it is read, so that the stories that use them can rely on a value being present
 and well formed, and a project that leaves one out is told which.
 
 ## Acceptance criteria

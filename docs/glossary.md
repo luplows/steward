@@ -130,7 +130,7 @@ story), **ready**, **done** (in `stories/done/`) and **retired** (in `stories/re
 and GitHub: **in-progress** (its branch exists) and **in-review** (a flight is open for it).
 
 A pull request is also **ready** when it is not a draft. Marking one ready is its author's
-hand-over; for the planning session's, it is the owner's go-ahead.
+hand-over; for the planning session's, it is the crew's go-ahead.
 
 ## Acts
 

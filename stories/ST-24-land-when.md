@@ -10,7 +10,7 @@ blocked: null
 
 ## Intent
 
-As the owner, I want the lander and the sweep to merge only once the checks the project's
+As a member of the crew, I want the lander and the sweep to merge only once the checks the project's
 `landWhen` setting names are green on the head, as well as `review/agent`, so that a project's
 own rule for when a pull request may merge is what steward follows, including on a repository
 with no branch protection, where GitHub's `mergeable_state` says nothing about required checks.

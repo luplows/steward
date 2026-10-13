@@ -10,10 +10,10 @@ blocked: null
 
 ## Intent
 
-As the owner, I want one command that runs a review-and-land pass: it decides which open pull
-requests get a reviewer, spawns them up to a cap, lands what has passed and is safe to merge, and
-exits, carrying nothing forward, so that the controller (and later any other trigger) can
-start the review side with one command and each run uses steward as it is on `main`.
+As a member of the crew, I want one command that runs a review-and-land pass: it decides which open
+pull requests get a reviewer, spawns them up to a cap, lands what has passed and is safe to merge,
+and exits, carrying nothing forward, so that the controller (and later any other trigger) can start
+the review side with one command and each run uses steward as it is on `main`.
 
 ## Acceptance criteria
 

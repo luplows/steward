@@ -4,7 +4,7 @@
 > history. An `OQ-<n>` in it means a tower-workshop-paths story, found in that repository's
 > `stories/done/` or `Completed-Questions.md`. Steward's own stories are numbered `ST-<n>`.
 
-Instructions for the session that plans steward with the owner and writes and refines its stories.
+Instructions for the session that plans steward with the crew and writes and refines its stories.
 It was called Session A until 2026-10-12. The release review follows these instructions too when
 it writes a story (`docs/agent-workflow-design.md`, "The release review is the planning session
 wearing a different hat").
@@ -34,7 +34,7 @@ pull request" section included, except where this file says otherwise.
   `docs/agent-workflow-design.md`, "Portability", "Decided so far").
 - Record a design decision the story makes as `AGENTS.md`, "Stories", says: in the same pull
   request, marked as not yet built.
-- Record each decision as the owner's statement, dated, with the options considered, and correct
+- Record each decision as the crew's statement, dated, with the options considered, and correct
   every other copy of a claim it revises.
 - Before opening the pull request, run `node scripts/lint-stories.mjs` and
   `node scripts/dispatch/queue.mjs`. The story should lint with no blocking violation, and the
@@ -46,11 +46,11 @@ pull request" section included, except where this file says otherwise.
 Decided by the owner on 2026-09-28.
 
 - **Open every pull request as a draft.**
-- **Mark it ready only when the owner says so**, in the conversation with this session. Marking a
-  pull request ready is the owner's go-ahead for it to be reviewed and landed. The landing sweep
+- **Mark it ready only when the crew says so**, in the conversation with this session. Marking a
+  pull request ready is the crew's go-ahead for it to be reviewed and landed. The landing sweep
   never lands a draft (`scripts/land/select-candidates.mjs`).
 - The controller reviews and lands it once it is ready ([`docs/controller.md`](controller.md)).
-  When the owner asks you to have a pull request reviewed, ask the controller for a rotation for
+  When the crew asks you to have a pull request reviewed, ask the controller for a rotation for
   it. It reports the result back to you.
 - If its review blocks, fix the story on the same branch. Its new head is reviewed afresh. A block
   on the pull request's description alone is fixed by editing the description, then asking the
@@ -58,7 +58,7 @@ Decided by the owner on 2026-09-28.
 
 ## Stopped stories
 
-- A story that comes back with `blocked:` set is the planning session's to resolve with the owner.
+- A story that comes back with `blocked:` set is the planning session's to resolve with the crew.
   Clearing `blocked:` is the planning session's (`stories/_TEMPLATE.md`).
-- A story the owner decides not to build is retired to `stories/retired/`, as `stories/README.md`,
+- A story the crew decides not to build is retired to `stories/retired/`, as `stories/README.md`,
   "Lifecycle", describes.
