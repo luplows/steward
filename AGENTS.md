@@ -57,9 +57,8 @@ These hold for every pull request's content, whoever writes it, the coder includ
   the same pull request.
 - [`REVIEW.md`](REVIEW.md) is the checklist a pull request is reviewed against. Read it before the
   pull request is opened.
-- Use the words in [`docs/glossary.md`](docs/glossary.md) with the meanings it gives them. In new
-  text, a rename its table marks agreed takes the new word; dated records keep the words they were
-  written with.
+- Write new text with the words in [`docs/glossary.md`](docs/glossary.md), with the meanings it
+  gives them. Dated records keep the words they were written with.
 
 ## Stories
 
@@ -103,7 +102,7 @@ pushes its branch and opens its pull request, as its prompt says.
 |---|---|
 | [`docs/agent-workflow-design.md`](docs/agent-workflow-design.md) | **The workflow's design of record** — roles, the gate, deliberate exclusions, platform facts. Read it before proposing a change to how work flows through this repository. |
 | [`docs/harness-outline.md`](docs/harness-outline.md) | Steward's product outline: who it is for, why, what it must never do, and the owner's decisions defining it. |
-| [`docs/glossary.md`](docs/glossary.md) | The words steward's documents use, each with one meaning, and the renames proposed for them. |
+| [`docs/glossary.md`](docs/glossary.md) | The words steward uses, and what each one means. |
 | [`REVIEW.md`](REVIEW.md) | The enumerated checklist a pull request is reviewed against. |
 | [`stories/README.md`](stories/README.md) | Story schema, status derivation, ordering, readiness test. |
 | [`docs/planning-session.md`](docs/planning-session.md) | Instructions for the planning session, including how a story pull request is handed over. |
