@@ -13,8 +13,8 @@ This file applies to every session. Each role has its own instructions as well:
 
 | You are | Also read |
 |---|---|
-| The planning session, which plans steward with the owner and writes its stories | [`docs/planning-session.md`](docs/planning-session.md) |
-| The controller, which the owner has asked to run `scripts/dispatch/` by hand | [`docs/controller.md`](docs/controller.md) |
+| The planning session, which plans steward with the crew and writes its stories | [`docs/planning-session.md`](docs/planning-session.md) |
+| The controller, which a member of the crew has asked to run `scripts/dispatch/` by hand | [`docs/controller.md`](docs/controller.md) |
 | A coder or reviewer session started by ATC | Your prompt, under `.claude/prompts/`. It says what else to read. |
 | Any other session that changes this repository | **Opening a pull request**, below. |
 
@@ -26,8 +26,8 @@ This file applies to every session. Each role has its own instructions as well:
 - Do not delete a pull request's head branch. The sweep deletes it (see
   [`scripts/land/delete-merged-heads.mjs`](scripts/land/delete-merged-heads.mjs)); the repository's
   `delete_branch_on_merge` setting is not relied on.
-- Do not trigger [`land-approved.yml`](.github/workflows/land-approved.yml). Only the owner, or
-  the pilot, [`scripts/dispatch/land.mjs`](scripts/dispatch/land.mjs), run by ATC or by the
+- Do not trigger [`land-approved.yml`](.github/workflows/land-approved.yml). Only the crew, by hand,
+  or the pilot, [`scripts/dispatch/land.mjs`](scripts/dispatch/land.mjs), run by ATC or by the
   controller, may.
 - The sweep lands one eligible pull request per run, only when triggered, so a merge-ready pull
   request waits. A run given a pull request (`land.mjs` always gives one) considers only that one;

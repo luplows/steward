@@ -10,11 +10,10 @@ blocked: null
 
 ## Intent
 
-As the owner, I want steward to find the unit a pull request implements from a link its body
-gives, deterministically and by the kinds of link the project uses, and to read that unit as it
-stands on `main`, so that the reviewer judges the work against the unit as it was approved,
-whatever form the project keeps its units in. This story builds the module; ST-22 puts it into
-the review.
+As a member of the crew, I want steward to find the unit a pull request implements from a link its
+body gives, deterministically and by the kinds of link the project uses, and to read that unit as it
+stands on `main`, so that the reviewer judges the work against the unit as it was approved, whatever
+form the project keeps its units in. This story builds the module; ST-22 puts it into the review.
 
 ## Acceptance criteria
 

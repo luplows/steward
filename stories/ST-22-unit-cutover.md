@@ -10,11 +10,11 @@ blocked: "Built by hand: changes .claude/prompts/reviewer.md, which a spawned co
 
 ## Intent
 
-As the owner, I want the reviewer to be given the unit a pull request links, read from `main`,
-with a plain statement of what steward found when the link is missing or unreadable, so that a
-pull request is judged against the unit as approved, in whatever form the project keeps its
-units. I also want the reviewer to check claims with narrower commands rather than rerunning the
-project's whole check, which CI already runs as a peer check.
+As a member of the crew, I want the reviewer to be given the unit a pull request links, read from
+`main`, with a plain statement of what steward found when the link is missing or unreadable, so that
+a pull request is judged against the unit as approved, in whatever form the project keeps its units.
+I also want the reviewer to check claims with narrower commands rather than rerunning the project's
+whole check, which CI already runs as a peer check.
 
 ## Acceptance criteria
 

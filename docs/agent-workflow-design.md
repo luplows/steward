@@ -140,7 +140,7 @@ stories/
     ST-55-declare-story-mechanisms.md  ← dropped unbuilt, moved by the planning session
 ```
 
-A story the owner decides not to build is retired, not deleted (decided 2026-10-07 by the owner).
+A story the crew decides not to build is retired, not deleted (decided 2026-10-07 by the owner).
 It keeps its file and its number in a directory nothing dispatches from, so reviving it is a
 `git mv`. `stories/README.md`, "Lifecycle", says how.
 
@@ -157,7 +157,7 @@ blocked: null              # null | "reason text" — set by a kickback
 
 ## Intent
 
-As the owner, I want the queue printed as JSON on request, so that another tool can
+As a member of the crew, I want the queue printed as JSON on request, so that another tool can
 read it without parsing the table.
 
 ## Acceptance criteria
@@ -318,8 +318,8 @@ deleted rather than relaxed.
 ### Happy path
 
 1. The planning session writes a story, with Open questions empty, and opens it as a pull request
-   from the owner's account, as a **draft**. It marks the pull request ready only when the owner
-   says so, and that is the owner's go-ahead for it to land (decided 2026-09-28;
+   from the owner's account, as a **draft**. It marks the pull request ready only when the crew
+   says so, and that is the crew's go-ahead for it to land (decided 2026-09-28;
    `docs/planning-session.md`). Before every pick, and also on a run with nothing ready, the loop
    itself reviews any such open, non-draft pull request against `REVIEW.md`'s story-PR items and
    lands it on a passing verdict (OQ-83; `scripts/dispatch/writer-prs.mjs`). Only a pull request
@@ -369,10 +369,10 @@ deleted rather than relaxed.
 5. Dispatcher spawns the reviewer, which returns a structured verdict.
 6. Dispatcher posts the verdict as a marker comment, and `review-gate.yml` derives
    `review/agent` = `success` on the head SHA from it.
-7. The landing sweep merges it (squash) once `mergeable_state` is `clean`. The owner
-   triggers the sweep, or the owner or the controller (**The controller**, below) runs
-   `scripts/dispatch/land.mjs` (OQ-50), which waits until the PR is landable, triggers it and
-   waits for the merge. `story.mjs` calls `land.mjs`.
+7. The landing sweep merges it (squash) once `mergeable_state` is `clean`. The crew
+   runs the runway by hand, or the crew or the controller (**The controller**, below) runs the
+   pilot, `scripts/dispatch/land.mjs` (OQ-50), which waits until the PR is landable, requests
+   landing and waits for the merge. `story.mjs` calls `land.mjs`.
    The loop starts the next story only once this one has merged, or stopped with its stop fully
    recorded (OQ-86); anything else stops the loop. So every story it dispatches runs from a `main`
    that includes the last.
@@ -390,7 +390,7 @@ The majority of the interesting behaviour.
 | CI failed in a setup step | A run that concluded `failure` only in setup steps (checkout, Node, `npm ci`, the browser install, or GitHub's `Set up job`) is treated like a cancelled run: not retried, not counted as a red round, and the story stops with `blocked:` naming the steps (`ci-setup-failed`). `ci.yml` marks its setup steps with a `Setup: ` name prefix that `ci.mjs`'s `isSetupStep` recognises, and `ci.test.mjs` checks the two agree. Decided 2026-10-07 by the owner, after a 403 from Playwright's browser CDN failed a run that the loop would have answered with a coder retry. Re-running CI is left to whoever runs the loop, so `ci.mjs` stays read-only. |
 | A retry reports the coder's `blocked:`, a draft request or a failure; a review records no verdict; a retry after red CI pushes no commit; landing fails | The story stops. Only the results OQ-48's AC-2 names continue the run (the `decide*` functions of `story.mjs`); every other result stops it. Every stop with an open PR makes the PR a draft first, so nothing can land it, which keeps the rule that a `blocked:` story is always a draft. Then it records `blocked:` on the branch. |
 | The reviewer's verdict does not parse | `reviewPullRequest` runs one more reviewer session, in the same worktree and with the same prompt, story, pull request, environment and model, before returning `malformed-verdict`; a second malformed reply stops the story as above, with both sessions' parse failures in the reason. Only a malformed verdict is re-run, never more than once, dependencies are not installed again, and each session keeps its own budget. Decided 2026-10-08 by the owner, so that one badly formatted reply does not stop a story. Before the second session the checkout is checked again, and if the first session changed it there is no second session and nothing is reset (decided 2026-10-08 by the owner): a reviewer that wrote to its checkout is worth seeing. Every result `reviewPullRequest` returns after running a session says how many it ran (1 or 2). |
-| The dispatcher is interrupted mid-story | The owner resumes it from its PR number (`story.mjs OQ-n --pr <number>`, OQ-48's AC-9), which derives where it was from GitHub alone. Once the run has pushed, the story's branch on `origin` keeps it `in-progress`, so the loop (OQ-86) skips it; a run killed between its push and opening the PR leaves a branch with no PR, which the owner handles by hand. Killed before its claim push, the story has no branch on `origin` and the loop picks it again, but the killed run's local branch makes the dispatch return `branch-exists`, which stops the loop (OQ-86's AC-3 and AC-4). The claim push (OQ-110, above) means a run killed after it almost always leaves a branch every machine sees, since the claim lands before the install or the session starts. The loop skips a story whose branch is only local, after pushing it (OQ-111, above), and opens a `Loop: OQ-n is stuck` issue for either kind of skip (OQ-112, above). |
+| The dispatcher is interrupted mid-story | The crew resumes it from its PR number (`story.mjs OQ-n --pr <number>`, OQ-48's AC-9), which derives where it was from GitHub alone. Once the run has pushed, the story's branch on `origin` keeps it `in-progress`, so the loop (OQ-86) skips it; a run killed between its push and opening the PR leaves a branch with no PR, which the crew handles by hand. Killed before its claim push, the story has no branch on `origin` and the loop picks it again, but the killed run's local branch makes the dispatch return `branch-exists`, which stops the loop (OQ-86's AC-3 and AC-4). The claim push (OQ-110, above) means a run killed after it almost always leaves a branch every machine sees, since the claim lands before the install or the session starts. The loop skips a story whose branch is only local, after pushing it (OQ-111, above), and opens a `Loop: OQ-n is stuck` issue for either kind of skip (OQ-112, above). |
 | Story was wrong, not the code | `blocked:` set with the reason → the planning session |
 | Coder hits ambiguity mid-story | `blocked:` + the specific question → the planning session |
 | Branch stale | Rebase; if it fails, kick back rather than merge against a moved world |
@@ -482,9 +482,9 @@ orchestrating agent."
 
 Decided 2026-09-28 by the owner, in tower-workshop-paths, as the dispatcher session; named the
 controller on 2026-10-12 (`glossary.md`). Until ATC runs rotations on a trigger of its own, the
-dispatch scripts are run by hand from an agent session the owner has asked to act as controller,
-which relays what they return. It is ATC's hands, not a coder or a reviewer: it changes nothing
-itself and decides no verdict. On steward it runs `review.mjs` and `land.mjs`, the pilot
+dispatch scripts are run by hand from an agent session a member of the crew has asked to act as
+controller, which relays what they return. It is ATC's hands, not a coder or a reviewer: it changes
+nothing itself and decides no verdict. On steward it runs `review.mjs` and `land.mjs`, the pilot
 ("Portability", "Decided so far"); in tower-workshop-paths it also ran `coder.mjs` and `story.mjs`.
 It works as a rotation will: one pull request's outcome does not stop the others, and only a
 failure of the rotation itself stops it (owner, 2026-10-12; `docs/controller.md`).
@@ -515,7 +515,7 @@ Why this is safe enough:
   runway some other way. The rule names `land.mjs` because that module's own allowlist permits the
   one dispatch and no other write.
 
-The owner can tell the controller to hold a pull request back. That is an instruction to the
+The crew can tell the controller to hold a pull request back. That is an instruction to the
 session, not part of this design: a pull request whose head passed review lands without a
 go-ahead of its own (owner, 2026-10-12).
 
@@ -528,7 +528,7 @@ without a dispatcher session in between.
   is on, on mains power only. The task is a script: a run with nothing ready starts no model
   session. GitHub's cron is not used (**Watchdog**, below).
 - **Planned (ST-11):** a run takes a lock that a dead holder does not keep, and appends one line to
-  a local run log. That log is how the owner hears about the loop's own stops. A leftover
+  a local run log. That log is how the crew hears about the loop's own stops. A leftover
   `tw-coder-*` worktree from an interrupted run is raised as a GitHub issue, as OQ-112 raises a
   stuck story, and the run goes on (decided 2026-10-01 by the owner). A blocked story pull request is also reported by
   GitHub's failure email, since a blocking verdict fails the gate's run.
@@ -539,9 +539,9 @@ without a dispatcher session in between.
   detached. `main` refuses, before fetching or dispatching anything, to run from a checkout that has
   a branch checked out (`requireOwnWorktree`). The controller's hand-runs also come from a worktree
   of their own, by rule rather than by that check (**The controller**, above).
-- Stuck stories reach the owner as GitHub issues, one per story (OQ-112), so a
+- Stuck stories reach the crew as GitHub issues, one per story (OQ-112), so a
   leftover on one machine is seen from any (decided 2026-10-01 by the owner, who runs the loop on
-  two machines). An issue names the machine by a label the owner sets, never its hostname, since
+  two machines). An issue names the machine by a label the crew sets, never its hostname, since
   the repository is public. A story whose branch is on `origin` with no open pull request is stuck
   unless its claim is younger than 2 hours (`STUCK_AFTER_MS`, `coder.mjs`'s `claimAgeMs`; this
   restatement must not drift from them). A younger claim is most likely a dispatch still running,
@@ -561,8 +561,8 @@ without a dispatcher session in between.
 - Any pull request from an account with write access (OQ-81) that passes review may land
   unattended, including one that changes this document, `AGENTS.md`, `CLAUDE.md`, `.github/` or
   `.claude/`.
-  Marking it ready is the owner's go-ahead: the planning session opens its pull requests as drafts
-  and marks one ready only on the owner's word. A dispatched story's own pull request lands on a
+  Marking it ready is the crew's go-ahead: the planning session opens its pull requests as drafts
+  and marks one ready only on the crew's word. A dispatched story's own pull request lands on a
   pass, as it does today: the story was the go-ahead.
 - Before the task is switched on, OQ-81 and OQ-82 are built, so nothing lands automatically from an
   outsider or changes `stories/` from inside a coder's pull request, and so are OQ-73 (a coder
@@ -806,8 +806,8 @@ it was obscured the real mechanism:
 - **`review/agent` is posted by `review-gate.yml`, not by the dispatcher** — the workflow reads the
   marker comment and derives the status. So the dispatcher's output is a *comment*, and enforcement
   is a GitHub Actions job it does not control. That split is the guarantee, and it already exists.
-- **Triggering `land-approved.yml` is the owner's, or the pilot's, `land.mjs`, when ATC or the
-  controller runs it; no other agent session does.**
+- **`land-approved.yml` is started only by the crew, by hand, or when the pilot, `land.mjs`, run by
+  ATC or the controller, requests landing; no other agent session starts it.**
   Enforced as a tested prohibition in OQ-68 and OQ-48 rather than by scope on a token. For the
   controller it is a rule, not a mechanism (**The controller**, above). `land.mjs`
   (OQ-50) is the one module that triggers it. Its own allowlist permits that one dispatch (`main`,
@@ -852,7 +852,7 @@ Additions that earn their place now:
 |---|---|
 | **Story schema lint** | Frontmatter valid, required sections present, AC ids well-formed. Carries the schema burden now that stories are files. |
 | **AC↔test traceability** | Every AC id in the story appears in at least one test name. Converts "did you do what was asked" from judgment into a gate. |
-| **Existing-test-modification flag** | Flags any PR touching tests outside its own story's additions. Today this is `REVIEW.md` item 9 — prose the reviewer must notice. |
+| **Existing-test-modification flag** | Flags any PR touching tests outside its own story's additions. Today this is an item of `REVIEW.md`'s "PRs that change app code" — prose the reviewer must notice. |
 
 AC ids appear in test names directly:
 
@@ -984,8 +984,8 @@ be kept essentially as-is:
   delivered it at roughly 5% of that rate, so the trigger was removed and landing is explicit
   (`gh workflow run land-approved.yml`) until a reliable one was chosen. `land.mjs` (OQ-50) is
   that trigger: it triggers the sweep once a PR is landable, and re-triggers while the PR is still
-  open. It never merges itself. `story.mjs` (OQ-48) calls it, and the owner or the dispatcher
-  session may run it directly; nothing else does.
+  open. It never merges itself. `story.mjs` (OQ-48) calls it, and the crew or the controller
+  may run it directly; nothing else does.
 - **It lands only pull requests whose author has write access** (the same association set the gate
   honours for markers, `scripts/land/check-author.mjs`), because a landed `ready` story is work the
   loop will carry out (OQ-81).
@@ -998,7 +998,7 @@ be kept essentially as-is:
 - **The named PR, or else the oldest.** The sweep takes an optional `pr` input, and `land.mjs`
   always names its own pull request in it. A run given a pull request considers only that one and
   lands nothing if it is not landable, so `land.mjs` lands what it was called for and nothing else.
-  A run given none, such as the owner's `gh workflow run`, lands the oldest landable one, so
+  A run given none, such as the crew's `gh workflow run`, lands the oldest landable one, so
   nothing starves. Decided 2026-09-28: the loop decides which pull request is ready, and a sweep
   that lands a different one spends `land.mjs`'s triggers, can stop a story that passed, and lands
   pull requests nobody asked it to. The candidate choice is made in
@@ -1083,7 +1083,7 @@ Everything above prevents bad changes landing. This covers one landing anyway.
 ## The release review
 
 Runs when a batch worth reviewing has accumulated (currently: human call, roughly every ten merged
-PRs). This is the existing OQ-46, and it is the only thing standing between the owner and a silently
+PRs). This is the existing OQ-46, and it is the only thing standing between the crew and a silently
 degrading mental model of their own app — every other guard is a *regression* detector that passes
 when a change is self-consistent.
 
@@ -1119,9 +1119,9 @@ halts all progress while waiting for a human stops being run.
 
 ### Feedback capture
 
-The owner is clicking around, notices something is off, says so in plain language. The release
-review turns that into a properly-formed story: clarifying questions, sizing, acceptance criteria,
-out-of-scope.
+A member of the crew is clicking around, notices something is off, says so in plain language. The
+release review turns that into a properly-formed story: clarifying questions, sizing, acceptance
+criteria, out-of-scope.
 
 Which is what the planning session does. **The release review is the planning session wearing a
 different hat** — same story-authoring discipline, different trigger (observed defect vs. envisioned
@@ -1929,7 +1929,14 @@ deciding what is next. It is the harness's product outline, and moves with this 
     backlog file of steward's own.
   - **`REVIEW.md` is cited by section name, not item number**, everywhere, since ST-21 gives each
     section its own numbering (`harness-outline.md`, "The rules file's shape"). Older citations
-    take the section name as they are touched.
+    take the section name as they are touched. **Clarified 2026-10-13 by the owner: the section,
+    and the item within it where one item is meant**, after #9's review found this entry at odds
+    with the outline ("a finding cites the section and the item") and with ST-21's AC-7. A finding
+    cites both. A document cites the section alone when it means the whole section, and an item's
+    number within a section only where that section numbers its own, which every section does
+    once ST-21 is built. Considered and not chosen: the section only, findings included, which
+    would revise the outline's decision and the verdict's `item`; and the section and the item
+    always.
   - **The crew, not the owner, in every current rule.** Each act a rule gives "the owner" today is
     the crew's: the owner is not the default, and steward is for any trusted contributor
     (`harness-outline.md`, "Who it is for"). Dated records keep "the owner". Considered and not

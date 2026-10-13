@@ -10,9 +10,9 @@ blocked: null
 
 ## Intent
 
-As the owner, I want the command that prepares a fresh checkout for a reviewer or a coder to be
-the project's own `setup` setting, stopped at the time limit written beside it, so that steward
-does not assume every project is prepared by `npm ci`, and a hung setup stops the dispatch
+As a member of the crew, I want the command that prepares a fresh checkout for a reviewer or a coder
+to be the project's own `setup` setting, stopped at the time limit written beside it, so that
+steward does not assume every project is prepared by `npm ci`, and a hung setup stops the dispatch
 instead of holding it forever. I also want it started on Windows without the Node deprecation
 warning today's install prints.
 
