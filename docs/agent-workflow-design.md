@@ -1920,6 +1920,21 @@ deciding what is next. It is the harness's product outline, and moves with this 
     of whoever runs it, for nothing it uses.
   - **"Rotation", not "sweep", for a run over every open pull request**, since the sweep, now
     the runway, is `land-approved.yml` (`glossary.md`).
+- **Three decisions from reviewing `stories/README.md`** (decided 2026-10-12 by the owner, in the
+  documents review):
+  - **Steward has no backlog file: a draft story is the backlog.** An unrefined idea is written as
+    a story whose Open questions still hold something; open questions about steward's design are
+    in this document. Tower-workshop-paths' `Open-Questions.md` and `Completed-Questions.md`
+    existed before it had story files, and steward has neither. Considered and not chosen: a
+    backlog file of steward's own.
+  - **`REVIEW.md` is cited by section name, not item number**, everywhere, since ST-21 gives each
+    section its own numbering (`harness-outline.md`, "The rules file's shape"). Older citations
+    take the section name as they are touched.
+  - **The crew, not the owner, in every current rule.** Each act a rule gives "the owner" today is
+    the crew's: the owner is not the default, and steward is for any trusted contributor
+    (`harness-outline.md`, "Who it is for"). Dated records keep "the owner". Considered and not
+    chosen: deciding rule by rule, which was the planning session's caution while the glossary
+    was written. In this repository the crew is the owner alone, so nothing changes in practice.
 
 ### The move, in order
 

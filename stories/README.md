@@ -1,49 +1,46 @@
 # Stories
 
-The refined, dispatchable queue. One file per story; a story is any file
-matching `stories/OQ-<n>-<slug>.md` and nothing else in this directory is one,
-which is what keeps this README and `_TEMPLATE.md` out of the queue without
-needing an exclusion list.
+Steward's own units of work, one file per story. A story is any file matching
+`stories/ST-<n>-<slug>.md`, and nothing else in this directory is one, which is
+what keeps this README and `_TEMPLATE.md` out of the queue without needing an
+exclusion list. The prefix is `steward.config.json`'s `storyPrefix`, which the
+queue reader builds its filename pattern from (`scripts/dispatch/queue.mjs`).
 
 Copy [`_TEMPLATE.md`](_TEMPLATE.md) to start one.
 
-## Three places work lives, and what dispatches from which
+## Where stories live
 
-| | What it holds | Dispatches? |
+| | What it holds | Can a coder take it? |
 |---|---|---|
-| `Open-Questions.md`, in tower-workshop-paths | The **idea backlog** — unrefined. Prose stories, open questions still open, no acceptance criteria. | **No.** |
-| `stories/` | **Refined** stories with enumerated acceptance criteria, ready to hand to a coder. | Yes. |
-| `stories/done/` | Completed stories, moved here by the PR that completed them. | — |
-| `stories/retired/` | Stories dropped without being built, moved here by a planning-session PR with the date and reason in their Context. | **No.** |
-| `Completed-Questions.md`, in tower-workshop-paths | The **historical archive**, going back to OQ-1. Grepped by number (`grep -n 'OQ-37' Completed-Questions.md`), never read whole. | — |
+| `stories/` | Every story not yet built: refined ones with enumerated acceptance criteria, and drafts, whose Open questions still hold something. | A ready one, yes. |
+| `stories/done/` | Completed stories, moved here by the pull request that completed them. | — |
+| `stories/retired/` | Stories dropped without being built, moved here by a planning-session pull request with the date and reason in their Context. | **No.** |
 
-**Nothing dispatches from `Open-Questions.md`.** It is input to a planning
-session, not to the loop. Refining an entry means moving it into a file here
-and attaching acceptance criteria to it — which happens when the story is next
-picked up, not in a bulk migration. The two queues coexist while it drains, and
-`Open-Questions.md` keeps its name because `Completed-Questions.md` and several
-workflow comments reference it by that name.
-
-`Completed-Questions.md` is **not** migrated. It stays exactly as it is. Only
-stories completed from `stories/` land in `stories/done/`; everything resolved
-before this directory existed stays in the archive where its references point.
+**A draft story is the backlog.** An idea not yet refined is written as a story
+with its questions under Open questions, which keeps it `draft` until they are
+answered. There is no separate backlog file. Open questions about steward's
+design, rather than about one story, are in `docs/agent-workflow-design.md`.
 
 ## Numbering
 
-Unchanged from `Open-Questions.md`: every story has a permanent `OQ-<n>`.
-**Numbers are never reused and never renumbered**, so a number always points at
-the same story, whether it lives here, in the backlog, or in the archive. A new
-story takes the next unused number — check all three places before picking one,
-including `stories/done/` and `stories/retired/`.
+Every story has a permanent `ST-<n>`. **Numbers are never reused and never
+renumbered**, so a number always points at the same story, wherever it lives. A
+new story takes the next unused number: check `stories/`, `stories/done/`,
+`stories/retired/` and every branch on `origin` (`git ls-remote --heads
+origin`), since a story still being written is on its branch and not yet on
+`main`.
+
+An `OQ-<n>` is a tower-workshop-paths story, which steward came from. Some of
+steward's stories began there, and each says so in its Context.
 
 ## Frontmatter
 
 ```yaml
-id: OQ-49                  # matches the filename
+id: ST-49                  # matches the filename
 title: Read and rank the story queue
 tier: next                 # fix | next | normal | later — priority, nothing else
-kind: workflow             # product | workflow — for reading; never read by the dispatcher
-depends_on: []             # [OQ-45] — not dispatched until those are in done/
+kind: workflow             # product | workflow — for reading; never read by ATC
+depends_on: []             # [ST-45] — not taken until those are in done/
 model: sonnet              # per-story escalation; the reviewer is never this model
 blocked: null              # null | "reason text"
 ```
@@ -55,7 +52,7 @@ blocked: null              # null | "reason text"
 | `fix` | A defect or regression. Absolute priority. |
 | `next` | Deliberately prioritised ahead of the default. |
 | `normal` | The default. Most stories. |
-| `later` | Refined and dispatchable, but deliberately deferred. |
+| `later` | Refined and ready to take, but deliberately deferred. |
 
 **Dependencies are not a tier.** `depends_on` handles them mechanically and at the
 right granularity. An earlier vocabulary — `foundational | dependent | anytime |
@@ -64,22 +61,25 @@ dependency, and subject matter. A story can be both workflow and foundational, s
 forcing one value made the sort order arbitrary, and two of the four duplicated
 `depends_on` while being able to contradict it.
 
-**`kind` is for people, not the dispatcher.** It groups stories for reading —
+**`kind` is for people, not ATC.** It groups stories for reading —
 release-review assembly, or answering "how much of this batch was tooling."
-**Nothing in the dispatcher reads it, and nothing in the ordering may.** That is
+**Nothing in ATC reads it, and nothing in the ordering may.** That is
 stated as a rule because a field that exists eventually attracts a sort: ordering
 by `kind` should be a visible violation of something written down rather than a
 natural-looking extension. Adding a value is cheap for the same reason.
 
+## Status
 
 `blocked` is **the only stored state**, because it is the only thing that
-cannot be derived. Everything else about where a story stands is read from the
-filesystem, git, and GitHub — by two different things, at two different layers.
+cannot be derived. A story with `blocked:` set is **grounded**: the field keeps
+the name `blocked`, and the queue prints the status as `blocked`. Everything
+else about where a story stands is read from the filesystem, git, and GitHub —
+by two different things, at two different layers.
 
-A story only the owner can carry out, by hand and outside the loop, keeps
-`blocked:` set with a reason saying so, so the loop never picks it up. The
-owner starts a session for it, and that session's pull request moves the story
-to `stories/done/` like any other.
+A story only the crew can carry out, by hand, keeps `blocked:` set with a reason
+saying so, so that no coder takes it. A member of the crew starts a session for
+it, and that session's pull request moves the story to `stories/done/` like any
+other.
 
 **From the story files alone.** These are what the queue reader derives. The
 first match wins, so the order of the rows is part of the definition:
@@ -87,7 +87,7 @@ first match wins, so the order of the rows is part of the definition:
 | Status | Derived from |
 |---|---|
 | `done` | the file lives in `stories/done/` |
-| `blocked` | `blocked` is non-null |
+| `blocked` (grounded) | `blocked` is non-null |
 | `draft` | **Open questions** holds content beyond the empty marker — see below |
 | `waiting` | a `depends_on` entry is not yet in `stories/done/` |
 | `ready` | none of the above |
@@ -107,24 +107,25 @@ the status is derived from. Anything else in the section, including a single
 line alongside the placeholder, makes the story `draft`.
 
 **From git and GitHub.** These refine `ready` once work has started, and need
-refs and PRs rather than files, so they belong to the dispatcher rather than to
+refs and pull requests rather than files, so they belong to ATC rather than to
 the queue reader:
 
 | Status | Derived from |
 |---|---|
-| `in-progress` | a `story/OQ-49-*` branch exists |
-| `in-review` | a PR is open for that branch |
+| `in-progress` | a `story/ST-49-*` branch exists |
+| `in-review` | a pull request is open for that branch |
 
-The split is load-bearing. A story is dispatchable when it reads `ready` from
+The split is load-bearing. A coder may take a story when it reads `ready` from
 the files *and* has no branch — but keeping the file-only derivation free of
 git is what lets the queue be read, tested and printed without a repository in
 any particular state.
 
-No status field, no status commits, nothing to sweep, nothing to drift.
+No status field, no status commits, nothing to tidy, nothing to drift.
 
 **The review round count is deliberately not a field here.** It is derived by
-counting blocking verdicts recorded on the PR. Storing it would mean a commit
-per round, on a file that lives on `main` while the work lives on a branch.
+counting blocking verdicts recorded on the pull request. Storing it would mean a
+commit per round, on a file that lives on `main` while the work lives on a
+branch.
 
 **Ordering** is by `tier`, then lowest id first. Deterministic, needs no ordering
 file, and re-prioritising is a one-field edit.
@@ -142,8 +143,8 @@ was **written down**. Anything left unspecified is not drift; it is
 unspecified, and the coder's choice on it stands unreviewed permanently.
 
 The consequence is easy to miss: **a vague story does not produce a weak
-review, it produces a review that cannot fail.** The gate silently stops
-working and the pipeline still shows green.
+review, it produces a review that cannot fail.** Review silently stops working
+and the checks still show green.
 
 > **Could a reviewer, seeing only this story and the diff, tell whether the
 > diff conforms?**
@@ -157,51 +158,50 @@ AC ids appear in test names directly, so that what was asked for and what was
 verified can be matched mechanically:
 
 ```js
-test('OQ-49/AC-4: ordering is by tier, then lowest id first', ...)
+test('ST-49/AC-4: ordering is by tier, then lowest id first', ...)
 ```
 
-Naming a test after an AC does not satisfy it — `REVIEW.md` item 17 exists
-precisely to catch a test named `OQ-49/AC-3` that does not exercise AC-3.
+Naming a test after an AC does not satisfy it — `REVIEW.md`, "Conformance to the
+story", exists precisely to catch a test named `ST-49/AC-3` that does not
+exercise AC-3.
 
-**The PR that implements a story ticks each AC it delivered**, in the story
-file, as part of that PR — `- [ ]` becomes `- [x]`. A story is written with
-every box unticked, and nothing else ticks them. An AC left unticked is one the
-PR says it did not deliver, and the PR body says why.
+**The pull request that implements a story ticks each AC it delivered**, in the
+story file, as part of that pull request — `- [ ]` becomes `- [x]`. A story is
+written with every box unticked, and nothing else ticks them. An AC left
+unticked is one the pull request says it did not deliver, and its body says
+why.
 
 A tick is the author's claim, not evidence. It shows in the diff, and the
-reviewer checks it against items 16 and 17: an AC delivered but left unticked,
-or ticked but not genuinely delivered, is a finding. When a review finds a
-ticked AC undelivered, the fix commit either delivers it or unticks it.
-
-The rule applies from 2026-09-24. The stories already in `stories/done/` by
-then — OQ-49, OQ-51, OQ-63, OQ-67, OQ-74 and OQ-75 — were completed before it
-and are left as they are, so their unticked boxes say nothing about what was
-delivered. Their PRs and reviews are the record.
+reviewer checks it against `REVIEW.md`, "Conformance to the story": an AC
+delivered but left unticked, or ticked but not genuinely delivered, is a
+finding. When a review finds a ticked AC undelivered, the fix commit either
+delivers it or unticks it.
 
 **A story whose decision is recorded in the design doc** carries an AC to
-resolve its `**Planned (OQ-n)**` markers there. The design doc's "Reading this
-document" note defines the markers, and the PR that writes the story records the
-decision, marked, so that the goal state reaches `main` when it is decided.
+resolve its `**Planned (ST-n)**` markers there. The design doc's "Reading this
+document" note defines the markers, and the pull request that writes the story
+records the decision, marked, so that the goal state reaches `main` when it is
+decided.
 
 ## Lifecycle
 
-1. A planning session writes the story here, or refines a backlog entry into
-   one. **Open questions** must be empty before it can be dispatched.
-2. A coder branches `story/OQ-49-<slug>`, implements, and opens a PR.
-3. The PR **ticks each AC it delivered** — see above — and **moves the story
-   file to `stories/done/`** — `REVIEW.md` item 19.
-   Completion is a `git mv` inside the story's own PR, visible in the diff and
-   checkable by the reviewer, rather than a cut-and-paste into an 82 KB
-   archive.
+1. The planning session writes the story here, with the crew. **Open
+   questions** must be empty before a coder can take it.
+2. A coder takes it: ATC claims the branch `story/ST-49-<slug>`, the coder
+   implements and commits, and ATC pushes the work and opens the pull request.
+3. The pull request **ticks each AC it delivered** — see above — and **moves the
+   story file to `stories/done/`** (`REVIEW.md`, "Conformance to the story").
+   Completion is a `git mv` inside the story's own pull request, visible in the
+   diff and checkable by the reviewer.
 4. If the story turns out to be wrong rather than the code, `blocked:` is set
-   with the reason and it goes back to a planning session.
-5. A story the owner decides not to build is **retired**: a planning-session PR moves
-   it to `stories/retired/` with a `git mv`, adds the date and reason to its
-   Context, and corrects whatever else cites it. Neither the queue reader nor
-   the story lint reads that directory, so a retired story is never
-   dispatched, and a `**Planned**` marker naming one is reported as naming no
-   story file. A `depends_on` naming one would leave that story `waiting` for
-   good, so the retiring PR removes it. Reviving one is a `git mv` back into
+   with the reason and it goes back to the planning session.
+5. A story the crew decides not to build is **retired**: a planning-session pull
+   request moves it to `stories/retired/` with a `git mv`, adds the date and
+   reason to its Context, and corrects whatever else cites it. Neither the queue
+   reader nor the story lint reads that directory, so a retired story is never
+   taken, and a `**Planned**` marker naming one is reported as naming no story
+   file. A `depends_on` naming one would leave that story `waiting` for good, so
+   the retiring pull request removes it. Reviving one is a `git mv` back into
    `stories/`.
 
-`git log stories/OQ-49-*.md` is that story's refinement trail.
+`git log stories/ST-49-*.md` is that story's refinement trail.
