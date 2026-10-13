@@ -11,6 +11,7 @@ verdict. The owner keeps the decisions: what to build, and what is fit to releas
   design of record.
 - [`AGENTS.md`](AGENTS.md): the rules every session here follows, whatever tool runs it.
   `CLAUDE.md` imports it for Claude Code.
+- [`docs/glossary.md`](docs/glossary.md): the words these documents use, and what each means.
 - [`stories/README.md`](stories/README.md): the story queue, `ST-<n>`.
 
 steward was moved out of [tower-workshop-paths](https://github.com/luplows/tower-workshop-paths)
