@@ -501,18 +501,18 @@ checked out (`requireOwnWorktree`, `scripts/dispatch/loop.mjs`).
 **It may land, and only through the pilot.** It runs `land.mjs` for a pull request whose head has
 an honoured `pass` or `pass-with-observations` verdict and green CI, with no further go-ahead
 (owner, 2026-10-12). It never runs `gh workflow run land-approved.yml`, and never merges through
-the API or any other way. No other agent session triggers the sweep. `AGENTS.md`, "Every
+the API or any other way. No other agent session starts the runway. `AGENTS.md`, "Every
 session", and `docs/controller.md` state the rule; this section is its rationale.
 
 Why this is safe enough:
 
-- **`land.mjs` decides nothing a script would not.** It triggers the sweep only once
-  `review/agent` is `success` and `mergeable_state` is `clean` on the head, and the sweep re-checks
-  both. The controller can choose *when* to land, never *whether* a head passed: the verdict is the
+- **The pilot decides nothing a script would not.** It requests landing only once `review/agent`
+  is `success` and `mergeable_state` is `clean` on the head, and the runway checks both again. The
+  controller can choose *when* to land, never *whether* a head passed: the verdict is the
   reviewer's, and `review/agent` is posted by `review-gate.yml`.
 - **It is a rule, not a mechanism.** The controller holds the credential of whoever runs it, as
-  ATC does (**Credential minimalism**, below), so nothing but the rule stops it triggering the
-  sweep some other way. The rule names `land.mjs` because that module's own allowlist permits the
+  ATC does (**Credential minimalism**, below), so nothing but the rule stops it starting the
+  runway some other way. The rule names `land.mjs` because that module's own allowlist permits the
   one dispatch and no other write.
 
 The owner can tell the controller to hold a pull request back. That is an instruction to the
@@ -1861,16 +1861,25 @@ deciding what is next. It is the harness's product outline, and moves with this 
   Section 8's other half, R4's OQ-to-ST mapping and retiring the moved stories in
   tower-workshop-paths, is that repository's planning session's.
 - **Steward's words are defined in one glossary, `glossary.md`** (decided 2026-10-12 by the owner,
-  with the planning session, in the documents review). Each word has one meaning; a word used in
-  several senses today lists them. Verbs follow one rule, one verb per actor and one actor per
-  verb, and steward's own mechanisms take aviation names (the owner's choice, over a house
-  steward's and nautical words, and over plain words with no theme). The glossary's "Proposed
-  renames" holds what is agreed, proposed and open, and each rename is applied across the files
-  by a later pull request: so far agreed, ATC for the dispatch scripts, the controller for the
-  dispatcher session, the pilot (`land.mjs`) that requests landing, a rotation for one run of the
-  review side (ST-25's pass), and the crew for the people steward serves. Dated records keep "the
-  owner". The same day the owner widened who steward is for, to any trusted contributor to a
-  project (`harness-outline.md`, "Who it is for").
+  with the planning session, in the documents review). The glossary is written for people: plain
+  definitions, without the reasoning, which is recorded here. Each word has one meaning. Verbs
+  follow one rule, one verb per actor and one actor per verb, so that "who did this?" has one
+  answer, which rules such as "only the runway merges" depend on. Steward's own mechanisms take
+  aviation names, which give "land" a setting where it makes sense: ATC (the dispatch scripts),
+  the controller (the dispatcher session), the pilot (`land.mjs`, which requests landing), the
+  runway (`land-approved.yml`, the sweep), a rotation (one run of the review side, ST-25's pass),
+  a flight and its flight plan, clearance, holding, a go-around, grounded, a ground stop, the
+  checklist, the pre-flight check, turnaround, inspection and the flight log. GitHub's and git's
+  words, and names fixed in code or the verdict marker, are kept. Considered and not chosen: plain
+  words with no theme, which leave "run", "check" and "ready" needing a qualifier everywhere; a
+  metaphor with no rule behind it; a house steward's words (rounds, house rules), which give
+  "land" no sense; and nautical words (a watch, a berth, a pilot bringing a ship in), which make
+  most readers picture aircraft when they read "land". The people steward serves are the crew;
+  two alternatives, maintainer and operator, are kept under the glossary's "Proposed names", the
+  only names not decided. Dated records keep their words, "the owner" among them, and older text
+  takes the new words as it is touched (`AGENTS.md`, "Every pull request"). The same day the owner
+  widened who steward is for, to any trusted contributor to a project (`harness-outline.md`, "Who
+  it is for").
 - **The controller works as a rotation will** (decided 2026-10-12 by the owner, from the notes the
   dispatcher session made on its own instructions, taken one by one in the documents review). The
   dispatcher session is renamed the controller, and its instructions move to `controller.md`
@@ -1906,8 +1915,8 @@ deciding what is next. It is the harness's product outline, and moves with this 
     `review.mjs` installs in the reviewer's own checkout, without credentials (`install.mjs`).
     An install in the controller's worktree would run the package's scripts with the credential
     of whoever runs it, for nothing it uses.
-  - **"Rotation", not "sweep", for a run over every open pull request**, since the sweep is
-    `land-approved.yml` (`glossary.md`).
+  - **"Rotation", not "sweep", for a run over every open pull request**, since the sweep, now
+    the runway, is `land-approved.yml` (`glossary.md`).
 
 ### The move, in order
 

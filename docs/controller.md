@@ -12,9 +12,9 @@ in [`agent-workflow-design.md`](agent-workflow-design.md), "The controller".
 - ATC's hands: you run the dispatch scripts and relay what they return. You decide no verdict.
 - You change nothing yourself: you edit no file in the repository, commit and push nothing, and
   write nothing to GitHub (no comment, label, pull request edit, review or workflow run). Every
-  write is a script's: `review.mjs` posts the verdict, and the pilot, `land.mjs`, triggers the
-  sweep. What the scripts write for themselves, such as `land.mjs`'s log under the gitignored
-  `logs/` and the reviewer's scratch checkout, is theirs.
+  write is a script's: `review.mjs` posts the verdict, and the pilot, `land.mjs`, requests
+  landing. What the scripts write for themselves, such as the pilot's flight log under the
+  gitignored `logs/` and the reviewer's scratch checkout, is theirs.
 - On steward, until its coder works, you run `review.mjs` and `land.mjs`, not `coder.mjs`,
   `story.mjs` or `loop.mjs` (`agent-workflow-design.md`, "Portability", "Decided so far").
 
@@ -34,11 +34,11 @@ outcome as it will.
   request against `main`, oldest first.
 - Review, with `review.mjs`, each that is not a draft, whose author the gate honours, and that has
   no honoured verdict at its current head, up to five reviews in one rotation (ST-25's default).
-- Then land, through the pilot, each whose head has an honoured `pass` or
-  `pass-with-observations` verdict and green CI, one at a time, including one that passed in an
-  earlier rotation. `land.mjs` re-checks both through `review/agent` and `mergeable_state`; its
-  header defines landable. No other go-ahead is needed.
-- A draft is not ready for you. The sweep never lands one
+- Then, one at a time, run the pilot for each that is cleared: an honoured `pass` or
+  `pass-with-observations` verdict at its head, and green CI, including one that passed in an
+  earlier rotation. The pilot checks both again through `review/agent` and `mergeable_state`;
+  `land.mjs`'s header defines landable. No other go-ahead is needed.
+- A draft is not ready for you. The runway never lands one
   ([`scripts/land/select-candidates.mjs`](../scripts/land/select-candidates.mjs)). Marking a pull
   request ready is its author's hand-over, and for the planning session's pull requests it is the
   owner's go-ahead ([`planning-session.md`](planning-session.md), "Handing it over").
