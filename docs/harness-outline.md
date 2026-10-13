@@ -48,6 +48,13 @@ loop", stated on 2026-10-07; the last two are unchanged.
 **The owner, across the owner's own projects.** The repository is public (R8 in the design
 document), so some setup help is worth exposing, but other users are not the main concern.
 
+**Revised 2026-10-12 by the owner: any trusted contributor to a project can use steward**, not
+only its owner, so steward's design names the people it serves by their role, the crew
+(`docs/glossary.md`), rather than as one owner. The code already works this way: the gate honours
+any author whose association is `OWNER`, `MEMBER` or `COLLABORATOR` (`HONOURED_ASSOCIATIONS`,
+`scripts/land/check-author.mjs`). Unchanged: the projects are the owner's own, and other people's
+projects are not the main concern.
+
 ## Why
 
 **To keep the owner on decisions and ideas, not on code and on reviewing individual tests.** Even
