@@ -49,10 +49,12 @@ Decided by the owner on 2026-09-28.
 - **Mark it ready only when the owner says so**, in the conversation with this session. Marking a
   pull request ready is the owner's go-ahead for it to be reviewed and landed. The landing sweep
   never lands a draft (`scripts/land/select-candidates.mjs`).
-- The dispatcher session reviews and lands it once it is ready
-  ([`docs/dispatcher-session.md`](dispatcher-session.md)). Tell that session when the owner asks
-  you to have a pull request reviewed.
-- If its review blocks, fix the story on the same branch. Its new head is reviewed afresh.
+- The controller reviews and lands it once it is ready ([`docs/controller.md`](controller.md)).
+  When the owner asks you to have a pull request reviewed, ask the controller for a rotation for
+  it. It reports the result back to you.
+- If its review blocks, fix the story on the same branch. Its new head is reviewed afresh. A block
+  on the pull request's description alone is fixed by editing the description, then asking the
+  controller for a `--rereview`, naming the finding (`docs/controller.md`, "Re-review").
 
 ## Stopped stories
 

@@ -264,8 +264,8 @@ access to the remote. Holding both a push and the means to clear the gate it
 feeds was the gap OQ-63 closed: with the owner's `repo`-scoped token, a coder
 could set `review/agent` to `success` on its own head and then dispatch
 `land-approved.yml`, breaking two rules that nothing but prose enforced: a
-session does not clear its own gate, and no session but the dispatcher session
-running `land.mjs` triggers the sweep (`AGENTS.md`, "Every
+session does not clear its own gate, and no session but the controller running
+the pilot, `land.mjs`, triggers the sweep (`AGENTS.md`, "Every
 session").
 
 **The coder holds no credential capable of a commit status, a workflow
@@ -288,7 +288,7 @@ the owner's credential. What keeps the thing that opens the PR from clearing the
 gate is not that credential's scope: `review/agent` is derived by
 `review-gate.yml` from the reviewer's verdict, and the runner triggers the sweep
 only through `land.mjs` (`docs/agent-workflow-design.md`, "Credential
-minimalism" and "The dispatcher session"). This is the same shape as "Recording
+minimalism" and "The controller"). This is the same shape as "Recording
 a verdict" above: the party with the judgement (or, here, the text) is not the
 party with the credential.
 

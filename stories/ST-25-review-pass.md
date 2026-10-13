@@ -12,7 +12,7 @@ blocked: null
 
 As the owner, I want one command that runs a review-and-land pass: it decides which open pull
 requests get a reviewer, spawns them up to a cap, lands what has passed and is safe to merge, and
-exits, carrying nothing forward, so that the dispatcher session (and later any other trigger) can
+exits, carrying nothing forward, so that the controller (and later any other trigger) can
 start the review side with one command and each run uses steward as it is on `main`.
 
 ## Acceptance criteria
@@ -44,10 +44,13 @@ start the review side with one command and each run uses steward as it is on `ma
       and the refusals in AC-2.
 - [ ] **AC-7** — The `**Planned (ST-25)**` marker in `docs/agent-workflow-design.md` loses
       `ST-25`, and the passage is corrected wherever what was built differs.
+- [ ] **AC-8** — `docs/controller.md` tells the controller to run a rotation with this command, in
+      place of running its steps by hand, and drops each instruction the command now carries out
+      itself; `docs/agent-workflow-design.md`, "The controller", is corrected to match.
 
 ## Out of scope
 
-- What starts a pass: the dispatcher session, for now (`docs/harness-outline.md`, "Loops").
+- What starts a pass: the controller, for now (`docs/harness-outline.md`, "Loops").
   A scheduled task or another trigger is later.
 - Raising problems a pass meets as GitHub issues, and the stop measure shared with the coder.
 - Running passes on more than one machine, and a review claim.
