@@ -806,8 +806,8 @@ it was obscured the real mechanism:
 - **`review/agent` is posted by `review-gate.yml`, not by the dispatcher** — the workflow reads the
   marker comment and derives the status. So the dispatcher's output is a *comment*, and enforcement
   is a GitHub Actions job it does not control. That split is the guarantee, and it already exists.
-- **Triggering `land-approved.yml` is the owner's, or `land.mjs`'s when the dispatcher runs it,
-  whether the dispatcher is ATC or the controller; no other agent session does.**
+- **Triggering `land-approved.yml` is the owner's, or the pilot's, `land.mjs`, when ATC or the
+  controller runs it; no other agent session does.**
   Enforced as a tested prohibition in OQ-68 and OQ-48 rather than by scope on a token. For the
   controller it is a rule, not a mechanism (**The controller**, above). `land.mjs`
   (OQ-50) is the one module that triggers it. Its own allowlist permits that one dispatch (`main`,

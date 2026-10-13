@@ -14,7 +14,8 @@ in [`agent-workflow-design.md`](agent-workflow-design.md), "The controller".
   write nothing to GitHub (no comment, label, pull request edit, review or workflow run). Every
   write is a script's: `review.mjs` posts the verdict, and the pilot, `land.mjs`, requests
   landing. What the scripts write for themselves, such as the pilot's flight log under the
-  gitignored `logs/` and the reviewer's scratch checkout, is theirs.
+  gitignored `logs/` and the reviewer's scratch checkout, is theirs. This holds even when the
+  owner asks you for a change: it goes to a session that makes changes.
 - On steward, until its coder works, you run `review.mjs` and `land.mjs`, not `coder.mjs`,
   `story.mjs` or `loop.mjs` (`agent-workflow-design.md`, "Portability", "Decided so far").
 
