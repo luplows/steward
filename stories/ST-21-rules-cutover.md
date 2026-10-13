@@ -40,7 +40,8 @@ only.
       every section, applied or not, with the reason for each not applied, before the marker
       line. The marker line is unchanged, so `review-gate.yml`, `apply-review-blocked.mjs` and
       `review-verdicts.mjs` read it as before.
-- [ ] **AC-5** — `REVIEW.md` is converted into the form ST-20 parses, holding rules only, in these
+- [ ] **AC-5** — `REVIEW.md` is converted into the form ST-20 parses, holding rules only and no
+      history (`docs/agent-workflow-design.md`, "`REVIEW.md` is concise instructions"), in these
       sections, in this order, each numbering its items from 1. Rules kept are worded as today
       except where this says otherwise:
       1. "Reading the pull request body" (no condition): today's opening "Reading the PR body"

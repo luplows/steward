@@ -973,6 +973,10 @@ Properties worth preserving:
   someone needs to hear about it.
 - **Never a label as the verdict.** Labels don't attach to a SHA, so an approval survives later
   pushes. Derive labels *from* the status if wanted.
+- **`verdict=fail` is still accepted as a deprecated spelling of `block`**, because an
+  unrecognised marker is ignored, which would leave a pull request pending for good with a
+  valid-looking verdict on it: a worse failure than honouring an old name. (Moved from `REVIEW.md`
+  on 2026-10-13.)
 
 ### Merging
 
@@ -1942,6 +1946,13 @@ deciding what is next. It is the harness's product outline, and moves with this 
     (`harness-outline.md`, "Who it is for"). Dated records keep "the owner". Considered and not
     chosen: deciding rule by rule, which was the planning session's caution while the glossary
     was written. In this repository the crew is the owner alone, so nothing changes in practice.
+- **`REVIEW.md` is concise instructions for the coder and the reviewer, without history**
+  (decided 2026-10-13 by the owner, in the documents review, while tower-workshop-paths' leftovers
+  were taken out of it). How a rule or a mechanism came about is recorded in this document, not
+  in the checklist, which the reviewer reads in full on every review. This extends
+  `harness-outline.md`, "The rules file's shape" ("The file holds rules only"). Considered and not
+  chosen: leaving the history in the sections ST-21 moves to `docs/review-mechanics.md` until it
+  moves them.
 
 ### The move, in order
 

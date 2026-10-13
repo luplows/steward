@@ -31,7 +31,7 @@ A section that restates the PR title in other words is also unfilled.
 3. **Docs check** records a real outcome for `README.md` — what changed, or
    why nothing needed to.
 
-<!-- Item 4, about tower-workshop-paths' `Open-Questions.md`, was removed on 2026-10-13. -->
+<!-- Item 4 is not used. -->
 
 5. A new story takes the next unused `ST-<n>`, checked as `stories/README.md`,
    "Numbering", says: against `stories/` (`done/` and `retired/` included) and
@@ -42,12 +42,12 @@ A section that restates the PR title in other words is also unfilled.
 
 ## PRs that change app code
 
-<!-- Item 8, tower-workshop-paths' own testing item, was removed at the bootstrap. -->
+<!-- Item 8 is not used. -->
 
 9. No test was skipped, disabled, quarantined, weakened, or deleted in order to
    make something pass.
 
-<!-- Item 10, tower-workshop-paths' screenshot-baseline item, was removed at the bootstrap. -->
+<!-- Item 10 is not used. -->
 
 11. No coverage-percentage tooling is added. Its absence is deliberate; see
     `AGENTS.md`.
@@ -89,7 +89,7 @@ standard it was supposed to meet.
 18. **Containment** — nothing in the diff falls under the story's
     **Out of scope**, and nothing implements a decision the story left open.
     CI enforces the `stories/` part of this mechanically
-    (`scripts/dispatch/story-containment.mjs`, OQ-82): the only changes a
+    (`scripts/dispatch/story-containment.mjs`): the only changes a
     story's own pull request may make under `stories/` are that story's move
     into `stories/done/`, its acceptance-criterion lines ticking, and its
     `blocked:` edit. The reviewer's judgement is still needed for the rest —
@@ -157,7 +157,7 @@ stays pending and cannot merge — forgetting to review fails safe.
 
 ### Recording a verdict
 
-The reviewer decides the verdict. **Whoever ran the reviewer records it**, as
+The reviewer decides the verdict. **Whoever ran the reviewer posts it**, as
 one ordinary PR comment naming the `REVIEW.md` item number each finding comes
 from, ending with exactly one marker line:
 
@@ -169,10 +169,7 @@ from, ending with exactly one marker line:
 
 That split is deliberate: the reviewer is handed no GitHub credential and posts
 nothing. It returns its verdict and findings, and ATC posts them
-(`review.mjs`), run by the controller until ATC runs on a trigger of its own. A
-reviewer that had to post its own verdict needed credentials, and hunting for
-them is what turned the old reviewer prompt into something a reviewer session
-correctly refused as an injection attack.
+(`review.mjs`), run by the controller until ATC runs on a trigger of its own.
 
 ### The three verdicts
 
@@ -182,29 +179,19 @@ correctly refused as an injection attack.
 | `pass-with-observations` | No applicable item fails, but real findings were surfaced and deliberately not blocked on. They go in the comment. | `success` |
 | `block` | At least one applicable item fails. | `failure` |
 
-The middle state exists because reviewers here kept producing findings that fit
-nowhere in a binary — a tool named as the primary method that did not exist in
-the container; an undescribed rider in a diff. Both were right to surface and
-arguably right not to block. Without a state for them, the verdict record
-understates what review catches, and any measurement built on it (OQ-47) is
-meaningless.
-
-`verdict=fail` is still accepted as a deprecated spelling of `block`. It is kept
-only because an unrecognised marker is *ignored* — which leaves the PR pending
-forever with a valid-looking verdict sitting on it, a worse failure than
-honouring an old name. Write `block` in new reviews.
+`verdict=fail` is accepted as a deprecated spelling of `block`. Write `block`.
 
 ### When the reviewer returns no verdict
 
 A reviewer that is not in a position to review at all — the head moved under it,
 the diff will not resolve, the story is missing when there should be one —
-returns `"verdict": null` rather than guessing. **Record nothing.** Post no
+returns `"verdict": null` rather than guessing. **Post nothing**: no
 marker. The PR stays pending and cannot merge.
 
 That is the intended outcome, not a gap to paper over. A PR stuck pending is a
 visible problem someone picks up; a `pass` recorded by a reviewer that was not
 in a position to give one is an invisible one. Where the cause is fixable —
-usually a new head to review against — run the reviewer again and record
+usually a new head to review against — run the reviewer again and post
 whatever verdict it returns then.
 
 ### What the workflow enforces
@@ -212,9 +199,7 @@ whatever verdict it returns then.
 Getting these wrong means the marker is silently ignored rather than obeyed.
 
 1. **`head` must be the full 40-character SHA of the commit reviewed**, not an
-   abbreviation. Where you get it depends on where you are running — every
-   command in this project is qualified by that, because it has twice shipped
-   documentation instructing agents to do impossible things:
+   abbreviation. Where you get it depends on where you are running:
 
    | Where | Command |
    |---|---|
@@ -230,14 +215,14 @@ Getting these wrong means the marker is silently ignored rather than obeyed.
    code is fixed by a commit that addresses it, which resets the gate to
    pending. **A block on the PR description alone** (items 2, 3, 7 or 12, with
    nothing in the diff to change) is fixed by editing the description, then
-   running a fresh review of the **same head** and recording its verdict. The
+   running a fresh review of the **same head** and posting its verdict. The
    description is not part of the head, so a commit would change nothing it
    found. Either way it is a new review, never a waved-through old one, and
    **the block still counts toward the round bound** like any other: the
    bound counts `block` verdicts and makes no exception for what they were
-   about. (The bound is three blocking verdicts. OQ-48 sets it; this is a
-   restatement for the reader and must not drift from it.) First used on
-   tower-workshop-paths PR 133, where round 2 blocked on a missing Docs check.
+   about. (The bound is three blocking verdicts. This restates `MAX_ROUNDS` in
+   `scripts/dispatch/story.mjs` and `ROUND_BOUND` in
+   `scripts/land/apply-review-blocked.mjs`, and must not drift from them.)
 4. **The comment must come from an account with write access.** Anyone can
    comment on a public repository; a marker from anyone else is ignored.
 
@@ -256,13 +241,7 @@ The prompt a coder session is spawned with lives in
 [`.claude/prompts/coder.md`](.claude/prompts/coder.md). The coder commits and
 does not push: the dispatcher pushes its branch after the session
 (`pushBranch` in `scripts/dispatch/coder.mjs`), so a model session has no write
-access to the remote. Holding both a push and the means to clear the gate it
-feeds was the gap OQ-63 closed: with the owner's `repo`-scoped token, a coder
-could set `review/agent` to `success` on its own head and then dispatch
-`land-approved.yml`, breaking two rules that nothing but prose enforced: a
-session does not clear its own gate, and no session but the controller running
-the pilot, `land.mjs`, triggers the sweep (`AGENTS.md`, "Every
-session").
+access to the remote.
 
 **The coder holds no credential capable of a commit status, a workflow
 dispatch, or a pull-request write.** `scripts/dispatch/coder-env.mjs`
@@ -271,11 +250,11 @@ its process environment and redirects `GH_CONFIG_DIR` to an empty directory,
 so nothing reachable from the session — `gh` directly, `gh` spawned from inside
 `node -e` via `child_process`, or an `npm`/`npx` script doing either — can
 authenticate as anything more than git over SSH, which none of that touches
-(removing that is OQ-73's). `gh` is absent from `coderAllowedTools`, and
+(removing that is ST-6's). `gh` is absent from `coderAllowedTools`, and
 `git push` is not allowed and is denied in `CODER_DISALLOWED_TOOLS`.
 
-**Opening the PR moves to whoever ran the coder.** The coder emits the PR title
-and body — the `pull_request_template.md` sections it always filled in — under
+**Whoever ran the coder opens the PR.** The coder emits the PR title
+and body — the `pull_request_template.md` sections — under
 `## PR title` and `## PR body` at the end of its final report, then
 `## Open as` and a line that is only `draft` or `ready`. Nothing may follow
 it, so that `parsePrBlock` in `scripts/dispatch/outcome.mjs` can read it;
@@ -288,10 +267,8 @@ minimalism" and "The controller"). This is the same shape as "Recording
 a verdict" above: the party with the judgement (or, here, the text) is not the
 party with the credential.
 
-**Answering a review finding the coder disagrees with** no longer means
-replying on the PR — AC-3 of OQ-63 removes commenting from the coder's reach
-along with everything else. The coder states its reasoning in its final report
-instead, and the runner posts it as an ordinary PR comment, the same relay this
-section already uses for the verdict.
+**To answer a review finding it disagrees with**, the coder states its
+reasoning in its final report, and the runner posts it as an ordinary PR
+comment. The coder cannot comment on the PR itself.
 
 
