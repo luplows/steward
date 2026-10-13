@@ -1870,7 +1870,10 @@ deciding what is next. It is the harness's product outline, and moves with this 
   runway (`land-approved.yml`, the sweep), a rotation (one run of the review side, ST-25's pass),
   a flight and its flight plan, clearance, holding, a go-around, grounded, a ground stop, the
   checklist, the pre-flight check, turnaround, inspection and the flight log. GitHub's and git's
-  words, and names fixed in code or the verdict marker, are kept. Considered and not chosen: plain
+  words, and names fixed in code or the verdict marker, are kept. "Flight" is used in design
+  documents and the glossary, while rules and instructions keep "pull request", which every agent
+  reads without a definition (owner, the same day; considered and not chosen: "flight" for every
+  pull request steward reviews or lands, wherever it is written). Considered and not chosen: plain
   words with no theme, which leave "run", "check" and "ready" needing a qualifier everywhere; a
   metaphor with no rule behind it; a house steward's words (rounds, house rules), which give
   "land" no sense; and nautical words (a watch, a berth, a pilot bringing a ship in), which make
