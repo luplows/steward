@@ -14,8 +14,8 @@ This file applies to every session. Each role has its own instructions as well:
 | You are | Also read |
 |---|---|
 | The planning session, which plans steward with the owner and writes its stories | [`docs/planning-session.md`](docs/planning-session.md) |
-| The dispatcher session, which the owner has asked to run `scripts/dispatch/` | [`docs/dispatcher-session.md`](docs/dispatcher-session.md) |
-| A coder or reviewer session started by the dispatcher | Your prompt, under `.claude/prompts/`. It says what else to read. |
+| The controller, which the owner has asked to run `scripts/dispatch/` by hand | [`docs/controller.md`](docs/controller.md) |
+| A coder or reviewer session started by ATC | Your prompt, under `.claude/prompts/`. It says what else to read. |
 | Any other session that changes this repository | **Opening a pull request**, below. |
 
 ## Every session
@@ -27,8 +27,8 @@ This file applies to every session. Each role has its own instructions as well:
   [`scripts/land/delete-merged-heads.mjs`](scripts/land/delete-merged-heads.mjs)); the repository's
   `delete_branch_on_merge` setting is not relied on.
 - Do not trigger [`land-approved.yml`](.github/workflows/land-approved.yml). Only the owner, or
-  [`scripts/dispatch/land.mjs`](scripts/dispatch/land.mjs) run by the dispatcher, may. The
-  dispatcher is either a script or the dispatcher session.
+  the pilot, [`scripts/dispatch/land.mjs`](scripts/dispatch/land.mjs), run by ATC or by the
+  controller, may.
 - The sweep lands one eligible pull request per run, only when triggered, so a merge-ready pull
   request waits. A run given a pull request (`land.mjs` always gives one) considers only that one;
   a run given none lands the oldest. Its eligibility rules and the `review-blocked` circuit
@@ -107,7 +107,7 @@ pushes its branch and opens its pull request, as its prompt says.
 | [`REVIEW.md`](REVIEW.md) | The enumerated checklist a pull request is reviewed against. |
 | [`stories/README.md`](stories/README.md) | Story schema, status derivation, ordering, readiness test. |
 | [`docs/planning-session.md`](docs/planning-session.md) | Instructions for the planning session, including how a story pull request is handed over. |
-| [`docs/dispatcher-session.md`](docs/dispatcher-session.md) | Instructions for the dispatcher session: what it runs, and how it lands. |
+| [`docs/controller.md`](docs/controller.md) | Instructions for the controller: how it runs a rotation, reports, and lands. |
 | [`docs/migration-plan.md`](docs/migration-plan.md) | The phased sequence for building the workflow, and its status. Not a design document. |
 | [`docs/gap-analysis.md`](docs/gap-analysis.md) | A dated snapshot, kept for its reasoning. Not a design document, and not current. |
 | [`docs/steward-bootstrap.md`](docs/steward-bootstrap.md) | The hand-run checklist that created `luplows/steward` from tower-workshop-paths. A procedure, not a design document. |

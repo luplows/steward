@@ -52,8 +52,8 @@ when they read "land".
 - **release review** — the periodic walkthrough of what has landed, which ends in a release tag
   (`docs/agent-workflow-design.md`, "The release review"). Called Session B until 2026-10-12. Not
   yet run.
-- **dispatcher session** — the session the crew has asked to run `scripts/dispatch/` by hand
-  (`docs/dispatcher-session.md`). Proposed: **controller**.
+- **controller** — the session the owner has asked to run `scripts/dispatch/` by hand, doing
+  ATC's work (`docs/controller.md`). Called the dispatcher session until 2026-10-12.
 - **coder** — a session started by the dispatcher to implement a unit. It commits; the dispatcher
   pushes its branch and opens its pull request.
 - **reviewer** — a session started by the dispatcher to judge one pull request at one head. It
@@ -68,7 +68,7 @@ when they read "land".
   its own work is reviewed and landed through its own gate (`AGENTS.md`).
 - **dispatcher** — two senses today: the dispatch scripts, which hold no model
   (`docs/agent-workflow-design.md`, "The dispatcher is a script"); and, in "the dispatcher
-  pushes", whichever runs them, the scripts or the dispatcher session. The outline also calls the
+  pushes", whichever runs them, the scripts or the controller. The outline also calls the
   review side "a review-and-land dispatcher". Proposed: **ATC**.
 - **lander** — `scripts/dispatch/land.mjs`, which asks the sweep to merge one pull request once it
   is landable, and never merges itself. Proposed: **pilot**.
@@ -185,7 +185,8 @@ Who does each, today.
 
 Each row is a proposal until a pull request applies it across the files. **Agreed** means the
 owner agreed the word on 2026-10-12; **proposed** means the planning session put it forward the
-same day and it is not yet confirmed; **open** means not decided. New text uses an agreed word
+same day and it is not yet confirmed; **open** means not decided; **applied** means a pull
+request has made the rename across current text. New text uses an agreed word
 from the day it is agreed (`AGENTS.md`, "Every pull request"; owner, 2026-10-12), so the documents
 align as they are touched.
 
@@ -194,7 +195,7 @@ align as they are touched.
 | owner, as a role | **crew** | agreed | Dated records keep "owner". "Maintainer" documented as the plain alternative. Applying it is also a rule change wherever a rule names the owner (for example, who may run the sweep by hand), to be decided rule by rule. |
 | owner, as whoever runs steward | **crew** | agreed | "Operator" documented, for rules about one machine's credential. |
 | dispatcher (the scripts) | **ATC** (air traffic control) | agreed | Decides which flights get a reviewer, starts sessions, posts verdicts, and has the pilot request landing. |
-| dispatcher session | **controller** | agreed | The session that works ATC by hand. |
+| dispatcher session | **controller** | applied | The session that works ATC by hand. Applied across current text, with `docs/dispatcher-session.md` renamed `docs/controller.md`; dated records keep "dispatcher session". |
 | lander, `land.mjs` | **pilot** | agreed | The pilot **requests landing** for one flight. |
 | pass, the review-and-land run | **rotation** | agreed | Frees "pass" for the verdict and plain English. |
 | the sweep, `land-approved.yml` | **runway** | proposed | One landing at a time; "only the runway merges". |

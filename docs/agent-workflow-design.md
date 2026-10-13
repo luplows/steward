@@ -370,8 +370,8 @@ deleted rather than relaxed.
 6. Dispatcher posts the verdict as a marker comment, and `review-gate.yml` derives
    `review/agent` = `success` on the head SHA from it.
 7. The landing sweep merges it (squash) once `mergeable_state` is `clean`. The owner
-   triggers the sweep, or the owner or the dispatcher session (**The dispatcher session**, below)
-   runs `scripts/dispatch/land.mjs` (OQ-50), which waits until the PR is landable, triggers it and
+   triggers the sweep, or the owner or the controller (**The controller**, below) runs
+   `scripts/dispatch/land.mjs` (OQ-50), which waits until the PR is landable, triggers it and
    waits for the merge. `story.mjs` calls `land.mjs`.
    The loop starts the next story only once this one has merged, or stopped with its stop fully
    recorded (OQ-86); anything else stops the loop. So every story it dispatches runs from a `main`
@@ -478,16 +478,19 @@ That is not cryptographic independence — closing that properly still needs a s
 identity — but "read the script and see it cannot fabricate" is a real improvement over "trust the
 orchestrating agent."
 
-### The dispatcher session
+### The controller
 
-Decided 2026-09-28 by the owner. Until the loop runs unattended (OQ-86), the dispatch scripts are
-run by hand, from a Claude Code session the owner has asked to act as dispatcher. That session
-runs `coder.mjs`, `review.mjs`, `land.mjs` and `story.mjs`, and relays what they return. It is the
-dispatcher's hands, not a coder or a reviewer: it writes no code for a story and decides no
-verdict.
+Decided 2026-09-28 by the owner, in tower-workshop-paths, as the dispatcher session; named the
+controller on 2026-10-12 (`glossary.md`). Until ATC runs rotations on a trigger of its own, the
+dispatch scripts are run by hand from an agent session the owner has asked to act as controller,
+which relays what they return. It is ATC's hands, not a coder or a reviewer: it changes nothing
+itself and decides no verdict. On steward it runs `review.mjs` and `land.mjs`, the pilot
+("Portability", "Decided so far"); in tower-workshop-paths it also ran `coder.mjs` and `story.mjs`.
+It works as a rotation will: one pull request's outcome does not stop the others, and only a
+failure of the rotation itself stops it (owner, 2026-10-12; `docs/controller.md`).
 
 It runs them from a worktree of its own at a detached `origin/main`, never from the repository's
-main checkout (decided 2026-10-06 by the owner, replacing the main checkout). Before each dispatch
+main checkout (decided 2026-10-06 by the owner, replacing the main checkout). Before each rotation
 it fetches `origin` and checks out `origin/main`, detached, as the loop's `updateCheckout` does.
 The scripts take the project from the working directory and their prompts from the checkout they
 are loaded from (`ENGINE_ROOT`, `coder.mjs`; OQ-123, OQ-130), and the session runs them in that
@@ -495,26 +498,26 @@ worktree, so both are what has landed, and the main checkout is left free for wh
 working. This is a rule, not a mechanism: only the loop's `main` refuses a checkout with a branch
 checked out (`requireOwnWorktree`, `scripts/dispatch/loop.mjs`).
 
-**It may land, and only through `land.mjs`.** It runs `land.mjs`, directly or through `story.mjs`,
-for a pull request whose head has an honoured `pass` or `pass-with-observations` verdict and green
-CI. It never runs `gh workflow run land-approved.yml`, and never merges through the API or any
-other way. No other agent session triggers the sweep. `AGENTS.md`, "Every session", and
-`docs/dispatcher-session.md` state the rule; this section is its rationale.
+**It may land, and only through the pilot.** It runs `land.mjs` for a pull request whose head has
+an honoured `pass` or `pass-with-observations` verdict and green CI, with no further go-ahead
+(owner, 2026-10-12). It never runs `gh workflow run land-approved.yml`, and never merges through
+the API or any other way. No other agent session triggers the sweep. `AGENTS.md`, "Every
+session", and `docs/controller.md` state the rule; this section is its rationale.
 
 Why this is safe enough:
 
 - **`land.mjs` decides nothing a script would not.** It triggers the sweep only once
   `review/agent` is `success` and `mergeable_state` is `clean` on the head, and the sweep re-checks
-  both. The session can choose *when* to land, never *whether* a head passed: the verdict is the
+  both. The controller can choose *when* to land, never *whether* a head passed: the verdict is the
   reviewer's, and `review/agent` is posted by `review-gate.yml`.
-- **It is a rule, not a mechanism.** The session holds the owner's credential, as the script
-  dispatcher does (**Credential minimalism**, below), so nothing but the rule stops it triggering
-  the sweep some other way. The rule names `land.mjs` because that module's own allowlist permits
-  the one dispatch and no other write.
+- **It is a rule, not a mechanism.** The controller holds the credential of whoever runs it, as
+  ATC does (**Credential minimalism**, below), so nothing but the rule stops it triggering the
+  sweep some other way. The rule names `land.mjs` because that module's own allowlist permits the
+  one dispatch and no other write.
 
-The owner can require a go-ahead before the session lands particular pull requests, for example
-ones that change `AGENTS.md`, `CLAUDE.md`, `REVIEW.md`, `.github/`, `.claude/` or this document.
-That is an instruction to the session, lifted when the owner says so, and not part of this design.
+The owner can tell the controller to hold a pull request back. That is an instruction to the
+session, not part of this design: a pull request whose head passed review lands without a
+go-ahead of its own (owner, 2026-10-12).
 
 ### Running unattended
 
@@ -534,8 +537,8 @@ without a dispatcher session in between.
   `scripts/dispatch/loop.mjs`, OQ-109). Between stories `updateCheckout` fetches `origin`, stops with
   status `dirty` if the worktree has anything uncommitted, and otherwise checks out `origin/main`,
   detached. `main` refuses, before fetching or dispatching anything, to run from a checkout that has
-  a branch checked out (`requireOwnWorktree`). A dispatcher session's hand-runs also come from a
-  worktree of their own, by rule rather than by that check (**The dispatcher session**, above).
+  a branch checked out (`requireOwnWorktree`). The controller's hand-runs also come from a worktree
+  of their own, by rule rather than by that check (**The controller**, above).
 - Stuck stories reach the owner as GitHub issues, one per story (OQ-112), so a
   leftover on one machine is seen from any (decided 2026-10-01 by the owner, who runs the loop on
   two machines). An issue names the machine by a label the owner sets, never its hostname, since
@@ -768,7 +771,7 @@ against this repository the same way the reviewer's gap was, by probing with del
 payloads and getting `422` (authorised, only validation failed) rather than `403` (denied). Both of
 the rules this workflow is built on — *you do not clear your own gate*, *triggering the sweep is
 the owner's* — were held by `CLAUDE.md`'s prose and nothing else. (The second has since been
-widened to the dispatcher session running `land.mjs`; see **The dispatcher session**.)
+widened to the controller running the pilot, `land.mjs`; see **The controller**.)
 
 The coder no longer pushes (OQ-84). The dispatcher pushes its branch, and the coder's allowlist
 grants no `git push` and denies it outright. That removes the reason given above for treating the
@@ -804,9 +807,9 @@ it was obscured the real mechanism:
   marker comment and derives the status. So the dispatcher's output is a *comment*, and enforcement
   is a GitHub Actions job it does not control. That split is the guarantee, and it already exists.
 - **Triggering `land-approved.yml` is the owner's, or `land.mjs`'s when the dispatcher runs it,
-  whether the dispatcher is a script or the dispatcher session; no other agent session does.**
+  whether the dispatcher is ATC or the controller; no other agent session does.**
   Enforced as a tested prohibition in OQ-68 and OQ-48 rather than by scope on a token. For the
-  dispatcher session it is a rule, not a mechanism (**The dispatcher session**, above). `land.mjs`
+  controller it is a rule, not a mechanism (**The controller**, above). `land.mjs`
   (OQ-50) is the one module that triggers it. Its own allowlist permits that one dispatch (`main`,
   with the one input `pr` naming its pull request) and no other write, and neither `coder.mjs` nor `review.mjs` imports it. `github.mjs`'s prohibition stays as it is.
 
@@ -1723,7 +1726,7 @@ deciding what is next. It is the harness's product outline, and moves with this 
   section 8): the prompts' slot, closing `REVIEW.md`'s gaps (dropped on 2026-10-11, R1) and `init`
   now come after the coder's stories. Until steward's review loop is built, its reviews are
   started by a dispatcher session running `review.mjs` and `land.mjs`, as this repository's are
-  (**The dispatcher session**, above; decided the same day by the owner).
+  (**The controller**, above; decided the same day by the owner).
 - **Which stories and paths move, re-sorted against the outline** (decided 2026-10-10 by the
   owner, from the planning session's proposal):
   - **Steward's own repository is a project that uses steward, and it and this repository each
@@ -1796,7 +1799,7 @@ deciding what is next. It is the harness's product outline, and moves with this 
   stories get its coder working": the review side's stories come before the coder's. Until steward
   has a coder, each story is built in one of the owner's interactive sessions, or by an agent that
   session spawns with a prompt written there. A new dispatcher session, steward's own, reviews and
-  lands steward's pull requests (**The dispatcher session**, above). Considered and not chosen:
+  lands steward's pull requests (**The controller**, above). Considered and not chosen:
   holding the stories until the coder works, which the order makes circular; and running this
   engine's `story.mjs` coder on them, against the entry above. **Revised 2026-10-12 by the owner:
   a story carries `blocked:` only where something stops it, not because steward has no coder.**
@@ -1839,13 +1842,14 @@ deciding what is next. It is the harness's product outline, and moves with this 
   theirs from their prompts, and `coder.md` reads `AGENTS.md` in place of `CLAUDE.md`, which had
   held the coder to pushing and opening its own pull request, which it may not do. Considered and
   not chosen: `CLAUDE.md` staying the main file, which is simpler but written for one company's
-  tool; the dispatcher session's rules in **The dispatcher session**, above, which would mix
-  instructions with rationale; and the prompt change as a story of its own, not needed since only
-  a spawned session cannot edit `.claude/prompts/`. Session A is renamed the planning session, and
-  Session B the release review, everywhere, dated records included (owner, the same day). The old
-  names remain only where they mean tower-workshop-paths' own session, or the file as it moved
-  (`docs/session-a.md`). Considered and not chosen: renaming only instructions and current
-  descriptions. What `init` gives a project of these files is left for later.
+  tool; the dispatcher session's rules in **The controller** (then "The dispatcher session"),
+  above, which would mix instructions with rationale; and the prompt change as a story of its
+  own, not needed since only a spawned session cannot edit `.claude/prompts/`. Session A is
+  renamed the planning session, and Session B the release review, everywhere, dated records
+  included (owner, the same day). The old names remain only where they mean tower-workshop-paths'
+  own session, or the file as it moved (`docs/session-a.md`). Considered and not chosen: renaming
+  only instructions and current descriptions. What `init` gives a project of these files is left
+  for later.
 - **Section 8's outcome** (2026-10-12; `steward-bootstrap.md`, section 8). Steward has no loop of
   its own, and its loop's worktree (`loop --init`) was not made: its review side is run by the
   dispatcher session from its own worktree, with `review.mjs` and `land.mjs` until the pass
@@ -1867,6 +1871,43 @@ deciding what is next. It is the harness's product outline, and moves with this 
   review side (ST-25's pass), and the crew for the people steward serves. Dated records keep "the
   owner". The same day the owner widened who steward is for, to any trusted contributor to a
   project (`harness-outline.md`, "Who it is for").
+- **The controller works as a rotation will** (decided 2026-10-12 by the owner, from the notes the
+  dispatcher session made on its own instructions, taken one by one in the documents review). The
+  dispatcher session is renamed the controller, and its instructions move to `controller.md`
+  (**The controller**, above). Each decision, with what was considered:
+  - **One pull request's outcome does not stop the others**: a status other than `recorded` from
+    `review.mjs`, or `merged` from `land.mjs`, is reported and the rotation goes on. Only a
+    failure of the rotation itself stops it: a worktree that cannot be brought to `origin/main`
+    or has anything uncommitted, or a script that fails with an error rather than a status. The
+    owner's reason: the controller models the automated rotation, so that work does not grind to
+    a halt on one issue, since some statuses are not failures at all. Considered and not chosen:
+    stopping the whole run at any status but success, which the notes proposed. Within a
+    rotation each command runs at most once per pull request.
+  - **It reports each command and its result** in its own session and to whichever session or
+    person asked for the rotation. A report is information, never a go-ahead.
+  - **`--rereview` runs when the owner asks, or when the session that wrote the pull request asks
+    and names the description-only finding it fixed** (`REVIEW.md`, "What the workflow enforces",
+    item 3). Considered and not chosen: the owner's word only. The owner's reason: the author of a
+    fix should be able to have it reviewed without relaying it through the owner.
+  - **It changes nothing itself**: no file in the repository, no commit or push, and nothing on
+    GitHub; every write is a script's. No exception when the owner asks: a change goes to a
+    session that makes changes. Considered and not chosen: an exception on the owner's word in
+    the controller's session.
+  - **Its instructions come from the owner, in its own session.** From another session it acts on
+    two requests only, a rotation and a `--rereview`; everything else, such as holding a pull
+    request back, counts only from the owner in its session. On 2026-10-12 it had refused a
+    go-ahead and a request to turn on its Remote Control relayed through the planning session.
+  - **No go-ahead before landing**: a pull request whose head passed review, with green CI, lands
+    in the rotation that finds it so, as ST-25's rotation will. The owner's reason: the dispatch
+    should become the deterministic loop, and temporary rules should not be recorded. Considered
+    and not chosen: writing down a standing go-ahead before every landing, which the owner had
+    been giving.
+  - **No `npm ci` in its worktree.** `review.mjs` and `land.mjs` import no npm package, and
+    `review.mjs` installs in the reviewer's own checkout, without credentials (`install.mjs`).
+    An install in the controller's worktree would run the package's scripts with the credential
+    of whoever runs it, for nothing it uses.
+  - **"Rotation", not "sweep", for a run over every open pull request**, since the sweep is
+    `land-approved.yml` (`glossary.md`).
 
 ### The move, in order
 
