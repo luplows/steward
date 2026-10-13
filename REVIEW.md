@@ -3,8 +3,8 @@
 The criteria a pull request is reviewed against. Written to be enumerated and
 auditable rather than a general instruction to "check the code is good" — when
 a review misses something, it should be possible to tell whether the rule was
-wrong or the reading was. See OQ-42 in `Completed-Questions.md` for why this
-exists and how the gating around it is meant to work.
+wrong or the reading was. Why it exists, and how the gating around it works,
+are in `docs/agent-workflow-design.md`, "The gate".
 
 ## Reading the PR body
 
@@ -28,19 +28,15 @@ A section that restates the PR title in other words is also unfilled.
 1. The work is on a feature branch with a pull request; nothing was pushed
    directly to `main`.
 2. All three template sections are present and substantively filled, per above.
-3. **Docs check** records a real outcome for `README.md`, `Open-Questions.md`
-   and `Project-Outline.md` — what changed, or why nothing needed to.
-4. If the PR resolves an entry from `Open-Questions.md`, that entry is moved
-   to `Completed-Questions.md` in completion order, with its `**Resolved in:**
-   [#N]` link. A PR implementing a story from `stories/` uses item 19 instead
-   — the two queues have different completion moves, and a story is not also
-   copied into the archive.
-5. Any new open question or story uses the next unused OQ number — checked
-   against `stories/` (`done/` and `retired/` included), `Open-Questions.md`
-   and `Completed-Questions.md`, which share one number space. Numbers are
-   never reused or renumbered.
-6. Commit granularity: one commit is right for most changes; a PR that both
-   regenerates data files and changes logic splits those into separate commits.
+3. **Docs check** records a real outcome for `README.md` — what changed, or
+   why nothing needed to.
+
+<!-- Item 4, about tower-workshop-paths' `Open-Questions.md`, was removed on 2026-10-13. -->
+
+5. A new story takes the next unused `ST-<n>`, checked as `stories/README.md`,
+   "Numbering", says: against `stories/` (`done/` and `retired/` included) and
+   every branch on `origin`. Numbers are never reused or renumbered.
+6. Commit granularity: one commit is right for most changes.
 7. The diff matches the **What changed** description. No unrelated changes
    riding along.
 
@@ -87,7 +83,7 @@ standard it was supposed to meet.
     must be explained in the PR body, and an AC delivered but left unticked is
     a finding here.
 17. **Fidelity** — each AC is genuinely satisfied, not merely named in a test.
-    A test named `OQ-49/AC-3` that does not exercise AC-3 fails this item. So
+    A test named `ST-49/AC-3` that does not exercise AC-3 fails this item. So
     does a ticked AC: a tick is the author's claim, and one that is not
     genuinely delivered fails this item as surely as a misnamed test.
 18. **Containment** — nothing in the diff falls under the story's
@@ -120,7 +116,7 @@ code.
     at the PR's head: files, functions, line numbers, counts, behaviour, and
     what another story says. Check each one (`AGENTS.md`, "Claims about this
     repository").
-23. **Stable ids** — a story that is already in flight (a `story/OQ-<n>-*`
+23. **Stable ids** — a story that is already in flight (a `story/ST-<n>-*`
     branch exists on `origin`; check with `git ls-remote`) does not have its
     AC ids renumbered. A new AC goes in with a letter suffix.
 24. **Consistency** — the story does not contradict or duplicate another
@@ -172,11 +168,11 @@ from, ending with exactly one marker line:
 ```
 
 That split is deliberate: the reviewer is handed no GitHub credential and posts
-nothing. It returns its verdict and findings, and the runner — a person today,
-the dispatcher once it exists — records them. A reviewer that had to post its
-own verdict needed credentials, and hunting for them is what turned the old
-reviewer prompt into something a reviewer session correctly refused as an
-injection attack.
+nothing. It returns its verdict and findings, and ATC posts them
+(`review.mjs`), run by the controller until ATC runs on a trigger of its own. A
+reviewer that had to post its own verdict needed credentials, and hunting for
+them is what turned the old reviewer prompt into something a reviewer session
+correctly refused as an injection attack.
 
 ### The three verdicts
 
@@ -241,7 +237,7 @@ Getting these wrong means the marker is silently ignored rather than obeyed.
    bound counts `block` verdicts and makes no exception for what they were
    about. (The bound is three blocking verdicts. OQ-48 sets it; this is a
    restatement for the reader and must not drift from it.) First used on
-   #133, where round 2 blocked on a missing Docs check.
+   tower-workshop-paths PR 133, where round 2 blocked on a missing Docs check.
 4. **The comment must come from an account with write access.** Anyone can
    comment on a public repository; a marker from anyone else is ignored.
 

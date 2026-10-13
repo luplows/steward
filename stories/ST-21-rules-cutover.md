@@ -44,7 +44,7 @@ only.
       sections, in this order, each numbering its items from 1. Rules kept are worded as today
       except where this says otherwise:
       1. "Reading the pull request body" (no condition): today's opening "Reading the PR body"
-         text; then item 2 (the template's sections filled); then item 3, naming `README.md` only.
+         text; then item 2 (the template's sections filled); then item 3 (the Docs check).
       2. "Every pull request" (no condition): item 6 (commit granularity); item 7 (the diff
          matches "What changed"); and a new item: statements the pull request adds about how
          the repository works, in documents, comments, commit messages or its body (what a file
@@ -56,13 +56,13 @@ only.
          18, saying "unit" where they do not mean a story file; and item 19, applying when the
          unit is a story file. The ticks in item 16 and the move in item 19 are kept.
       6. "Changes to stories" (applies when the pull request adds or changes a file under
-         `stories/` without implementing one): item 5, checking `stories/` (with `done/` and
-         `retired/`) and the branches on `origin` for the next unused `ST-<n>`; then items 20 to
+         `stories/` without implementing one): item 5 (the next unused `ST-<n>`); then items 20 to
          25.
 
-      Today's item 1 (a feature branch, nothing pushed to `main`) and item 4 (about
-      `Open-Questions.md`) are removed. The pull request body gives the mapping from each old
-      item number to its new section and item, or to "removed".
+      Today's item 1 (a feature branch, nothing pushed to `main`) is removed. Item 4 (about
+      `Open-Questions.md`) was removed on 2026-10-13, before this story. The pull request body
+      gives the mapping from each old item number to its new section and item, or to
+      "removed".
 - [ ] **AC-6** — What `REVIEW.md` held about how steward works ("For the reviewer: reporting a
       verdict", with its subsections, and "For the coder: opening a PR") moves to a new
       `docs/review-mechanics.md`, which `AGENTS.md`'s "Where things are documented" table lists,
@@ -87,9 +87,8 @@ only.
 - How the unit is found: ST-19 and ST-22. `resolveStory` and the `{{STORY}}` placeholders are
   unchanged here.
 - The reviewer's narrower commands in place of the whole check: ST-22.
-- Changing any rule's substance beyond the changes AC-5 names: item 3 naming `README.md` only;
-  the new claims item; items 16 to 18 saying "unit"; item 5 checking `stories/` and `origin`'s
-  branches for the next `ST-<n>`; and removing items 1 and 4.
+- Changing any rule's substance beyond the changes AC-5 names: the new claims item; items 16 to
+  18 saying "unit"; and removing item 1.
 - What steward's example rules file for other projects contains, and `init`.
 - `docs/gap-analysis.md`, `docs/migration-plan.md`, `docs/steward-bootstrap.md` and the fixtures
   under `test/fixtures/`, which are records of their time and keep their item numbers.
