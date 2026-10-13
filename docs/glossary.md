@@ -185,7 +185,9 @@ Who does each, today.
 
 Each row is a proposal until a pull request applies it across the files. **Agreed** means the
 owner agreed the word on 2026-10-12; **proposed** means the planning session put it forward the
-same day and it is not yet confirmed; **open** means not decided.
+same day and it is not yet confirmed; **open** means not decided. New text uses an agreed word
+from the day it is agreed (`AGENTS.md`, "Every pull request"; owner, 2026-10-12), so the documents
+align as they are touched.
 
 | Today | Proposed | Status | Note |
 |---|---|---|---|

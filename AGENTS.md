@@ -57,6 +57,9 @@ These hold for every pull request's content, whoever writes it, the coder includ
   the same pull request.
 - [`REVIEW.md`](REVIEW.md) is the checklist a pull request is reviewed against. Read it before the
   pull request is opened.
+- Use the words in [`docs/glossary.md`](docs/glossary.md) with the meanings it gives them. In new
+  text, a rename its table marks agreed takes the new word; dated records keep the words they were
+  written with.
 
 ## Stories
 
