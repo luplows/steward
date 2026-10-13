@@ -55,8 +55,8 @@ Where a file defines the thing, the entry names it, and the file is the authorit
 
 ## Flights
 
-- **flight** — a pull request, as steward handles it from opening to landing. Where GitHub's
-  object is meant, the word is "pull request".
+- **flight** — a pull request, as steward handles it from opening to landing. Used in steward's
+  design documents and this glossary; rules and instructions say "pull request".
 - **unit** — the piece of work a flight implements, in whatever form the project keeps it: a file
   in the repository or a GitHub issue.
 - **story** — steward's own form of unit: a file under `stories/` with the schema in
