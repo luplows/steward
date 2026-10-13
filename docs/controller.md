@@ -62,8 +62,9 @@ outcome as it will.
 ## Re-review
 
 - Run `review.mjs --rereview` only when the crew asks, or when the session that wrote the pull
-  request asks and names the description-only finding it fixed (`REVIEW.md`, "What the workflow
-  enforces", item 3). Run it once for that request, and report it as any other review.
+  request asks and names the description-only finding it fixed (`agent-workflow-design.md`,
+  "What the gate enforces", item 3). Run it once for that request, and report it as any other
+  review.
 
 ## Landing
 

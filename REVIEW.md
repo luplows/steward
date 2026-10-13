@@ -1,10 +1,8 @@
 # Review Checklist
 
-The criteria a pull request is reviewed against. Written to be enumerated and
-auditable rather than a general instruction to "check the code is good" — when
-a review misses something, it should be possible to tell whether the rule was
-wrong or the reading was. Why it exists, and how the gating around it works,
-are in `docs/agent-workflow-design.md`, "The gate".
+The checklist a pull request is reviewed against. A section applies when its
+`Applies when:` line says so, and a section without one always applies. How a
+review is run and reported is in `.claude/prompts/reviewer.md`.
 
 ## Reading the PR body
 
@@ -42,6 +40,8 @@ A section that restates the PR title in other words is also unfilled.
 
 ## PRs that change app code
 
+Applies when: the diff changes code or tests.
+
 <!-- Item 8 is not used. -->
 
 9. No test was skipped, disabled, quarantined, weakened, or deleted in order to
@@ -54,9 +54,6 @@ A section that restates the PR title in other words is also unfilled.
 
 ## Integrity
 
-These exist because an unsupervised author optimizes for the success criterion,
-and the cheapest path to "green" is not always the intended one.
-
 12. The **Verification** section reports real results — actual numbers, taken
     the same way across a before/after comparison — rather than an assertion
     that checks passed.
@@ -68,14 +65,7 @@ and the cheapest path to "green" is not always the intended one.
 
 ## Conformance to the story
 
-These apply to a PR implementing a story from `stories/`. A PR that implements
-no story — a bootstrap, or a workflow-only change — has no story to conform
-to; say which of these you treated as not applicable rather than passing them
-silently.
-
-Items 7 and 15 check the PR against *its own account of itself*, and the same
-worker wrote both sides. These four check it against **the story**, which is the
-standard it was supposed to meet.
+Applies when: the pull request implements a story from `stories/`.
 
 16. **Completeness** — every acceptance criterion in the story is delivered.
     Name any that are not. The PR ticks each AC it delivered in the story file
@@ -99,10 +89,8 @@ standard it was supposed to meet.
 
 ## PRs that add or change a story
 
-These apply to a PR that writes or edits files under `stories/` without
-implementing one: the planning session's work. A story that lands `ready` is work the
-dispatch loop will carry out unattended, so it is reviewed as carefully as
-code.
+Applies when: the pull request adds or changes a file under `stories/` without
+implementing a story.
 
 20. **Schema** — each added or changed story matches `stories/_TEMPLATE.md`:
     the frontmatter keys, the six sections, and AC ids of the form `AC-N`
@@ -126,149 +114,3 @@ code.
     `docs/agent-workflow-design.md` in this PR, marked as that document's
     "Reading this document" note says, and the story has an AC to resolve the
     marker. A decision that exists only in a story is a finding.
-
-## For the reviewer: reporting a verdict
-
-The prompt a reviewer session is spawned with lives in
-[`.claude/prompts/reviewer.md`](.claude/prompts/reviewer.md). It must be spawned
-as its own session, never as a continuation of the one that wrote the PR: the
-independence this gate provides comes from context isolation, and a reviewer
-told what the change was *meant* to do cannot see that the diff does something
-else.
-
-**The reviewer is given the story**, and that is not a contradiction of the
-paragraph above. What is withheld is the author's *working context* — its
-session and transcript, its internal reasoning, and any commentary from whatever
-dispatched it. The *authored story* is a different thing: it is the standard the
-diff has to meet, and a reviewer that never sees it cannot check items 16–18 at
-all. It could only compare the diff to the PR body, which the same worker wrote.
-
-**The PR body is given too, as an exhibit rather than as testimony.** The
-reviewer is required to judge whether that account is honest, which is
-impossible without reading it — so `reviewer.md` injects it as `{{PR_BODY}}`
-rather than leaving the reviewer to fetch it. It is supplied for judging, never
-for believing: where the body and the diff disagree, the diff is what happened.
-Reading it after the findings are formed is what keeps it from framing them.
-
-Review is enforced by `.github/workflows/review-gate.yml`, which sets a
-`review/agent` commit status. Opening a PR, or pushing to one, sets that status
-to pending; it clears only when a verdict marker is posted. A PR with no marker
-stays pending and cannot merge — forgetting to review fails safe.
-
-### Recording a verdict
-
-The reviewer decides the verdict. **Whoever ran the reviewer posts it**, as
-one ordinary PR comment naming the `REVIEW.md` item number each finding comes
-from, ending with exactly one marker line:
-
-```
-<!-- agent-review head=<full-40-char-sha> verdict=pass -->
-<!-- agent-review head=<full-40-char-sha> verdict=pass-with-observations -->
-<!-- agent-review head=<full-40-char-sha> verdict=block -->
-```
-
-That split is deliberate: the reviewer is handed no GitHub credential and posts
-nothing. It returns its verdict and findings, and ATC posts them
-(`review.mjs`), run by the controller until ATC runs on a trigger of its own.
-
-### The three verdicts
-
-| Verdict | Means | Commit status |
-|---|---|---|
-| `pass` | No applicable item fails, and nothing was found worth recording. | `success` |
-| `pass-with-observations` | No applicable item fails, but real findings were surfaced and deliberately not blocked on. They go in the comment. | `success` |
-| `block` | At least one applicable item fails. | `failure` |
-
-`verdict=fail` is accepted as a deprecated spelling of `block`. Write `block`.
-
-### When the reviewer returns no verdict
-
-A reviewer that is not in a position to review at all — the head moved under it,
-the diff will not resolve, the story is missing when there should be one —
-returns `"verdict": null` rather than guessing. **Post nothing**: no
-marker. The PR stays pending and cannot merge.
-
-That is the intended outcome, not a gap to paper over. A PR stuck pending is a
-visible problem someone picks up; a `pass` recorded by a reviewer that was not
-in a position to give one is an invisible one. Where the cause is fixable —
-usually a new head to review against — run the reviewer again and post
-whatever verdict it returns then.
-
-### What the workflow enforces
-
-Getting these wrong means the marker is silently ignored rather than obeyed.
-
-1. **`head` must be the full 40-character SHA of the commit reviewed**, not an
-   abbreviation. Where you get it depends on where you are running:
-
-   | Where | Command |
-   |---|---|
-   | Locally, or on a GitHub Actions runner — `gh` present | `gh pr view <N> --repo <owner/repo> --json headRefOid --jq .headRefOid` |
-   | In a spawned cloud session — **no `gh`** | `git fetch origin <head-branch> && git rev-parse origin/<head-branch>` |
-
-   The second works everywhere, so prefer it when unsure.
-2. **That SHA must still be the PR's head.** A verdict about an earlier commit
-   says nothing about the current one, so a stale marker is ignored and the
-   status stays pending. Re-review after any new push.
-3. **There is no partial credit and no dismissal mechanism.** The only way past
-   a `block` is to fix what it found and get a fresh review. A block on the
-   code is fixed by a commit that addresses it, which resets the gate to
-   pending. **A block on the PR description alone** (items 2, 3, 7 or 12, with
-   nothing in the diff to change) is fixed by editing the description, then
-   running a fresh review of the **same head** and posting its verdict. The
-   description is not part of the head, so a commit would change nothing it
-   found. Either way it is a new review, never a waved-through old one, and
-   **the block still counts toward the round bound** like any other: the
-   bound counts `block` verdicts and makes no exception for what they were
-   about. (The bound is three blocking verdicts. This restates `MAX_ROUNDS` in
-   `scripts/dispatch/story.mjs` and `ROUND_BOUND` in
-   `scripts/land/apply-review-blocked.mjs`, and must not drift from them.)
-4. **The comment must come from an account with write access.** Anyone can
-   comment on a public repository; a marker from anyone else is ignored.
-
-If a comment contains more than one well-formed marker, the last one wins, so a
-correction later in the same comment supersedes an earlier line.
-
-A `block` verdict also fails the `Review gate` workflow run itself. The commit
-status is what blocks the merge; failing the run is what makes the block
-*noticeable*, since GitHub's built-in Actions failure notifications only fire on
-a failed run. A job reporting success while recording a blocking review would be
-silent exactly when someone needs to hear about it.
-
-## For the coder: opening a PR
-
-The prompt a coder session is spawned with lives in
-[`.claude/prompts/coder.md`](.claude/prompts/coder.md). The coder commits and
-does not push: the dispatcher pushes its branch after the session
-(`pushBranch` in `scripts/dispatch/coder.mjs`), so a model session has no write
-access to the remote.
-
-**The coder holds no credential capable of a commit status, a workflow
-dispatch, or a pull-request write.** `scripts/dispatch/coder-env.mjs`
-(`coderEnv`) strips `GH_TOKEN`, `GITHUB_TOKEN` and `GH_ENTERPRISE_TOKEN` from
-its process environment and redirects `GH_CONFIG_DIR` to an empty directory,
-so nothing reachable from the session — `gh` directly, `gh` spawned from inside
-`node -e` via `child_process`, or an `npm`/`npx` script doing either — can
-authenticate as anything more than git over SSH, which none of that touches
-(removing that is ST-6's). `gh` is absent from `coderAllowedTools`, and
-`git push` is not allowed and is denied in `CODER_DISALLOWED_TOOLS`.
-
-**Whoever ran the coder opens the PR.** The coder emits the PR title
-and body — the `pull_request_template.md` sections — under
-`## PR title` and `## PR body` at the end of its final report, then
-`## Open as` and a line that is only `draft` or `ready`. Nothing may follow
-it, so that `parsePrBlock` in `scripts/dispatch/outcome.mjs` can read it;
-`coder.md` pins the exact block. The runner creates the PR from that text with
-the owner's credential. What keeps the thing that opens the PR from clearing the
-gate is not that credential's scope: `review/agent` is derived by
-`review-gate.yml` from the reviewer's verdict, and the runner triggers the sweep
-only through `land.mjs` (`docs/agent-workflow-design.md`, "Credential
-minimalism" and "The controller"). This is the same shape as "Recording
-a verdict" above: the party with the judgement (or, here, the text) is not the
-party with the credential.
-
-**To answer a review finding it disagrees with**, the coder states its
-reasoning in its final report, and the runner posts it as an ordinary PR
-comment. The coder cannot comment on the PR itself.
-
-

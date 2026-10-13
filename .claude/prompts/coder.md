@@ -102,7 +102,7 @@ and you do not open your own PR" below, because `scripts/dispatch/outcome.mjs`
 (`parsePrBlock`) parses it and rejects anything else. Whatever spawned it
 reads that text and opens the pull request with the owner's credential. This
 mirrors the existing split where the reviewer returns a verdict and the runner
-records it (`REVIEW.md`, "For the coder: opening a PR").
+posts it (`docs/agent-workflow-design.md`, "Credential minimalism").
 
 This paragraph used to say the dispatcher held "its own, separately-scoped
 credential — one that can write pull requests but, like the coder's, cannot set a

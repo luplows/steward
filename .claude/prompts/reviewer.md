@@ -130,9 +130,9 @@ JSON verdict described at the end of this prompt; nothing else you write is read
 The story file is `{{STORY_PATH}}`. If the block above is a story, item 19
 requires this PR to have moved that file into `stories/done/`, so the path is
 itself part of what you check. If it says this PR implements no story, the path
-reads `n/a` and items 16–19 do not apply. If such a PR adds or changes files
-under `stories/`, items 20–25 do: it is putting work into the queue that the
-loop will carry out unattended.
+reads `n/a` and items 16–19 do not apply: say so in your summary. If such a PR
+adds or changes files under `stories/`, items 20–25 do: it is putting work into
+the queue that the loop will carry out unattended.
 
 ## The pull request's own description
 
@@ -281,9 +281,9 @@ There is no partial credit and no dismissal mechanism: the only way past a
 `block` is to fix what it found and get a fresh review. For the code that means
 a commit, which resets the gate to pending. A block on the PR description alone
 is fixed by editing the description, followed by a fresh review of the same
-head (`REVIEW.md`, "What the workflow enforces", item 3). So a review of a head
-that has been reviewed before is normal. Judge the description as it stands
-now. A `block` also turns the gate's workflow run red. That
+head (`docs/agent-workflow-design.md`, "What the gate enforces", item 3). So a
+review of a head that has been reviewed before is normal. Judge the description
+as it stands now. A `block` also turns the gate's workflow run red. That
 is deliberate — it is what makes the block reach a human — not a bug for you to
 avoid triggering.
 

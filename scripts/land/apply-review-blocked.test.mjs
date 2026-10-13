@@ -41,7 +41,7 @@ describe('OQ-80/AC-1: counting the round bound', () => {
     expect(countBlockingVerdicts(comments)).toBe(2)
   })
 
-  it('every well-formed block counts, on whatever head it names (REVIEW.md: "counts toward the round bound like any other")', () => {
+  it('every well-formed block counts, on whatever head it names (design doc, "What the gate enforces": "counts toward the round bound like any other")', () => {
     const olderSha = 'b'.repeat(40)
     const comments = [comment('block', 'OWNER', olderSha), comment('block'), comment('block')]
     expect(countBlockingVerdicts(comments)).toBe(3)

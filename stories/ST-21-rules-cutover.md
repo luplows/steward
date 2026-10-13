@@ -41,8 +41,8 @@ only.
       line. The marker line is unchanged, so `review-gate.yml`, `apply-review-blocked.mjs` and
       `review-verdicts.mjs` read it as before.
 - [ ] **AC-5** — `REVIEW.md` is converted into the form ST-20 parses, holding rules only and no
-      history (`docs/agent-workflow-design.md`, "`REVIEW.md` is concise instructions"), in these
-      sections, in this order, each numbering its items from 1. Rules kept are worded as today
+      history (`docs/agent-workflow-design.md`, "`REVIEW.md` is concise, without history"), in
+      these sections, in this order, each numbering its items from 1. Rules kept are worded as today
       except where this says otherwise:
       1. "Reading the pull request body" (no condition): today's opening "Reading the PR body"
          text; then item 2 (the template's sections filled); then item 3 (the Docs check).
@@ -64,23 +64,18 @@ only.
       `Open-Questions.md`) was removed on 2026-10-13, before this story. The pull request body
       gives the mapping from each old item number to its new section and item, or to
       "removed".
-- [ ] **AC-6** — What `REVIEW.md` held about how steward works ("For the reviewer: reporting a
-      verdict", with its subsections, and "For the coder: opening a PR") moves to a new
-      `docs/review-mechanics.md`, which `AGENTS.md`'s "Where things are documented" table lists,
-      except what the reviewer itself must follow, which is in `reviewer.md` already or added
-      there.
-- [ ] **AC-7** — Every reference to a `REVIEW.md` item number in `stories/README.md`,
+- [ ] **AC-6** — Every reference to a `REVIEW.md` item number in `stories/README.md`,
       `.claude/prompts/coder.md`, `.claude/prompts/reviewer.md`, and the comments and messages of
       `scripts/dispatch/` and `scripts/land/`, names the section instead, and the item within it
       where one item is meant (`docs/agent-workflow-design.md`, "Three decisions from reviewing
       `stories/README.md`").
       `grep -rn "item [0-9]" ` over those paths, given in the pull request body, shows what
       remains and why.
-- [ ] **AC-8** — Tests: `review.test.mjs` covers AC-1 (missing and unparseable rules, with no
+- [ ] **AC-7** — Tests: `review.test.mjs` covers AC-1 (missing and unparseable rules, with no
       session spawned), AC-3 (each rejection, and a valid verdict accepted) and AC-4 (the
       comment's text); `ST-21/AC-5`, in a test file of its choosing, parses the committed
       `REVIEW.md` with `parseRules` and checks its section names and conditions.
-- [ ] **AC-9** — The `**Planned (ST-21)**` marker in `docs/agent-workflow-design.md` loses
+- [ ] **AC-8** — The `**Planned (ST-21)**` marker in `docs/agent-workflow-design.md` loses
       `ST-21`, and the passage is corrected wherever what was built differs.
 
 ## Out of scope
