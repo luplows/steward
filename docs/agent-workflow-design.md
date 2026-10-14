@@ -31,6 +31,8 @@
 
 ---
 
+# Part 1: Steward's design
+
 ## Purpose
 
 A repeatable loop for building software where agents implement and review, and the human stays in
@@ -40,6 +42,29 @@ and **deciding what is fit to release**.
 The goal is not "agents write code." It is a system where work can only enter the product through
 one explicit, gated path, so quality is a property of the pipeline rather than of any individual
 prompt.
+
+### Goals
+
+Decided 2026-10-07 by the owner.
+
+1. **The owner can use the workflow in other projects.**
+2. **Models from other companies can be used**, so that the work is not all done by similar
+   models. This is the [reviewer-on-a-different-model](#quality-beyond-the-gate) hedge taken
+   further: a different company's model decorrelates more than a different model from the same one.
+3. **The workflow is insulated from any one AI model company** folding or pricing the owner out.
+4. **This repository stays focused on the product**, not on the workflow.
+
+The owner is starting to plan another project and wants to work the same way in both. That is
+what makes goal 1 near-term: the second project is the workflow's first user outside this
+repository.
+
+### What the workflow is for
+
+[`outline.md`](outline.md) is steward's product outline, the owner's own account
+of it from 2026-10-07 on: what it is, who it is for, why, the three things it must never do, the
+view for deciding what is next, and the owner's decisions defining steward. The questions it
+leaves open are under "Open questions", "Defining steward", below, and the options it considered
+are under "The outline's reasoning", next.
 
 ---
 
@@ -105,6 +130,254 @@ draft of this document did.)*
 | **Coder** | None | Sonnet (per-story override) | Yes |
 | **Reviewer** | None | Opus / high — *never the coder's model* | **No** (tool-enforced) |
 | **Release review** | Periodic, conversational | Opus / high | No |
+
+---
+
+## The gate
+
+### What CI runs
+
+The governing problem: **the same context that decided how to implement also decided what to
+assert.** A coder that misreads a story writes tests confirming the misreading. Green means
+"internally consistent," not "correct."
+
+Current CI — oxlint, Vitest, build, Playwright — runs in **~70 seconds**. That is fast enough that
+**tiering is premature**; run everything on every push. Adopt a PR-subset / merge-queue-full split
+only when E2E passes roughly five minutes.
+
+Additions that earn their place now:
+
+| Check | Why |
+|---|---|
+| **Story schema lint** | Frontmatter valid, required sections present, AC ids well-formed. Carries the schema burden now that stories are files. |
+| **AC↔test traceability** | Every AC id in the story appears in at least one test name. Converts "did you do what was asked" from judgment into a gate. |
+| **Existing-test-modification flag** | Flags any PR touching tests outside its own story's additions. Today this is `REVIEW.md`, "Changes to code", item 1 — prose the reviewer must notice. |
+
+AC ids appear in test names directly:
+
+```js
+test('ST-49/AC-4: a story file that does not parse is in the array with its error', ...)
+```
+
+**Coverage stays absent.** A percentage floor produces coverage-shaped tests that assert nothing,
+and agents are extremely literal about hitting a number. The existing deliberate absence is correct.
+
+**Flakiness: no retries in the merge gate.** A flake blocks the dispatcher with nobody watching,
+and a coder meeting an unrelated failure may "fix" it by weakening the assertion. Quarantine —
+skip plus an auto-filed story — keeps the signal visible instead of burying it in a retry count.
+Determinism requires fixed clock, seeded data, no external network, and **stable test IDs rather
+than text or positional selectors**.
+
+**Setup is cached and bounded.** CI caches Playwright's browser, keyed on the runner's OS and the
+installed `@playwright/test` version, and on a hit installs only the system packages. The install
+step has a 5-minute limit and tries twice within it, two minutes each; the job has a 20-minute
+limit, well inside `story.mjs`'s 30-minute CI wait. `update-screenshots.yml` does the same with the
+same key, so baselines are minted by the browser CI compares against. Decided 2026-10-07 by the
+owner, after installs hung in apt and one browser download was refused, with no limit short of
+GitHub's 360-minute default. Retrying the install is a retry of setup, not of a test, so it does not
+contradict "no retries in the merge gate": the checks themselves still run once. `detect-drift.yml`'s
+weekly install is left as it is (decided 2026-10-08 by the owner): it gates no pull request.
+
+A try that fails or reaches its limit leaves nothing running: after each try the step kills every
+process that started during it and is still alive, `apt-get` and `dpkg` under sudo included,
+trying a plain `kill` first and falling back to `sudo kill` only when that is refused. A try runs
+under `timeout`, in a process group of its own, and what it starts with `setsid` or under sudo's
+pty has a session of its own, so the try's processes are the new ones whose group or session is
+new too. A new process whose group and session both existed before the try, such as a test
+runner's child, is not the try's, and is left alone (amended 2026-10-09 by the owner). A new
+process in a new session that the try did not start, such as a system service init starts during
+it, cannot be told apart, and is killed too.
+Before the second try it waits up to 30 seconds for `/var/lib/dpkg/lock-frontend` to be free and
+then runs `sudo dpkg --configure -a`, so a package the first try left half-installed is finished.
+The wait tests the lock with an `fcntl` lock, as apt and dpkg take it, since a `flock` probe
+cannot see theirs; the repair is limited to 20 seconds, and a repair that fails or times out is
+logged and does not stop the second try, though the step runs under `bash -e` (amended again
+2026-10-09 by the owner, after #241's review).
+Decided 2026-10-09 by the owner (OQ-136), after a first try timed out while apt was slowly fetching
+fonts: the limit ended `npx` but not the `apt-get` under it, which kept the dpkg lock, so the
+second try failed at once and the retry could not recover from the hang it was added for. The
+test that runs this clean-up for real is in a file of its own, `*.alone.test.mjs`, which `npm test`
+leaves out and CI runs in a step of its own after it, so that no other test's processes are
+running for the clean-up to stop (decided 2026-10-09 by the owner).
+
+In tower-workshop-paths, its OQ-137 plans for the step's worst case to count the clean-up after the
+first try, with a 5-second allowance that the clean-up test checks: 2 × 120 + 5 + 30 + 20 = 295
+seconds of the 300 (decided 2026-10-09 by the owner, from #243's review). The clean-up after the
+second try is not counted: the step fails then whatever happens.
+
+**Definition of green:** it builds, lint is clean, every AC has a named test, Vitest passes,
+Playwright passes without retries, no pre-existing test was modified without story authorization,
+and the story file validates.
+
+### Reviewer
+
+**The reviewer's job is drift detection, not quality assurance:**
+
+> Does this diff do what the story said, all of what it said, and nothing it didn't?
+
+Three sub-checks: **completeness** (every AC delivered), **fidelity** (the AC is genuinely
+satisfied, not merely named in a test), **containment** (nothing outside scope).
+
+**The reviewer is given the story.** This is the single most important correction to the existing
+implementation, where the reviewer receives `REVIEW.md`, the diff and the PR body — but never the
+OQ entry. Its scope items therefore compare the diff to *the PR's own account of itself*, both
+written by the same worker. A worker that misread the story writes a body describing what it built
+and a diff matching that body; every item passes. Drift is invisible.
+
+That happened by over-applying a correct principle. *"A reviewer that knows what the change was
+meant to do cannot see that the diff does something else"* is true of **the author's account**. It
+is not true of **the authored story**, which is the standard the diff must meet.
+
+So the reviewer receives: **story file, diff, checklist.** It does not receive the coder's session,
+summary, reasoning, or any dispatcher commentary. Decorrelation preserved; drift detection enabled.
+
+**The PR description is itself in scope.** After forming findings from the diff, check whether the
+description honestly describes the change. Prose that oversells a diff is real signal.
+
+**Verdict states:** `pass` / `pass-with-observations` / `block`. Binary pass/fail cannot express
+what reviewers here already produce — real problems rightly surfaced and arguably rightly not
+blocking. Without the third state the verdict record understates what review catches, and any
+measurement built on it is meaningless.
+
+**Model:** Opus, high effort, and **deliberately not the coder's model.** Fidelity is the hard part
+— noticing that a test named `AC-3` doesn't exercise AC-3 is adversarial reading. And author and
+reviewer sharing a model family means correlated blind spots: context isolation decorrelates
+*knowledge*, not *reasoning style*. Opus-reviews-Sonnet buys both at once.
+
+### Recording the verdict
+
+A **required status check keyed to the head SHA**, posted by the dispatcher:
+
+```bash
+# Valid where gh exists — verified on the owner's machine (gh 2.100.0, account luplows).
+# NOT available in spawned cloud sessions.
+gh api -X POST "repos/$REPO/statuses/$SHA" \
+  -f state=success -f context=review/agent \
+  -f description='ST-49: pass' -f target_url="$FINDINGS_URL"
+```
+
+Why a status rather than a PR review: GitHub forbids approving your own PR, which deadlocks a
+single-account project. A commit status carries no such restriction. **This is already implemented
+and already required in branch protection** — verified live alongside `test`, with
+`enforce_admins: true`.
+
+Properties worth preserving:
+
+- **Stale by construction.** A new push leaves the head with no status; merge blocks until
+  re-review. "No dismissal mechanism" is a platform guarantee, not a convention.
+- **`pass-with-observations` maps to `success`** with the observations in the findings comment.
+  Only `block` maps to `failure`.
+- **A blocking verdict also fails the workflow run**, purely so GitHub's built-in failure
+  notification fires. A job reporting success while recording a block is silent exactly when
+  someone needs to hear about it.
+- **Never a label as the verdict.** Labels don't attach to a SHA, so an approval survives later
+  pushes. Derive labels *from* the status if wanted.
+- **`verdict=fail` is still accepted as a deprecated spelling of `block`**, because an
+  unrecognised marker is ignored, which would leave a pull request pending for good with a
+  valid-looking verdict on it: a worse failure than honouring an old name. (Moved from `REVIEW.md`
+  on 2026-10-13.)
+
+### What the gate enforces
+
+Moved from `REVIEW.md` on 2026-10-13, when it became the checklist only. ATC posts a verdict as
+one pull request comment that cites the checklist item each finding comes from and ends with
+exactly one marker line:
+
+```
+<!-- agent-review head=<full-40-char-sha> verdict=pass -->
+<!-- agent-review head=<full-40-char-sha> verdict=pass-with-observations -->
+<!-- agent-review head=<full-40-char-sha> verdict=block -->
+```
+
+Opening a pull request, or pushing to one, sets `review/agent` to pending, and only a marker
+clears it, so a pull request nobody reviews cannot merge. A reviewer that returns no verdict gets
+nothing posted: the pull request stays pending, which is visible, where a `pass` from a reviewer
+that could not review would not be. Where the cause is fixable, such as a new head, a later review
+posts whatever verdict it returns.
+
+Getting these wrong means the gate ignores the marker rather than obeys it:
+
+1. **`head` is the full 40-character SHA of the commit reviewed**, not an abbreviation.
+2. **That SHA is still the pull request's head.** A verdict about an earlier commit says nothing
+   about the current one, so a stale marker is ignored and the status stays pending.
+3. **There is no partial credit and no dismissal mechanism.** The only way past a `block` is to
+   fix what it found and get a fresh review. A block on the code is fixed by a commit that
+   addresses it, which resets the gate to pending. **A block on the pull request's description
+   alone** (`REVIEW.md`, "Reading the pull request body", items 1 and 2, "Every pull request",
+   item 2, or "Integrity", item 1, with nothing in the diff to change) is fixed by
+   editing the description, then a fresh review of the **same head** (`review.mjs --rereview`),
+   whose verdict is posted. The description is not part of the head, so a commit would change
+   nothing it found. Either way it is a new review, never a waved-through old one, and **the block
+   still counts toward the round bound like any other**: the bound counts `block` verdicts and
+   makes no exception for what they were about. (The bound is three blocking verdicts. This
+   restates `MAX_ROUNDS` in `scripts/dispatch/story.mjs` and `ROUND_BOUND` in
+   `scripts/land/apply-review-blocked.mjs`, and must not drift from them.)
+4. **The comment comes from an account with write access.** Anyone can comment on a public
+   repository; a marker from anyone else is ignored.
+
+If a comment holds more than one well-formed marker, the last one wins, so a correction later in
+the same comment supersedes an earlier line.
+
+### Merging
+
+**Nothing with judgment merges.** The existing `land-approved.yml` is the correct design and should
+be kept essentially as-is:
+
+- **Triggered independently of the work**, so it depends on no session being alive — a worker
+  finishes long before its verdict arrives. This was a `*/15` schedule until 2026-09-18; GitHub
+  delivered it at roughly 5% of that rate, so the trigger was removed and landing is explicit
+  (`gh workflow run land-approved.yml`) until a reliable one was chosen. `land.mjs` (OQ-50) is
+  that trigger: it triggers the sweep once a PR is landable, and re-triggers while the PR is still
+  open. It never merges itself. `story.mjs` (OQ-48) calls it, and the crew or the controller
+  may run it directly; nothing else does.
+- **It lands only pull requests whose author has write access** (the same association set the gate
+  honours for markers, `scripts/land/check-author.mjs`), because a landed `ready` story is work the
+  loop will carry out (OQ-81).
+- **One PR per run.** `mergeable_state` is computed asynchronously, so a second merge in the same
+  pass decides on stale data. The same fact has a cost between runs: straight after a merge, other
+  open PRs can read `unknown` for a while, and the sweep skips `unknown` rather than guessing. A
+  run triggered soon after the previous merge can therefore land nothing even though a PR is ready.
+  That is safe, and it is why back-to-back manual runs sometimes need one more. See **GitHub
+  mechanics** below and OQ-50.
+- **The named PR, or else the oldest.** The sweep takes an optional `pr` input, and `land.mjs`
+  always names its own pull request in it. A run given a pull request considers only that one and
+  lands nothing if it is not landable, so `land.mjs` lands what it was called for and nothing else.
+  A run given none, such as the crew's `gh workflow run`, lands the oldest landable one, so
+  nothing starves. Decided 2026-09-28: the loop decides which pull request is ready, and a sweep
+  that lands a different one spends `land.mjs`'s triggers, can stop a story that passed, and lands
+  pull requests nobody asked it to. The candidate choice is made in
+  `scripts/land/select-candidates.mjs`, which is tested without running the workflow.
+- **Re-checks `review/agent` directly** rather than trusting `clean`, because a required check
+  vanished from protection once. Prevention, not detection.
+- **`--match-head-commit`**, which refuses the merge if anything was pushed between the check and
+  the call.
+- Circuit breaker at five `review-blocked` PRs, with exemptions for `breaker-override` and
+  workflow-only diffs so a tripped breaker is not a trap.
+
+`review-blocked` is applied automatically when a pull request reaches the round bound, by
+`review-gate.yml`, with the bound derived from the PR's own `block` verdicts rather than
+remembered (OQ-80). **Planned (ST-16):** removing the label by hand means "I have seen the cost,
+proceed", so after a removal only blocks recorded since the latest removal count towards applying
+it again, read from the pull request's `unlabeled` events (decided 2026-10-08 by the owner).
+
+### Merge queue
+
+Two PRs that pass independently can break together; neither one's CI ever ran against the other's
+changes. A merge queue tests the post-merge state on temporary branches — and **the PR's own head
+SHA never changes**, so the `review/agent` status survives. That is the property that makes it
+adoptable: the previously-rejected alternative (refreshing every ready PR after each merge) reset
+the gate on every in-flight PR.
+
+Not urgent while the dispatcher runs one story at a time. Required before parallel dispatch.
+
+Three things to get right:
+
+- **Workflows need a `merge_group` trigger**, or checks never report and PRs sit forever.
+- **"Require branches up to date" stays off.** Confirmed `strict: false`.
+- **Verify** how an externally-posted `review/agent` interacts with required checks on the merge
+  group. Robust workaround worth building preemptively: a `merge_group`-triggered workflow that
+  resolves the originating PR, confirms `review/agent` was `success` on its head SHA, and reports
+  itself green — correct however the semantics fall.
 
 ---
 
@@ -313,121 +586,6 @@ deleted rather than relaxed.
 
 ---
 
-## The loop
-
-### Happy path
-
-1. The planning session writes a story, with Open questions empty, and opens it as a pull request
-   from the owner's account, as a **draft**. It marks the pull request ready only when the crew
-   says so, and that is the crew's go-ahead for it to land (decided 2026-09-28;
-   `docs/planning-session.md`). Before every pick, and also on a run with nothing ready, the loop
-   itself reviews any such open, non-draft pull request against `REVIEW.md`'s story-PR items and
-   lands it on a passing verdict (OQ-83; `scripts/dispatch/writer-prs.mjs`). Only a pull request
-   from an account with write access is reviewed at all, let alone landed (OQ-81). CI fails a
-   coder's own pull request if it changes `stories/` beyond its own story's move, ticks and
-   `blocked:` edit (OQ-82; `scripts/dispatch/story-containment.mjs`). In tower-workshop-paths, its
-   OQ-105 plans for CI also to fail one whose head branch names a `story/OQ-<n>-…` other than the
-   story its diff moves.
-2. Dispatcher picks the highest-tier, lowest-id ready story; creates a worktree and the branch
-   `story/ST-49-queue-json`. The loop (`scripts/dispatch/loop.mjs`, OQ-86) skips a ready
-   story whose `story/OQ-<n>-*` branch already exists on `origin` (`stories/README.md`'s
-   `in-progress`), so a story stopped after its PR was opened, which still reads `ready` on `main`,
-   is never dispatched again. A story that stops before it has a PR stops the loop instead, since
-   nothing on `origin` would keep it from being dispatched again -- except that, straight after
-   creating the branch and before the dependency install and the coder session, `dispatchCoder`
-   makes an empty **claim commit** on it, naming the machine and the time, and pushes it to
-   `origin` with `git push --force-with-lease=refs/heads/<branch>: origin <branch>` (`coder.mjs`'s
-   `claimPushArgs`, OQ-110): the empty expected value means "must not already exist", so the push
-   only ever creates the branch there, and a second claim of the same branch is refused. From the
-   claim on, that commit -- not `origin/main` -- is the base the dispatch measures "committed
-   beyond" from, so a session that commits nothing still ends `nothing-committed` as before, and
-   `pickStory`'s existing check for a branch on `origin` skips the story on the next run. A failed
-   claim push spends nothing (no install, no session) and leaves nothing behind: `branch-exists`
-   when the branch is then on `origin` (a race with another machine), otherwise `claim-failed`
-   carrying git's error. A story whose branch is only local is skipped too (`pickStory`, OQ-111): it
-   is pushed to `origin` as it is with `claimPushArgs` before the skip, and the skip entry says
-   whether the branch was on `origin` or only local, and for a local one, whether that push
-   succeeded. A branch both local and on `origin` counts as on `origin`, whatever its local tip, and
-   nothing is pushed for it. A skip of either kind gets a `Loop: OQ-n is stuck` issue (OQ-112,
-   `loop.mjs`'s `pickStory` skip handling): always for a local-only branch, and for one on `origin`
-   unless its claim is younger than `STUCK_AFTER_MS` -- a younger claim is most likely a dispatch
-   still running, on this machine or another. A skipped story with an open pull request gets none,
-   since the pull request already shows it (OQ-48's AC-8).
-   Before picking, and only between
-   stories, the loop fetches `origin` and checks out `origin/main`, detached, in its own worktree
-   (`updateCheckout`, OQ-109), so its code, prompts and queue include everything already landed.
-   If that worktree has anything uncommitted, it stops with status `dirty` and dispatches nothing.
-   A story stopped with its PR open does not hold the update back.
-   Each story then runs in its own process, so it loads the code as updated; the loop's own
-   process keeps what it loaded at start.
-3. Coder implements, tests green, commits, and emits the PR title/body and a
-   draft-or-ready decision in its report. The dispatcher pushes the branch (`pushBranch` in
-   `scripts/dispatch/coder.mjs`), so a model session has no write access to the remote, then opens
-   the PR from that text, as a **draft** if the coder said draft.
-4. CI passes. `scripts/dispatch/story.mjs` waits for it (`waitForCi`) before reviewing, so no
-   review is spent on a head that cannot land.
-5. Dispatcher spawns the reviewer, which returns a structured verdict.
-6. Dispatcher posts the verdict as a marker comment, and `review-gate.yml` derives
-   `review/agent` = `success` on the head SHA from it.
-7. The landing sweep merges it (squash) once `mergeable_state` is `clean`. The crew
-   runs the runway by hand, or the crew or the controller (**The controller**, below) runs the
-   pilot, `scripts/dispatch/land.mjs` (OQ-50), which waits until the PR is landable, requests
-   landing and waits for the merge. `story.mjs` calls `land.mjs`.
-   The loop starts the next story only once this one has merged, or stopped with its stop fully
-   recorded (OQ-86); anything else stops the loop. So every story it dispatches runs from a `main`
-   that includes the last.
-
-### Failure paths
-
-The majority of the interesting behaviour.
-
-| Situation | Route |
-|---|---|
-| Reviewer returns `block` | Findings → coder respawned with story + findings. **Bounded** at three blocking verdicts (`MAX_ROUNDS` in `scripts/dispatch/story.mjs`, OQ-48). The respawn (`retryStory` in `scripts/dispatch/coder.mjs`) works on the existing branch and pull request, replaces the PR body, never opens a second PR, and says whether its findings came from review or CI. It leaves the PR's draft state alone: `story.mjs` acts on a coder's `blocked:` or draft, and stops the story. |
-| Still failing at the bound | Human queue. Round count **derived from `block` verdicts on the PR**, not stored. `review-gate.yml` applies `review-blocked` itself (OQ-80). `story.mjs` makes the PR a draft (OQ-87), then records `blocked:` in the story file on the story's own branch, as a commit it pushes with `pushBranch`. If the conversion to a draft fails it commits nothing, so a `blocked:` story is never left ready. The PR stays open, as a draft; `main`'s copy is not touched. |
-| CI red on the head | A run that concluded `failure` → failure output → coder respawned on the same branch. Bounded separately at three (OQ-48's AC-4), derived from the PR's failed CI runs (`countRedCiRounds`); then `blocked:` on the branch, no label. |
-| CI cancelled, timed out, or not finished within the dispatcher's wait | Not retried and not counted. The story stops, with `blocked:` on the branch naming the outcome. None of these is something a coder can fix (OQ-48's AC-5); `waitForCi`'s `red` result carries the run's `conclusion` to tell them apart. |
-| CI failed in a setup step | A run that concluded `failure` only in setup steps (checkout, Node, `npm ci`, the browser install, or GitHub's `Set up job`) is treated like a cancelled run: not retried, not counted as a red round, and the story stops with `blocked:` naming the steps (`ci-setup-failed`). `ci.yml` marks its setup steps with a `Setup: ` name prefix that `ci.mjs`'s `isSetupStep` recognises, and `ci.test.mjs` checks the two agree. Decided 2026-10-07 by the owner, after a 403 from Playwright's browser CDN failed a run that the loop would have answered with a coder retry. Re-running CI is left to whoever runs the loop, so `ci.mjs` stays read-only. |
-| A retry reports the coder's `blocked:`, a draft request or a failure; a review records no verdict; a retry after red CI pushes no commit; landing fails | The story stops. Only the results OQ-48's AC-2 names continue the run (the `decide*` functions of `story.mjs`); every other result stops it. Every stop with an open PR makes the PR a draft first, so nothing can land it, which keeps the rule that a `blocked:` story is always a draft. Then it records `blocked:` on the branch. |
-| The reviewer's verdict does not parse | `reviewPullRequest` runs one more reviewer session, in the same worktree and with the same prompt, story, pull request, environment and model, before returning `malformed-verdict`; a second malformed reply stops the story as above, with both sessions' parse failures in the reason. Only a malformed verdict is re-run, never more than once, dependencies are not installed again, and each session keeps its own budget. Decided 2026-10-08 by the owner, so that one badly formatted reply does not stop a story. Before the second session the checkout is checked again, and if the first session changed it there is no second session and nothing is reset (decided 2026-10-08 by the owner): a reviewer that wrote to its checkout is worth seeing. Every result `reviewPullRequest` returns after running a session says how many it ran (1 or 2). |
-| The dispatcher is interrupted mid-story | The crew resumes it from its PR number (`story.mjs OQ-n --pr <number>`, OQ-48's AC-9), which derives where it was from GitHub alone. Once the run has pushed, the story's branch on `origin` keeps it `in-progress`, so the loop (OQ-86) skips it; a run killed between its push and opening the PR leaves a branch with no PR, which the crew handles by hand. Killed before its claim push, the story has no branch on `origin` and the loop picks it again, but the killed run's local branch makes the dispatch return `branch-exists`, which stops the loop (OQ-86's AC-3 and AC-4). The claim push (OQ-110, above) means a run killed after it almost always leaves a branch every machine sees, since the claim lands before the install or the session starts. The loop skips a story whose branch is only local, after pushing it (OQ-111, above), and opens a `Loop: OQ-n is stuck` issue for either kind of skip (OQ-112, above). |
-| Story was wrong, not the code | `blocked:` set with the reason → the planning session |
-| Coder hits ambiguity mid-story | `blocked:` + the specific question → the planning session |
-| Branch stale | Rebase; if it fails, kick back rather than merge against a moved world |
-| Spawn died / timed out / hit budget | Dispatcher records it and moves on; the watchdog surfaces it. A coder dispatch that ends before a PR exists (a failed install or session, nothing committed, uncommitted changes, a failed push) stops the loop (OQ-86) rather than moving on. The claim pushed before the install or the session (OQ-110, above) stays on `origin` through that stop, so the next run skips the story instead of dispatching it again, with the `Loop: OQ-n is stuck` issue that skip now opens (OQ-112, above). A dispatch that stops before a pull request exists for a reason other than another run's claim (`branch-exists`) or the story going stale (`not-ready`) opens the same issue itself, directly, rather than waiting for the next run's skip. |
-
-**The outlet valve must never prompt.** A spawned session that asks a question with nobody attached
-hangs — one observed instance sat blocked for eight minutes. Invocations pass
-`--permission-prompts none` so anything that would prompt is denied instead of blocking, and the
-coder's escape route is **write-and-exit**: set `blocked:` with the question, exit.
-
-### Retry is bounded, and the bound is derived
-
-A fixed number of blocking verdicts, then stop. OQ-48 holds the number and the reasoning behind
-it; this section deliberately does not restate it. Uncapped retries are how you get forty commits
-of an agent arguing with itself. A reviewer session is fresh each time and cannot know how many
-rounds preceded it, and a prose bound honoured by agents remembering is not a mechanism — that is
-the existing OQ-48.
-
-**The round count is derived from the PR, not stored.** Each round leaves a durable trace: a
-findings comment and a `review/agent` status of `failure` on the head SHA it judged. Counting
-`block` verdicts recorded on the PR gives the round count exactly, with no state to keep in sync.
-
-This matters more than it looks. An earlier draft of this document put the count in "the
-dispatcher's own run state," which contradicts
-[principle 6](#principles) and the [derived-status model](#status-is-derived-not-stored): a
-dispatcher restart would silently reset the bound, and a bound that resets when a process dies is
-the bound not existing. Deriving it means the count survives restarts, machine reboots, and a
-dispatcher rewritten from scratch — it is a property of the PR, which is where the evidence lives
-anyway.
-
-The same derivation feeds the circuit breaker. When the bound is reached, `story.mjs` makes the
-PR a draft and sets `blocked:` on the story, on the story's own branch. `review-gate.yml` applies
-`review-blocked` itself, because it sees every PR, including ones no dispatcher ran. That is what
-makes the breaker in `land-approved.yml` count a signal something reliably produces.
-
----
-
 ## Execution model
 
 **This is the largest revision from v1.** The documented pain of the existing workflow — no `gh`,
@@ -518,56 +676,6 @@ Why this is safe enough:
 The crew can tell the controller to hold a pull request back. That is an instruction to the
 session, not part of this design: a pull request whose head passed review lands without a
 go-ahead of its own (owner, 2026-10-12).
-
-### Running unattended
-
-Decided 2026-09-28 by the owner, planning how the planning session's pull requests reach the queue
-without a dispatcher session in between.
-
-- **Planned (ST-11):** a Windows scheduled task starts the loop every 15 minutes while the machine
-  is on, on mains power only. The task is a script: a run with nothing ready starts no model
-  session. GitHub's cron is not used (**Watchdog**, below).
-- **Planned (ST-11):** a run takes a lock that a dead holder does not keep, and appends one line to
-  a local run log. That log is how the crew hears about the loop's own stops. A leftover
-  `tw-coder-*` worktree from an interrupted run is raised as a GitHub issue, as OQ-112 raises a
-  stuck story, and the run goes on (decided 2026-10-01 by the owner). A blocked story pull request is also reported by
-  GitHub's failure email, since a blocking verdict fails the gate's run.
-- The loop runs from a worktree of its own, beside the repository and at a detached `origin/main`,
-  created once by `node scripts/dispatch/loop.mjs --init [path]` (`initWorktree`,
-  `scripts/dispatch/loop.mjs`, OQ-109). Between stories `updateCheckout` fetches `origin`, stops with
-  status `dirty` if the worktree has anything uncommitted, and otherwise checks out `origin/main`,
-  detached. `main` refuses, before fetching or dispatching anything, to run from a checkout that has
-  a branch checked out (`requireOwnWorktree`). The controller's hand-runs also come from a worktree
-  of their own, by rule rather than by that check (**The controller**, above).
-- Stuck stories reach the crew as GitHub issues, one per story (OQ-112), so a
-  leftover on one machine is seen from any (decided 2026-10-01 by the owner, who runs the loop on
-  two machines). An issue names the machine by a label the crew sets, never its hostname, since
-  the repository is public. A story whose branch is on `origin` with no open pull request is stuck
-  unless its claim is younger than 2 hours (`STUCK_AFTER_MS`, `coder.mjs`'s `claimAgeMs`; this
-  restatement must not drift from them). A younger claim is most likely a dispatch still running,
-  on this machine or another, and a branch with no claim counts as stuck. With two or more open
-  `loop-stuck` issues the queue stops completely: a run starts no coder session, review or landing
-  (decided 2026-10-03 by the owner). One stuck story can be its own fault, while two suggest the
-  loop's. The claim commit (above, OQ-110) names the machine by the same label, read from
-  `TW_MACHINE_LABEL` (`coder.mjs`'s `machineLabel`): unset or empty is `unlabelled`, and a value
-  that does not match `^[A-Za-z0-9._-]{1,32}$` stops the dispatch with `bad-machine-label` before
-  anything is claimed, installed or spawned.
-- `--max-stories N` caps how many stories one run starts (`scripts/dispatch/loop.mjs`, OQ-86); a
-  story the loop skips as `in-progress` does not count against it.
-- **Planned (ST-12):** past a usage threshold, the loop starts no coder session, first dispatch or
-  retry, but reviews and landing carry on, so every pull request ends with a review posted. A
-  story that would have been retried is paused, and resumes on a later run under the threshold.
-  What is measured, and over what window, is open.
-- Any pull request from an account with write access (OQ-81) that passes review may land
-  unattended, including one that changes this document, `AGENTS.md`, `CLAUDE.md`, `.github/` or
-  `.claude/`.
-  Marking it ready is the crew's go-ahead: the planning session opens its pull requests as drafts
-  and marks one ready only on the crew's word. A dispatched story's own pull request lands on a
-  pass, as it does today: the story was the go-ahead.
-- Before the task is switched on, OQ-81 and OQ-82 are built, so nothing lands automatically from an
-  outsider or changes `stories/` from inside a coder's pull request, and so are OQ-73 (a coder
-  cannot read the owner's stored token) and OQ-80 (the circuit breaker counts real blocks).
-  OQ-101's `depends_on` holds this.
 
 ### Invocation shape
 
@@ -834,254 +942,6 @@ than as the cron expression. `land-approved.yml`'s schedule was removed for this
 
 ---
 
-## The gate
-
-### What CI runs
-
-The governing problem: **the same context that decided how to implement also decided what to
-assert.** A coder that misreads a story writes tests confirming the misreading. Green means
-"internally consistent," not "correct."
-
-Current CI — oxlint, Vitest, build, Playwright — runs in **~70 seconds**. That is fast enough that
-**tiering is premature**; run everything on every push. Adopt a PR-subset / merge-queue-full split
-only when E2E passes roughly five minutes.
-
-Additions that earn their place now:
-
-| Check | Why |
-|---|---|
-| **Story schema lint** | Frontmatter valid, required sections present, AC ids well-formed. Carries the schema burden now that stories are files. |
-| **AC↔test traceability** | Every AC id in the story appears in at least one test name. Converts "did you do what was asked" from judgment into a gate. |
-| **Existing-test-modification flag** | Flags any PR touching tests outside its own story's additions. Today this is `REVIEW.md`, "Changes to code", item 1 — prose the reviewer must notice. |
-
-AC ids appear in test names directly:
-
-```js
-test('ST-49/AC-4: a story file that does not parse is in the array with its error', ...)
-```
-
-**Coverage stays absent.** A percentage floor produces coverage-shaped tests that assert nothing,
-and agents are extremely literal about hitting a number. The existing deliberate absence is correct.
-
-**Flakiness: no retries in the merge gate.** A flake blocks the dispatcher with nobody watching,
-and a coder meeting an unrelated failure may "fix" it by weakening the assertion. Quarantine —
-skip plus an auto-filed story — keeps the signal visible instead of burying it in a retry count.
-Determinism requires fixed clock, seeded data, no external network, and **stable test IDs rather
-than text or positional selectors**.
-
-**Setup is cached and bounded.** CI caches Playwright's browser, keyed on the runner's OS and the
-installed `@playwright/test` version, and on a hit installs only the system packages. The install
-step has a 5-minute limit and tries twice within it, two minutes each; the job has a 20-minute
-limit, well inside `story.mjs`'s 30-minute CI wait. `update-screenshots.yml` does the same with the
-same key, so baselines are minted by the browser CI compares against. Decided 2026-10-07 by the
-owner, after installs hung in apt and one browser download was refused, with no limit short of
-GitHub's 360-minute default. Retrying the install is a retry of setup, not of a test, so it does not
-contradict "no retries in the merge gate": the checks themselves still run once. `detect-drift.yml`'s
-weekly install is left as it is (decided 2026-10-08 by the owner): it gates no pull request.
-
-A try that fails or reaches its limit leaves nothing running: after each try the step kills every
-process that started during it and is still alive, `apt-get` and `dpkg` under sudo included,
-trying a plain `kill` first and falling back to `sudo kill` only when that is refused. A try runs
-under `timeout`, in a process group of its own, and what it starts with `setsid` or under sudo's
-pty has a session of its own, so the try's processes are the new ones whose group or session is
-new too. A new process whose group and session both existed before the try, such as a test
-runner's child, is not the try's, and is left alone (amended 2026-10-09 by the owner). A new
-process in a new session that the try did not start, such as a system service init starts during
-it, cannot be told apart, and is killed too.
-Before the second try it waits up to 30 seconds for `/var/lib/dpkg/lock-frontend` to be free and
-then runs `sudo dpkg --configure -a`, so a package the first try left half-installed is finished.
-The wait tests the lock with an `fcntl` lock, as apt and dpkg take it, since a `flock` probe
-cannot see theirs; the repair is limited to 20 seconds, and a repair that fails or times out is
-logged and does not stop the second try, though the step runs under `bash -e` (amended again
-2026-10-09 by the owner, after #241's review).
-Decided 2026-10-09 by the owner (OQ-136), after a first try timed out while apt was slowly fetching
-fonts: the limit ended `npx` but not the `apt-get` under it, which kept the dpkg lock, so the
-second try failed at once and the retry could not recover from the hang it was added for. The
-test that runs this clean-up for real is in a file of its own, `*.alone.test.mjs`, which `npm test`
-leaves out and CI runs in a step of its own after it, so that no other test's processes are
-running for the clean-up to stop (decided 2026-10-09 by the owner).
-
-In tower-workshop-paths, its OQ-137 plans for the step's worst case to count the clean-up after the
-first try, with a 5-second allowance that the clean-up test checks: 2 × 120 + 5 + 30 + 20 = 295
-seconds of the 300 (decided 2026-10-09 by the owner, from #243's review). The clean-up after the
-second try is not counted: the step fails then whatever happens.
-
-**Definition of green:** it builds, lint is clean, every AC has a named test, Vitest passes,
-Playwright passes without retries, no pre-existing test was modified without story authorization,
-and the story file validates.
-
-### Reviewer
-
-**The reviewer's job is drift detection, not quality assurance:**
-
-> Does this diff do what the story said, all of what it said, and nothing it didn't?
-
-Three sub-checks: **completeness** (every AC delivered), **fidelity** (the AC is genuinely
-satisfied, not merely named in a test), **containment** (nothing outside scope).
-
-**The reviewer is given the story.** This is the single most important correction to the existing
-implementation, where the reviewer receives `REVIEW.md`, the diff and the PR body — but never the
-OQ entry. Its scope items therefore compare the diff to *the PR's own account of itself*, both
-written by the same worker. A worker that misread the story writes a body describing what it built
-and a diff matching that body; every item passes. Drift is invisible.
-
-That happened by over-applying a correct principle. *"A reviewer that knows what the change was
-meant to do cannot see that the diff does something else"* is true of **the author's account**. It
-is not true of **the authored story**, which is the standard the diff must meet.
-
-So the reviewer receives: **story file, diff, checklist.** It does not receive the coder's session,
-summary, reasoning, or any dispatcher commentary. Decorrelation preserved; drift detection enabled.
-
-**The PR description is itself in scope.** After forming findings from the diff, check whether the
-description honestly describes the change. Prose that oversells a diff is real signal.
-
-**Verdict states:** `pass` / `pass-with-observations` / `block`. Binary pass/fail cannot express
-what reviewers here already produce — real problems rightly surfaced and arguably rightly not
-blocking. Without the third state the verdict record understates what review catches, and any
-measurement built on it is meaningless.
-
-**Model:** Opus, high effort, and **deliberately not the coder's model.** Fidelity is the hard part
-— noticing that a test named `AC-3` doesn't exercise AC-3 is adversarial reading. And author and
-reviewer sharing a model family means correlated blind spots: context isolation decorrelates
-*knowledge*, not *reasoning style*. Opus-reviews-Sonnet buys both at once.
-
-### Recording the verdict
-
-A **required status check keyed to the head SHA**, posted by the dispatcher:
-
-```bash
-# Valid where gh exists — verified on the owner's machine (gh 2.100.0, account luplows).
-# NOT available in spawned cloud sessions.
-gh api -X POST "repos/$REPO/statuses/$SHA" \
-  -f state=success -f context=review/agent \
-  -f description='ST-49: pass' -f target_url="$FINDINGS_URL"
-```
-
-Why a status rather than a PR review: GitHub forbids approving your own PR, which deadlocks a
-single-account project. A commit status carries no such restriction. **This is already implemented
-and already required in branch protection** — verified live alongside `test`, with
-`enforce_admins: true`.
-
-Properties worth preserving:
-
-- **Stale by construction.** A new push leaves the head with no status; merge blocks until
-  re-review. "No dismissal mechanism" is a platform guarantee, not a convention.
-- **`pass-with-observations` maps to `success`** with the observations in the findings comment.
-  Only `block` maps to `failure`.
-- **A blocking verdict also fails the workflow run**, purely so GitHub's built-in failure
-  notification fires. A job reporting success while recording a block is silent exactly when
-  someone needs to hear about it.
-- **Never a label as the verdict.** Labels don't attach to a SHA, so an approval survives later
-  pushes. Derive labels *from* the status if wanted.
-- **`verdict=fail` is still accepted as a deprecated spelling of `block`**, because an
-  unrecognised marker is ignored, which would leave a pull request pending for good with a
-  valid-looking verdict on it: a worse failure than honouring an old name. (Moved from `REVIEW.md`
-  on 2026-10-13.)
-
-### What the gate enforces
-
-Moved from `REVIEW.md` on 2026-10-13, when it became the checklist only. ATC posts a verdict as
-one pull request comment that cites the checklist item each finding comes from and ends with
-exactly one marker line:
-
-```
-<!-- agent-review head=<full-40-char-sha> verdict=pass -->
-<!-- agent-review head=<full-40-char-sha> verdict=pass-with-observations -->
-<!-- agent-review head=<full-40-char-sha> verdict=block -->
-```
-
-Opening a pull request, or pushing to one, sets `review/agent` to pending, and only a marker
-clears it, so a pull request nobody reviews cannot merge. A reviewer that returns no verdict gets
-nothing posted: the pull request stays pending, which is visible, where a `pass` from a reviewer
-that could not review would not be. Where the cause is fixable, such as a new head, a later review
-posts whatever verdict it returns.
-
-Getting these wrong means the gate ignores the marker rather than obeys it:
-
-1. **`head` is the full 40-character SHA of the commit reviewed**, not an abbreviation.
-2. **That SHA is still the pull request's head.** A verdict about an earlier commit says nothing
-   about the current one, so a stale marker is ignored and the status stays pending.
-3. **There is no partial credit and no dismissal mechanism.** The only way past a `block` is to
-   fix what it found and get a fresh review. A block on the code is fixed by a commit that
-   addresses it, which resets the gate to pending. **A block on the pull request's description
-   alone** (`REVIEW.md`, "Reading the pull request body", items 1 and 2, "Every pull request",
-   item 2, or "Integrity", item 1, with nothing in the diff to change) is fixed by
-   editing the description, then a fresh review of the **same head** (`review.mjs --rereview`),
-   whose verdict is posted. The description is not part of the head, so a commit would change
-   nothing it found. Either way it is a new review, never a waved-through old one, and **the block
-   still counts toward the round bound like any other**: the bound counts `block` verdicts and
-   makes no exception for what they were about. (The bound is three blocking verdicts. This
-   restates `MAX_ROUNDS` in `scripts/dispatch/story.mjs` and `ROUND_BOUND` in
-   `scripts/land/apply-review-blocked.mjs`, and must not drift from them.)
-4. **The comment comes from an account with write access.** Anyone can comment on a public
-   repository; a marker from anyone else is ignored.
-
-If a comment holds more than one well-formed marker, the last one wins, so a correction later in
-the same comment supersedes an earlier line.
-
-### Merging
-
-**Nothing with judgment merges.** The existing `land-approved.yml` is the correct design and should
-be kept essentially as-is:
-
-- **Triggered independently of the work**, so it depends on no session being alive — a worker
-  finishes long before its verdict arrives. This was a `*/15` schedule until 2026-09-18; GitHub
-  delivered it at roughly 5% of that rate, so the trigger was removed and landing is explicit
-  (`gh workflow run land-approved.yml`) until a reliable one was chosen. `land.mjs` (OQ-50) is
-  that trigger: it triggers the sweep once a PR is landable, and re-triggers while the PR is still
-  open. It never merges itself. `story.mjs` (OQ-48) calls it, and the crew or the controller
-  may run it directly; nothing else does.
-- **It lands only pull requests whose author has write access** (the same association set the gate
-  honours for markers, `scripts/land/check-author.mjs`), because a landed `ready` story is work the
-  loop will carry out (OQ-81).
-- **One PR per run.** `mergeable_state` is computed asynchronously, so a second merge in the same
-  pass decides on stale data. The same fact has a cost between runs: straight after a merge, other
-  open PRs can read `unknown` for a while, and the sweep skips `unknown` rather than guessing. A
-  run triggered soon after the previous merge can therefore land nothing even though a PR is ready.
-  That is safe, and it is why back-to-back manual runs sometimes need one more. See **GitHub
-  mechanics** below and OQ-50.
-- **The named PR, or else the oldest.** The sweep takes an optional `pr` input, and `land.mjs`
-  always names its own pull request in it. A run given a pull request considers only that one and
-  lands nothing if it is not landable, so `land.mjs` lands what it was called for and nothing else.
-  A run given none, such as the crew's `gh workflow run`, lands the oldest landable one, so
-  nothing starves. Decided 2026-09-28: the loop decides which pull request is ready, and a sweep
-  that lands a different one spends `land.mjs`'s triggers, can stop a story that passed, and lands
-  pull requests nobody asked it to. The candidate choice is made in
-  `scripts/land/select-candidates.mjs`, which is tested without running the workflow.
-- **Re-checks `review/agent` directly** rather than trusting `clean`, because a required check
-  vanished from protection once. Prevention, not detection.
-- **`--match-head-commit`**, which refuses the merge if anything was pushed between the check and
-  the call.
-- Circuit breaker at five `review-blocked` PRs, with exemptions for `breaker-override` and
-  workflow-only diffs so a tripped breaker is not a trap.
-
-`review-blocked` is applied automatically when a pull request reaches the round bound, by
-`review-gate.yml`, with the bound derived from the PR's own `block` verdicts rather than
-remembered (OQ-80). **Planned (ST-16):** removing the label by hand means "I have seen the cost,
-proceed", so after a removal only blocks recorded since the latest removal count towards applying
-it again, read from the pull request's `unlabeled` events (decided 2026-10-08 by the owner).
-
-### Merge queue
-
-Two PRs that pass independently can break together; neither one's CI ever ran against the other's
-changes. A merge queue tests the post-merge state on temporary branches — and **the PR's own head
-SHA never changes**, so the `review/agent` status survives. That is the property that makes it
-adoptable: the previously-rejected alternative (refreshing every ready PR after each merge) reset
-the gate on every in-flight PR.
-
-Not urgent while the dispatcher runs one story at a time. Required before parallel dispatch.
-
-Three things to get right:
-
-- **Workflows need a `merge_group` trigger**, or checks never report and PRs sit forever.
-- **"Require branches up to date" stays off.** Confirmed `strict: false`.
-- **Verify** how an externally-posted `review/agent` interacts with required checks on the merge
-  group. Robust workaround worth building preemptively: a `merge_group`-triggered workflow that
-  resolves the originating PR, confirms `review/agent` was `success` on its head SHA, and reports
-  itself green — correct however the semantics fall.
-
----
-
 ## Branching and releases
 
 ```
@@ -1280,268 +1140,6 @@ the variables rather than blanking them, which is why it works. Whoever implemen
 reviewer's half of the same problem — is the person most likely to reach for the empty string, which
 is why this is recorded here rather than only in a code comment.
 
-### A long shell command in a headless session
-
-**A `-p` session loses a shell command that outlasts the shell timeout.** Claude Code moves the
-command to the background and tells the session it will be notified when it finishes. The session
-ends its turn to wait. A `-p` session ends when the model stops calling tools, so the CLI kills the
-command and the session exits 0. `spawnSession` classifies that as `completed`. This is what
-happened to OQ-86's first dispatch on 2026-10-01. The trials below (OQ-106) reproduce it, and test
-three environment variables against it.
-
-**How the trials were run.** Seven trial sessions on 2026-10-01, from 05:37 UTC, on the owner's
-Windows machine. Every one ran Claude Code `2.1.281 (Claude Code)` (`claude --version`, run on the
-binary `resolveClaudeExecutable` found). Each was started by `spawnSession` in
-`scripts/dispatch/spawn.mjs`, with `role: 'coder'` except T7 (`role: 'reviewer'`). So the arguments
-and environment were the ones `buildInvocation` builds, with these choices:
-
-- **Model `haiku`** for every trial, to keep them cheap. Effort and the rest of the arguments were
-  the role defaults: `--effort medium` for the coder, `--effort high` for the reviewer.
-- **`maxBudgetUsd: 1`** for every trial.
-- **`spawnSession`'s default `timeoutMs` and `stallMs`**: `DEFAULT_TIMEOUT_MS` and
-  `DEFAULT_STALL_MS` in `spawn.mjs`. No trial was stopped. Every one has `stoppedFor: null`, exit
-  code 0 and classification `completed`.
-- **`baseEnv`** was the trial runner's `process.env`, with the variable under test added. Thirteen
-  variables were removed first. The runner was a `node` script started from a Claude Code session,
-  and that session had put them in its shell's environment. They name that session (its id, its
-  pid, its messaging socket and token), so a trial must not inherit them. The thirteen are
-  `CLAUDECODE`, `CLAUDE_AGENT_SDK_VERSION`, `CLAUDE_CODE_CHILD_SESSION`,
-  `CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING`, `CLAUDE_CODE_ENABLE_TASKS`,
-  `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_EXECPATH`, `CLAUDE_CODE_MESSAGING_SOCKET`,
-  `CLAUDE_CODE_MESSAGING_TOKEN`, `CLAUDE_CODE_SESSION_ATTENDED`, `CLAUDE_CODE_SESSION_ID`,
-  `CLAUDE_EFFORT` and `CLAUDE_PID`. A dispatcher started from a Claude Code session passes
-  variables like these on to its sessions, because `baseEnv` defaults to `process.env` in
-  `coder.mjs` and `review.mjs`. Whether any of them changes these results was not tested.
-- **`buildInvocation` overrides none of the three variables under test** at this commit. The
-  runner recorded each variable as it stood in `buildInvocation`'s returned `env`, which is what
-  the session ran with. In every trial that was the value added, and unset for the other two.
-- **Working directory:** a fresh, empty scratch directory per trial, outside this repository's
-  tree. It was not a git repository.
-- **Prompt:** a short instruction, not `coder.md` or `reviewer.md`. `<params>` was the parameter
-  instruction given for each trial, and `<command>` its command:
-
-  ```text
-  This session is a short test of the Bash tool. Run the command below with the Bash tool, once, exactly as written. <params>
-
-  <command>
-
-  When you have the Bash tool's result, reply with that result quoted verbatim.
-  ```
-
-- **The slow command** was this `node -e` timer, with `N` set to 150 or 660. It writes
-  `finished.txt` and prints one line when the time is up:
-
-  ```bash
-  node -e "setTimeout(()=>{require('fs').writeFileSync('finished.txt',new Date().toISOString());console.log('timer finished after N s')},N000)"
-  ```
-
-  "Ended before the command finished" compares the time `spawnSession` resolved with
-  `finished.txt`'s modification time. The runner looked for the file one minute after the
-  command's own end. Where the file never appeared, the background command's output file (the
-  path in the shell result) was read afterwards.
-- **What the shell tool returned** is taken from each session's transcript under
-  `~/.claude/projects/`, found by the `session_id` in the session's JSON output. Each one is
-  quoted below exactly as the transcript holds it.
-- The trial script is not committed. Its full text is in the body of the pull request that added
-  this subsection.
-
-T4 runs no slow command, so it was run first on its own. That also showed that `haiku` accepts
-the role's `--effort` argument before the six long trials were committed to it. Those six were
-started together, from one `node` script run in the background.
-
-Each trial below gives the Claude Code version (`2.1.281` for all seven), the variables set beyond
-what `buildInvocation` produces, the command and how long it takes, what the shell tool returned,
-whether the session ended before the command finished, and `total_cost_usd`.
-
-**T1: Q1, the baseline.** Coder. **Added:** nothing. **Parameters:** "Do not set the timeout or
-run_in_background parameters." **Command:** the timer at 150 s. **Shell tool returned**, 120 s
-after the call:
-
-```text
-Command did not complete within its 120s timeout and was moved to the background (ID: bnr6zuyzk). Output is being written to: C:\Users\steve\AppData\Local\Temp\claude\C--Users-steve-AppData-Local-Temp-claude-C--Users-steve-AppData-Local-Temp-tw-coder-q5fluR-tree-d18945d5-43bb-47db-96d8-3ef89b5e9c52-scratchpad-oq106-scratch-T1\8ba9f7b6-730c-4f80-bd4c-2e56e973cecb\tasks\bnr6zuyzk.output. You will be notified when it completes. To check interim output, use Read on that file path.
-```
-
-**Ended before the command finished:** yes. The session ended at 134.9 s, with the final text "I've
-run the command, but it needs 150 seconds to complete. The Bash tool's default timeout is 120
-seconds, so the process was automatically moved to the background. I'll wait for it to finish."
-`finished.txt` was never written. The background output file held only `[killed]`.
-**`total_cost_usd`:** 0.0254879.
-**Answer to Q1:** yes on both counts. With nothing added, the command was moved to the background
-at 120 s. The session then ended its turn and exited, and the CLI killed the command.
-
-**T2: Q2.** Coder. **Added:** `BASH_DEFAULT_TIMEOUT_MS=600000`. **Parameters:** as T1.
-**Command:** the timer at 150 s. **Shell tool returned**, 150 s after the call:
-
-```text
-timer finished after 150 s
-```
-
-**Ended before the command finished:** no. The command finished at 05:40:21.230Z and the session
-ended at 05:40:22.757Z. **`total_cost_usd`:** 0.0489788.
-**Answer to Q2:** yes. The command finished in the foreground, and its output came back to the
-session as the tool result.
-
-**T3: Q3, a command past the timeout.** Coder. **Added:** `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`.
-**Parameters:** as T1. **Command:** the timer at 150 s. **Shell tool returned**, 120 s after the
-call, marked as an error (`is_error: true`):
-
-```text
-Exit code 143
-Command timed out after 2m 0s
-```
-
-**Ended before the command finished:** yes, because the command was stopped. It never wrote
-`finished.txt`, and the session ended at 129.3 s. **`total_cost_usd`:** 0.0238691.
-**Answer to Q3, first part:** the command was stopped at the shell timeout (exit code 143) and the
-session saw it as an error. It was not moved to the background.
-
-**T4: Q3, `run_in_background`.** Coder. **Added:** `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`.
-**Parameters:** "Set the run_in_background parameter to true. Do not set the timeout parameter."
-**Command:** `node -e "console.log('background command ran')"`, which returns at once. The
-session passed `"run_in_background": "true"`. **Shell tool returned**, marked as an error:
-
-```text
-<tool_use_error>InputValidationError: Bash failed due to the following issue:
-An unexpected parameter `run_in_background` was provided</tool_use_error>
-```
-
-**Ended before the command finished:** not applicable. The command never ran. The session's own
-summary listed the Bash tool's parameters as `command`, `description`, `dangerouslyDisableSandbox`
-and `timeout`. **`total_cost_usd`:** 0.0536022.
-**Answer to Q3, second part:** no. With the variable set, `run_in_background` is not a parameter of
-the Bash tool, and a call that passes it is rejected before anything runs.
-
-**T5: Q4.** Coder. **Added:** `BASH_MAX_TIMEOUT_MS=900000`. **Parameters:** "Set the timeout
-parameter to 800000. Do not set the run_in_background parameter." The session passed
-`"timeout": 800000`. **Command:** the timer at 660 s. **Shell tool returned**, 660 s after the
-call:
-
-```text
-timer finished after 660 s
-```
-
-**Ended before the command finished:** no. The command finished at 05:48:52.842Z and the session
-ended at 05:48:56.418Z. **`total_cost_usd`:** 0.0501535.
-**Answer to Q4:** yes. With the maximum raised to 900000, an explicit timeout of 800000 took
-effect, and a 660-second command finished in the foreground.
-
-**T6: Q4's control.** Coder. **Added:** nothing. **Parameters:** as T5, and the session passed
-`"timeout": 800000`. **Command:** the timer at 660 s. **Shell tool returned**, 600 s after the call:
-
-```text
-Command did not complete within its 600s timeout and was moved to the background (ID: bap4qokky). Output is being written to: C:\Users\steve\AppData\Local\Temp\claude\C--Users-steve-AppData-Local-Temp-claude-C--Users-steve-AppData-Local-Temp-tw-coder-q5fluR-tree-d18945d5-43bb-47db-96d8-3ef89b5e9c52-scratchpad-oq106-scratch-T6\75e687ec-29b6-45de-aa30-fce0bda017ce\tasks\bap4qokky.output. You will be notified when it completes. To check interim output, use Read on that file path.
-```
-
-**Ended before the command finished:** yes. The session ended at 615.6 s, saying it would "be
-notified when it completes". `finished.txt` was never written, and the background output file held
-only `[killed]`. **`total_cost_usd`:** 0.0251996.
-**What T6 adds to Q4:** a timeout above the maximum is accepted without an error, then cut to the
-maximum without saying so in advance: 800000 was asked for, and the result reports "its 600s
-timeout". So the outcome in T5 is the raised maximum taking effect, not the explicit timeout alone.
-
-**T7: Q5, the reviewer.** Reviewer (`role: 'reviewer'`, so the reviewer's allowlist and a plain
-copy of `baseEnv`; unlike `review.mjs`, the runner did not pass `baseEnv` through `coderEnv`
-first, which changes only credentials and `GH_CONFIG_DIR`). **Added:** nothing. **Parameters:**
-as T1. **Command:** the timer at 150 s. **Shell tool returned**, 120 s after the call:
-
-```text
-Command did not complete within its 120s timeout and was moved to the background (ID: bk4qdpx2l). Output is being written to: C:\Users\steve\AppData\Local\Temp\claude\C--Users-steve-AppData-Local-Temp-claude-C--Users-steve-AppData-Local-Temp-tw-coder-q5fluR-tree-d18945d5-43bb-47db-96d8-3ef89b5e9c52-scratchpad-oq106-scratch-T7\ab4aee68-0bd8-445a-999a-abe88c86ba74\tasks\bk4qdpx2l.output. You will be notified when it completes. To check interim output, use Read on that file path.
-```
-
-**Ended before the command finished:** yes. The session ended at 133.2 s, saying "I'm waiting for
-it to finish so I can provide you with the result." `finished.txt` was never written, and the
-background output file held only `[killed]`. **`total_cost_usd`:** 0.0487476.
-**Answer to Q5:** yes. A reviewer session behaves as T1 does.
-
-All seven cost 0.2760387 USD together.
-
-**What the trials do not show.** Each configuration was tried once, with `haiku`. The shell
-tool's result comes from the CLI and should not depend on the model. Ending the turn after a
-background notice is the model's choice. All three `haiku` sessions that got one (T1, T6, T7) made
-it, and so did OQ-86's coder. Two things were not tried. One is a command past 600 s with
-`CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` and `BASH_DEFAULT_TIMEOUT_MS=600000` together; T3 suggests
-an exit 143 at 600 s. The other is an inherited `BASH_DEFAULT_TIMEOUT_MS` above 600000 raising the
-maximum on its own. OQ-76 read that rule from the CLI's code. T2 and T5 agree with it but do not
-test that case. Like the reviewer's shell check in "Invocation shape", all of this belongs to
-Claude Code 2.1.281, and another version can change it.
-
-**Recommendation.** This is a recommendation only. Acting on it is a later story, written by
-the planning session.
-
-1. **Set `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` in `coderEnv`** (T3, T4). A command past the
-   timeout then fails as an error the session sees, instead of moving to the background and being
-   killed silently when the session ends (T1, T6). It also takes `run_in_background` out of the
-   Bash tool (T4). That costs little in a `-p` session, where a background command does not outlive
-   the session anyway (T1, T6: `[killed]`). It does stop a session from running a command in the
-   background and polling it, which is how this spike's own coder ran its trials. A later story
-   that needs that would have to do without it.
-2. **Set `BASH_DEFAULT_TIMEOUT_MS=600000` in `coderEnv`** (T2). A command up to 10 minutes long,
-   such as a slow test suite, then finishes in the foreground without the session having to pass
-   a `timeout`. With item 1, a command longer than that fails visibly rather than being lost (T3,
-   by extension).
-3. **Set `BASH_MAX_TIMEOUT_MS=600000` in `coderEnv`**, the planned value (T5, T6). T6 shows that
-   600000 caps even an explicit `timeout` above it. T5 shows that a raised maximum lets one call
-   run longer. That would also lengthen the longest stretch in which a session emits nothing.
-4. **Set the same three variables, at the same values, in the reviewer's environment** (T7). Q5
-   shows the reviewer is exposed in the same way. The reviewer's environment in `buildInvocation`
-   is a plain copy of `baseEnv`. `review.mjs` currently passes `coderEnv`'s output as that
-   `baseEnv`, so values set in `coderEnv` would reach a reviewer started through `review.mjs`.
-   They would not reach one started through `buildInvocation` by any other caller, as T7 was. So
-   they belong in `buildInvocation`'s reviewer branch too, which is where OQ-76's AC-5 already
-   plans its pins for both roles.
-5. **Add a line to `coder.md` about background commands, and the same to `reviewer.md`** (T1, T6,
-   T7). Every session that was told a command had moved to the background ended its turn to wait.
-   The line should say that a `-p` session ends when it stops calling tools, so no notification
-   ever arrives. It should say never to end a turn to wait for a command. And if a command times
-   out, the session should narrow it, or rerun it with an explicit `timeout` no higher than 600000.
-   With item 1 in place the background notice should not appear. The line is the backstop if a
-   later CLI version stops honouring the variable.
-
-6. **OQ-76's AC-5, value by value.** OQ-76 plans to pin `BASH_DEFAULT_TIMEOUT_MS=120000` and
-   `BASH_MAX_TIMEOUT_MS=600000` for both roles in `buildInvocation`, and to derive
-   `DEFAULT_STALL_MS` from that maximum. Items 2 to 4 above already imply the answers. Here they
-   are against each planned value:
-
-   - **`BASH_DEFAULT_TIMEOUT_MS`: change 120000 to 600000** (T1, T7 against T2). At 120000, a
-     command between 2 and 10 minutes long is moved to the background and lost when the session
-     ends. At 600000 it finishes in the foreground. Pinning it to 120000 would pin the failure this
-     spike studies.
-   - **`BASH_MAX_TIMEOUT_MS`: keep 600000** (T6, T5). It is the bound that holds even against an
-     explicit larger `timeout` (T6). Raising it lengthens the longest single call (T5).
-   - **`DEFAULT_STALL_MS`: keep the planned derivation and value**, the pinned maximum plus a
-     margin, which OQ-76 puts at 12 minutes. The default rises to 600000, but under the CLI's rule
-     `Math.max(BASH_MAX_TIMEOUT_MS ?? 600000, BASH_DEFAULT_TIMEOUT_MS ?? 120000)` the maximum is
-     still 600000. T6 shows a call cut off at 600 s with the maximum unset. So the longest single
-     shell call, during which a session emits no event (OQ-76's Context), stays 10 minutes. The
-     stall interval needs no more than OQ-76 already plans. If a later story raises
-     `BASH_MAX_TIMEOUT_MS`, the stall interval must rise with it, to above the new maximum. The
-     derivation OQ-76 plans makes that automatic. Until OQ-76 lands, output stays
-     `--output-format json`, which is silent for the whole session, so `DEFAULT_STALL_MS` has to
-     stay above a whole session's length. None of these trials changes that.
-
-**Decided 2026-10-01 by the owner: background commands stay available.** Item 1 is not adopted.
-Turning them off would mean a story that needs one has to be spotted and run differently. Once the
-loop runs unattended, nothing would spot it, so the owner chose fewer special cases over the
-guarantee. `buildInvocation` pins `BASH_DEFAULT_TIMEOUT_MS` and `BASH_MAX_TIMEOUT_MS` to `600000`
-for both roles (`SHELL_TIMEOUT_MS` in `scripts/dispatch/invocation.mjs`), and removes
-`CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` if the dispatcher's environment carries it (items 2 to 4,
-with the default changed as item 6 says). `coder.md` and `reviewer.md` tell a session never to end
-its turn while a command runs (item 5). **Planned (ST-14):** a coder session that completes with
-work left uncommitted is resumed once and told so. The resumed session's outcome, report and
-commits are then used exactly as a first session's would be, so its report supplies the PR. That is the
-backstop for a session that ends its turn anyway, whatever the story. Items 4 and 6 describe
-OQ-76's AC-5 as it stood when the trials ran. The two pins have since moved to OQ-107. OQ-76's
-AC-5 now holds the `DEFAULT_STALL_MS` derivation, from OQ-107's maximum, and the timeout below.
-
-**Decided 2026-10-03 by the owner: a session's timeout rises to 60 minutes.** On 2026-10-02 the
-20-minute stall interval stopped a working coder, the first OQ-110, about halfway through its
-story. Its output was `--output-format json`, which is silent until the session ends.
-`DEFAULT_TIMEOUT_MS` in `scripts/dispatch/spawn.mjs` goes from 30 to 60
-minutes, together with the 12-minute stall interval that streamed output makes possible (OQ-76).
-Once a session's output shows it working, the stall interval catches one that has hung, and
-`--max-budget-usd` caps its spending. That leaves the timeout to stop a session that is busy but
-not finishing, and 30 minutes is shorter than a real story needs.
-
 ### GitHub mechanics
 
 - **`mergeable_state`**: `clean` (all *required* checks green), `blocked` (required check
@@ -1584,21 +1182,283 @@ open, no maintainer response). The `ANTHROPIC_API_KEY` alternative works but int
 billing stream, declined on cost-isolation grounds. **This is why review runs outside CI** — and
 under the local execution model it no longer matters.
 
-### Costs
+---
 
-| Thing | Cost | Wall clock |
-|---|---|---|
-| Worker session (one story, opens PR) | ~$2.41 | ~25 min |
-| Reviewer session | $1.03 – $1.55 | 5–8 min |
-| CI run (lint + unit + build + Playwright) | free | ~70 s |
+## Deliberately excluded
 
-Public repo, so Actions minutes are not a constraint; **model usage is.** A clean first pass is
-~$3.70; worst case with two retries is ~$11. Story quality decides which you pay — *and*, per the
-readiness test, whether the gate works at all. Both arguments point at the planning session.
-
-`--max-budget-usd` makes the ceiling explicit per invocation rather than discovered afterwards.
+- **More agent roles.** Two roles plus a script is the right complexity.
+- **Agents conversing with each other.** Artifacts only.
+- **A model in the dispatcher.** If it needs judgment, the schema is underspecified.
+- **Merging without a recorded verdict.**
+- **Coverage-percentage tooling.**
+- **A `develop` trunk.** `main` is the integration trunk.
 
 ---
+
+## Open questions
+
+| # | Question | Status |
+|---|---|---|
+| 1 | Queue location | **Resolved:** one file per story under `stories/`, OQ numbering preserved. |
+| 2 | Reviewer local vs. CI | **Resolved: local** — Action cannot authenticate; now moot since everything runs locally. |
+| 3 | Dispatcher implementation | **Resolved:** a local script, no model. |
+| 4 | Release cut trigger | Open. Human call, roughly every ten merged PRs. |
+| 5 | Fresh vs. resumed coder on retry | Open. Fresh matches the context principle; resumed may be cheaper. Untested. |
+| 6 | Story sizing proxies | **Resolved:** guideline, not a cap. The planning session's judgment governs readiness, and carries an obligation to push back when scope is too large. Better proxy is distinct mechanisms than criterion count — see [Sizing is a judgment](#sizing-is-a-judgment-and-it-is-the-planning-sessions). |
+| 7 | Verdict mechanism | **Resolved:** `review/agent` status, SHA-keyed. Already built and required. |
+| 8 | What CI runs | **Resolved:** current suite plus schema lint, AC traceability, existing-test flag. No tiering at 70 s. |
+| 10 | Second GitHub identity | Open. The only thing that fully closes self-marking. Cost: a machine account or App. |
+| 11 | Other companies' models | Open. Goals decided 2026-10-07, and comes after the move; questions M1–M6 under [Portability](#portability-other-projects-other-companies-models). OQ-114. |
+| 12 | The workflow in a repository of its own | Open. Goals decided 2026-10-07, and comes first; questions R1–R10 under [Portability](#portability-other-projects-other-companies-models). OQ-115. |
+
+### Defining steward
+
+Moved from `outline.md`, "Defining steward", on 2026-10-13 ("The outline is a current
+document", above). Each names the outline's section it belongs to.
+
+- **D1. The ground stop** ("What it is", "The two sides"). Steward keeps working while ready work
+  remains, up to a point where too much has stopped without landing. Open: whether "too much
+  stopped" is one measure, what it counts, and how each stop reaches the crew. The owner's view
+  (2026-10-10, asked whether each side stops on its own measure or both on one): the two sides
+  should probably stop at the same time, so that a backlog of unreviewed pull requests does not
+  build up. Two separate limits come closest today: two or more open `loop-stuck` issues stop
+  the loop (`STUCK_ISSUE_LIMIT`, `scripts/dispatch/loop.mjs`), and five or more open
+  `review-blocked` pull requests narrow what the runway lands (the circuit breaker,
+  `.github/workflows/land-approved.yml`). Neither counts a unit stopped for another reason, such
+  as red CI at its own bound, which `story.mjs` records as `blocked:` on a draft pull request,
+  with no label and no issue.
+- **D2. Priority** ("What steward is for"). Probably the order in which work is started, since
+  the order it finishes in is not deterministic (the owner's leaning, 2026-10-10, still to be
+  thought through). Steward's own stories are ordered by `tier`, then lowest id
+  (`stories/README.md`, "Status").
+- **D3. Looking back** ("What steward is for"). Ideally a walkthrough of the product (owner,
+  2026-10-10). Open: whether it is steward's. The release review (above) is meant for it, a
+  periodic walkthrough of `main` ending in a release tag, but it has not yet run, so its scope is
+  unknown (owner, 2026-10-10); steward's `origin` has no tags (2026-10-13).
+- **D4. Whether and how the `Unit:` line is required** ("Review"). ST-26 puts the line in
+  steward's pull request template and leaves this open. The planning session's options
+  (2026-10-11): the pull request template carries it; ATC always writes it on a pull request it
+  opens; or a check on the pull request body, posted by steward's gate, fails without it, which
+  would sit with "Steward enforces nothing about CI" ("Land").
+- **D5. The `unitLinks` value `init` writes** ("Review").
+- **D6. A tool that compares a project's checklist with the example in the version it pins**
+  ("Review"): a possibility, not decided (owner, 2026-10-09).
+- **D7. The checklist's parser as a command a project may run in its own CI** ("The checklist's
+  shape"), so that a pull request that breaks the checklist is caught before it lands, since
+  otherwise every review after it stops. The planning session's proposal, 2026-10-11, not decided.
+- **D8. What `init` explores in the repository to surface options** ("Land").
+- **D9. The two ways to set up** ("Land"): one declarative, which runs without AI, and one meant
+  to be run with an AI helper (owner, 2026-10-11). Not yet refined: what each covers, and how the
+  second sits with `init` as a deterministic script.
+- **D10. Whether a project must have CI at all** ("Land"). The owner leans against making CI a
+  prerequisite, but every project of the owner's will have CI, so requiring it is possible
+  (owner, 2026-10-10).
+- **D11. Whether GitHub's rulesets are available where branch protection is not** ("Land"). Only
+  the branch protection limit is recorded (R6).
+- **D12. Which commands the reviewer and the coder may run** ("Settings"), left for later by the
+  owner (2026-10-11). It probably needs to be a setting, for a project that is not built with
+  Node, and may look different once coder and reviewer sessions run in containers (R5).
+- **D13. Other triggers for a rotation** ("The two sides"), such as a scheduled task (ST-11) or a
+  GitHub event, left by the owner for a later discussion (2026-10-11). To start with, the
+  controller starts each rotation.
+
+### Other companies' models (OQ-114)
+
+- **M1. Which tools and models.** The owner's examples are OpenAI's GPT models. An adapter needs,
+  from the tool: a non-interactive run from a prompt, a machine-readable result, restrictions on
+  what the session may run, confinement to its working directory, and a time or cost bound.
+  OpenAI's own documentation (developers.openai.com/codex/noninteractive, read 2026-10-07)
+  describes the Codex CLI's `codex exec` for this: the prompt as an argument, `--json` for JSON
+  Lines output, and `--sandbox read-only | workspace-write | danger-full-access`. Not yet run here.
+  Its restrictions are a sandbox policy, not a per-command allowlist like Claude Code's, so M3
+  applies in full. **Decided 2026-10-08 by the owner: the Codex CLI is the first adapter, for the
+  reviewer (M2), after a spike** that runs it here and shows it can run `npm test` inside its
+  read-only sandbox and return a verdict the gate can parse.
+- **M2. Which role first.** **Decided 2026-10-08 by the owner: the reviewer.** Goal 2's value is largest there, and a
+  reviewer that cannot write is a smaller guarantee to re-establish than a coder's.
+- **M3. Guarantees before use.** **Decided 2026-10-08 by the owner:** no tool runs a role until that role's guarantees are
+  shown to hold for it by tests, in the way the guarantee checks in OQ-73's Context test the
+  coder's.
+- **M4. How a story or role names its model.** Today a bare Claude model name. It needs the tool as
+  well. OQ-54 (one declared default coder model) would be reworked or folded in. **Left open for
+  the workflow's own repository** (owner, 2026-10-08): it works best as configurable for the
+  specific job, rather than fixed per project.
+- **M5. Prompts.** One prompt per role with per-tool parts, or one per tool? **Decided 2026-10-08
+  by the owner: one prompt per role**, holding the role's rules once, with a small section per tool
+  for that tool's specifics, so the rules cannot drift between tools.
+- **M6. Switching away (goal 3).** **Decided 2026-10-08 by the owner:** replacing a tool for a role is a configuration change,
+  with no code change beyond its adapter.
+
+---
+
+# Part 2: The engine from tower-workshop-paths
+
+## The loop
+
+### Happy path
+
+1. The planning session writes a story, with Open questions empty, and opens it as a pull request
+   from the owner's account, as a **draft**. It marks the pull request ready only when the crew
+   says so, and that is the crew's go-ahead for it to land (decided 2026-09-28;
+   `docs/planning-session.md`). Before every pick, and also on a run with nothing ready, the loop
+   itself reviews any such open, non-draft pull request against `REVIEW.md`'s story-PR items and
+   lands it on a passing verdict (OQ-83; `scripts/dispatch/writer-prs.mjs`). Only a pull request
+   from an account with write access is reviewed at all, let alone landed (OQ-81). CI fails a
+   coder's own pull request if it changes `stories/` beyond its own story's move, ticks and
+   `blocked:` edit (OQ-82; `scripts/dispatch/story-containment.mjs`). In tower-workshop-paths, its
+   OQ-105 plans for CI also to fail one whose head branch names a `story/OQ-<n>-…` other than the
+   story its diff moves.
+2. Dispatcher picks the highest-tier, lowest-id ready story; creates a worktree and the branch
+   `story/ST-49-queue-json`. The loop (`scripts/dispatch/loop.mjs`, OQ-86) skips a ready
+   story whose `story/OQ-<n>-*` branch already exists on `origin` (`stories/README.md`'s
+   `in-progress`), so a story stopped after its PR was opened, which still reads `ready` on `main`,
+   is never dispatched again. A story that stops before it has a PR stops the loop instead, since
+   nothing on `origin` would keep it from being dispatched again -- except that, straight after
+   creating the branch and before the dependency install and the coder session, `dispatchCoder`
+   makes an empty **claim commit** on it, naming the machine and the time, and pushes it to
+   `origin` with `git push --force-with-lease=refs/heads/<branch>: origin <branch>` (`coder.mjs`'s
+   `claimPushArgs`, OQ-110): the empty expected value means "must not already exist", so the push
+   only ever creates the branch there, and a second claim of the same branch is refused. From the
+   claim on, that commit -- not `origin/main` -- is the base the dispatch measures "committed
+   beyond" from, so a session that commits nothing still ends `nothing-committed` as before, and
+   `pickStory`'s existing check for a branch on `origin` skips the story on the next run. A failed
+   claim push spends nothing (no install, no session) and leaves nothing behind: `branch-exists`
+   when the branch is then on `origin` (a race with another machine), otherwise `claim-failed`
+   carrying git's error. A story whose branch is only local is skipped too (`pickStory`, OQ-111): it
+   is pushed to `origin` as it is with `claimPushArgs` before the skip, and the skip entry says
+   whether the branch was on `origin` or only local, and for a local one, whether that push
+   succeeded. A branch both local and on `origin` counts as on `origin`, whatever its local tip, and
+   nothing is pushed for it. A skip of either kind gets a `Loop: OQ-n is stuck` issue (OQ-112,
+   `loop.mjs`'s `pickStory` skip handling): always for a local-only branch, and for one on `origin`
+   unless its claim is younger than `STUCK_AFTER_MS` -- a younger claim is most likely a dispatch
+   still running, on this machine or another. A skipped story with an open pull request gets none,
+   since the pull request already shows it (OQ-48's AC-8).
+   Before picking, and only between
+   stories, the loop fetches `origin` and checks out `origin/main`, detached, in its own worktree
+   (`updateCheckout`, OQ-109), so its code, prompts and queue include everything already landed.
+   If that worktree has anything uncommitted, it stops with status `dirty` and dispatches nothing.
+   A story stopped with its PR open does not hold the update back.
+   Each story then runs in its own process, so it loads the code as updated; the loop's own
+   process keeps what it loaded at start.
+3. Coder implements, tests green, commits, and emits the PR title/body and a
+   draft-or-ready decision in its report. The dispatcher pushes the branch (`pushBranch` in
+   `scripts/dispatch/coder.mjs`), so a model session has no write access to the remote, then opens
+   the PR from that text, as a **draft** if the coder said draft.
+4. CI passes. `scripts/dispatch/story.mjs` waits for it (`waitForCi`) before reviewing, so no
+   review is spent on a head that cannot land.
+5. Dispatcher spawns the reviewer, which returns a structured verdict.
+6. Dispatcher posts the verdict as a marker comment, and `review-gate.yml` derives
+   `review/agent` = `success` on the head SHA from it.
+7. The landing sweep merges it (squash) once `mergeable_state` is `clean`. The crew
+   runs the runway by hand, or the crew or the controller (**The controller**, below) runs the
+   pilot, `scripts/dispatch/land.mjs` (OQ-50), which waits until the PR is landable, requests
+   landing and waits for the merge. `story.mjs` calls `land.mjs`.
+   The loop starts the next story only once this one has merged, or stopped with its stop fully
+   recorded (OQ-86); anything else stops the loop. So every story it dispatches runs from a `main`
+   that includes the last.
+
+### Failure paths
+
+The majority of the interesting behaviour.
+
+| Situation | Route |
+|---|---|
+| Reviewer returns `block` | Findings → coder respawned with story + findings. **Bounded** at three blocking verdicts (`MAX_ROUNDS` in `scripts/dispatch/story.mjs`, OQ-48). The respawn (`retryStory` in `scripts/dispatch/coder.mjs`) works on the existing branch and pull request, replaces the PR body, never opens a second PR, and says whether its findings came from review or CI. It leaves the PR's draft state alone: `story.mjs` acts on a coder's `blocked:` or draft, and stops the story. |
+| Still failing at the bound | Human queue. Round count **derived from `block` verdicts on the PR**, not stored. `review-gate.yml` applies `review-blocked` itself (OQ-80). `story.mjs` makes the PR a draft (OQ-87), then records `blocked:` in the story file on the story's own branch, as a commit it pushes with `pushBranch`. If the conversion to a draft fails it commits nothing, so a `blocked:` story is never left ready. The PR stays open, as a draft; `main`'s copy is not touched. |
+| CI red on the head | A run that concluded `failure` → failure output → coder respawned on the same branch. Bounded separately at three (OQ-48's AC-4), derived from the PR's failed CI runs (`countRedCiRounds`); then `blocked:` on the branch, no label. |
+| CI cancelled, timed out, or not finished within the dispatcher's wait | Not retried and not counted. The story stops, with `blocked:` on the branch naming the outcome. None of these is something a coder can fix (OQ-48's AC-5); `waitForCi`'s `red` result carries the run's `conclusion` to tell them apart. |
+| CI failed in a setup step | A run that concluded `failure` only in setup steps (checkout, Node, `npm ci`, the browser install, or GitHub's `Set up job`) is treated like a cancelled run: not retried, not counted as a red round, and the story stops with `blocked:` naming the steps (`ci-setup-failed`). `ci.yml` marks its setup steps with a `Setup: ` name prefix that `ci.mjs`'s `isSetupStep` recognises, and `ci.test.mjs` checks the two agree. Decided 2026-10-07 by the owner, after a 403 from Playwright's browser CDN failed a run that the loop would have answered with a coder retry. Re-running CI is left to whoever runs the loop, so `ci.mjs` stays read-only. |
+| A retry reports the coder's `blocked:`, a draft request or a failure; a review records no verdict; a retry after red CI pushes no commit; landing fails | The story stops. Only the results OQ-48's AC-2 names continue the run (the `decide*` functions of `story.mjs`); every other result stops it. Every stop with an open PR makes the PR a draft first, so nothing can land it, which keeps the rule that a `blocked:` story is always a draft. Then it records `blocked:` on the branch. |
+| The reviewer's verdict does not parse | `reviewPullRequest` runs one more reviewer session, in the same worktree and with the same prompt, story, pull request, environment and model, before returning `malformed-verdict`; a second malformed reply stops the story as above, with both sessions' parse failures in the reason. Only a malformed verdict is re-run, never more than once, dependencies are not installed again, and each session keeps its own budget. Decided 2026-10-08 by the owner, so that one badly formatted reply does not stop a story. Before the second session the checkout is checked again, and if the first session changed it there is no second session and nothing is reset (decided 2026-10-08 by the owner): a reviewer that wrote to its checkout is worth seeing. Every result `reviewPullRequest` returns after running a session says how many it ran (1 or 2). |
+| The dispatcher is interrupted mid-story | The crew resumes it from its PR number (`story.mjs OQ-n --pr <number>`, OQ-48's AC-9), which derives where it was from GitHub alone. Once the run has pushed, the story's branch on `origin` keeps it `in-progress`, so the loop (OQ-86) skips it; a run killed between its push and opening the PR leaves a branch with no PR, which the crew handles by hand. Killed before its claim push, the story has no branch on `origin` and the loop picks it again, but the killed run's local branch makes the dispatch return `branch-exists`, which stops the loop (OQ-86's AC-3 and AC-4). The claim push (OQ-110, above) means a run killed after it almost always leaves a branch every machine sees, since the claim lands before the install or the session starts. The loop skips a story whose branch is only local, after pushing it (OQ-111, above), and opens a `Loop: OQ-n is stuck` issue for either kind of skip (OQ-112, above). |
+| Story was wrong, not the code | `blocked:` set with the reason → the planning session |
+| Coder hits ambiguity mid-story | `blocked:` + the specific question → the planning session |
+| Branch stale | Rebase; if it fails, kick back rather than merge against a moved world |
+| Spawn died / timed out / hit budget | Dispatcher records it and moves on; the watchdog surfaces it. A coder dispatch that ends before a PR exists (a failed install or session, nothing committed, uncommitted changes, a failed push) stops the loop (OQ-86) rather than moving on. The claim pushed before the install or the session (OQ-110, above) stays on `origin` through that stop, so the next run skips the story instead of dispatching it again, with the `Loop: OQ-n is stuck` issue that skip now opens (OQ-112, above). A dispatch that stops before a pull request exists for a reason other than another run's claim (`branch-exists`) or the story going stale (`not-ready`) opens the same issue itself, directly, rather than waiting for the next run's skip. |
+
+**The outlet valve must never prompt.** A spawned session that asks a question with nobody attached
+hangs — one observed instance sat blocked for eight minutes. Invocations pass
+`--permission-prompts none` so anything that would prompt is denied instead of blocking, and the
+coder's escape route is **write-and-exit**: set `blocked:` with the question, exit.
+
+### Retry is bounded, and the bound is derived
+
+A fixed number of blocking verdicts, then stop. OQ-48 holds the number and the reasoning behind
+it; this section deliberately does not restate it. Uncapped retries are how you get forty commits
+of an agent arguing with itself. A reviewer session is fresh each time and cannot know how many
+rounds preceded it, and a prose bound honoured by agents remembering is not a mechanism — that is
+the existing OQ-48.
+
+**The round count is derived from the PR, not stored.** Each round leaves a durable trace: a
+findings comment and a `review/agent` status of `failure` on the head SHA it judged. Counting
+`block` verdicts recorded on the PR gives the round count exactly, with no state to keep in sync.
+
+This matters more than it looks. An earlier draft of this document put the count in "the
+dispatcher's own run state," which contradicts
+[principle 6](#principles) and the [derived-status model](#status-is-derived-not-stored): a
+dispatcher restart would silently reset the bound, and a bound that resets when a process dies is
+the bound not existing. Deriving it means the count survives restarts, machine reboots, and a
+dispatcher rewritten from scratch — it is a property of the PR, which is where the evidence lives
+anyway.
+
+The same derivation feeds the circuit breaker. When the bound is reached, `story.mjs` makes the
+PR a draft and sets `blocked:` on the story, on the story's own branch. `review-gate.yml` applies
+`review-blocked` itself, because it sees every PR, including ones no dispatcher ran. That is what
+makes the breaker in `land-approved.yml` count a signal something reliably produces.
+
+### Running unattended
+
+Decided 2026-09-28 by the owner, planning how the planning session's pull requests reach the queue
+without a dispatcher session in between.
+
+- **Planned (ST-11):** a Windows scheduled task starts the loop every 15 minutes while the machine
+  is on, on mains power only. The task is a script: a run with nothing ready starts no model
+  session. GitHub's cron is not used (**Watchdog**, below).
+- **Planned (ST-11):** a run takes a lock that a dead holder does not keep, and appends one line to
+  a local run log. That log is how the crew hears about the loop's own stops. A leftover
+  `tw-coder-*` worktree from an interrupted run is raised as a GitHub issue, as OQ-112 raises a
+  stuck story, and the run goes on (decided 2026-10-01 by the owner). A blocked story pull request is also reported by
+  GitHub's failure email, since a blocking verdict fails the gate's run.
+- The loop runs from a worktree of its own, beside the repository and at a detached `origin/main`,
+  created once by `node scripts/dispatch/loop.mjs --init [path]` (`initWorktree`,
+  `scripts/dispatch/loop.mjs`, OQ-109). Between stories `updateCheckout` fetches `origin`, stops with
+  status `dirty` if the worktree has anything uncommitted, and otherwise checks out `origin/main`,
+  detached. `main` refuses, before fetching or dispatching anything, to run from a checkout that has
+  a branch checked out (`requireOwnWorktree`). The controller's hand-runs also come from a worktree
+  of their own, by rule rather than by that check (**The controller**, above).
+- Stuck stories reach the crew as GitHub issues, one per story (OQ-112), so a
+  leftover on one machine is seen from any (decided 2026-10-01 by the owner, who runs the loop on
+  two machines). An issue names the machine by a label the crew sets, never its hostname, since
+  the repository is public. A story whose branch is on `origin` with no open pull request is stuck
+  unless its claim is younger than 2 hours (`STUCK_AFTER_MS`, `coder.mjs`'s `claimAgeMs`; this
+  restatement must not drift from them). A younger claim is most likely a dispatch still running,
+  on this machine or another, and a branch with no claim counts as stuck. With two or more open
+  `loop-stuck` issues the queue stops completely: a run starts no coder session, review or landing
+  (decided 2026-10-03 by the owner). One stuck story can be its own fault, while two suggest the
+  loop's. The claim commit (above, OQ-110) names the machine by the same label, read from
+  `TW_MACHINE_LABEL` (`coder.mjs`'s `machineLabel`): unset or empty is `unlabelled`, and a value
+  that does not match `^[A-Za-z0-9._-]{1,32}$` stops the dispatch with `bad-machine-label` before
+  anything is claimed, installed or spawned.
+- `--max-stories N` caps how many stories one run starts (`scripts/dispatch/loop.mjs`, OQ-86); a
+  story the loop skips as `in-progress` does not count against it.
+- **Planned (ST-12):** past a usage threshold, the loop starts no coder session, first dispatch or
+  retry, but reviews and landing carry on, so every pull request ends with a review posted. A
+  story that would have been retried is paused, and resumes on a later run under the threshold.
+  What is measured, and over what window, is open.
+- Any pull request from an account with write access (OQ-81) that passes review may land
+  unattended, including one that changes this document, `AGENTS.md`, `CLAUDE.md`, `.github/` or
+  `.claude/`.
+  Marking it ready is the crew's go-ahead: the planning session opens its pull requests as drafts
+  and marks one ready only on the crew's word. A dispatched story's own pull request lands on a
+  pass, as it does today: the story was the go-ahead.
+- Before the task is switched on, OQ-81 and OQ-82 are built, so nothing lands automatically from an
+  outsider or changes `stories/` from inside a coder's pull request, and so are OQ-73 (a coder
+  cannot read the owner's stored token) and OQ-80 (the circuit breaker counts real blocks).
+  OQ-101's `depends_on` holds this.
+
+---
+
+# Part 3: The record
 
 ## Portability: other projects, other companies' models
 
@@ -1606,29 +1466,6 @@ Refined with the owner from 2026-10-07. The goals, the move's shape and its orde
 M4 (how a role names its model) and R7's issue queue are still
 open, and both wait for the workflow's own repository. Each answer is recorded here, dated, in
 the pull request that makes it.
-
-### Goals
-
-Decided 2026-10-07 by the owner.
-
-1. **The owner can use the workflow in other projects.**
-2. **Models from other companies can be used**, so that the work is not all done by similar
-   models. This is the [reviewer-on-a-different-model](#quality-beyond-the-gate) hedge taken
-   further: a different company's model decorrelates more than a different model from the same one.
-3. **The workflow is insulated from any one AI model company** folding or pricing the owner out.
-4. **This repository stays focused on the product**, not on the workflow.
-
-The owner is starting to plan another project and wants to work the same way in both. That is
-what makes goal 1 near-term: the second project is the workflow's first user outside this
-repository.
-
-### What the workflow is for
-
-[`outline.md`](outline.md) is steward's product outline, the owner's own account
-of it from 2026-10-07 on: what it is, who it is for, why, the three things it must never do, the
-view for deciding what is next, and the owner's decisions defining steward. The questions it
-leaves open are under "Open questions", "Defining steward", below, and the options it considered
-are under "The outline's reasoning", next.
 
 ### The outline's reasoning
 
@@ -2248,35 +2085,6 @@ Checked on 2026-10-07 against `main` at `66c578d`:
 - The rules the gate enforces mix the general with this project's own: `REVIEW.md`, `AGENTS.md`,
   `stories/README.md`, `stories/_TEMPLATE.md` and this document.
 
-### Open questions
-
-**Models (OQ-114)**
-
-- **M1. Which tools and models.** The owner's examples are OpenAI's GPT models. An adapter needs,
-  from the tool: a non-interactive run from a prompt, a machine-readable result, restrictions on
-  what the session may run, confinement to its working directory, and a time or cost bound.
-  OpenAI's own documentation (developers.openai.com/codex/noninteractive, read 2026-10-07)
-  describes the Codex CLI's `codex exec` for this: the prompt as an argument, `--json` for JSON
-  Lines output, and `--sandbox read-only | workspace-write | danger-full-access`. Not yet run here.
-  Its restrictions are a sandbox policy, not a per-command allowlist like Claude Code's, so M3
-  applies in full. **Decided 2026-10-08 by the owner: the Codex CLI is the first adapter, for the
-  reviewer (M2), after a spike** that runs it here and shows it can run `npm test` inside its
-  read-only sandbox and return a verdict the gate can parse.
-- **M2. Which role first.** **Decided 2026-10-08 by the owner: the reviewer.** Goal 2's value is largest there, and a
-  reviewer that cannot write is a smaller guarantee to re-establish than a coder's.
-- **M3. Guarantees before use.** **Decided 2026-10-08 by the owner:** no tool runs a role until that role's guarantees are
-  shown to hold for it by tests, in the way the guarantee checks in OQ-73's Context test the
-  coder's.
-- **M4. How a story or role names its model.** Today a bare Claude model name. It needs the tool as
-  well. OQ-54 (one declared default coder model) would be reworked or folded in. **Left open for
-  the workflow's own repository** (owner, 2026-10-08): it works best as configurable for the
-  specific job, rather than fixed per project.
-- **M5. Prompts.** One prompt per role with per-tool parts, or one per tool? **Decided 2026-10-08
-  by the owner: one prompt per role**, holding the role's rules once, with a small section per tool
-  for that tool's specifics, so the rules cannot drift between tools.
-- **M6. Switching away (goal 3).** **Decided 2026-10-08 by the owner:** replacing a tool for a role is a configuration change,
-  with no code change beyond its adapter.
-
 **A repository of its own (OQ-115)**
 
 - **R1. What moves.** Proposed by the planning session, 2026-10-07, from `main` at `21fdb52`;
@@ -2580,82 +2388,283 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   repository name is needed at the move; the package name is whatever its `package.json` says. The
   name should not name a model company (goal 3), and need not say "story" if units of work come
   from issues (R7).
----
-
-## Deliberately excluded
-
-- **More agent roles.** Two roles plus a script is the right complexity.
-- **Agents conversing with each other.** Artifacts only.
-- **A model in the dispatcher.** If it needs judgment, the schema is underspecified.
-- **Merging without a recorded verdict.**
-- **Coverage-percentage tooling.**
-- **A `develop` trunk.** `main` is the integration trunk.
 
 ---
 
-## Open questions
+## Trials and measurements
 
-| # | Question | Status |
+### A long shell command in a headless session
+
+**A `-p` session loses a shell command that outlasts the shell timeout.** Claude Code moves the
+command to the background and tells the session it will be notified when it finishes. The session
+ends its turn to wait. A `-p` session ends when the model stops calling tools, so the CLI kills the
+command and the session exits 0. `spawnSession` classifies that as `completed`. This is what
+happened to OQ-86's first dispatch on 2026-10-01. The trials below (OQ-106) reproduce it, and test
+three environment variables against it.
+
+**How the trials were run.** Seven trial sessions on 2026-10-01, from 05:37 UTC, on the owner's
+Windows machine. Every one ran Claude Code `2.1.281 (Claude Code)` (`claude --version`, run on the
+binary `resolveClaudeExecutable` found). Each was started by `spawnSession` in
+`scripts/dispatch/spawn.mjs`, with `role: 'coder'` except T7 (`role: 'reviewer'`). So the arguments
+and environment were the ones `buildInvocation` builds, with these choices:
+
+- **Model `haiku`** for every trial, to keep them cheap. Effort and the rest of the arguments were
+  the role defaults: `--effort medium` for the coder, `--effort high` for the reviewer.
+- **`maxBudgetUsd: 1`** for every trial.
+- **`spawnSession`'s default `timeoutMs` and `stallMs`**: `DEFAULT_TIMEOUT_MS` and
+  `DEFAULT_STALL_MS` in `spawn.mjs`. No trial was stopped. Every one has `stoppedFor: null`, exit
+  code 0 and classification `completed`.
+- **`baseEnv`** was the trial runner's `process.env`, with the variable under test added. Thirteen
+  variables were removed first. The runner was a `node` script started from a Claude Code session,
+  and that session had put them in its shell's environment. They name that session (its id, its
+  pid, its messaging socket and token), so a trial must not inherit them. The thirteen are
+  `CLAUDECODE`, `CLAUDE_AGENT_SDK_VERSION`, `CLAUDE_CODE_CHILD_SESSION`,
+  `CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING`, `CLAUDE_CODE_ENABLE_TASKS`,
+  `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_EXECPATH`, `CLAUDE_CODE_MESSAGING_SOCKET`,
+  `CLAUDE_CODE_MESSAGING_TOKEN`, `CLAUDE_CODE_SESSION_ATTENDED`, `CLAUDE_CODE_SESSION_ID`,
+  `CLAUDE_EFFORT` and `CLAUDE_PID`. A dispatcher started from a Claude Code session passes
+  variables like these on to its sessions, because `baseEnv` defaults to `process.env` in
+  `coder.mjs` and `review.mjs`. Whether any of them changes these results was not tested.
+- **`buildInvocation` overrides none of the three variables under test** at this commit. The
+  runner recorded each variable as it stood in `buildInvocation`'s returned `env`, which is what
+  the session ran with. In every trial that was the value added, and unset for the other two.
+- **Working directory:** a fresh, empty scratch directory per trial, outside this repository's
+  tree. It was not a git repository.
+- **Prompt:** a short instruction, not `coder.md` or `reviewer.md`. `<params>` was the parameter
+  instruction given for each trial, and `<command>` its command:
+
+  ```text
+  This session is a short test of the Bash tool. Run the command below with the Bash tool, once, exactly as written. <params>
+
+  <command>
+
+  When you have the Bash tool's result, reply with that result quoted verbatim.
+  ```
+
+- **The slow command** was this `node -e` timer, with `N` set to 150 or 660. It writes
+  `finished.txt` and prints one line when the time is up:
+
+  ```bash
+  node -e "setTimeout(()=>{require('fs').writeFileSync('finished.txt',new Date().toISOString());console.log('timer finished after N s')},N000)"
+  ```
+
+  "Ended before the command finished" compares the time `spawnSession` resolved with
+  `finished.txt`'s modification time. The runner looked for the file one minute after the
+  command's own end. Where the file never appeared, the background command's output file (the
+  path in the shell result) was read afterwards.
+- **What the shell tool returned** is taken from each session's transcript under
+  `~/.claude/projects/`, found by the `session_id` in the session's JSON output. Each one is
+  quoted below exactly as the transcript holds it.
+- The trial script is not committed. Its full text is in the body of the pull request that added
+  this subsection.
+
+T4 runs no slow command, so it was run first on its own. That also showed that `haiku` accepts
+the role's `--effort` argument before the six long trials were committed to it. Those six were
+started together, from one `node` script run in the background.
+
+Each trial below gives the Claude Code version (`2.1.281` for all seven), the variables set beyond
+what `buildInvocation` produces, the command and how long it takes, what the shell tool returned,
+whether the session ended before the command finished, and `total_cost_usd`.
+
+**T1: Q1, the baseline.** Coder. **Added:** nothing. **Parameters:** "Do not set the timeout or
+run_in_background parameters." **Command:** the timer at 150 s. **Shell tool returned**, 120 s
+after the call:
+
+```text
+Command did not complete within its 120s timeout and was moved to the background (ID: bnr6zuyzk). Output is being written to: C:\Users\steve\AppData\Local\Temp\claude\C--Users-steve-AppData-Local-Temp-claude-C--Users-steve-AppData-Local-Temp-tw-coder-q5fluR-tree-d18945d5-43bb-47db-96d8-3ef89b5e9c52-scratchpad-oq106-scratch-T1\8ba9f7b6-730c-4f80-bd4c-2e56e973cecb\tasks\bnr6zuyzk.output. You will be notified when it completes. To check interim output, use Read on that file path.
+```
+
+**Ended before the command finished:** yes. The session ended at 134.9 s, with the final text "I've
+run the command, but it needs 150 seconds to complete. The Bash tool's default timeout is 120
+seconds, so the process was automatically moved to the background. I'll wait for it to finish."
+`finished.txt` was never written. The background output file held only `[killed]`.
+**`total_cost_usd`:** 0.0254879.
+**Answer to Q1:** yes on both counts. With nothing added, the command was moved to the background
+at 120 s. The session then ended its turn and exited, and the CLI killed the command.
+
+**T2: Q2.** Coder. **Added:** `BASH_DEFAULT_TIMEOUT_MS=600000`. **Parameters:** as T1.
+**Command:** the timer at 150 s. **Shell tool returned**, 150 s after the call:
+
+```text
+timer finished after 150 s
+```
+
+**Ended before the command finished:** no. The command finished at 05:40:21.230Z and the session
+ended at 05:40:22.757Z. **`total_cost_usd`:** 0.0489788.
+**Answer to Q2:** yes. The command finished in the foreground, and its output came back to the
+session as the tool result.
+
+**T3: Q3, a command past the timeout.** Coder. **Added:** `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`.
+**Parameters:** as T1. **Command:** the timer at 150 s. **Shell tool returned**, 120 s after the
+call, marked as an error (`is_error: true`):
+
+```text
+Exit code 143
+Command timed out after 2m 0s
+```
+
+**Ended before the command finished:** yes, because the command was stopped. It never wrote
+`finished.txt`, and the session ended at 129.3 s. **`total_cost_usd`:** 0.0238691.
+**Answer to Q3, first part:** the command was stopped at the shell timeout (exit code 143) and the
+session saw it as an error. It was not moved to the background.
+
+**T4: Q3, `run_in_background`.** Coder. **Added:** `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`.
+**Parameters:** "Set the run_in_background parameter to true. Do not set the timeout parameter."
+**Command:** `node -e "console.log('background command ran')"`, which returns at once. The
+session passed `"run_in_background": "true"`. **Shell tool returned**, marked as an error:
+
+```text
+<tool_use_error>InputValidationError: Bash failed due to the following issue:
+An unexpected parameter `run_in_background` was provided</tool_use_error>
+```
+
+**Ended before the command finished:** not applicable. The command never ran. The session's own
+summary listed the Bash tool's parameters as `command`, `description`, `dangerouslyDisableSandbox`
+and `timeout`. **`total_cost_usd`:** 0.0536022.
+**Answer to Q3, second part:** no. With the variable set, `run_in_background` is not a parameter of
+the Bash tool, and a call that passes it is rejected before anything runs.
+
+**T5: Q4.** Coder. **Added:** `BASH_MAX_TIMEOUT_MS=900000`. **Parameters:** "Set the timeout
+parameter to 800000. Do not set the run_in_background parameter." The session passed
+`"timeout": 800000`. **Command:** the timer at 660 s. **Shell tool returned**, 660 s after the
+call:
+
+```text
+timer finished after 660 s
+```
+
+**Ended before the command finished:** no. The command finished at 05:48:52.842Z and the session
+ended at 05:48:56.418Z. **`total_cost_usd`:** 0.0501535.
+**Answer to Q4:** yes. With the maximum raised to 900000, an explicit timeout of 800000 took
+effect, and a 660-second command finished in the foreground.
+
+**T6: Q4's control.** Coder. **Added:** nothing. **Parameters:** as T5, and the session passed
+`"timeout": 800000`. **Command:** the timer at 660 s. **Shell tool returned**, 600 s after the call:
+
+```text
+Command did not complete within its 600s timeout and was moved to the background (ID: bap4qokky). Output is being written to: C:\Users\steve\AppData\Local\Temp\claude\C--Users-steve-AppData-Local-Temp-claude-C--Users-steve-AppData-Local-Temp-tw-coder-q5fluR-tree-d18945d5-43bb-47db-96d8-3ef89b5e9c52-scratchpad-oq106-scratch-T6\75e687ec-29b6-45de-aa30-fce0bda017ce\tasks\bap4qokky.output. You will be notified when it completes. To check interim output, use Read on that file path.
+```
+
+**Ended before the command finished:** yes. The session ended at 615.6 s, saying it would "be
+notified when it completes". `finished.txt` was never written, and the background output file held
+only `[killed]`. **`total_cost_usd`:** 0.0251996.
+**What T6 adds to Q4:** a timeout above the maximum is accepted without an error, then cut to the
+maximum without saying so in advance: 800000 was asked for, and the result reports "its 600s
+timeout". So the outcome in T5 is the raised maximum taking effect, not the explicit timeout alone.
+
+**T7: Q5, the reviewer.** Reviewer (`role: 'reviewer'`, so the reviewer's allowlist and a plain
+copy of `baseEnv`; unlike `review.mjs`, the runner did not pass `baseEnv` through `coderEnv`
+first, which changes only credentials and `GH_CONFIG_DIR`). **Added:** nothing. **Parameters:**
+as T1. **Command:** the timer at 150 s. **Shell tool returned**, 120 s after the call:
+
+```text
+Command did not complete within its 120s timeout and was moved to the background (ID: bk4qdpx2l). Output is being written to: C:\Users\steve\AppData\Local\Temp\claude\C--Users-steve-AppData-Local-Temp-claude-C--Users-steve-AppData-Local-Temp-tw-coder-q5fluR-tree-d18945d5-43bb-47db-96d8-3ef89b5e9c52-scratchpad-oq106-scratch-T7\ab4aee68-0bd8-445a-999a-abe88c86ba74\tasks\bk4qdpx2l.output. You will be notified when it completes. To check interim output, use Read on that file path.
+```
+
+**Ended before the command finished:** yes. The session ended at 133.2 s, saying "I'm waiting for
+it to finish so I can provide you with the result." `finished.txt` was never written, and the
+background output file held only `[killed]`. **`total_cost_usd`:** 0.0487476.
+**Answer to Q5:** yes. A reviewer session behaves as T1 does.
+
+All seven cost 0.2760387 USD together.
+
+**What the trials do not show.** Each configuration was tried once, with `haiku`. The shell
+tool's result comes from the CLI and should not depend on the model. Ending the turn after a
+background notice is the model's choice. All three `haiku` sessions that got one (T1, T6, T7) made
+it, and so did OQ-86's coder. Two things were not tried. One is a command past 600 s with
+`CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` and `BASH_DEFAULT_TIMEOUT_MS=600000` together; T3 suggests
+an exit 143 at 600 s. The other is an inherited `BASH_DEFAULT_TIMEOUT_MS` above 600000 raising the
+maximum on its own. OQ-76 read that rule from the CLI's code. T2 and T5 agree with it but do not
+test that case. Like the reviewer's shell check in "Invocation shape", all of this belongs to
+Claude Code 2.1.281, and another version can change it.
+
+**Recommendation.** This is a recommendation only. Acting on it is a later story, written by
+the planning session.
+
+1. **Set `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` in `coderEnv`** (T3, T4). A command past the
+   timeout then fails as an error the session sees, instead of moving to the background and being
+   killed silently when the session ends (T1, T6). It also takes `run_in_background` out of the
+   Bash tool (T4). That costs little in a `-p` session, where a background command does not outlive
+   the session anyway (T1, T6: `[killed]`). It does stop a session from running a command in the
+   background and polling it, which is how this spike's own coder ran its trials. A later story
+   that needs that would have to do without it.
+2. **Set `BASH_DEFAULT_TIMEOUT_MS=600000` in `coderEnv`** (T2). A command up to 10 minutes long,
+   such as a slow test suite, then finishes in the foreground without the session having to pass
+   a `timeout`. With item 1, a command longer than that fails visibly rather than being lost (T3,
+   by extension).
+3. **Set `BASH_MAX_TIMEOUT_MS=600000` in `coderEnv`**, the planned value (T5, T6). T6 shows that
+   600000 caps even an explicit `timeout` above it. T5 shows that a raised maximum lets one call
+   run longer. That would also lengthen the longest stretch in which a session emits nothing.
+4. **Set the same three variables, at the same values, in the reviewer's environment** (T7). Q5
+   shows the reviewer is exposed in the same way. The reviewer's environment in `buildInvocation`
+   is a plain copy of `baseEnv`. `review.mjs` currently passes `coderEnv`'s output as that
+   `baseEnv`, so values set in `coderEnv` would reach a reviewer started through `review.mjs`.
+   They would not reach one started through `buildInvocation` by any other caller, as T7 was. So
+   they belong in `buildInvocation`'s reviewer branch too, which is where OQ-76's AC-5 already
+   plans its pins for both roles.
+5. **Add a line to `coder.md` about background commands, and the same to `reviewer.md`** (T1, T6,
+   T7). Every session that was told a command had moved to the background ended its turn to wait.
+   The line should say that a `-p` session ends when it stops calling tools, so no notification
+   ever arrives. It should say never to end a turn to wait for a command. And if a command times
+   out, the session should narrow it, or rerun it with an explicit `timeout` no higher than 600000.
+   With item 1 in place the background notice should not appear. The line is the backstop if a
+   later CLI version stops honouring the variable.
+
+6. **OQ-76's AC-5, value by value.** OQ-76 plans to pin `BASH_DEFAULT_TIMEOUT_MS=120000` and
+   `BASH_MAX_TIMEOUT_MS=600000` for both roles in `buildInvocation`, and to derive
+   `DEFAULT_STALL_MS` from that maximum. Items 2 to 4 above already imply the answers. Here they
+   are against each planned value:
+
+   - **`BASH_DEFAULT_TIMEOUT_MS`: change 120000 to 600000** (T1, T7 against T2). At 120000, a
+     command between 2 and 10 minutes long is moved to the background and lost when the session
+     ends. At 600000 it finishes in the foreground. Pinning it to 120000 would pin the failure this
+     spike studies.
+   - **`BASH_MAX_TIMEOUT_MS`: keep 600000** (T6, T5). It is the bound that holds even against an
+     explicit larger `timeout` (T6). Raising it lengthens the longest single call (T5).
+   - **`DEFAULT_STALL_MS`: keep the planned derivation and value**, the pinned maximum plus a
+     margin, which OQ-76 puts at 12 minutes. The default rises to 600000, but under the CLI's rule
+     `Math.max(BASH_MAX_TIMEOUT_MS ?? 600000, BASH_DEFAULT_TIMEOUT_MS ?? 120000)` the maximum is
+     still 600000. T6 shows a call cut off at 600 s with the maximum unset. So the longest single
+     shell call, during which a session emits no event (OQ-76's Context), stays 10 minutes. The
+     stall interval needs no more than OQ-76 already plans. If a later story raises
+     `BASH_MAX_TIMEOUT_MS`, the stall interval must rise with it, to above the new maximum. The
+     derivation OQ-76 plans makes that automatic. Until OQ-76 lands, output stays
+     `--output-format json`, which is silent for the whole session, so `DEFAULT_STALL_MS` has to
+     stay above a whole session's length. None of these trials changes that.
+
+**Decided 2026-10-01 by the owner: background commands stay available.** Item 1 is not adopted.
+Turning them off would mean a story that needs one has to be spotted and run differently. Once the
+loop runs unattended, nothing would spot it, so the owner chose fewer special cases over the
+guarantee. `buildInvocation` pins `BASH_DEFAULT_TIMEOUT_MS` and `BASH_MAX_TIMEOUT_MS` to `600000`
+for both roles (`SHELL_TIMEOUT_MS` in `scripts/dispatch/invocation.mjs`), and removes
+`CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` if the dispatcher's environment carries it (items 2 to 4,
+with the default changed as item 6 says). `coder.md` and `reviewer.md` tell a session never to end
+its turn while a command runs (item 5). **Planned (ST-14):** a coder session that completes with
+work left uncommitted is resumed once and told so. The resumed session's outcome, report and
+commits are then used exactly as a first session's would be, so its report supplies the PR. That is the
+backstop for a session that ends its turn anyway, whatever the story. Items 4 and 6 describe
+OQ-76's AC-5 as it stood when the trials ran. The two pins have since moved to OQ-107. OQ-76's
+AC-5 now holds the `DEFAULT_STALL_MS` derivation, from OQ-107's maximum, and the timeout below.
+
+**Decided 2026-10-03 by the owner: a session's timeout rises to 60 minutes.** On 2026-10-02 the
+20-minute stall interval stopped a working coder, the first OQ-110, about halfway through its
+story. Its output was `--output-format json`, which is silent until the session ends.
+`DEFAULT_TIMEOUT_MS` in `scripts/dispatch/spawn.mjs` goes from 30 to 60
+minutes, together with the 12-minute stall interval that streamed output makes possible (OQ-76).
+Once a session's output shows it working, the stall interval catches one that has hung, and
+`--max-budget-usd` caps its spending. That leaves the timeout to stop a session that is busy but
+not finishing, and 30 minutes is shorter than a real story needs.
+
+### Costs
+
+| Thing | Cost | Wall clock |
 |---|---|---|
-| 1 | Queue location | **Resolved:** one file per story under `stories/`, OQ numbering preserved. |
-| 2 | Reviewer local vs. CI | **Resolved: local** — Action cannot authenticate; now moot since everything runs locally. |
-| 3 | Dispatcher implementation | **Resolved:** a local script, no model. |
-| 4 | Release cut trigger | Open. Human call, roughly every ten merged PRs. |
-| 5 | Fresh vs. resumed coder on retry | Open. Fresh matches the context principle; resumed may be cheaper. Untested. |
-| 6 | Story sizing proxies | **Resolved:** guideline, not a cap. The planning session's judgment governs readiness, and carries an obligation to push back when scope is too large. Better proxy is distinct mechanisms than criterion count — see [Sizing is a judgment](#sizing-is-a-judgment-and-it-is-the-planning-sessions). |
-| 7 | Verdict mechanism | **Resolved:** `review/agent` status, SHA-keyed. Already built and required. |
-| 8 | What CI runs | **Resolved:** current suite plus schema lint, AC traceability, existing-test flag. No tiering at 70 s. |
-| 10 | Second GitHub identity | Open. The only thing that fully closes self-marking. Cost: a machine account or App. |
-| 11 | Other companies' models | Open. Goals decided 2026-10-07, and comes after the move; questions M1–M6 under [Portability](#portability-other-projects-other-companies-models). OQ-114. |
-| 12 | The workflow in a repository of its own | Open. Goals decided 2026-10-07, and comes first; questions R1–R10 under [Portability](#portability-other-projects-other-companies-models). OQ-115. |
+| Worker session (one story, opens PR) | ~$2.41 | ~25 min |
+| Reviewer session | $1.03 – $1.55 | 5–8 min |
+| CI run (lint + unit + build + Playwright) | free | ~70 s |
 
-### Defining steward
+Public repo, so Actions minutes are not a constraint; **model usage is.** A clean first pass is
+~$3.70; worst case with two retries is ~$11. Story quality decides which you pay — *and*, per the
+readiness test, whether the gate works at all. Both arguments point at the planning session.
 
-Moved from `outline.md`, "Defining steward", on 2026-10-13 ("The outline is a current
-document", above). Each names the outline's section it belongs to.
-
-- **D1. The ground stop** ("What it is", "The two sides"). Steward keeps working while ready work
-  remains, up to a point where too much has stopped without landing. Open: whether "too much
-  stopped" is one measure, what it counts, and how each stop reaches the crew. The owner's view
-  (2026-10-10, asked whether each side stops on its own measure or both on one): the two sides
-  should probably stop at the same time, so that a backlog of unreviewed pull requests does not
-  build up. Two separate limits come closest today: two or more open `loop-stuck` issues stop
-  the loop (`STUCK_ISSUE_LIMIT`, `scripts/dispatch/loop.mjs`), and five or more open
-  `review-blocked` pull requests narrow what the runway lands (the circuit breaker,
-  `.github/workflows/land-approved.yml`). Neither counts a unit stopped for another reason, such
-  as red CI at its own bound, which `story.mjs` records as `blocked:` on a draft pull request,
-  with no label and no issue.
-- **D2. Priority** ("What steward is for"). Probably the order in which work is started, since
-  the order it finishes in is not deterministic (the owner's leaning, 2026-10-10, still to be
-  thought through). Steward's own stories are ordered by `tier`, then lowest id
-  (`stories/README.md`, "Status").
-- **D3. Looking back** ("What steward is for"). Ideally a walkthrough of the product (owner,
-  2026-10-10). Open: whether it is steward's. The release review (above) is meant for it, a
-  periodic walkthrough of `main` ending in a release tag, but it has not yet run, so its scope is
-  unknown (owner, 2026-10-10); steward's `origin` has no tags (2026-10-13).
-- **D4. Whether and how the `Unit:` line is required** ("Review"). ST-26 puts the line in
-  steward's pull request template and leaves this open. The planning session's options
-  (2026-10-11): the pull request template carries it; ATC always writes it on a pull request it
-  opens; or a check on the pull request body, posted by steward's gate, fails without it, which
-  would sit with "Steward enforces nothing about CI" ("Land").
-- **D5. The `unitLinks` value `init` writes** ("Review").
-- **D6. A tool that compares a project's checklist with the example in the version it pins**
-  ("Review"): a possibility, not decided (owner, 2026-10-09).
-- **D7. The checklist's parser as a command a project may run in its own CI** ("The checklist's
-  shape"), so that a pull request that breaks the checklist is caught before it lands, since
-  otherwise every review after it stops. The planning session's proposal, 2026-10-11, not decided.
-- **D8. What `init` explores in the repository to surface options** ("Land").
-- **D9. The two ways to set up** ("Land"): one declarative, which runs without AI, and one meant
-  to be run with an AI helper (owner, 2026-10-11). Not yet refined: what each covers, and how the
-  second sits with `init` as a deterministic script.
-- **D10. Whether a project must have CI at all** ("Land"). The owner leans against making CI a
-  prerequisite, but every project of the owner's will have CI, so requiring it is possible
-  (owner, 2026-10-10).
-- **D11. Whether GitHub's rulesets are available where branch protection is not** ("Land"). Only
-  the branch protection limit is recorded (R6).
-- **D12. Which commands the reviewer and the coder may run** ("Settings"), left for later by the
-  owner (2026-10-11). It probably needs to be a setting, for a project that is not built with
-  Node, and may look different once coder and reviewer sessions run in containers (R5).
-- **D13. Other triggers for a rotation** ("The two sides"), such as a scheduled task (ST-11) or a
-  GitHub event, left by the owner for a later discussion (2026-10-11). To start with, the
-  controller starts each rotation.
+`--max-budget-usd` makes the ceiling explicit per invocation rather than discovered afterwards.
