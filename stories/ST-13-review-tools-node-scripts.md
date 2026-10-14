@@ -49,12 +49,15 @@ exit code.
       updated to say that a repository script may be run with `node`, and
       that `node`'s flags may not. `allowedPrefixes()` still leaves `node`
       out, so a `node` command is admitted only by AC-1's rule.
+- [ ] **AC-4** — `.claude/prompts/reviewer.md`, "Verify rather than accept",
+      which says the helper refuses every `node` command, says instead that
+      it runs a repository script with `node`, and refuses `node`'s flags.
+      A spawned coder session cannot edit `.claude/prompts/`, so the coder
+      gives this edit as a `### Proposed prompt edit` in its pull request
+      body (`coder.md`, "Constraints that apply to every story").
 
 ## Out of scope
 
-- **`.claude/prompts/reviewer.md`.** It already tells the reviewer the helper
-  "runs only commands your allowlist admits", and `Bash(node:*)` is on that
-  allowlist. A spawned session cannot edit the prompt in any case.
 - **Changing any allowlist.** `reviewerAllowedTools()` is unchanged.
 - **Narrowing the reviewer's direct `node` access.** OQ-62's, as OQ-92 said.
 

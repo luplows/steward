@@ -86,9 +86,10 @@ tested it.
 
 - `docs/agent-workflow-design.md` — "Invocation shape" and "Credential
   minimalism", both corrected in #109 to state the gap rather than close it
-- `.claude/prompts/reviewer.md` — the preamble paragraph on load-bearing flags
-- `REVIEW.md`, "Recording a verdict" — the split that exists so the reviewer
-  never needs to post
+- `.claude/prompts/reviewer.md` — "What to do", which tells the reviewer that
+  posting nothing is a rule it keeps, not a wall it is behind
+- `docs/agent-workflow-design.md`, "Recording the verdict" — the split that
+  exists so the reviewer never needs to post
 
 ## Open questions
 
