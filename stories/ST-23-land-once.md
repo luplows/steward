@@ -60,7 +60,8 @@ project that has turned steward's landing off never to have the sweep triggered 
 - `scripts/dispatch/land.mjs`: `assess` (the waits and terminal states), `landPullRequest`'s
   loop, and the bounds `SWEEP_RUN_BOUND_MS`, `BLOCKED_BOUND_MS` and `MAX_TOTAL_WAIT_MS`.
 - `scripts/dispatch/writer-prs.mjs`: skips a pull request that already has a verdict at its head,
-  so a landing that gave up there is never tried again (`docs/harness-outline.md`, "The two sides").
+  so a landing that gave up there is never tried again (`docs/agent-workflow-design.md`, "The
+  outline's reasoning", "The two sides").
 
 ## Open questions
 

@@ -1626,7 +1626,135 @@ repository.
 [`harness-outline.md`](harness-outline.md) is steward's product outline, the owner's own account
 of it from 2026-10-07 on: what it is, who it is for, why, the three things it must never do, the
 view for deciding what is next, and the owner's decisions defining steward. The questions it
-leaves open are under "Open questions", "Defining steward", below.
+leaves open are under "Open questions", "Defining steward", below, and the options it considered
+are under "The outline's reasoning", next.
+
+### The outline's reasoning
+
+Moved from `harness-outline.md`, "Defining steward", on 2026-10-13 ("The outline is a current
+document", below): for each statement there, the options considered and not chosen, and what
+follows from it. The headings are the outline's, and each entry starts with the statement,
+shortened where it is long, so that it can be found there with its date.
+
+#### What steward is for
+
+- **Steward's purpose is to provide a path to automated code and review.** Considered and not
+  chosen: steward shipping a planning session, as tower-workshop-paths has in its Session A (its
+  `docs/session-a.md`).
+
+#### Review
+
+- **A pull request points at its unit with a link.** Two other ways of finding the unit were
+  considered: the project's settings name one of a few lookups steward provides, or the project
+  supplies its own lookup.
+- **ATC finds the link deterministically.** Considered and not chosen: going on inferring the unit
+  from the diff, as `resolveStory` does today. It could be deterministic too, but it fits only one
+  project's story convention.
+- **A pull request whose link is missing is still reviewed, and the review does not pass.**
+  Considered and not chosen: ATC posting `block` itself for any pull request with no readable
+  link.
+- **A setting lists the kinds of link a project uses.** This is not one of the lookups considered
+  on 2026-10-09 (above): the pull request still points at its unit, and the setting says only
+  which kinds of pointer steward reads. What follows (the planning session, 2026-10-11): a coder
+  can take work only from `issue` or `file`, since coder work always needs a unit it can read, so
+  a project with only `other`, or none, is review-only.
+- **The example is a copy: once adopted, the project owns its checklist.** Considered and not
+  chosen: steward's default sections shipped in the package, which a project's file extends or
+  switches off.
+- **"Every pull request" gains a claims item** (steward's own `REVIEW.md`). Considered and not
+  chosen: leaving the body's statements to "Integrity" alone.
+- **Each section numbers its own items, and a finding cites the section and the item.**
+  Considered and not chosen (the planning session's proposal): integers across the whole file,
+  never renumbered, which would have kept the verdict format as it is. What follows (the planning
+  session, 2026-10-11): the verdict's `item`, an integer `review.mjs` checks today, becomes a
+  section and an item; and the story that was to close `REVIEW.md`'s numbering gaps (R1) has
+  nothing left to do once its sections are numbered on their own.
+- **A checklist that is missing from `main`, or does not parse, is an error.** The other option
+  was a quiet skip, which leaves the pull request just as pending but tells nobody.
+
+#### Land
+
+- **Steward learns it from the project's steward settings.** Considered and not chosen (the
+  planning session's list): `init` detecting the setup with nothing written down; reading the
+  required checks from GitHub's branch protection or rulesets, which an unprotected repository
+  does not have (R6); and describing it in the checklist, which steward itself cannot act on.
+- **Steward does not wait for CI before it starts a review, and does wait for all checks before
+  it lands.** What follows (the planning session, 2026-10-10): the reviewer can read only the CI
+  results that have finished when it looks.
+- **The review and CI are two peer checks on the same head, joined at the merge.** Considered and
+  not chosen (the planning session's proposal): ATC handing the reviewer a snapshot of the head's
+  checks, with a log excerpt for each failed job, as it hands it the pull request body. What
+  follows (the planning session, 2026-10-11): the reviewer is not given CI results, and a red
+  check the settings name stops the merge whatever the verdict.
+- **The reviewer does not run the project's whole pre-flight check.** The owner accepts what
+  follows: a pull request body that claims a count of passing tests is no longer checked against a
+  run of its own by the reviewer, and a false count is stopped only at the merge, by the red
+  check, not reported as a finding. Considered and not chosen: the reviewer running the whole
+  pre-flight check, as `reviewer.md` tells it to run `npm test` today ("Verify rather than
+  accept").
+- **The coder session runs the pre-flight check; steward's own script does not run it again
+  before the push.** Considered and not chosen: steward's script running it, alone or as well.
+  What follows (the planning session, 2026-10-10): nothing deterministic runs the check before the
+  push, so a coder that skips it is caught only by the checks the pilot waits for, which is only
+  where the project has CI.
+- **Steward calls it `setup`.** Considered and not chosen: `install`, which names only a
+  dependency install, where a project may need more, such as generating code.
+- **A project says in its steward settings which checks must pass before steward lands a pull
+  request.** Two other ways were considered: land whenever GitHub allows, which on an unprotected
+  repository means on the verdict alone; and keep requiring `mergeable_state` `clean` as steward's
+  own rule.
+
+#### Settings
+
+- **One file, `steward.config.json`, flat for now.** Considered and not chosen: optional keys
+  with defaults in steward's code. What follows, accepted by the owner: a key that becomes
+  required breaks a project until it adds it, which a project meets only when it moves its pin,
+  and which each version's update notes must name. Required keys are hoped to be added rarely
+  (owner). Not chosen for now: a version field in the file.
+- **`storyPrefix` leaves steward's settings.** What follows (the planning session, 2026-10-11):
+  `review.mjs`'s `resolveStory` goes with the unit link; steward's own story lint and story
+  containment are its own convention ("Decided so far", 2026-10-10, below), so they keep the
+  prefix in tooling of their own; `scripts/no-project-literals.test.mjs`, which keeps the prefix
+  out of the code, changes with it; and how a coder finds ready units waits for the coder's
+  readiness setting.
+- **`setup` and `check`: one command each, run through the platform's shell.** Not chosen: an
+  argument list run without a shell. What follows for `check` (the planning session, 2026-10-11):
+  its program must be one the coder's allowlist admits, which today means `npm`, `npx` or `node`.
+- **Each command is written with its own time limit, as one value.** Considered and not chosen: a
+  time limit as a key of its own, required only when its command is not `null`; and one always
+  required, even beside `null`. What follows (the planning session, 2026-10-11): the coder runs
+  `check` as one shell call, and a shell call is cut off at 10 minutes (`SHELL_TIMEOUT_MS`,
+  `scripts/dispatch/invocation.mjs`), so a longer limit also needs that bound raised, and the
+  stall interval with it (`DEFAULT_STALL_MS`, `scripts/dispatch/spawn.mjs`). ST-7 builds `setup`'s
+  time limit.
+- **When GitHub reports a pull request `blocked` though the checks `landWhen` names are green,
+  steward does not ask the runway to land it.** Considered and not chosen: triggering the runway
+  regardless, which is just as safe, since GitHub refuses the merge, but fails a runway run on
+  every rotation until the requirement clears; and treating `blocked` as a rule of steward's own.
+- **A project can turn steward's landing off.** Considered and not chosen: a setting that turns
+  off the pilot's need for a passing verdict, which would make the first of the three rules a
+  project's choice.
+
+#### The two sides
+
+- **A review side and a coding side, separately.** Considered and not chosen: one run taking a
+  unit through coding, review and retry, which is what tower-workshop-paths does.
+- **The review side runs in rotations, not as a loop that keeps running.** Considered and not
+  chosen: a process that keeps running and polls, which keeps the code it loaded at start. What
+  follows from the controller starting each rotation (the planning session, 2026-10-11): that
+  reads "Keeping going" (the outline's "What matters most") as working through ready work without
+  the crew's hands, not without any session attending, so a scheduled task is not needed for the
+  MVP.
+- **Landing never waits.** Considered and not chosen: waiting, as `land.mjs` does today, polling
+  until the pull request is landable within its bounds (`BLOCKED_BOUND_MS`,
+  `MAX_TOTAL_WAIT_MS`). What follows (the planning session, 2026-10-11): once reviews stop waiting
+  for CI, a pull request can pass review before its checks finish. In `writer-prs.mjs` as it is, a
+  pull request whose landing gave up would never be landed, since a later call skips any pull
+  request that has a verdict at its head; retrying the landing in every rotation closes that.
+- **A coder claims its work with a claim commit, at first.** The owner accepts what follows
+  (2026-10-10): the claim moves the head, so the block is no longer at the head and no other coder
+  takes the pull request, and `review/agent` is cleared until the next review; and the claim commit
+  stays in the pull request's history, though not in `main`'s once the runway squashes it.
 
 ### Decided so far
 
@@ -1748,7 +1876,8 @@ leaves open are under "Open questions", "Defining steward", below.
   session's case for extracting, put to the owner the same day: the gate already works, as do the
   session bounds, the allowlists, the sweep and the claim, and most of what the outline changes is a
   change to existing code. In `harness-outline.md`, "Defining steward", decisions that differ from
-  the engine say what it does today, each in a note starting "For reference". The planning session
+  the engine say what it does today, each in a note starting "For reference" (removed on
+  2026-10-13, "The outline is a current document", below). The planning session
   proposed three more decisions before the extraction resumes: what steward runs for its own pull
   requests on its first day (the planning session suggested the gate only, as R6 decided for the
   second project), taken the same day (next entry); which stories and paths move, re-sorted against
@@ -2006,8 +2135,11 @@ leaves open are under "Open questions", "Defining steward", below.
   glossary's words, though its statements are the owner's and dated, since it describes steward as
   it is meant to be; two of its headings change with them ("The two sides", "The checklist's
   shape"). Considered and not chosen: keeping the open items in the outline; and keeping its old
-  words, as a dated record keeps its own. Not yet decided: whether its "Considered and not chosen"
-  and "What follows" lines move to this document (owner, to be discussed).
+  words, as a dated record keeps its own. **Also decided the same day by the owner: its "Considered
+  and not chosen" and "What follows" lines move to this document**, to "The outline's reasoning",
+  above, so that the outline holds the decided product and this document the reasoning, as
+  `REVIEW.md` holds the checklist and this document its history. The outline points there once,
+  in its "Defining steward" introduction, rather than from each statement.
 
 ### The move, in order
 

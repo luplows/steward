@@ -61,7 +61,8 @@ puts it into the review.
 ## Context
 
 - `docs/harness-outline.md`, "Defining steward", "Review", "The checklist's shape": the
-  decisions this story builds, with the options considered.
+  decisions this story builds; the options considered are in `docs/agent-workflow-design.md`,
+  "The outline's reasoning".
 - `REVIEW.md` today: one numbering across the file, with `## ` sections and `### ` subsections,
   and steward's mechanism mixed in. ST-21 converts it; this module need not parse today's file.
 
