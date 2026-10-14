@@ -18,15 +18,15 @@
  *
  * A review that cannot be recorded is not an error: a `null` verdict, a
  * moved head, an unresolvable story all leave the PR pending, which
- * `REVIEW.md` ("When the reviewer returns no verdict") says is the right
- * outcome. Each is a distinct `status` on the result.
+ * `docs/agent-workflow-design.md` ("What the gate enforces") says is the
+ * right outcome. Each is a distinct `status` on the result.
  *
  * Usage:
  *   node scripts/dispatch/review.mjs <pr-number> [--repo owner/name] [--rereview]
  *
  * `--rereview` permits reviewing a head whose governing verdict is a `block`
- * (`REVIEW.md`, "What the workflow enforces", item 3). Over any other verdict,
- * or none, it stops.
+ * (`docs/agent-workflow-design.md`, "What the gate enforces", item 3). Over any
+ * other verdict, or none, it stops.
  */
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'

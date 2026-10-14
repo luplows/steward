@@ -4,8 +4,8 @@
  * `<!-- agent-review head=... verdict=... -->` marker comments
  * `.github/workflows/review-gate.yml` already reads. Adds no instrumentation
  * and stores nothing -- the record already exists twice, as this comment and
- * as the `review/agent` commit status (REVIEW.md, "Recording a verdict");
- * this only reads the comment.
+ * as the `review/agent` commit status (`docs/agent-workflow-design.md`, "What
+ * the gate enforces"); this only reads the comment.
  *
  * Reuses `buildListComments`, `parseComments` and `parseMarkerComment` from
  * `../dispatch/github.mjs` unchanged, so a verdict this counts is, by

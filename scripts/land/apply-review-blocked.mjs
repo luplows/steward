@@ -6,9 +6,10 @@
 //
 // Runs from review-gate.yml's "verdict" job, after every marker-bearing comment. It
 // recomputes from every comment on the pull request, not only the one that triggered this
-// run: REVIEW.md ("the block still counts toward the round bound like any other") counts a
-// well-formed `block` (or the deprecated `fail`) from a write-access author on any head, so
-// a round can complete without the triggering comment itself being the third.
+// run: the design doc's "What the gate enforces" ("the block still counts toward the round
+// bound like any other") counts a well-formed `block` (or the deprecated `fail`) from a
+// write-access author on any head, so a round can complete without the triggering comment
+// itself being the third.
 //
 // `isHonouredAuthor` comes from `check-author.mjs`, already kept identical to
 // review-gate.yml's `case` by a test there. The marker pattern below is the same
