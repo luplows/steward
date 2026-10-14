@@ -1225,10 +1225,6 @@ shipped documentation instructing agents to do impossible things; both read perf
 | Network egress | unrestricted | policy-limited |
 | GitHub Actions runner | — | `gh` **is** present there |
 
-*Known live defect:* `REVIEW.md` tells the reviewer to get the head SHA with `gh pr view`, while
-`.claude/reviewer-prompt.md` says there is no `gh` and gives the `git rev-parse` alternative. Moot
-once the reviewer runs locally, but the document of record is currently wrong.
-
 ### A spawned session cannot edit `.claude/prompts/`
 
 **Claude Code refuses `Edit` and `Write` to `.claude/prompts/` from a spawned `claude -p` session**,
