@@ -50,7 +50,7 @@ the review side with one command and each run uses steward as it is on `main`.
 
 ## Out of scope
 
-- What starts a pass: the controller, for now (`docs/harness-outline.md`, "Loops").
+- What starts a pass: the controller, for now (`docs/harness-outline.md`, "The two sides").
   A scheduled task or another trigger is later.
 - Raising problems a pass meets as GitHub issues, and the stop measure shared with the coder.
 - Running passes on more than one machine, and a review claim.
@@ -64,9 +64,9 @@ the review side with one command and each run uses steward as it is on `main`.
 
 ## Context
 
-- `docs/harness-outline.md`, "Defining steward", "Loops": the review side as a review-and-land
-  dispatcher, the five steps of a pass, landing that never waits, the cap, and one machine for
-  now.
+- `docs/harness-outline.md`, "Defining steward", "The two sides": the review side as a
+  review-and-land dispatcher, the five steps of a pass, landing that never waits, the cap, and one
+  machine for now.
 - `scripts/dispatch/writer-prs.mjs`'s `reviewAndLandWriterPullRequests`: today's nearest thing,
   run only inside `loop.mjs`, landing straight after each review and never retrying a landing.
 - `scripts/dispatch/loop.mjs`: `requireOwnWorktree`, `updateCheckout`, and how it reads the

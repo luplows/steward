@@ -36,8 +36,8 @@ a pull request with no unit meant to have one.
 ## Out of scope
 
 - Reading the line: ST-19 and ST-22.
-- Making the line required by a check: left open by the owner (`docs/harness-outline.md`,
-  "Review").
+- Making the line required by a check: left open by the owner (`docs/agent-workflow-design.md`,
+  "Open questions", D4).
 - The dispatcher writing the line on a pull request it opens for a coder: with the coder's
   stories.
 
@@ -47,8 +47,8 @@ a pull request with no unit meant to have one.
 
 ## Context
 
-- `docs/harness-outline.md`, "Defining steward", "Review": the `Unit:` line, `Unit: none`, and
-  the options left open for requiring it.
+- `docs/harness-outline.md`, "Defining steward", "Review": the `Unit:` line and `Unit: none`;
+  `docs/agent-workflow-design.md`, "Open questions", D4: the options left open for requiring it.
 - `.github/pull_request_template.md` today: three sections, "What changed", "Verification" and
   "Docs check", each with a comment.
 
