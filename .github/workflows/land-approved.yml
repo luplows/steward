@@ -171,8 +171,8 @@ jobs:
           echo "No PR ready to land."
 
       # Deleting a merged PR's head branch is an explicit act of the sweep. The
-      # repository's `delete_branch_on_merge` setting is enabled and observably
-      # does not fire (OQ-52), so nothing may rely on it. This is cleanup and
+      # repository's `delete_branch_on_merge` setting is not relied on (OQ-52),
+      # and a branch it already deleted is skipped. This is cleanup and
       # never a gate: it runs even when the step above landed nothing, and
       # `continue-on-error` means it cannot fail the run or un-record a merge.
       # It also sweeps branches already left behind by earlier merges. See

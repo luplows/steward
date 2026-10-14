@@ -193,7 +193,7 @@ section, this section is right.
 - **Ref deletion works**, but do not delete your branch. When the landing sweep
   merges a PR it deletes the head branch as an explicit step
   (`scripts/land/delete-merged-heads.mjs`). The repository's
-  `delete_branch_on_merge` setting is not relied on, because it does not fire.
+  `delete_branch_on_merge` setting is not relied on.
 - You are in a checkout of this repository, already on `{{BRANCH}}` — a
   dedicated git worktree once the dispatcher makes them, an ordinary clone
   while this prompt is still rendered by hand. Either way the branch exists

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Refuses to land a pull request whose `author_association` is not one
 // `.github/workflows/review-gate.yml`'s "Apply verdict from marker" step
-// honours for a review marker (REVIEW.md, "The comment must come from an
-// account with write access"). The repository is public and forking is
+// honours for a review marker (`docs/agent-workflow-design.md`, "What the gate
+// enforces", item 4). The repository is public and forking is
 // allowed, so anyone can open a pull request; only a passing review marker
 // stands between such a pull request and the sweep, and that marker itself
 // only counts from a writer. Without this check the sweep would still land
