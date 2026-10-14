@@ -18,7 +18,7 @@ puts it into the review.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — A new module, `scripts/dispatch/rules.mjs`, exports `parseRules(text)`, a pure
+- [x] **AC-1** — A new module, `scripts/dispatch/rules.mjs`, exports `parseRules(text)`, a pure
       function. A section starts at each line beginning `## `, and its name is the rest of that
       line. Text before the first section is the file's preamble. In a section:
       - the first non-blank line, if it begins `Applies when:`, is the section's condition, and
@@ -27,22 +27,22 @@ puts it into the review.
       - each line beginning with a number, a full stop and a space (`3. `) starts an item, and
         the item runs until the next item or the end of the section; lines starting `### `
         inside a section belong to it.
-- [ ] **AC-2** — `parseRules` returns `{ ok: true, preamble, sections }`, each section
+- [x] **AC-2** — `parseRules` returns `{ ok: true, preamble, sections }`, each section
       `{ name, appliesWhen, items }` and each item `{ number, text }`, or `{ ok: false, problems
       }` listing every problem it found, each naming the section. A file does not parse when it
       has no section, when a section has no item, when one section numbers two items the same,
       or when two sections have the same name.
-- [ ] **AC-3** — `readRules({ repoDir, base, rulesFile })` reads the file with
+- [x] **AC-3** — `readRules({ repoDir, base, rulesFile })` reads the file with
       `git show <remote>/<base>:<rulesFile>` in `repoDir`, so the copy on `main`, never a pull
       request's head, and parses it. A file missing from `main` returns `{ ok: false, problems }`
       naming the path, as an unparseable one does. It never throws for either.
-- [ ] **AC-4** — Each section numbers its own items: two sections may each have an item 1.
+- [x] **AC-4** — Each section numbers its own items: two sections may each have an item 1.
       Numbers within a section need not be consecutive.
-- [ ] **AC-5** — Tests in `scripts/dispatch/rules.test.mjs`, named `ST-20/AC-<n>`, cover: a file
+- [x] **AC-5** — Tests in `scripts/dispatch/rules.test.mjs`, named `ST-20/AC-<n>`, cover: a file
       of several sections with and without a condition, read back as sections and items; each
       problem in AC-2, alone and together; the same item number in two sections, accepted; a file
       present at a branch's head but not on `main`, reported missing.
-- [ ] **AC-6** — The `**Planned (ST-20)**` marker in `docs/agent-workflow-design.md` loses
+- [x] **AC-6** — The `**Planned (ST-20)**` marker in `docs/agent-workflow-design.md` loses
       `ST-20`, and the passage is corrected wherever what was built differs.
 
 ## Out of scope

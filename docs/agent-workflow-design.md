@@ -1990,8 +1990,8 @@ shortened where it is long, so that it can be found there with its date.
     `npm ci`.
   - **Planned (ST-19):** finding a pull request's unit from the link in its body, and reading it
     from `main`.
-  - **Planned (ST-20):** reading the rules file from `main`, in sections that each say when they
-    apply and number their own items.
+  - Reading the rules file from `main`, in sections that each say when they apply and number
+    their own items, and refusing a file that does not parse (`scripts/dispatch/rules.mjs`).
   - **Planned (ST-21):** the reviewer judged by those rules, naming every section applied or not,
     and citing each finding by section and item. (`REVIEW.md` has held rules only since
     2026-10-13, "`REVIEW.md` is concise, without history", below.)
