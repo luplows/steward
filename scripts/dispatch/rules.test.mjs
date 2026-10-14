@@ -149,6 +149,8 @@ describe('readRules', () => {
 
     const good = await readRules({ repoDir, base: 'main', rulesFile: 'GOOD.md' })
     expect(good.ok).toBe(true)
+    // ST-21/AC-2: the file's text comes back with the parse, for the reviewer's prompt.
+    expect(good.text).toBe('## A\n\n1. a\n')
     expect(good.sections[0].items).toEqual([{ number: 1, text: 'a' }])
 
     const bad = await readRules({ repoDir, base: 'main', rulesFile: 'BAD.md' })

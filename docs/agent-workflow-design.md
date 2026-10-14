@@ -1004,7 +1004,8 @@ Getting these wrong means the gate ignores the marker rather than obeys it:
 3. **There is no partial credit and no dismissal mechanism.** The only way past a `block` is to
    fix what it found and get a fresh review. A block on the code is fixed by a commit that
    addresses it, which resets the gate to pending. **A block on the pull request's description
-   alone** (`REVIEW.md` items 2, 3, 7 or 12, with nothing in the diff to change) is fixed by
+   alone** (`REVIEW.md`, "Reading the pull request body", items 1 and 2, "Every pull request",
+   item 2, or "Integrity", item 1, with nothing in the diff to change) is fixed by
    editing the description, then a fresh review of the **same head** (`review.mjs --rereview`),
    whose verdict is posted. The description is not part of the head, so a commit would change
    nothing it found. Either way it is a new review, never a waved-through old one, and **the block
@@ -1991,9 +1992,11 @@ shortened where it is long, so that it can be found there with its date.
     from `main`.
   - Reading the rules file from `main`, in sections that each say when they apply and number
     their own items, and refusing a file that does not parse (`scripts/dispatch/rules.mjs`).
-  - **Planned (ST-21):** the reviewer judged by those rules, naming every section applied or not,
-    and citing each finding by section and item. (`REVIEW.md` has held rules only since
-    2026-10-13, "`REVIEW.md` is concise, without history", below.)
+  - The reviewer judged by those rules, given in its prompt from `main`, naming every section
+    applied or not, and citing each finding by section and item; a checklist missing from
+    `main`, or one that does not parse, ends the review as `rules-unreadable`
+    (`scripts/dispatch/review.mjs`). `REVIEW.md` is in that form: six sections, each numbering
+    its own items.
   - **Planned (ST-22):** the reviewer given the linked unit and the note on what was found, and
     verifying with narrower commands rather than the whole check.
   - **Planned (ST-23):** landing in one look, without waiting, and a project able to turn

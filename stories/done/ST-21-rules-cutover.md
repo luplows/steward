@@ -19,16 +19,16 @@ only.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `review.mjs` reads the rules with ST-20's `readRules`, from the settings'
+- [x] **AC-1** — `review.mjs` reads the rules with ST-20's `readRules`, from the settings'
       `rulesFile` on `main`, before any setup or session. A file that is missing or does not
       parse ends the review with a new result, `rules-unreadable`, carrying the problems: no
       session starts, nothing is recorded, and the pull request stays pending.
-- [ ] **AC-2** — The rules file's text reaches the reviewer through a new `{{RULES}}` placeholder
+- [x] **AC-2** — The rules file's text reaches the reviewer through a new `{{RULES}}` placeholder
       in `.claude/prompts/reviewer.md`, bounded as the other injected values are
       (`wrapInjectedBlock`). The prompt no longer tells the reviewer to read `REVIEW.md` from its
       checkout. It tells it to decide which sections apply from each section's `Applies when:`
       line, and that a section without one always applies.
-- [ ] **AC-3** — The verdict the prompt asks for has each finding as `{ section, item, severity,
+- [x] **AC-3** — The verdict the prompt asks for has each finding as `{ section, item, severity,
       text }`, `section` a section's name and `item` an item number in it, and a `sections` list
       naming every section of the rules once, each `{ name, applied }`, with a non-empty
       `reason` when `applied` is false. `parseReviewerVerdict` rejects, as malformed, a verdict
@@ -36,11 +36,11 @@ only.
       leaves one out, names one twice, names one the rules do not have, or lacks a reason for one
       not applied. A malformed verdict is handled as today: one more session, then
       `malformed-verdict`.
-- [ ] **AC-4** — The recorded comment cites each finding by section and item, and then lists
+- [x] **AC-4** — The recorded comment cites each finding by section and item, and then lists
       every section, applied or not, with the reason for each not applied, before the marker
       line. The marker line is unchanged, so `review-gate.yml`, `apply-review-blocked.mjs` and
       `review-verdicts.mjs` read it as before.
-- [ ] **AC-5** — `REVIEW.md` is converted into the form ST-20 parses, holding rules only and no
+- [x] **AC-5** — `REVIEW.md` is converted into the form ST-20 parses, holding rules only and no
       history (`docs/agent-workflow-design.md`, "`REVIEW.md` is concise, without history"), in
       these sections, in this order, each numbering its items from 1. Rules kept are worded as today
       except where this says otherwise:
@@ -64,18 +64,18 @@ only.
       `Open-Questions.md`) was removed on 2026-10-13, before this story. The pull request body
       gives the mapping from each old item number to its new section and item, or to
       "removed".
-- [ ] **AC-6** — Every reference to a `REVIEW.md` item number in `stories/README.md`,
+- [x] **AC-6** — Every reference to a `REVIEW.md` item number in `stories/README.md`,
       `.claude/prompts/coder.md`, `.claude/prompts/reviewer.md`, and the comments and messages of
       `scripts/dispatch/` and `scripts/land/`, names the section instead, and the item within it
       where one item is meant (`docs/agent-workflow-design.md`, "Three decisions from reviewing
       `stories/README.md`").
       `grep -rn "item [0-9]" ` over those paths, given in the pull request body, shows what
       remains and why.
-- [ ] **AC-7** — Tests: `review.test.mjs` covers AC-1 (missing and unparseable rules, with no
+- [x] **AC-7** — Tests: `review.test.mjs` covers AC-1 (missing and unparseable rules, with no
       session spawned), AC-3 (each rejection, and a valid verdict accepted) and AC-4 (the
       comment's text); `ST-21/AC-5`, in a test file of its choosing, parses the committed
       `REVIEW.md` with `parseRules` and checks its section names and conditions.
-- [ ] **AC-8** — The `**Planned (ST-21)**` marker in `docs/agent-workflow-design.md` loses
+- [x] **AC-8** — The `**Planned (ST-21)**` marker in `docs/agent-workflow-design.md` loses
       `ST-21`, and the passage is corrected wherever what was built differs.
 
 ## Out of scope

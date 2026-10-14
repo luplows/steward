@@ -206,7 +206,7 @@ design doc, "The outline's reasoning", under the same headings.
     sessions;
   - "Every pull request" gains a claims item: statements a pull request adds about how the
     repository works, in documents, comments, commit messages or its body, are true at its
-    head. Today only a story's claims are checked (item 22). Not in the example: it is the
+    head. Until then only a story's claims were checked. Not in the example: it is the
     discipline steward's own project chose (`AGENTS.md`, "Claims about this repository");
   - "Changes to code" applies to workflow files and prompts as well as code and tests, to start
     with;

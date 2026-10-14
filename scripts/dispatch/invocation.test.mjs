@@ -56,6 +56,7 @@ const reviewerOptions = {
   story,
   branch: BRANCH,
   pr: { number: 129, headSha: SHA, body: HOSTILE },
+  rules: HOSTILE,
   baseEnv: { PATH: '/bin' },
 }
 
@@ -248,12 +249,19 @@ describe('OQ-74/AC-4: every untrusted value is bounded', () => {
     assertBounded(prompt, ['STORY'], baseline)
   })
 
-  it('reviewer: {{STORY}} and {{PR_BODY}} each carry one begin and one end marker', () => {
+  it('reviewer: {{STORY}}, {{PR_BODY}} and ST-21/AC-2\'s {{RULES}} each carry one begin and one end marker', () => {
     const { prompt } = buildInvocation(reviewerOptions)
     const baseline = emptyRender(REVIEWER_TEMPLATE, {
       PR_NUMBER: '129', HEAD_BRANCH: BRANCH, HEAD_SHA: SHA, STORY_ID: 'OQ-74', STORY_PATH: story.path, STORY: '', PR_BODY: '',
+      RULES: '',
     })
-    assertBounded(prompt, ['STORY', 'PR_BODY'], baseline)
+    assertBounded(prompt, ['STORY', 'PR_BODY', 'RULES'], baseline)
+  })
+
+  it('ST-21/AC-2: a reviewer invocation requires the rules, and a coder invocation takes none', () => {
+    const { rules: _rules, ...withoutRules } = reviewerOptions
+    expect(() => buildInvocation(withoutRules)).toThrow(/requires rules/)
+    expect(() => buildInvocation({ ...coderOptions, rules: 'x' })).toThrow(/takes no rules/)
   })
 
   it('a retry\'s findings block is bounded too, and the hostile text stays inert', () => {

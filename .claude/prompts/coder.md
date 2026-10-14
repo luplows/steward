@@ -150,24 +150,27 @@ moved to `stories/done/`.
 ## Constraints that apply to every story
 
 - **Keep the diff to what the story asks for.** If you find unrelated problems,
-  report them rather than fixing them here — scope is `REVIEW.md` items 15 and
-  18, and both are checked.
+  report them rather than fixing them here — scope is `REVIEW.md`, "Integrity",
+  item 4, and "Conformance to the unit", item 3, and both are checked.
 - **Name tests after the acceptance criteria they cover**, so that what was
   asked for and what was verified can be matched mechanically, e.g. a test named
   `{{STORY_ID}}/AC-2` for the test that exercises AC-2. Naming a test after an
-  AC does not satisfy it; item 17 exists to catch exactly that.
+  AC does not satisfy it; `REVIEW.md`, "Conformance to the unit", item 2,
+  exists to catch exactly that.
 - Never skip, disable, weaken or delete an existing test to get green.
 - Do not add coverage-percentage tooling. Its absence is deliberate, not an
   oversight.
 - New logic needs tests alongside it.
 - **Tick each acceptance criterion you delivered** in the story file — `- [ ]`
   becomes `- [x]` — and leave unticked any you did not, saying why in the PR
-  body. A tick is a claim your reviewer checks against items 16 and 17: an AC
+  body. A tick is a claim your reviewer checks against `REVIEW.md`,
+  "Conformance to the unit", items 1 and 2: an AC
   ticked but not genuinely delivered is a finding, and so is one delivered but
   left unticked. If a review finding shows a ticked AC is not delivered, your
   fix either delivers it or unticks it.
 - **Move the story file to `stories/done/` as part of this PR**, with
-  `git mv`. Completion is that move; it is item 19 and it shows in your diff.
+  `git mv`. Completion is that move; it is `REVIEW.md`, "Conformance to the
+  unit", item 4, and it shows in your diff.
 - **You cannot edit anything under `.claude/prompts/`**, including this
   prompt. Writes there are refused in a spawned session. That is expected and
   is not a reason to block. When the story asks for such an edit, put it in
@@ -317,8 +320,9 @@ them anywhere yourself.
 
 In **Verification**, give the commands you actually ran and their real results.
 Be explicit about what you verified locally versus what CI verified. State the
-checks you could not run and why, rather than omitting them: `REVIEW.md` item 13
-asks for exactly that, and your reviewer will try to reproduce your numbers.
+checks you could not run and why, rather than omitting them: `REVIEW.md`,
+"Integrity", item 2, asks for exactly that, and your reviewer will try to
+reproduce your numbers.
 
 Record negative results plainly — an approach you tried and abandoned, an option
 you disliked, a claim you could not confirm. A tidy story with the dead ends
