@@ -68,7 +68,8 @@ const REMOTE = 'origin'
 export const HONOURED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR']
 const SHA_RE = /^[0-9a-f]{40}$/
 
-// reviewer.md, "For a PR that implements no story".
+// What {{STORY}} renders as for a pull request that implements no story
+// (reviewer.md, the placeholders).
 const NO_STORY_TEXT = '*(none — this PR implements no story; "Conformance to the unit" does not apply.)*'
 
 // ------------------------------------------------------------------- story
@@ -115,8 +116,8 @@ export function resolveStory({ nameStatus, branch, prefix }) {
 
 // ------------------------------------------------------------------- model
 
-// A different family from the coder's is the point (reviewer.md: context
-// isolation decorrelates knowledge, not reasoning style).
+// A different family from the coder's is the point (docs/agent-workflow-design.md,
+// "Reviewer": context isolation decorrelates knowledge, not reasoning style).
 const REVIEWER_MODEL_FALLBACK = 'sonnet'
 
 function sameModel(a, b) {
@@ -390,7 +391,8 @@ export async function reviewPullRequest({
     const sessionEnv = coderEnv(baseEnv, ghConfigDir)
 
     // A reviewer that cannot run `npm test` silently reviews by reading
-    // (reviewer.md), so a failed install stops the dispatch.
+    // (docs/agent-workflow-design.md, "Invocation shape"), so a failed install
+    // stops the dispatch.
     try {
       await install({ cwd: tree, env: sessionEnv })
     } catch (error) {

@@ -1,124 +1,47 @@
 # Reviewer prompt
 
-The prompt a fresh session is spawned with to review one pull request. The
-author's counterpart is [`coder.md`](coder.md), which is where the spawn
-discipline for both is written down.
+The prompt ATC starts a reviewer session with, to review one pull request at
+one head. Its counterpart is [`coder.md`](coder.md). Why the reviewer is given
+what it is given, and what its invocation does and does not guarantee, are in
+`docs/agent-workflow-design.md`, "Reviewer", "Invocation shape" and
+"Credential minimalism".
 
-Everything below the `---` is the prompt. It is **rendered**, not pasted:
-whatever spawns the session substitutes these placeholders and sends the result.
+Everything below the `---` is the prompt. `review.mjs` renders it with
+`buildInvocation` (`scripts/dispatch/invocation.mjs`), which substitutes these
+placeholders:
 
 | Placeholder | Substituted with |
 |---|---|
-| `{{PR_NUMBER}}` | the number of the PR under review, e.g. `98` |
-| `{{HEAD_BRANCH}}` | its head branch, e.g. `story/OQ-49-read-story-queue` |
+| `{{PR_NUMBER}}` | the number of the pull request under review, e.g. `98` |
+| `{{HEAD_BRANCH}}` | its head branch, e.g. `story/ST-49-queue-json` |
 | `{{HEAD_SHA}}` | the full 40-character SHA of the commit under review |
-| `{{STORY_ID}}` | the story's id, e.g. `OQ-49` |
-| `{{STORY_PATH}}` | the story file's path **on the PR branch** — `stories/done/OQ-49-read-story-queue.md` once the PR has moved it there |
+| `{{STORY_ID}}` | the story's id, e.g. `ST-49` |
+| `{{STORY_PATH}}` | the story file's path **on the pull request's branch**: `stories/done/ST-49-queue-json.md` once it has moved the story there |
 | `{{STORY}}` | the entire contents of that file, verbatim |
 | `{{PR_BODY}}` | the pull request's description, verbatim |
 | `{{RULES}}` | the project's checklist (the settings' `rulesFile`) as it stands on `main`, verbatim |
 
-**Every placeholder in this table must appear in the prompt below**, and every
-placeholder below must appear in this table. Rendering is the only thing that
-reads either, so a row with no corresponding use is not a harmless leftover — it
-is a value the dispatcher computes and silently drops, and whether that is an
-error or a warning is a decision `render` has to make. `{{STORY_PATH}}` sat in
-this table unused until the first hand-run of the loop checked both directions.
+`render` (`scripts/dispatch/render.mjs`) refuses a prompt that uses a
+placeholder this table does not list, and returns any row the prompt does not
+use as `unusedDocumented` (`checkPlaceholderContract`). Every value not named
+in `TRUSTED_INLINE` (`invocation.mjs`) is injected as a bounded block:
+`{{STORY}}`, `{{PR_BODY}}` and `{{RULES}}`.
 
-For a PR that implements no story — a bootstrap or workflow-only change —
-`{{STORY}}` renders as
-`*(none — this PR implements no story; "Conformance to the unit" does not apply.)*` and the
-other story placeholders render as `n/a`.
+For a pull request that implements no story, `{{STORY}}` renders as
+`NO_STORY_TEXT` (`review.mjs`), and `{{STORY_ID}}` and `{{STORY_PATH}}` as
+`n/a`.
 
-**`{{PR_BODY}}` is injected rather than fetched.** The reviewer is required to
-judge the PR description (step 4 below, and the checklist's "Reading the pull
-request body"),
-which for a long time it had no way to read: this prompt told it there was no
-`gh` and then told it to read the body, and the first hand-run of the loop only
-worked because the repository happened to be public and the invocation happened
-to allow `curl`. Injecting it keeps the reviewer hermetic — git and a checkout
-are all it *needs* — so nothing has to hand it a credential, it works on a
-private repository, and it sees exactly the text the dispatcher saw.
+The reviewer is given its inputs rather than looking them up, so that it needs
+no GitHub credential: the story and the pull request's body, as evidence to
+judge, and the checklist from `main`, so that a pull request cannot loosen the
+rules it is judged by. It is not given the author's session, summary or
+reasoning. ATC starts it as a session of its own, on a different model from
+the coder's (`chooseReviewerModel`, `review.mjs`), and posts the verdict it
+returns.
 
-**The reviewer receives the story.** That is not a contradiction of the context
-isolation this gate depends on. What is withheld is the author's *working
-context* — its session and transcript, its internal reasoning, and any
-commentary from whatever dispatched it. The *authored story* is a different
-thing: it is the standard the diff has to meet. A reviewer that never sees it
-can only compare the diff to the PR body, and the same worker wrote both, so a
-worker that misread the story produces a body describing what it actually built,
-a diff matching that body, and a review that cannot fail.
-
-**The PR body is given too, but as an exhibit rather than as testimony.** It is
-the author's account, and the review's job includes deciding whether that
-account is honest — which is impossible without reading it. So it is supplied
-for judging, never for believing: where it and the diff disagree, the diff is
-what happened. Read it last, after the findings are formed, so it cannot frame
-them. That ordering is why step 4 sits where it does.
-
-**The checklist is injected from `main`, not read from the checkout.** The
-checkout is the pull request's head, so a pull request could otherwise loosen
-the rules it is judged by. Its sections and items are what a finding cites, and
-`review.mjs` rejects a verdict that cites one the checklist does not have.
-
-**Spawn it as its own session**, never as a continuation of the one that wrote
-the PR, and on a **different model from the coder's** — context isolation
-decorrelates knowledge, not reasoning style.
-
-**The reviewer is handed no GitHub credential and posts nothing.** It returns a
-verdict; whoever ran it records that verdict. Invoke it with `Edit`, `Write`,
-`NotebookEdit`, `Bash(git push:*)` and `Bash(gh:*)` disallowed.
-
-Those denials raise the floor rather than sealing it — see **defence in depth,
-not containment** below, which is the honest version of what they buy and why
-OQ-62 exists.
-
-**Three further flags on that invocation are load-bearing.** Pass
-`--permission-prompts none`, so anything that would prompt is *denied* rather
-than blocking a session nobody is attached to — a reviewer that stops to ask
-waits forever, and one did, for eight minutes. Pass `--max-budget-usd` as a hard
-ceiling on what a single review can cost, chosen in advance rather than
-discovered afterwards. Pass `--allowedTools` covering what review actually
-needs — reading the repository, read-only `git`, `git merge-tree`, and the test
-and lint commands, since **Verify rather than accept** below requires re-running
-the author's claims. Denying prompts decides that nothing may ask; the allowlist
-decides what does not need to, and a reviewer that cannot run `npm test` silently
-reviews by reading. Enumerate the `git` subcommands rather than granting
-`Bash(git:*)`, so `git push` is absent from the allowlist before the
-`--disallowedTools` deny rule also removes it. All of them are read-only except
-`git merge-tree`, which writes tree and blob objects that nothing references,
-moves no ref, and is there so the reviewer can check a claim that two branches
-merge cleanly. The list is built by
-`reviewerAllowedTools()` in `scripts/dispatch/invocation.mjs`, which is the
-authority; this prose summarises it. It includes the read-only shell utilities in
-`READ_ONLY_SHELL_UTILS` (`ls cat head tail wc grep diff cut pwd`), so
-pipelines such as `npm test | tail` are permitted. `sed` and `sort` are absent
-because they can write. The list is passed on the command line in full, not
-left to `.claude/settings.json`, whose allowances are ignored without warning
-when the workspace is not trusted.
-
-**That is defence in depth, not containment, and the difference matters.** The
-same list grants `npm`, `npx` and `node`, because **Verify rather than accept**
-requires running the suite — and those are arbitrary execution. `node -e` can
-write files despite `Edit`/`Write` being disallowed, and can spawn `git push`
-despite the deny rule, which matches a command *prefix* that `node …` never
-trips. Running locally the session is the owner, with an SSH key and a `gh`
-keyring token in reach. So the enumeration raises the floor against the
-accidental path; it does not make writing impossible, and nothing in this
-invocation does. What keeps the gate honest is that you **post nothing** — a
-rule you follow, not one the flags enforce. Treat that as a reason to hold to it
-more carefully, not less. Removing the capability rather than denying the
-command is OQ-62; until it lands, prose is the guarantee.
-
-That is also why this file has no credentials section. The previous version of
-this prompt accreted one fix per failed run — credential hunting after sessions
-could not post, "do not ask questions" after one hung — until the assembled text
-read *find tokens on disk, tell nobody, act with elevated access*, and a
-reviewer session correctly refused it as an injection attack. Each addition was
-locally reasonable; nobody re-read the whole. Removing the need to post anything
-deletes that section rather than rewording it.
-
-Read the assembled prompt end to end before sending it, as a stranger would.
+Read the whole prompt end to end, as a stranger would, after any change to it.
+A prompt that gains one fix per failed run can end up reading like an attack
+(`docs/agent-workflow-design.md`, "Credential minimalism").
 
 ---
 
@@ -250,17 +173,24 @@ suspicion of bad faith, but because "internally consistent" and "correct" look
 identical from inside.
 
 **If a read-only command you needed is denied, that is a finding about this
-invocation — report it, do not route around it.** Your allowlist is supposed to
+invocation — report it, do not route around it.** Your allowlist
+(`reviewerAllowedTools()`, `scripts/dispatch/invocation.mjs`) is supposed to
 cover reading the repository, read-only `git` (including `ls-remote` and
 `ls-tree`), `git merge-tree` for checking that branches merge, the read-only
 shell utilities `ls cat head tail wc grep diff cut pwd` (so a pipeline such as
-`npm test | tail` is allowed), and the test and lint commands. A
-gap in it is silent in a way the coder's is not: the coder that cannot commit
-fails visibly, whereas you can return a confident `pass` having checked less
-than you think. Say in `summary` which command was refused and what you could
-not therefore verify, and drop the verdict to `pass-with-observations` — or to
-`null` if what you could not run was load-bearing enough that the review does
-not stand without it.
+`npm test | tail` is allowed), and the test and lint commands. A gap in it is
+silent in a way the coder's is not: the coder that cannot commit fails visibly,
+whereas you can return a confident `pass` having checked less than you think.
+Say in `summary` which command was refused and what you could not therefore
+verify, and drop the verdict to `pass-with-observations` — or to `null` if what
+you could not run was load-bearing enough that the review does not stand
+without it.
+
+**`gh` is not such a gap: it is denied by design.** A claim that only `gh` or
+the GitHub API could check, such as a branch's protection, how long a CI run
+took or a comment's id, is one you cannot check. Name each such claim in
+`summary` as not checked, and why. It is not a finding, and it does not change
+the verdict.
 
 **Whether a shell command runs is decided by Claude Code's permission layer,
 not by your allowlist alone.** Read-only pipes, chains and loops usually run,
@@ -271,11 +201,12 @@ variants of it. For a repeated run, an exit code or sorted output, use
 `scripts/dispatch/review-tools.mjs`:
 `node scripts/dispatch/review-tools.mjs repeat <n> -- <command…>`,
 `… exit -- <command…>` or `… sorted [--unique] -- <command…>`. It runs only
-commands your allowlist admits, and exits 0 whenever it ran the command, so
-read the result from its output. For anything else, run the parts as separate
-commands, use the Read, Grep and Glob tools, or use `node -e` when composition
-is genuinely needed. When a check could not be run, say so in the verdict,
-naming the check.
+commands your allowlist admits, other than `node`: it refuses every `node`
+command, a repository script included. It exits 0 whenever it ran the
+command, so read the result from its output. For anything else, run the parts
+as separate commands, use the Read, Grep and Glob tools, or use `node -e` when
+composition is genuinely needed. When a check could not be run, say so in the
+verdict, naming the check.
 
 ## Calibration
 
@@ -307,7 +238,7 @@ is fixed by editing the description, followed by a fresh review of the same
 head (`docs/agent-workflow-design.md`, "What the gate enforces", item 3). So a
 review of a head that has been reviewed before is normal. Judge the description
 as it stands now. A `block` also turns the gate's workflow run red. That
-is deliberate — it is what makes the block reach a human — not a bug for you to
+is deliberate — it is what makes the block reach the crew — not a bug for you to
 avoid triggering.
 
 **If you cannot review** — the head moved, the diff will not resolve, the story
