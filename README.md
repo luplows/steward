@@ -13,6 +13,7 @@ verdict. The owner keeps the decisions: what to build, and what is fit to releas
   `CLAUDE.md` imports it for Claude Code.
 - [`docs/glossary.md`](docs/glossary.md): the words these documents use, and what each means.
 - [`stories/README.md`](stories/README.md): the story queue, `ST-<n>`.
+- [`docs/settings.md`](docs/settings.md): the keys of a project's `steward.config.json`.
 
 steward was moved out of [tower-workshop-paths](https://github.com/luplows/tower-workshop-paths)
 with its history; [`docs/steward-bootstrap.md`](docs/steward-bootstrap.md) records how. An
@@ -22,4 +23,4 @@ with its history; [`docs/steward-bootstrap.md`](docs/steward-bootstrap.md) recor
 
 CI runs it on Node 22. `npm ci`, then `node scripts/dispatch/cli.mjs <command>`, where
 `<command>` is one of `coder`, `review`, `story`, `land`, `loop`, `queue`, `lint` or `verdicts`.
-A project's own `steward.config.json` names its repository and its story prefix.
+A project's own `steward.config.json` holds its settings (`docs/settings.md`).

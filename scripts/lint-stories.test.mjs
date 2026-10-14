@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { fixtureSettings } from './dispatch/settings-fixture.mjs'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -79,7 +80,7 @@ function storySource(frontmatterOpts, sectionOpts) {
 let tmpRoot
 
 async function writeSettings(root, storyPrefix) {
-  await writeFile(path.join(root, 'steward.config.json'), JSON.stringify({ repo: 'owner/repo', storyPrefix }), 'utf8')
+  await writeFile(path.join(root, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: 'owner/repo', storyPrefix })), 'utf8')
 }
 
 beforeEach(async () => {

@@ -1854,8 +1854,8 @@ deciding what is next. It is the harness's product outline, and moves with this 
   2026-10-12). The review side's design is in `harness-outline.md`,
   "Defining steward" (Review, Land, Settings and Loops), decided the same day; each part is built
   by the story named:
-  - **Planned (ST-18):** the settings keys `setup`, `check`, `landWhen`, `land`, `unitLinks` and
-    `rulesFile`, each required, with no default in the code.
+  - Built (ST-18): the settings keys `setup`, `check`, `landWhen`, `land`, `unitLinks` and
+    `rulesFile`, each required, with no default in the code (`docs/settings.md`).
   - **Planned (ST-7):** the project's `setup` command, within its time limit, in place of
     `npm ci`.
   - **Planned (ST-19):** finding a pull request's unit from the link in its body, and reading it

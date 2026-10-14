@@ -16,7 +16,7 @@ and well formed, and a project that leaves one out is told which.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `readSettings` in `scripts/dispatch/settings.mjs` accepts and returns these
+- [x] **AC-1** — `readSettings` in `scripts/dispatch/settings.mjs` accepts and returns these
       keys besides `repo` and `storyPrefix`, which are unchanged:
       - `setup` and `check`: each either `null` or an object with exactly the keys `command`
         (a non-empty string) and `timeoutMinutes` (a positive integer);
@@ -27,26 +27,26 @@ and well formed, and a project that leaves one out is told which.
         and `"other"`;
       - `rulesFile`: a non-empty string that is a relative path with forward slashes, neither
         absolute nor containing a `..` segment.
-- [ ] **AC-2** — Every key is required. A missing key, an unknown key (top level, or inside a
+- [x] **AC-2** — Every key is required. A missing key, an unknown key (top level, or inside a
       `setup` or `check` object), or a value of the wrong form throws an error naming the file
       and the key, with its parent for a nested one (for example `setup.timeoutMinutes`).
       Nothing is defaulted: `readSettings` holds no value of its own for any key.
-- [ ] **AC-3** — Steward's own `steward.config.json` gains:
+- [x] **AC-3** — Steward's own `steward.config.json` gains:
       `"setup": { "command": "npm ci", "timeoutMinutes": 5 }`,
       `"check": { "command": "npm run check", "timeoutMinutes": 10 }`,
       `"landWhen": "all-checks"`, `"land": true`, `"unitLinks": ["file"]` and
       `"rulesFile": "REVIEW.md"`. `package.json` gains a `check` script running lint and then
       Vitest, as CI does.
-- [ ] **AC-4** — Tests in `scripts/dispatch/settings.test.mjs` cover, for each new key: a valid
+- [x] **AC-4** — Tests in `scripts/dispatch/settings.test.mjs` cover, for each new key: a valid
       value read back unchanged, and each invalid form in AC-1 and AC-2 rejected with the key
       named. `null` is accepted for `setup` and for `check`; `[]` is accepted for `unitLinks`.
-- [ ] **AC-5** — Every test fixture that writes a `steward.config.json` holds every required key,
+- [x] **AC-5** — Every test fixture that writes a `steward.config.json` holds every required key,
       so that the full suite passes. The committed-file test ("OQ-122/AC-2") expects AC-3's
       values.
-- [ ] **AC-6** — A new `docs/settings.md` lists every key with its form, what it is for, and
+- [x] **AC-6** — A new `docs/settings.md` lists every key with its form, what it is for, and
       what `init` will write, and says that an empty `unitLinks` means the project links no
       units. `README.md` and `AGENTS.md`'s "Where things are documented" table each point at it.
-- [ ] **AC-7** — The `**Planned (ST-18)**` marker in `docs/agent-workflow-design.md` loses
+- [x] **AC-7** — The `**Planned (ST-18)**` marker in `docs/agent-workflow-design.md` loses
       `ST-18`, and the passage is corrected wherever what was built differs.
 
 ## Out of scope

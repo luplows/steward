@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { describe, expect, it, vi } from 'vitest'
+import { fixtureSettings } from '../dispatch/settings-fixture.mjs'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -257,7 +258,7 @@ describe('OQ-125/AC-3: the CLI\'s default repo comes from steward.config.json at
   async function withTempSettings(settings, fn) {
     const dir = mkdtempSync(path.join(tmpdir(), 'tw-review-verdicts-settings-'))
     try {
-      writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(settings))
+      writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings(settings)))
       return await fn(dir)
     } finally {
       rmSync(dir, { recursive: true, force: true })
