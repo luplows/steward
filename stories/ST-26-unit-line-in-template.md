@@ -36,8 +36,8 @@ a pull request with no unit meant to have one.
 ## Out of scope
 
 - Reading the line: ST-19 and ST-22.
-- Making the line required by a check: left open by the owner (`docs/harness-outline.md`,
-  "Review").
+- Making the line required by a check: left open by the owner (`docs/agent-workflow-design.md`,
+  "Open questions", D4).
 - The dispatcher writing the line on a pull request it opens for a coder: with the coder's
   stories.
 

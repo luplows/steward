@@ -1623,9 +1623,10 @@ repository.
 
 ### What the workflow is for
 
-[`harness-outline.md`](harness-outline.md) holds the owner's own account of it (from
-2026-10-07): what it is, who it is for, why, the three things it must never do, and the view for
-deciding what is next. It is the harness's product outline, and moves with this document.
+[`harness-outline.md`](harness-outline.md) is steward's product outline, the owner's own account
+of it from 2026-10-07 on: what it is, who it is for, why, the three things it must never do, the
+view for deciding what is next, and the owner's decisions defining steward. The questions it
+leaves open are under "Open questions", "Defining steward", below.
 
 ### Decided so far
 
@@ -1761,12 +1762,12 @@ deciding what is next. It is the harness's product outline, and moves with this 
   as R6 decided for the second project. The first follow-ups in steward are the stories that get its
   coder working to its outline. Considered and not chosen: steward dispatching its own `ST-<n>`
   stories from the day it exists, which "The move, in order" was built for; that would run the
-  engine's single loop, which the outline replaces with two (`harness-outline.md`, "Loops"). This
-  revises the order of steward's first stories in R4 and in `steward-bootstrap.md` (D-5 and
-  section 8): the prompts' slot, closing `REVIEW.md`'s gaps (dropped on 2026-10-11, R1) and `init`
-  now come after the coder's stories. Until steward's review loop is built, its reviews are
-  started by a dispatcher session running `review.mjs` and `land.mjs`, as this repository's are
-  (**The controller**, above; decided the same day by the owner).
+  engine's single loop, which the outline replaces with two (`harness-outline.md`, "The two
+  sides"). This revises the order of steward's first stories in R4 and in `steward-bootstrap.md`
+  (D-5 and section 8): the prompts' slot, closing `REVIEW.md`'s gaps (dropped on 2026-10-11, R1)
+  and `init` now come after the coder's stories. Until steward's review loop is built, its reviews
+  are started by a dispatcher session running `review.mjs` and `land.mjs`, as this repository's
+  are (**The controller**, above; decided the same day by the owner).
 - **Which stories and paths move, re-sorted against the outline** (decided 2026-10-10 by the
   owner, from the planning session's proposal):
   - **Steward's own repository is a project that uses steward, and it and this repository each
@@ -1894,11 +1895,12 @@ deciding what is next. It is the harness's product outline, and moves with this 
 - **Section 8's outcome** (2026-10-12; `steward-bootstrap.md`, section 8). Steward has no loop of
   its own, and its loop's worktree (`loop --init`) was not made: its review side is run by the
   dispatcher session from its own worktree, with `review.mjs` and `land.mjs` until the pass
-  (ST-25) is built (`harness-outline.md`, "Loops"), and `loop.mjs` is not to be run on steward as
-  it is configured (owner, 2026-10-12, above). Its first stories are the review side's, ST-18 to
-  ST-26 with ST-7 rewritten, at tier `next`, landed in #4. Its first pull request through its own
-  gate was #1, landed on 2026-10-11: `review/agent` passed at its head, the sweep merged it, its
-  head branch was deleted, and CI ran on `main` by `workflow_run`. #2 to #5 landed the same way.
+  (ST-25) is built (`harness-outline.md`, "The two sides"), and `loop.mjs` is not to be run on
+  steward as it is configured (owner, 2026-10-12, above). Its first stories are the review side's,
+  ST-18 to ST-26 with ST-7 rewritten, at tier `next`, landed in #4. Its first pull request through
+  its own gate was #1, landed on 2026-10-11: `review/agent` passed at its head, the sweep merged
+  it, its head branch was deleted, and CI ran on `main` by `workflow_run`. #2 to #5 landed the same
+  way.
   Section 8's other half, R4's OQ-to-ST mapping and retiring the moved stories in
   tower-workshop-paths, is that repository's planning session's.
 - **Steward's words are defined in one glossary, `glossary.md`** (decided 2026-10-12 by the owner,
@@ -1969,7 +1971,7 @@ deciding what is next. It is the harness's product outline, and moves with this 
     existed before it had story files, and steward has neither. Considered and not chosen: a
     backlog file of steward's own.
   - **`REVIEW.md` is cited by section name, not item number**, everywhere, since ST-21 gives each
-    section its own numbering (`harness-outline.md`, "The rules file's shape"). Older citations take
+    section its own numbering (`harness-outline.md`, "The checklist's shape"). Older citations take
     the section name as they are touched. **Clarified 2026-10-13 by the owner: the section, and the
     item within it where one item is meant**, after #9's review found this entry at odds with the
     outline ("a finding cites the section and the item") and with ST-21's AC-7 (AC-6 since
@@ -1987,7 +1989,7 @@ deciding what is next. It is the harness's product outline, and moves with this 
   review, while tower-workshop-paths' leftovers were taken out of it: "concise instructions for the
   coder and reviewer"). How a rule or a mechanism came about is recorded in this document, not in
   the checklist, which the reviewer reads in full on every review. This extends
-  `harness-outline.md`, "The rules file's shape" ("The file holds rules only"). Considered and not
+  `harness-outline.md`, "The checklist's shape" ("The file holds rules only"). Considered and not
   chosen: leaving the history in the sections ST-21 moves to `docs/review-mechanics.md` until it
   moves them. **The same day, also by the owner: `REVIEW.md` is the checklist only**, with each
   section's intro reduced to the `Applies when:` line that says when it applies. The reviewer's
@@ -1995,6 +1997,17 @@ deciding what is next. It is the harness's product outline, and moves with this 
   how the gate works in this document ("What the gate enforces"), so three files each do one job.
   Considered and not chosen: a new `docs/review-mechanics.md`, which ST-21 planned until then; and
   new instruction files under `docs/` that the prompts point to.
+- **The outline is a current document** (decided 2026-10-13 by the owner, in the documents
+  review). `harness-outline.md` is steward's product outline, and its opening says so, without the
+  move or tower-workshop-paths' pull requests. It holds what is decided. What is open moves to
+  "Open questions", "Defining steward", below, where `stories/README.md` already puts open
+  questions about steward's design. Notes on what a statement superseded, and the planning
+  session's "For reference" snapshots of tower-workshop-paths' code, are removed. It takes the
+  glossary's words, though its statements are the owner's and dated, since it describes steward as
+  it is meant to be; two of its headings change with them ("The two sides", "The checklist's
+  shape"). Considered and not chosen: keeping the open items in the outline; and keeping its old
+  words, as a dated record keeps its own. Not yet decided: whether its "Considered and not chosen"
+  and "What follows" lines move to this document (owner, to be discussed).
 
 ### The move, in order
 
@@ -2153,7 +2166,7 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   leaving gaps in the numbering. A story in steward closes the gaps and updates every reference to
   an item number. **Revised 2026-10-11 by the owner:** no such story. Each section of a rules file
   numbers its own items, and a finding cites the section and the item (`harness-outline.md`,
-  "Review", "The rules file's shape"), so the gaps are left to go with the file's restructuring.
+  "Review", "The checklist's shape"), so the gaps are left to go with the file's restructuring.
 
   A side effect worth having: in the workflow's repository the prompts need not live under
   `.claude/`, so a coder there could edit them directly, instead of through the emit-a-diff route
@@ -2445,3 +2458,54 @@ Checked on 2026-10-07 against `main` at `66c578d`:
 | 10 | Second GitHub identity | Open. The only thing that fully closes self-marking. Cost: a machine account or App. |
 | 11 | Other companies' models | Open. Goals decided 2026-10-07, and comes after the move; questions M1–M6 under [Portability](#portability-other-projects-other-companies-models). OQ-114. |
 | 12 | The workflow in a repository of its own | Open. Goals decided 2026-10-07, and comes first; questions R1–R10 under [Portability](#portability-other-projects-other-companies-models). OQ-115. |
+
+### Defining steward
+
+Moved from `harness-outline.md`, "Defining steward", on 2026-10-13 ("The outline is a current
+document", above). Each names the outline's section it belongs to.
+
+- **D1. The ground stop** ("What it is", "The two sides"). Steward keeps working while ready work
+  remains, up to a point where too much has stopped without landing. Open: whether "too much
+  stopped" is one measure, what it counts, and how each stop reaches the crew. The owner's view
+  (2026-10-10, asked whether each side stops on its own measure or both on one): the two sides
+  should probably stop at the same time, so that a backlog of unreviewed pull requests does not
+  build up. Two separate limits come closest today: two or more open `loop-stuck` issues stop
+  the loop (`STUCK_ISSUE_LIMIT`, `scripts/dispatch/loop.mjs`), and five or more open
+  `review-blocked` pull requests narrow what the runway lands (the circuit breaker,
+  `.github/workflows/land-approved.yml`). Neither counts a unit stopped for another reason, such
+  as red CI at its own bound, which `story.mjs` records as `blocked:` on a draft pull request,
+  with no label and no issue.
+- **D2. Priority** ("What steward is for"). Probably the order in which work is started, since
+  the order it finishes in is not deterministic (the owner's leaning, 2026-10-10, still to be
+  thought through). Steward's own stories are ordered by `tier`, then lowest id
+  (`stories/README.md`, "Status").
+- **D3. Looking back** ("What steward is for"). Ideally a walkthrough of the product (owner,
+  2026-10-10). Open: whether it is steward's. The release review (above) is meant for it, a
+  periodic walkthrough of `main` ending in a release tag, but it has not yet run, so its scope is
+  unknown (owner, 2026-10-10); steward's `origin` has no tags (2026-10-13).
+- **D4. Whether and how the `Unit:` line is required** ("Review"). ST-26 puts the line in
+  steward's pull request template and leaves this open. The planning session's options
+  (2026-10-11): the pull request template carries it; ATC always writes it on a pull request it
+  opens; or a check on the pull request body, posted by steward's gate, fails without it, which
+  would sit with "Steward enforces nothing about CI" ("Land").
+- **D5. The `unitLinks` value `init` writes** ("Review").
+- **D6. A tool that compares a project's checklist with the example in the version it pins**
+  ("Review"): a possibility, not decided (owner, 2026-10-09).
+- **D7. The checklist's parser as a command a project may run in its own CI** ("The checklist's
+  shape"), so that a pull request that breaks the checklist is caught before it lands, since
+  otherwise every review after it stops. The planning session's proposal, 2026-10-11, not decided.
+- **D8. What `init` explores in the repository to surface options** ("Land").
+- **D9. The two ways to set up** ("Land"): one declarative, which runs without AI, and one meant
+  to be run with an AI helper (owner, 2026-10-11). Not yet refined: what each covers, and how the
+  second sits with `init` as a deterministic script.
+- **D10. Whether a project must have CI at all** ("Land"). The owner leans against making CI a
+  prerequisite, but every project of the owner's will have CI, so requiring it is possible
+  (owner, 2026-10-10).
+- **D11. Whether GitHub's rulesets are available where branch protection is not** ("Land"). Only
+  the branch protection limit is recorded (R6).
+- **D12. Which commands the reviewer and the coder may run** ("Settings"), left for later by the
+  owner (2026-10-11). It probably needs to be a setting, for a project that is not built with
+  Node, and may look different once coder and reviewer sessions run in containers (R5).
+- **D13. Other triggers for a rotation** ("The two sides"), such as a scheduled task (ST-11) or a
+  GitHub event, left by the owner for a later discussion (2026-10-11). To start with, the
+  controller starts each rotation.

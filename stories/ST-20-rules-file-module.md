@@ -50,7 +50,7 @@ puts it into the review.
 - Giving the rules to the reviewer, the verdict format, and converting steward's own `REVIEW.md`:
   ST-21.
 - A command that runs the parser for a project's own CI: proposed by the planning session on
-  2026-10-11 and not decided (`docs/harness-outline.md`, "The rules file's shape").
+  2026-10-11 and not decided (`docs/agent-workflow-design.md`, "Open questions", D7).
 - Judging whether a section applies, which is the reviewer's.
 - What the example rules file contains (left for later by the owner).
 
@@ -60,7 +60,7 @@ puts it into the review.
 
 ## Context
 
-- `docs/harness-outline.md`, "Defining steward", "Review", "The rules file's shape": the
+- `docs/harness-outline.md`, "Defining steward", "Review", "The checklist's shape": the
   decisions this story builds, with the options considered.
 - `REVIEW.md` today: one numbering across the file, with `## ` sections and `### ` subsections,
   and steward's mechanism mixed in. ST-21 converts it; this module need not parse today's file.
