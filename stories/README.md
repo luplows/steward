@@ -162,7 +162,7 @@ test('ST-49/AC-4: ordering is by tier, then lowest id first', ...)
 ```
 
 Naming a test after an AC does not satisfy it — `REVIEW.md`, "Conformance to the
-story", exists precisely to catch a test named `ST-49/AC-3` that does not
+unit", exists precisely to catch a test named `ST-49/AC-3` that does not
 exercise AC-3.
 
 **The pull request that implements a story ticks each AC it delivered**, in the
@@ -172,7 +172,7 @@ unticked is one the pull request says it did not deliver, and its body says
 why.
 
 A tick is the author's claim, not evidence. It shows in the diff, and the
-reviewer checks it against `REVIEW.md`, "Conformance to the story": an AC
+reviewer checks it against `REVIEW.md`, "Conformance to the unit": an AC
 delivered but left unticked, or ticked but not genuinely delivered, is a
 finding. When a review finds a ticked AC undelivered, the fix commit either
 delivers it or unticks it.
@@ -190,7 +190,7 @@ decided.
 2. A coder takes it: ATC claims the branch `story/ST-49-<slug>`, the coder
    implements and commits, and ATC pushes the work and opens the pull request.
 3. The pull request **ticks each AC it delivered** — see above — and **moves the
-   story file to `stories/done/`** (`REVIEW.md`, "Conformance to the story").
+   story file to `stories/done/`** (`REVIEW.md`, "Conformance to the unit").
    Completion is a `git mv` inside the story's own pull request, visible in the
    diff and checkable by the reviewer.
 4. If the story turns out to be wrong rather than the code, `blocked:` is set
