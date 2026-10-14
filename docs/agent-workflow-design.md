@@ -787,8 +787,8 @@ inside `node -e`, or from an `npm`/`npx` script. Git's own authentication over S
 by any of that, which is why the push is the dispatcher's rather than something the coder is
 trusted to do with it (OQ-84). The coder still cannot open its own PR — that capability moves to
 whatever spawned it. "A coder session is trusted, not contained" — the wording this section carried
-while OQ-63 was open — is no longer true of the write path that mattered; see `REVIEW.md`, "For the
-coder: opening a PR".
+while OQ-63 was open — is no longer true of the write path that mattered; see `coder.md`, "You
+do not merge, and you do not open your own PR".
 
 **Corrected 2026-09-19, while writing OQ-68.** This paragraph used to claim the dispatcher holds a
 *third, separately-scoped credential* with pull-request write but neither commit-status nor
@@ -973,6 +973,50 @@ Properties worth preserving:
   someone needs to hear about it.
 - **Never a label as the verdict.** Labels don't attach to a SHA, so an approval survives later
   pushes. Derive labels *from* the status if wanted.
+- **`verdict=fail` is still accepted as a deprecated spelling of `block`**, because an
+  unrecognised marker is ignored, which would leave a pull request pending for good with a
+  valid-looking verdict on it: a worse failure than honouring an old name. (Moved from `REVIEW.md`
+  on 2026-10-13.)
+
+### What the gate enforces
+
+Moved from `REVIEW.md` on 2026-10-13, when it became the checklist only. ATC posts a verdict as
+one pull request comment that cites the checklist item each finding comes from and ends with
+exactly one marker line:
+
+```
+<!-- agent-review head=<full-40-char-sha> verdict=pass -->
+<!-- agent-review head=<full-40-char-sha> verdict=pass-with-observations -->
+<!-- agent-review head=<full-40-char-sha> verdict=block -->
+```
+
+Opening a pull request, or pushing to one, sets `review/agent` to pending, and only a marker
+clears it, so a pull request nobody reviews cannot merge. A reviewer that returns no verdict gets
+nothing posted: the pull request stays pending, which is visible, where a `pass` from a reviewer
+that could not review would not be. Where the cause is fixable, such as a new head, a later review
+posts whatever verdict it returns.
+
+Getting these wrong means the gate ignores the marker rather than obeys it:
+
+1. **`head` is the full 40-character SHA of the commit reviewed**, not an abbreviation.
+2. **That SHA is still the pull request's head.** A verdict about an earlier commit says nothing
+   about the current one, so a stale marker is ignored and the status stays pending.
+3. **There is no partial credit and no dismissal mechanism.** The only way past a `block` is to
+   fix what it found and get a fresh review. A block on the code is fixed by a commit that
+   addresses it, which resets the gate to pending. **A block on the pull request's description
+   alone** (`REVIEW.md` items 2, 3, 7 or 12, with nothing in the diff to change) is fixed by
+   editing the description, then a fresh review of the **same head** (`review.mjs --rereview`),
+   whose verdict is posted. The description is not part of the head, so a commit would change
+   nothing it found. Either way it is a new review, never a waved-through old one, and **the block
+   still counts toward the round bound like any other**: the bound counts `block` verdicts and
+   makes no exception for what they were about. (The bound is three blocking verdicts. This
+   restates `MAX_ROUNDS` in `scripts/dispatch/story.mjs` and `ROUND_BOUND` in
+   `scripts/land/apply-review-blocked.mjs`, and must not drift from them.)
+4. **The comment comes from an account with write access.** Anyone can comment on a public
+   repository; a marker from anyone else is ignored.
+
+If a comment holds more than one well-formed marker, the last one wins, so a correction later in
+the same comment supersedes an earlier line.
 
 ### Merging
 
@@ -1823,7 +1867,8 @@ deciding what is next. It is the harness's product outline, and moves with this 
   - **Planned (ST-20):** reading the rules file from `main`, in sections that each say when they
     apply and number their own items.
   - **Planned (ST-21):** the reviewer judged by those rules, naming every section applied or not,
-    and citing each finding by section and item; `REVIEW.md` holding rules only.
+    and citing each finding by section and item. (`REVIEW.md` has held rules only since
+    2026-10-13, "`REVIEW.md` is concise, without history", below.)
   - **Planned (ST-22):** the reviewer given the linked unit and the note on what was found, and
     verifying with narrower commands rather than the whole check.
   - **Planned (ST-23):** landing in one look, without waiting, and a project able to turn
@@ -1898,8 +1943,8 @@ deciding what is next. It is the harness's product outline, and moves with this 
   - **It reports each command and its result** in its own session and to whichever session or
     person asked for the rotation. A report is information, never a go-ahead.
   - **`--rereview` runs when the owner asks, or when the session that wrote the pull request asks
-    and names the description-only finding it fixed** (`REVIEW.md`, "What the workflow enforces",
-    item 3). Considered and not chosen: the owner's word only. The owner's reason: the author of a
+    and names the description-only finding it fixed** ("What the gate enforces", above, item 3).
+    Considered and not chosen: the owner's word only. The owner's reason: the author of a
     fix should be able to have it reviewed without relaying it through the owner.
   - **It changes nothing itself**: no file in the repository, no commit or push, and nothing on
     GitHub; every write is a script's. No exception when the owner asks: a change goes to a
@@ -1928,20 +1973,32 @@ deciding what is next. It is the harness's product outline, and moves with this 
     existed before it had story files, and steward has neither. Considered and not chosen: a
     backlog file of steward's own.
   - **`REVIEW.md` is cited by section name, not item number**, everywhere, since ST-21 gives each
-    section its own numbering (`harness-outline.md`, "The rules file's shape"). Older citations
-    take the section name as they are touched. **Clarified 2026-10-13 by the owner: the section,
-    and the item within it where one item is meant**, after #9's review found this entry at odds
-    with the outline ("a finding cites the section and the item") and with ST-21's AC-7. A finding
-    cites both. A document cites the section alone when it means the whole section, and an item's
-    number within a section only where that section numbers its own, which every section does
-    once ST-21 is built. Considered and not chosen: the section only, findings included, which
-    would revise the outline's decision and the verdict's `item`; and the section and the item
-    always.
+    section its own numbering (`harness-outline.md`, "The rules file's shape"). Older citations take
+    the section name as they are touched. **Clarified 2026-10-13 by the owner: the section, and the
+    item within it where one item is meant**, after #9's review found this entry at odds with the
+    outline ("a finding cites the section and the item") and with ST-21's AC-7 (AC-6 since
+    2026-10-13). A finding cites both. A document cites the section alone when it means the whole
+    section, and an item's number within a section only where that section numbers its own, which
+    every section does once ST-21 is built. Considered and not chosen: the section only, findings
+    included, which would revise the outline's decision and the verdict's `item`; and the section
+    and the item always.
   - **The crew, not the owner, in every current rule.** Each act a rule gives "the owner" today is
     the crew's: the owner is not the default, and steward is for any trusted contributor
     (`harness-outline.md`, "Who it is for"). Dated records keep "the owner". Considered and not
     chosen: deciding rule by rule, which was the planning session's caution while the glossary
     was written. In this repository the crew is the owner alone, so nothing changes in practice.
+- **`REVIEW.md` is concise, without history** (decided 2026-10-13 by the owner, in the documents
+  review, while tower-workshop-paths' leftovers were taken out of it: "concise instructions for the
+  coder and reviewer"). How a rule or a mechanism came about is recorded in this document, not in
+  the checklist, which the reviewer reads in full on every review. This extends
+  `harness-outline.md`, "The rules file's shape" ("The file holds rules only"). Considered and not
+  chosen: leaving the history in the sections ST-21 moves to `docs/review-mechanics.md` until it
+  moves them. **The same day, also by the owner: `REVIEW.md` is the checklist only**, with each
+  section's intro reduced to the `Applies when:` line that says when it applies. The reviewer's
+  instructions are in `.claude/prompts/reviewer.md`, the coder's in `.claude/prompts/coder.md`, and
+  how the gate works in this document ("What the gate enforces"), so three files each do one job.
+  Considered and not chosen: a new `docs/review-mechanics.md`, which ST-21 planned until then; and
+  new instruction files under `docs/` that the prompts point to.
 
 ### The move, in order
 

@@ -227,7 +227,7 @@ export function parseIssues(json) {
 /**
  * Composes the comment that records a verdict: `findings` followed by exactly
  * one marker line (AC-3b). A `null` verdict composes no comment and returns
- * `null` -- REVIEW.md: a reviewer not in a position to review leaves the PR
+ * `null` -- a reviewer not in a position to review leaves the PR
  * pending. `fail` is never written (AC-4).
  */
 export function composeMarkerComment({ headSha, verdict, findings = '' }) {
