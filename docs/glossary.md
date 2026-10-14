@@ -103,18 +103,20 @@ Where a file defines the thing, the entry names it, and the file is the authorit
 - **CI** — the `test` job of `.github/workflows/ci.yml`. A required check.
 - **checklist** — the file of rules a flight is reviewed against: `REVIEW.md` in this repository,
   and in a project the file its settings name (planned: ST-18, ST-20). *Formerly: the rules file.*
-- **pre-flight check** — the command in a project's settings that a coder runs before its work is
-  pushed (planned: ST-18). *Formerly: the `check` command.*
-- **setup** — the command in a project's settings that prepares a fresh checkout before a session
-  starts (planned: ST-18, ST-7). Today it is `npm ci` (`scripts/dispatch/install.mjs`).
-- **settings** — a project's `steward.config.json`, read by `scripts/dispatch/settings.mjs`.
+- **pre-flight check** — the `check` command in a project's settings, which a coder runs before its
+  work is pushed. No story yet has the coder run it. *Formerly: the `check` command.*
+- **setup** — the `setup` command in a project's settings, which prepares a fresh checkout before a
+  session starts. Today `npm ci` runs in its place (`scripts/dispatch/install.mjs`; planned: ST-7).
+- **settings** — a project's `steward.config.json`, read by `scripts/dispatch/settings.mjs`, with
+  its keys listed in `docs/settings.md`.
 
 ## Stopping
 
 - **grounded** — a story whose `blocked:` field is set, with the reason. ATC does not start it.
   The field keeps the name `blocked` in story files.
 - **ground stop** — the point at which steward stops both its coding and its review, when too much
-  has stopped without landing. How it is measured is not yet decided.
+  has stopped without landing. How it is measured is not yet decided
+  (`docs/agent-workflow-design.md`, "Defining steward", D1).
 - **stuck** — a story whose branch is on `origin` with no open flight and no recent claim. It is
   raised as a `loop-stuck` issue, and two open issues stop the loop (`STUCK_ISSUE_LIMIT`,
   `scripts/dispatch/loop.mjs`).
