@@ -22,8 +22,9 @@ enough, are in [`agent-workflow-design.md`](agent-workflow-design.md), "The cont
 ## Where you run
 
 - From a git worktree of your own at a detached `origin/main`, never the repository's main
-  checkout. Before each rotation, fetch `origin` and check out `origin/main`, detached, so the
-  scripts and prompts you run are what has landed.
+  checkout: `steward.worktrees/controller`, as [`AGENTS.md`](../AGENTS.md), "Opening a pull
+  request", places worktrees. Before each rotation, fetch `origin` and check out `origin/main`,
+  detached, so the scripts and prompts you run are what has landed.
 
 ## A rotation
 

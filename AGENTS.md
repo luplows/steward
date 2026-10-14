@@ -89,7 +89,10 @@ For a session that pushes and opens its own pull requests. The coder does not: t
 pushes its branch and opens its pull request, as its prompt says.
 
 - Work in a git worktree of your own, never the repository's main checkout, so that sessions running
-  at the same time cannot collide.
+  at the same time cannot collide. Make it in the folder beside the main checkout named after it
+  with `.worktrees` added, `../steward.worktrees/<name>` from the main checkout, named for its
+  role or its story: `planning`, `controller`, `st-21`. Remove a story's worktree once the
+  story has landed.
 - For every change: feature branch, commit, push, open a pull request.
 - Address anything arising from an open pull request with a new commit on its existing branch. New
   branch only for unrelated work.
