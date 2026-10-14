@@ -96,8 +96,9 @@ export const READ_ONLY_SHELL_UTILS = [
  * and stopped on that alone (#140, #145). `branch` may still not be `main`.
  *
  * `git mv` is granted because `coder.md` requires the story file to be moved
- * with it (`REVIEW.md` item 19). It rewrites the working tree and index only,
- * the same reach `Write` and `git add` already have.
+ * with it (`REVIEW.md`, "Conformance to the unit", item 4). It rewrites the
+ * working tree and index only, the same reach `Write` and `git add` already
+ * have.
  *
  * `gh` is not included, in either form -- there is no longer a legitimate use
  * for it here (AC-6 moves PR creation to whatever spawned the coder), so
