@@ -2143,6 +2143,18 @@ shortened where it is long, so that it can be found there with its date.
   since "harness" is the glossary's former word for steward. Considered and not chosen:
   `docs/project-outline.md`, after tower-workshop-paths' `Project-Outline.md`, since a project
   is a repository that uses steward (`glossary.md`).
+- **Worktrees live beside the main checkout, in `<checkout>.worktrees`** (decided 2026-10-13 by
+  the owner). Sessions had made theirs as siblings of every other repository's checkout
+  (`E:\Source\steward-planning`, `steward-dispatch`, `steward-st18`), or under the main
+  checkout's `.claude/worktrees`, so one repository's worktrees could not be told from
+  another's. Each repository now has one folder for them, on the same drive as its checkout,
+  named after it: `steward.worktrees\planning`, `\controller`, `\st-21`, with
+  tower-workshop-paths' in `tower-workshop-paths.worktrees`. A story's worktree is removed once
+  the story has landed. Considered and not chosen: one root for every repository's worktrees,
+  away from the checkouts (`E:\Worktrees\steward\`); and a gitignored folder inside the main
+  checkout, where tools run in the checkout, such as Vitest and oxlint, can pick up the nested
+  copies. The scripts' own scratch checkouts (`tw-review-*`, `tw-coder-*`, `tw-stop-*` in the
+  system temporary directory) are not sessions' worktrees, and are not changed by this decision.
 
 ### The move, in order
 
