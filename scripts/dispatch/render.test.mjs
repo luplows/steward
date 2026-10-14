@@ -274,6 +274,7 @@ describe('OQ-51/AC-3: a colliding heading does not shadow the prompt\'s real sec
       STORY_PATH: 'stories/OQ-999-hostile.md',
       STORY: wrapInjectedBlock('STORY', HOSTILE_STORY),
       PR_BODY: 'ordinary, well-behaved PR body',
+      RULES: 'the checklist',
     })
 
     const realSectionMatches = [...text.matchAll(/^## Your verdict$/gm)]
@@ -297,6 +298,7 @@ describe('OQ-51/AC-3: a colliding heading does not shadow the prompt\'s real sec
       STORY_PATH: 'stories/OQ-999-hostile.md',
       STORY: wrapInjectedBlock('STORY', 'ordinary story, no headings crafted to collide'),
       PR_BODY: wrapInjectedBlock('PR_BODY', HOSTILE_PR_BODY, 'hostilenonce'),
+      RULES: 'the checklist',
     })
 
     const realSectionMatches = [...text.matchAll(/^## Your verdict$/gm)]
@@ -318,6 +320,7 @@ describe('OQ-51/AC-3: a colliding heading does not shadow the prompt\'s real sec
       STORY_PATH: 'stories/OQ-999-hostile.md',
       STORY: wrapInjectedBlock('STORY', HOSTILE_STORY_SETEXT),
       PR_BODY: 'ordinary, well-behaved PR body',
+      RULES: 'the checklist',
     })
 
     const realSectionMatches = [...text.matchAll(/^## Your verdict$/gm)]
@@ -339,6 +342,7 @@ describe('OQ-51/AC-3: a colliding heading does not shadow the prompt\'s real sec
       STORY_PATH: 'stories/OQ-999-hostile.md',
       STORY: wrapInjectedBlock('STORY', 'ordinary story, no headings crafted to collide'),
       PR_BODY: wrapInjectedBlock('PR_BODY', HOSTILE_PR_BODY_SETEXT, 'hostilenonce'),
+      RULES: 'the checklist',
     })
 
     const realSectionMatches = [...text.matchAll(/^## Your verdict$/gm)]
@@ -357,6 +361,7 @@ describe('OQ-51/AC-3: a colliding heading does not shadow the prompt\'s real sec
       STORY_PATH: 'stories/OQ-999-hostile.md',
       STORY: wrapInjectedBlock('STORY', HOSTILE_STORY_CRLF),
       PR_BODY: 'ordinary, well-behaved PR body',
+      RULES: 'the checklist',
     })
 
     const realSectionMatches = [...text.matchAll(/^## Your verdict$/gm)]
@@ -375,6 +380,7 @@ describe('OQ-51/AC-3: a colliding heading does not shadow the prompt\'s real sec
       STORY_PATH: 'stories/OQ-999-hostile.md',
       STORY: wrapInjectedBlock('STORY', 'ordinary story, no headings crafted to collide'),
       PR_BODY: wrapInjectedBlock('PR_BODY', HOSTILE_PR_BODY_CRLF, 'hostilenonce'),
+      RULES: 'the checklist',
     })
 
     const realSectionMatches = [...text.matchAll(/^## Your verdict$/gm)]
@@ -393,6 +399,7 @@ describe('OQ-51/AC-3: a colliding heading does not shadow the prompt\'s real sec
       STORY_PATH: 'stories/OQ-999-hostile.md',
       STORY: wrapInjectedBlock('STORY', HOSTILE_STORY_LONE_CR),
       PR_BODY: 'ordinary, well-behaved PR body',
+      RULES: 'the checklist',
     })
 
     const realSectionMatches = [...text.matchAll(/^## Your verdict$/gm)]
@@ -411,6 +418,7 @@ describe('OQ-51/AC-3: a colliding heading does not shadow the prompt\'s real sec
       STORY_PATH: 'stories/OQ-999-hostile.md',
       STORY: wrapInjectedBlock('STORY', HOSTILE_STORY),
       PR_BODY: wrapInjectedBlock('PR_BODY', HOSTILE_PR_BODY),
+      RULES: 'the checklist',
     })
 
     expect([...text.matchAll(/^## Your verdict$/gm)]).toHaveLength(1)
@@ -508,6 +516,7 @@ describe('OQ-51/AC-5: assembling either prompt against a real story leaves no un
       STORY_PATH: 'stories/done/OQ-51-story-injection-boundary.md',
       STORY: wrapInjectedBlock('STORY', storySource),
       PR_BODY: wrapInjectedBlock('PR_BODY', prBodyQuotingPlaceholders),
+      RULES: 'the checklist',
     })
 
     expect(unusedDocumented).toEqual([])
@@ -544,6 +553,7 @@ describe('OQ-51/AC-5: assembling either prompt against a real story leaves no un
       STORY_PATH: 'stories/done/OQ-51-story-injection-boundary.md',
       STORY: wrapInjectedBlock('STORY', storySource, 'storynonce'),
       PR_BODY: wrapInjectedBlock('PR_BODY', 'ordinary PR body, no placeholder syntax', 'bodynonce'),
+      RULES: 'the checklist',
     })
 
     expect([...text.matchAll(/<!-- BEGIN STORY /g)]).toHaveLength(1)

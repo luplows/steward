@@ -235,7 +235,9 @@ export function retrySection({ round, roundsRemaining, findings, branch, source 
  *   story           { id, path, text, model }
  *   branch          coder: the branch it works on. reviewer: the PR's head branch
  *   pr              reviewer only: { number, headSha, body }
- *   retry           coder only, optional: { round, roundsRemaining, findings, source, storyMoved }
+ *   rules           reviewer only: the project's checklist as read from `main`
+ *                   (`readRules`'s `text`), rendered as `{{RULES}}` (ST-21)
+ *   retry          coder only, optional: { round, roundsRemaining, findings, source, storyMoved }
  *                   (`source` is 'review' or 'ci'; `storyMoved` is false when the story file is still under stories/)
  *   baseEnv         the environment to derive the process environment from
  *   emptyGhConfigDir  coder only: see `coderEnv`
@@ -251,7 +253,7 @@ export function retrySection({ round, roundsRemaining, findings, branch, source 
  * available (OQ-107).
  */
 export function buildInvocation(options) {
-  const { role, promptTemplate, story, branch, pr, retry, baseEnv, emptyGhConfigDir } = options
+  const { role, promptTemplate, story, branch, pr, rules, retry, baseEnv, emptyGhConfigDir } = options
   if (!ROLES.includes(role)) throw new Error(`unknown role: ${JSON.stringify(role)}`)
   if (!story) throw new Error('buildInvocation requires a story')
 
@@ -268,6 +270,7 @@ export function buildInvocation(options) {
   let env
   if (role === 'coder') {
     if (pr) throw new Error('a coder invocation takes no pr')
+    if (rules !== undefined) throw new Error('a coder invocation takes no rules')
     values = {
       STORY_ID: story.id,
       STORY_PATH: retry && retry.storyMoved !== false ? donePath(story.path) : story.path,
@@ -281,6 +284,7 @@ export function buildInvocation(options) {
   } else {
     if (retry) throw new Error('a reviewer invocation takes no retry')
     if (!pr) throw new Error('a reviewer invocation requires pr')
+    if (typeof rules !== 'string') throw new Error('a reviewer invocation requires rules')
     values = {
       PR_NUMBER: String(pr.number),
       HEAD_BRANCH: branch,
@@ -289,6 +293,7 @@ export function buildInvocation(options) {
       STORY_PATH: story.path,
       STORY: story.text,
       PR_BODY: pr.body,
+      RULES: rules,
     }
     env = { ...(baseEnv ?? {}) }
     env.BASH_DEFAULT_TIMEOUT_MS = SHELL_TIMEOUT_MS

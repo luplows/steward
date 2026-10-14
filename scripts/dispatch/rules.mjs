@@ -92,8 +92,10 @@ export function parseRules(text) {
 
 /**
  * Reads `rulesFile` as it stands on `<remote>/<base>` in `repoDir`, never a
- * pull request's head, and parses it. A file missing from there, or one that
- * does not parse, returns `{ ok: false, problems }`; neither throws.
+ * pull request's head, and parses it. A file that parses returns
+ * `parseRules`'s result with the file's `text` added, which is what the
+ * reviewer is given (ST-21). A file missing from there, or one that does not
+ * parse, returns `{ ok: false, problems }`; neither throws.
  */
 export async function readRules({ repoDir, base, rulesFile }) {
   let text
@@ -111,6 +113,6 @@ export async function readRules({ repoDir, base, rulesFile }) {
     }
   }
   const parsed = parseRules(text)
-  if (parsed.ok) return parsed
+  if (parsed.ok) return { ...parsed, text }
   return { ok: false, problems: parsed.problems.map((problem) => `${rulesFile}: ${problem}`) }
 }

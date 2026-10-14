@@ -102,7 +102,8 @@ Where a file defines the thing, the entry names it, and the file is the authorit
   `review/agent`.
 - **CI** — the `test` job of `.github/workflows/ci.yml`. A required check.
 - **checklist** — the file of rules a flight is reviewed against: `REVIEW.md` in this repository,
-  and in a project the file its settings name (planned: ST-18, ST-20). *Formerly: the rules file.*
+  and in a project the file its settings name (`rulesFile`), read from `main`
+  (`scripts/dispatch/review.mjs`). *Formerly: the rules file.*
 - **pre-flight check** — the `check` command in a project's settings, which a coder runs before its
   work is pushed. No story yet has the coder run it. *Formerly: the `check` command.*
 - **setup** — the `setup` command in a project's settings, which prepares a fresh checkout before a

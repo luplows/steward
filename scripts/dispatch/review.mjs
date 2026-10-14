@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
  * Reviews one open pull request end to end and records the verdict (OQ-69):
- * resolve the head, check out that exact commit somewhere that is not the
- * coder's tree, work out which story the PR implements, spawn the reviewer,
- * parse what it returns, and post the verdict as a marker comment.
+ * resolve the head, read the project's checklist from `main` (ST-21), check
+ * out that exact commit somewhere that is not the coder's tree, work out which
+ * story the PR implements, spawn the reviewer, parse what it returns against
+ * the checklist, and post the verdict as a marker comment.
  *
  * It joins existing modules and reimplements none of them: `github.mjs` reads
  * the pull request, lists its comments, composes and posts the marker;
@@ -47,6 +48,7 @@ import {
 import { installDependencies } from './install.mjs'
 import { ROLE_DEFAULTS } from './invocation.mjs'
 import { parseFrontmatter, storyFilenameRe } from './queue.mjs'
+import { readRules } from './rules.mjs'
 import { readSettings } from './settings.mjs'
 import { spawnSession } from './spawn.mjs'
 
@@ -67,7 +69,7 @@ export const HONOURED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR']
 const SHA_RE = /^[0-9a-f]{40}$/
 
 // reviewer.md, "For a PR that implements no story".
-const NO_STORY_TEXT = '*(none — this PR implements no story; items 16–19 do not apply.)*'
+const NO_STORY_TEXT = '*(none — this PR implements no story; "Conformance to the unit" does not apply.)*'
 
 // ------------------------------------------------------------------- story
 
@@ -75,14 +77,14 @@ const NO_STORY_TEXT = '*(none — this PR implements no story; items 16–19 do 
  * Decides which story a pull request implements from the name-status lines of
  * its diff (`git diff --name-status --no-renames`) and its head branch name.
  *
- * The source is the story file the diff moves into `stories/done/` (`REVIEW.md`
- * item 19), which a conforming PR always has and which works for a PR this
- * dispatcher did not open. With `--no-renames` a move is a deletion under
- * `stories/` plus an addition under `stories/done/` of the same file name, so it
- * does not depend on git's similarity guess.
+ * The source is the story file the diff moves into `stories/done/` (`REVIEW.md`,
+ * "Conformance to the unit", item 4), which a conforming PR always has and
+ * which works for a PR this dispatcher did not open. With `--no-renames` a
+ * move is a deletion under `stories/` plus an addition under `stories/done/`
+ * of the same file name, so it does not depend on git's similarity guess.
  *
  * The branch name is only a fallback for *diagnosis*: a branch that names a
- * story the diff does not move is a coder that forgot item 19, reported as
+ * story the diff does not move is a coder that forgot that move, reported as
  * `branch-only` rather than reviewed against a story the diff never touched.
  *
  * `prefix` is the project's story-id prefix (OQ-126): nothing falls back to a
@@ -134,11 +136,40 @@ export function chooseReviewerModel(storyModel) {
 // ----------------------------------------------------------------- verdict
 
 /**
+ * Why `sections`, the reviewer's list of the checklist's sections, is not what
+ * the checklist has (ST-21/AC-3), or `null` when it names each once, with a
+ * reason for each not applied. `items` maps each section name to its numbers.
+ */
+function sectionsProblem(sections, items) {
+  if (!Array.isArray(sections)) return '`sections` is not an array'
+  const seen = new Set()
+  for (const entry of sections) {
+    if (entry === null || typeof entry !== 'object' || typeof entry.name !== 'string' ||
+      typeof entry.applied !== 'boolean') {
+      return 'a `sections` entry lacks a `name` or a boolean `applied`'
+    }
+    if (!items.has(entry.name)) return `\`sections\` names "${entry.name}", which the checklist does not have`
+    if (seen.has(entry.name)) return `\`sections\` names "${entry.name}" twice`
+    seen.add(entry.name)
+    if (!entry.applied && (typeof entry.reason !== 'string' || entry.reason.trim() === '')) {
+      return `\`sections\` gives no reason for not applying "${entry.name}"`
+    }
+  }
+  const missing = [...items.keys()].filter((name) => !seen.has(name))
+  if (missing.length > 0) return `\`sections\` leaves out ${missing.map((name) => `"${name}"`).join(', ')}`
+  return null
+}
+
+/**
  * Reads the JSON object reviewer.md says is the last thing the reviewer prints,
- * tolerating a code fence around it. Returns `{ ok: true, verdict }` or
+ * tolerating a code fence around it, and checks it against `rules`, the
+ * checklist as `parseRules` read it (ST-21/AC-3): each finding names a section
+ * and an item the checklist has, and `sections` names every section once,
+ * with a reason for each not applied. A `null` verdict, which records nothing,
+ * need not list the sections. Returns `{ ok: true, verdict }` or
  * `{ ok: false, reason }`; never guesses a verdict from prose.
  */
-export function parseReviewerVerdict(text) {
+export function parseReviewerVerdict(text, rules) {
   if (typeof text !== 'string') return { ok: false, reason: 'the session returned no text' }
   const candidates = [text.trim()]
   for (const fenced of text.matchAll(/```(?:json)?[^\S\n]*\n([\s\S]*?)\n```/g)) candidates.unshift(fenced[1])
@@ -159,31 +190,52 @@ export function parseReviewerVerdict(text) {
   }
   if (parsed === null) return { ok: false, reason: 'no JSON verdict object found in the reviewer output' }
 
-  const { head, verdict, findings, summary } = parsed
+  const { head, verdict, findings, summary, sections } = parsed
   if (typeof head !== 'string' || !SHA_RE.test(head)) return { ok: false, reason: '`head` is not a full 40-character SHA' }
   if (verdict !== null && !WRITABLE_VERDICTS.includes(verdict)) {
     return { ok: false, reason: `\`verdict\` is not one of ${WRITABLE_VERDICTS.join(', ')} or null` }
   }
+  const items = new Map(rules.sections.map((s) => [s.name, new Set(s.items.map((i) => i.number))]))
   if (!Array.isArray(findings)) return { ok: false, reason: '`findings` is not an array' }
   for (const finding of findings) {
     const valid = finding !== null && typeof finding === 'object' &&
-      Number.isInteger(finding.item) && ['block', 'observation'].includes(finding.severity) &&
-      typeof finding.text === 'string'
-    if (!valid) return { ok: false, reason: 'a finding lacks an integer `item`, a `severity` or `text`' }
+      typeof finding.section === 'string' && Number.isInteger(finding.item) &&
+      ['block', 'observation'].includes(finding.severity) && typeof finding.text === 'string'
+    if (!valid) return { ok: false, reason: 'a finding lacks a `section`, an integer `item`, a `severity` or `text`' }
+    if (!items.has(finding.section)) {
+      return { ok: false, reason: `a finding names section "${finding.section}", which the checklist does not have` }
+    }
+    if (!items.get(finding.section).has(finding.item)) {
+      return { ok: false, reason: `a finding names item ${finding.item} of "${finding.section}", which that section does not have` }
+    }
   }
   if (typeof summary !== 'string') return { ok: false, reason: '`summary` is not a string' }
   if (verdict !== 'block' && findings.some((f) => f.severity === 'block')) {
     return { ok: false, reason: `a finding has severity block but the verdict is ${verdict}` }
   }
-  return { ok: true, verdict: { head, verdict, findings, summary } }
+  if (verdict !== null || sections !== undefined) {
+    const problem = sectionsProblem(sections, items)
+    if (problem) return { ok: false, reason: problem }
+  }
+  return { ok: true, verdict: { head, verdict, findings, summary, sections: sections ?? [] } }
 }
 
-/** The comment text that precedes the marker: what the reviewer found, by item. */
-export function formatFindings({ verdict, findings, summary }) {
+/**
+ * The comment text that precedes the marker (ST-21/AC-4): what the reviewer
+ * found, each finding by section and item, then every section of the
+ * checklist, applied or not, with the reason for each not applied.
+ */
+export function formatFindings({ verdict, findings, summary, sections }) {
   const lines = [`**Review verdict: ${verdict}**`, '', summary.trim()]
   if (findings.length > 0) {
     lines.push('')
-    for (const { item, severity, text } of findings) lines.push(`- **Item ${item}** (${severity}): ${text.trim()}`)
+    for (const { section, item, severity, text } of findings) {
+      lines.push(`- **${section}, item ${item}** (${severity}): ${text.trim()}`)
+    }
+  }
+  lines.push('', '**Sections**', '')
+  for (const { name, applied, reason } of sections) {
+    lines.push(applied ? `- ${name}: applied` : `- ${name}: not applied. ${reason.trim()}`)
   }
   return lines.join('\n')
 }
@@ -237,8 +289,11 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
  *
  * Resolves `{ status, ... }`. `recorded` carries the comment id; every other
  * status means nothing was posted, and `reason` says why. `no-verdict` and
- * `already-reviewed` are not failures; `install-failed` and `rereview-refused`
- * are. Every result returned after a session started carries `sessions`, the
+ * `already-reviewed` are not failures; `install-failed`, `rereview-refused`
+ * and `rules-unreadable` are. `rules-unreadable` (ST-21/AC-1) is a checklist
+ * (the settings' `rulesFile`) that is missing from the base branch or does
+ * not parse: it carries `problems`, and comes before any install or session.
+ * Every result returned after a session started carries `sessions`, the
  * number of reviewer sessions run (1 or 2, OQ-121). A verdict that does not
  * parse (`parseReviewerVerdict` rejects it) gets one re-run, in the same
  * worktree with the same prompt, story, pull request, environment and model;
@@ -251,7 +306,7 @@ export async function reviewPullRequest({
   rereview = false, install = installDependencies, scratchRoot = tmpdir(),
 }) {
   const template = promptTemplate ?? readFileSync(REVIEWER_PROMPT, 'utf8')
-  const { storyPrefix } = await readSettings(repoDir)
+  const { storyPrefix, rulesFile } = await readSettings(repoDir)
   const pr = await getPullRequestState(ctx, number)
   if (!SHA_RE.test(pr.headSha) || !pr.headRef || !pr.baseRef) {
     throw new Error(`pull request #${number} did not resolve a head SHA, head branch and base branch`)
@@ -286,6 +341,15 @@ export async function reviewPullRequest({
     if (fetchedTip !== pr.headSha) {
       return { status: 'head-moved', reason: `${pr.headRef} is at ${fetchedTip}, not the ${pr.headSha} the API reported` }
     }
+
+    // ST-21/AC-1: the checklist as it stands on the base branch, never the
+    // pull request's own copy, read before anything is installed or started,
+    // so a missing or broken file costs no review.
+    const rules = await readRules({ repoDir, base: pr.baseRef, rulesFile })
+    if (!rules.ok) {
+      return { status: 'rules-unreadable', problems: rules.problems, reason: rules.problems.join('; ') }
+    }
+
     await git(repoDir, ['worktree', 'add', '--detach', tree, pr.headSha])
     worktreeAdded = true
     await assertReviewableCheckout(tree, pr.headSha, repoDir)
@@ -298,7 +362,7 @@ export async function reviewPullRequest({
       return {
         status: 'story-not-moved',
         reason: `branch ${pr.headRef} names ${resolved.id}, but the diff moves no story file into stories/done/ ` +
-          '(REVIEW.md item 19); not reviewing against a story the diff never touched',
+          '(REVIEW.md, "Conformance to the unit", item 4); not reviewing against a story the diff never touched',
       }
     }
     if (resolved.kind === 'ambiguous') {
@@ -340,6 +404,7 @@ export async function reviewPullRequest({
       story,
       branch: pr.headRef,
       pr: { number, headSha: pr.headSha, body: pr.body },
+      rules: rules.text,
       baseEnv: sessionEnv,
       model: chooseReviewerModel(story.model),
       cwd: tree,
@@ -351,7 +416,7 @@ export async function reviewPullRequest({
       return { status: 'session-failed', outcome: classification.outcome, reason: classification.reason, sessions }
     }
 
-    let parsed = parseReviewerVerdict(output.result)
+    let parsed = parseReviewerVerdict(output.result, rules)
     if (!parsed.ok) {
       // OQ-121: one malformed verdict does not stop the story; try once more,
       // in the same checkout, unless the first session left it changed.
@@ -371,7 +436,7 @@ export async function reviewPullRequest({
       if (classification.outcome !== 'completed') {
         return { status: 'session-failed', outcome: classification.outcome, reason: classification.reason, sessions }
       }
-      parsed = parseReviewerVerdict(output.result)
+      parsed = parseReviewerVerdict(output.result, rules)
       if (!parsed.ok) {
         return { status: 'malformed-verdict', reason: `first session: ${firstReason}; second session: ${parsed.reason}`, sessions }
       }
