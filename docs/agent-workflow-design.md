@@ -24,8 +24,9 @@ The document is in three parts:
 > story has an acceptance criterion saying so. **A built item is a plain statement**, naming no
 > story: the story file and git history record which story built it. The convention dates
 > from 2026-09-25. Passages written before then may describe unbuilt parts without a marker; the
-> migration plan tracks those. `scripts/lint-stories.mjs` fails CI if a marker names a story whose
-> file is already in `stories/done/`, or a numeric id with no story file at all.
+> migration plan tracks those. `scripts/lint-stories.mjs` reports a marker that names a story
+> whose file is already in `stories/done/`, or a numeric id with no story file at all. CI does not
+> run it; the planning session does, before it opens a pull request (`docs/planning-session.md`).
 
 > **OQ numbers.** This document was written in tower-workshop-paths, and moved to steward with its
 > history. An `OQ-<n>` in it means a tower-workshop-paths story, found in that repository's
@@ -58,7 +59,8 @@ Decided 2026-10-07 by the owner.
    models. This is the [reviewer-on-a-different-model](#quality-beyond-the-gate) hedge taken
    further: a different company's model decorrelates more than a different model from the same one.
 3. **The workflow is insulated from any one AI model company** folding or pricing the owner out.
-4. **This repository stays focused on the product**, not on the workflow.
+4. **This repository stays focused on the product**, not on the workflow. (Written in
+   tower-workshop-paths, of its own repository: the reason the workflow moved to steward.)
 
 The owner is starting to plan another project and wants to work the same way in both. That is
 what makes goal 1 near-term: the second project is the workflow's first user outside this
@@ -160,17 +162,19 @@ The governing problem: **the same context that decided how to implement also dec
 assert.** A coder that misreads a story writes tests confirming the misreading. Green means
 "internally consistent," not "correct."
 
-Current CI — oxlint, Vitest, build, Playwright — runs in **~70 seconds**. That is fast enough that
-**tiering is premature**; run everything on every push. Adopt a PR-subset / merge-queue-full split
-only when E2E passes roughly five minutes.
+Steward's CI is one job, `test` in `.github/workflows/ci.yml`: `npm ci`, `npm run lint` (oxlint),
+`npm test` (Vitest), and on a pull request story containment
+(`scripts/dispatch/story-containment.mjs`), which fails a story's own pull request that changes
+`stories/` beyond its story's move, ticks and `blocked:` line. The six runs before 05:20 UTC on
+2026-10-14 took 25 to 41 seconds, so **tiering is premature**: everything runs on every push.
 
-Additions that earn their place now:
+Checks on stories that CI does not make:
 
-| Check | Why |
+| Check | Where it is |
 |---|---|
-| **Story schema lint** | Frontmatter valid, required sections present, AC ids well-formed. Carries the schema burden now that stories are files. |
-| **AC↔test traceability** | Every AC id in the story appears in at least one test name. Converts "did you do what was asked" from judgment into a gate. |
-| **Existing-test-modification flag** | Flags any PR touching tests outside its own story's additions. Today this is `REVIEW.md`, "Changes to code", item 1 — prose the reviewer must notice. |
+| **Story schema lint** | `scripts/lint-stories.mjs`: frontmatter, sections, AC ids, and the `**Planned (ST-n)**` markers in `docs/`. The planning session runs it before opening a pull request (`docs/planning-session.md`, "Writing it"). |
+| **AC↔test traceability** | Not built. Tests are named after the AC they cover (`stories/README.md`, "Acceptance criteria and tests"), and the reviewer checks each AC is genuinely delivered (`REVIEW.md`, "Conformance to the unit", item 2). |
+| **Existing-test-modification flag** | Not built. `REVIEW.md`, "Changes to code", item 1: prose the reviewer must notice. |
 
 AC ids appear in test names directly:
 
@@ -181,52 +185,14 @@ test('ST-49/AC-4: a story file that does not parse is in the array with its erro
 **Coverage stays absent.** A percentage floor produces coverage-shaped tests that assert nothing,
 and agents are extremely literal about hitting a number. The existing deliberate absence is correct.
 
-**Flakiness: no retries in the merge gate.** A flake blocks the dispatcher with nobody watching,
+**Flakiness: no retries in the merge gate.** A flake blocks landing with nobody watching,
 and a coder meeting an unrelated failure may "fix" it by weakening the assertion. Quarantine —
 skip plus an auto-filed story — keeps the signal visible instead of burying it in a retry count.
 Determinism requires fixed clock, seeded data, no external network, and **stable test IDs rather
 than text or positional selectors**.
 
-**Setup is cached and bounded.** CI caches Playwright's browser, keyed on the runner's OS and the
-installed `@playwright/test` version, and on a hit installs only the system packages. The install
-step has a 5-minute limit and tries twice within it, two minutes each; the job has a 20-minute
-limit, well inside `story.mjs`'s 30-minute CI wait. `update-screenshots.yml` does the same with the
-same key, so baselines are minted by the browser CI compares against. Decided 2026-10-07 by the
-owner, after installs hung in apt and one browser download was refused, with no limit short of
-GitHub's 360-minute default. Retrying the install is a retry of setup, not of a test, so it does not
-contradict "no retries in the merge gate": the checks themselves still run once. `detect-drift.yml`'s
-weekly install is left as it is (decided 2026-10-08 by the owner): it gates no pull request.
-
-A try that fails or reaches its limit leaves nothing running: after each try the step kills every
-process that started during it and is still alive, `apt-get` and `dpkg` under sudo included,
-trying a plain `kill` first and falling back to `sudo kill` only when that is refused. A try runs
-under `timeout`, in a process group of its own, and what it starts with `setsid` or under sudo's
-pty has a session of its own, so the try's processes are the new ones whose group or session is
-new too. A new process whose group and session both existed before the try, such as a test
-runner's child, is not the try's, and is left alone (amended 2026-10-09 by the owner). A new
-process in a new session that the try did not start, such as a system service init starts during
-it, cannot be told apart, and is killed too.
-Before the second try it waits up to 30 seconds for `/var/lib/dpkg/lock-frontend` to be free and
-then runs `sudo dpkg --configure -a`, so a package the first try left half-installed is finished.
-The wait tests the lock with an `fcntl` lock, as apt and dpkg take it, since a `flock` probe
-cannot see theirs; the repair is limited to 20 seconds, and a repair that fails or times out is
-logged and does not stop the second try, though the step runs under `bash -e` (amended again
-2026-10-09 by the owner, after #241's review).
-Decided 2026-10-09 by the owner (OQ-136), after a first try timed out while apt was slowly fetching
-fonts: the limit ended `npx` but not the `apt-get` under it, which kept the dpkg lock, so the
-second try failed at once and the retry could not recover from the hang it was added for. The
-test that runs this clean-up for real is in a file of its own, `*.alone.test.mjs`, which `npm test`
-leaves out and CI runs in a step of its own after it, so that no other test's processes are
-running for the clean-up to stop (decided 2026-10-09 by the owner).
-
-In tower-workshop-paths, its OQ-137 plans for the step's worst case to count the clean-up after the
-first try, with a 5-second allowance that the clean-up test checks: 2 × 120 + 5 + 30 + 20 = 295
-seconds of the 300 (decided 2026-10-09 by the owner, from #243's review). The clean-up after the
-second try is not counted: the step fails then whatever happens.
-
-**Definition of green:** it builds, lint is clean, every AC has a named test, Vitest passes,
-Playwright passes without retries, no pre-existing test was modified without story authorization,
-and the story file validates.
+**Definition of green:** lint is clean, Vitest passes, and, on a pull request, story containment
+passes. Everything else a pull request must meet is the reviewer's, by the checklist.
 
 ### Reviewer
 
@@ -237,18 +203,18 @@ and the story file validates.
 Three sub-checks: **completeness** (every AC delivered), **fidelity** (the AC is genuinely
 satisfied, not merely named in a test), **containment** (nothing outside scope).
 
-**The reviewer is given the story.** This is the single most important correction to the existing
-implementation, where the reviewer receives `REVIEW.md`, the diff and the PR body — but never the
-OQ entry. Its scope items therefore compare the diff to *the PR's own account of itself*, both
-written by the same worker. A worker that misread the story writes a body describing what it built
-and a diff matching that body; every item passes. Drift is invisible.
-
-That happened by over-applying a correct principle. *"A reviewer that knows what the change was
+**The reviewer is given the unit.** A reviewer given only the pull request's own account of itself
+compares the diff with a body written by the same author: an author that misread the story writes
+a body describing what it built and a diff matching it, every item passes, and drift is invisible.
+Tower-workshop-paths' first reviewer worked that way. *"A reviewer that knows what the change was
 meant to do cannot see that the diff does something else"* is true of **the author's account**. It
-is not true of **the authored story**, which is the standard the diff must meet.
+is not true of **the authored unit**, which is the standard the diff must meet.
 
-So the reviewer receives: **story file, diff, checklist.** It does not receive the coder's session,
-summary, reasoning, or any dispatcher commentary. Decorrelation preserved; drift detection enabled.
+So the reviewer receives **the unit, the pull request body and the checklist from `main`**, and
+reads the diff in its own checkout of the head (`reviewer.md`). Today `review.mjs` finds the unit
+as the story file the diff moves into `stories/done/` (`resolveStory`); ST-19 and ST-22 change
+that to the unit the body links, read from `main` (Part 3, "Decided so far"). It does not receive
+the coder's session, summary or reasoning, or any commentary from ATC.
 
 **The PR description is itself in scope.** After forming findings from the diff, check whether the
 description honestly describes the change. Prose that oversells a diff is real signal.
@@ -258,27 +224,24 @@ what reviewers here already produce — real problems rightly surfaced and argua
 blocking. Without the third state the verdict record understates what review catches, and any
 measurement built on it is meaningless.
 
+**Findings cite the checklist** by section and item, and the comment lists every section, applied
+or not, with a reason for each not applied, so a section skipped wrongly is visible
+(`parseReviewerVerdict` and `formatFindings`, `scripts/dispatch/review.mjs`).
+
 **Model:** Opus, high effort, and **deliberately not the coder's model.** Fidelity is the hard part
 — noticing that a test named `AC-3` doesn't exercise AC-3 is adversarial reading. And author and
 reviewer sharing a model family means correlated blind spots: context isolation decorrelates
-*knowledge*, not *reasoning style*. Opus-reviews-Sonnet buys both at once.
+*knowledge*, not *reasoning style*. Opus-reviews-Sonnet buys both at once. When a story's model is
+`opus`, the reviewer's is `sonnet` (`chooseReviewerModel`, `review.mjs`).
 
 ### Recording the verdict
 
-A **required status check keyed to the head SHA**, posted by the dispatcher:
-
-```bash
-# Valid where gh exists — verified on the owner's machine (gh 2.100.0, account luplows).
-# NOT available in spawned cloud sessions.
-gh api -X POST "repos/$REPO/statuses/$SHA" \
-  -f state=success -f context=review/agent \
-  -f description='ST-49: pass' -f target_url="$FINDINGS_URL"
-```
+**`review/agent`, a commit status on the head SHA**, is the verdict GitHub sees. `review-gate.yml`
+posts it from ATC's marker comment (**What the gate enforces**, below), and branch protection
+requires it beside `test`, with `enforce_admins` on (checked 2026-10-14).
 
 Why a status rather than a PR review: GitHub forbids approving your own PR, which deadlocks a
-single-account project. A commit status carries no such restriction. **This is already implemented
-and already required in branch protection** — verified live alongside `test`, with
-`enforce_admins: true`.
+single-account project. A commit status carries no such restriction.
 
 Properties worth preserving:
 
@@ -299,8 +262,8 @@ Properties worth preserving:
 ### What the gate enforces
 
 Moved from `REVIEW.md` on 2026-10-13, when it became the checklist only. ATC posts a verdict as
-one pull request comment that cites the checklist item each finding comes from and ends with
-exactly one marker line:
+one pull request comment that cites the checklist's section and item for each finding, lists every
+section applied or not, and ends with exactly one marker line:
 
 ```
 <!-- agent-review head=<full-40-char-sha> verdict=pass -->
@@ -339,33 +302,32 @@ the same comment supersedes an earlier line.
 
 ### Merging
 
-**Nothing with judgment merges.** The existing `land-approved.yml` is the correct design and should
-be kept essentially as-is:
+**Nothing with judgment merges.** The runway, `land-approved.yml`, merges; the pilot only requests
+it:
 
-- **Triggered independently of the work**, so it depends on no session being alive — a worker
-  finishes long before its verdict arrives. This was a `*/15` schedule until 2026-09-18; GitHub
-  delivered it at roughly 5% of that rate, so the trigger was removed and landing is explicit
-  (`gh workflow run land-approved.yml`) until a reliable one was chosen. `land.mjs` (OQ-50) is
-  that trigger: it triggers the sweep once a PR is landable, and re-triggers while the PR is still
-  open. It never merges itself. `story.mjs` (OQ-48) calls it, and the crew or the controller
-  may run it directly; nothing else does.
-- **It lands only pull requests whose author has write access** (the same association set the gate
-  honours for markers, `scripts/land/check-author.mjs`), because a landed `ready` story is work the
-  loop will carry out (OQ-81).
-- **One PR per run.** `mergeable_state` is computed asynchronously, so a second merge in the same
-  pass decides on stale data. The same fact has a cost between runs: straight after a merge, other
-  open PRs can read `unknown` for a while, and the sweep skips `unknown` rather than guessing. A
-  run triggered soon after the previous merge can therefore land nothing even though a PR is ready.
-  That is safe, and it is why back-to-back manual runs sometimes need one more. See **GitHub
-  mechanics** below and OQ-50.
-- **The named PR, or else the oldest.** The sweep takes an optional `pr` input, and `land.mjs`
-  always names its own pull request in it. A run given a pull request considers only that one and
-  lands nothing if it is not landable, so `land.mjs` lands what it was called for and nothing else.
-  A run given none, such as the crew's `gh workflow run`, lands the oldest landable one, so
-  nothing starves. Decided 2026-09-28: the loop decides which pull request is ready, and a sweep
-  that lands a different one spends `land.mjs`'s triggers, can stop a story that passed, and lands
-  pull requests nobody asked it to. The candidate choice is made in
-  `scripts/land/select-candidates.mjs`, which is tested without running the workflow.
+- **Started independently of the work**, so it depends on no session being alive. It runs when
+  the crew starts it by hand, or when the pilot, `land.mjs`, requests landing for one pull request
+  (**The controller**, below). The pilot waits until the pull request is landable, requests
+  landing, and requests again while it is still open; it never merges itself. ST-23 changes this
+  to one look without waiting, and ST-24 to landing on the checks `landWhen` names (Part 3,
+  "Decided so far"). The runway was a `*/15` schedule until 2026-09-18, which GitHub delivered at
+  roughly 5% of that rate (**Watchdog**, below).
+- **It lands only pull requests whose author the gate honours** (`HONOURED_ASSOCIATIONS`,
+  `scripts/land/check-author.mjs`), because a landed story is work a coder will take (OQ-81).
+- **One pull request per run.** `mergeable_state` is computed asynchronously, so a second merge in
+  the same run decides on stale data. The same fact has a cost between runs: straight after a
+  merge, other open pull requests can read `unknown` for a while, and the runway skips `unknown`
+  rather than guessing. A run started soon after the previous merge can therefore land nothing
+  even though a pull request is ready. That is safe, and it is why back-to-back manual runs
+  sometimes need one more. See **GitHub mechanics** below and OQ-50.
+- **The named pull request, or else the oldest.** The runway takes an optional `pr` input, and the
+  pilot always names its own pull request in it. A run given a pull request considers only that
+  one and lands nothing if it is not landable, so the pilot lands what it was called for and
+  nothing else. A run given none, such as the crew's `gh workflow run`, lands the oldest landable
+  one, so nothing starves. The rotation decides which pull request is ready, and a runway that
+  landed a different one would spend the pilot's requests and land pull requests nobody asked it
+  to (decided 2026-09-28). The candidate choice is made in `scripts/land/select-candidates.mjs`,
+  which is tested without running the workflow.
 - **Re-checks `review/agent` directly** rather than trusting `clean`, because a required check
   vanished from protection once. Prevention, not detection.
 - **`--match-head-commit`**, which refuses the merge if anything was pushed between the check and
@@ -387,12 +349,13 @@ SHA never changes**, so the `review/agent` status survives. That is the property
 adoptable: the previously-rejected alternative (refreshing every ready PR after each merge) reset
 the gate on every in-flight PR.
 
-Not urgent while the dispatcher runs one story at a time. Required before parallel dispatch.
+Not urgent while the runway lands one pull request per run and work is not parallel. Required
+before parallel work (`outline.md`, "What matters most").
 
 Three things to get right:
 
 - **Workflows need a `merge_group` trigger**, or checks never report and PRs sit forever.
-- **"Require branches up to date" stays off.** Confirmed `strict: false`.
+- **"Require branches up to date" stays off.** Confirmed `strict: false` (2026-10-14).
 - **Verify** how an externally-posted `review/agent` interacts with required checks on the merge
   group. Robust workaround worth building preemptively: a `merge_group`-triggered workflow that
   resolves the originating PR, confirms `review/agent` was `success` on its head SHA, and reports
@@ -424,23 +387,13 @@ The engine's coder runs inside its single loop, with retries on a `block` or red
 
 ### Format
 
-One file per story. **OQ numbering is preserved** — those identifiers are referenced throughout the
-codebase, workflow comments, and `Completed-Questions.md`, and the "never reused, never renumbered"
-rule stays. Only the container changes.
-
-The prefix is a project setting, not part
-of the code. A project's `steward.config.json` names its repository and its story prefix (`OQ`
-here), and every story-id pattern the scripts use is built from it, so the same code can run a
-queue numbered `ST-<n>` (decided 2026-10-08 by the owner, as the first step of moving the workflow
-to its own repository). `scripts/dispatch/settings.mjs` reads and validates that file (OQ-122).
-The default repository comes from it in five modules under `scripts/dispatch/` and in
-`scripts/report/review-verdicts.mjs` (OQ-125). The queue reader — `queue.mjs`'s filename pattern,
-frontmatter `id` check and `numericId`, `review.mjs`'s `resolveStory`, and `coder.mjs`'s
-`loadQueueAt` — takes the prefix from it already (OQ-126), and so does the story lint,
-`scripts/lint-stories.mjs` (OQ-127), and `coder.mjs`'s `retryStory` and `story.mjs`'s `runStory`,
-in their story-id checks and usage text (OQ-128). A test fails if any of them comes back into the
-code (OQ-129; split from OQ-122 on 2026-10-08 by the owner; `review-verdicts.mjs` added the same
-day from #222's review).
+Steward's own units are story files, one per story, numbered `ST-<n>` and never reused or
+renumbered (`stories/README.md`, which defines the schema). They are the convention of steward's
+own repository: a project need not use stories, and steward is to read a project's unit as
+written, without parsing or linting it (`outline.md`, "Review"). Today `review.mjs` still finds a
+story by the file the diff moves. The prefix is `storyPrefix` in the settings, and every story-id
+pattern the scripts use is built from it; the outline decides that `storyPrefix` leaves steward's
+settings (`outline.md`, "Settings"), and no story yet does that.
 
 ```
 stories/
@@ -461,8 +414,8 @@ It keeps its file and its number in a directory nothing dispatches from, so revi
 id: ST-49
 title: Print the queue as JSON
 tier: normal               # fix | next | normal | later — priority only
-kind: workflow             # product | workflow — never read by the dispatcher
-depends_on: []             # [ST-45] — dispatcher skips until those are done
+kind: workflow             # product | workflow — never read by ATC
+depends_on: []             # [ST-45] — waiting until those are done
 model: sonnet              # per-story escalation
 blocked: null              # null | "reason text" — set by a kickback
 ---
@@ -503,19 +456,16 @@ read it without parsing the table.
 ### Why one file per story
 
 - **Atomic.** A story's whole state is one file; two in-flight stories cannot conflict.
-- **Machine-readable.** Frontmatter gives the dispatcher a schema to read and CI a schema to lint.
+- **Machine-readable.** Frontmatter gives ATC a schema to read and the story lint one to check.
   A single 12 KB prose file gives neither.
 - **Completion is a `git mv`** inside the story's own PR, not a cut-and-paste into an 82 KB
   archive. The move is visible in the diff and checkable by the reviewer.
 - **Per-story history.** `git log stories/ST-49-*.md` is the refinement trail.
 
-`Completed-Questions.md` stays exactly as it is — a historical archive, grepped by OQ number. It is
-not migrated. Only the handful of currently-open stories move.
-
 ### Status is derived, not stored
 
 Only `blocked` is stored, because only it is not derivable. Everything else is read from the files,
-from git and from GitHub. No status commits, no sweep, no drift.
+from git and from GitHub. No status commits, nothing to tidy, no drift.
 
 **The statuses themselves, and what each is derived from, are specified in `stories/README.md`**,
 and are deliberately not restated here. They were once: this document and that file each carried a
@@ -545,7 +495,7 @@ Four values, highest first:
 | `later` | Refined and dispatchable, but deliberately deferred. |
 
 **Dependencies are not a tier.** `depends_on` already handles them mechanically and at the right
-granularity, and the dispatcher already skips a story whose dependencies are not in `done/`. An
+granularity: the queue reader reads a story whose dependencies are not in `done/` as `waiting`. An
 earlier vocabulary — `foundational | dependent | anytime | workflow` — mixed three axes: position
 in the dependency graph, absence of a dependency, and subject matter. A story can be both workflow
 and foundational, so forcing one value made the sort order arbitrary; and two of the four values
@@ -554,19 +504,19 @@ duplicated `depends_on` while being able to contradict it.
 **Ordering:** by tier, then lowest id first, with one exception below. Deterministic, needs no
 ordering file, and re-prioritising means editing one file's `tier`.
 
-### Kind is for people, not the dispatcher
+### Kind is for people, not ATC
 
 `kind: product | workflow` groups stories for reading — release-review assembly, or answering "how
-much of this batch was tooling." **Nothing in the dispatcher reads it, and nothing in the ordering
-may.** That is stated as a rule because a field that exists eventually attracts a sort: a future
-change that orders by `kind` should be a visible violation of something written down rather than a
+much of this batch was tooling." **Nothing in ATC reads it, and nothing in the ordering may.** That
+is stated as a rule because a field that exists eventually attracts a sort: a future change that
+orders by `kind` should be a visible violation of something written down rather than a
 natural-looking extension. Adding a value is cheap for the same reason.
 
 ### The starvation valve
 
-Tier-then-id does not starve stories *within* a tier, but a lower tier starves indefinitely while
-higher-tier work keeps arriving. *(An earlier version of this document claimed the ordering "cannot
-starve an old story." That holds only within a tier.)*
+Not built: ST-2 plans it. Tier-then-id does not starve stories *within* a tier, but a lower tier
+starves indefinitely while higher-tier work keeps arriving. *(An earlier version of this document
+claimed the ordering "cannot starve an old story." That holds only within a tier.)*
 
 The valve, derived rather than remembered and therefore still deterministic:
 
@@ -576,8 +526,8 @@ The valve, derived rather than remembered and therefore still deterministic:
 
 Four properties earn it:
 
-- **Derived from git, not stored.** `git log -1` on the story file gives the age. A dispatcher
-  restart cannot reset it — the same reasoning as the retry bound.
+- **Derived from git, not stored.** `git log -1` on the story file gives the age. A restart of
+  ATC cannot reset it — the same reasoning as the retry bound.
 - **Self-limiting.** Once the aged story dispatches it is no longer the oldest, so the valve stops
   on its own. There is no rate to tune and no way for it to run greedily.
 - **Last-touched, not created.** A story edited last week is being attended to, not starved.
@@ -585,7 +535,7 @@ Four properties earn it:
 - **`fix` is exempt.** A valve that can promote a `later` story ahead of a regression fix is worse
   than the starvation it solves.
 
-The dispatcher records which rule selected the story. Without that, "why did it pick that one" is
+ATC records which rule selected the story. Without that, "why did it pick that one" is
 unanswerable, and a promotion is indistinguishable from broken ordering.
 
 ### The readiness test
@@ -627,9 +577,10 @@ deleted rather than relaxed.
 
 ## Execution model
 
-**This is the largest revision from v1.** The documented pain of the existing workflow — no `gh`,
-blocked network egress, sessions unreachable mid-flight, sessions dying at $0, ref deletion
-refused — is *cloud-session* pain. Running the loop **locally** eliminates most of it at once.
+ATC and the sessions it starts run on a crew member's own machine, not in cloud sessions.
+Tower-workshop-paths' first workflow ran in cloud sessions, which had no `gh`, limited network
+egress, could not be reached mid-flight, sometimes died at $0, and were refused ref deletion.
+Running **locally** removes all of that.
 
 ### Everything runs locally
 
@@ -644,14 +595,14 @@ Verified on the owner's Windows machine: `claude` CLI 2.1.273, `gh` 2.100.0 auth
 | Mid-flight control | cannot be messaged | **ordinary process** |
 | Death at $0 | observed | **not applicable** |
 
-The cost is that the machine must be on. For a solo project that is acceptable, and the
-[watchdog](#watchdog) covers the case where it isn't.
+The cost is that the machine must be on. For a small crew that is acceptable, and inspection
+([watchdog](#watchdog), not built) would cover the case where it isn't.
 
-### The dispatcher is a script
+### ATC is scripts
 
-Not a Haiku agent — **a script, with no model in it at all.** It reads the story directory, derives
-state from git and `gh`, invokes `claude -p`, parses structured output, and posts a commit status.
-Every one of those is deterministic.
+**ATC is scripts, with no model in them at all.** They read the story directory, derive state from
+git and `gh`, start `claude -p` sessions, parse their structured output, and post comments. Every
+one of those is deterministic.
 
 `coder.mjs`, `review.mjs`, `story.mjs`, `land.mjs` and `loop.mjs` work on the project in the working
 directory, not on the checkout they are loaded from: the engine (the scripts and the prompts) and
@@ -665,8 +616,8 @@ working tree, and the settings it reads all come from the project.
 for every command: `node scripts/dispatch/cli.mjs <command> [arguments]` starts the named module
 (`coder.mjs`, `review.mjs`, `story.mjs`, `land.mjs`, `loop.mjs`, `queue.mjs`, `lint-stories.mjs` or
 `review-verdicts.mjs`) as its own process with the same argv, so a project with the workflow
-installed as a dependency has one command to call and this repository's own package can point
-`bin` at it. Running a module directly still works; `cli.mjs` adds a front door rather than
+installed as a dependency has one command to call, and steward's package points `bin` at it
+(`package.json`). Running a module directly still works; `cli.mjs` adds a front door rather than
 replacing the back one.
 
 This also materially improves the self-marking problem. The thing that posts a verdict is
@@ -723,7 +674,7 @@ Sketches, not literal — the prompts are rendered from files with the story inj
 ```bash
 # Coder — can edit, inside its own worktree, which is the session's working
 # directory (spawn.mjs's required cwd; no --add-dir). It commits and does not push
-# (the dispatcher pushes, OQ-84); gh is neither allowlisted nor authenticated
+# (ATC pushes, OQ-84); gh is neither allowlisted nor authenticated
 # (OQ-63). The allowlist, read-only shell utilities included, is
 # coderAllowedTools's alone (OQ-67).
 claude -p "$(render .claude/prompts/coder.md ST-49)" \
@@ -756,12 +707,12 @@ Both argument lists, both allowlists, the coder's environment and the rendered p
 returned separately and never becomes an argument. `reviewerAllowedTools()` is the reviewer's
 allowlist: the read-only `git` verbs plus `git merge-tree`, `Read Glob Grep TodoWrite`,
 `npm`/`npx`/`node`, and `READ_ONLY_SHELL_UTILS` imported from `coder-env.mjs`, with no `git push`
-and no `gh`. `git merge-tree` is the one `git` verb there that writes: it adds unreferenced tree
-and blob objects and moves no ref, and it is kept in its own list in `invocation.mjs` so that the
-rest stays read-only. Each list is
-complete on its own, because `permissions.allow` in `.claude/settings.json` is ignored when the
-workspace is not trusted. Untrusted values (`STORY`, `PR_BODY`, a retry's findings) are bounded with
-`wrapInjectedBlock` by placeholder name: everything not declared a trusted inline token is wrapped.
+and no `gh`. `git merge-tree` is the one `git` verb there that writes: it adds unreferenced tree and
+blob objects and moves no ref, and it is kept in its own list in `invocation.mjs` so that the rest
+stays read-only. Each list is complete on its own, because `permissions.allow` in
+`.claude/settings.json` is ignored when the workspace is not trusted. Untrusted values (`STORY`,
+`PR_BODY`, `RULES`, a retry's findings) are bounded with `wrapInjectedBlock` by placeholder name:
+everything not declared a trusted inline token is wrapped.
 
 `scripts/dispatch/review-tools.mjs` does the jobs that refused shell forms were
 doing in reviews: a command repeated N times, a command's exit code, and sorted output. It runs only
@@ -786,38 +737,27 @@ Three flags are load-bearing:
   Directly answers the observed hang.
 - **`--max-budget-usd`** — a hard spend ceiling per invocation. Turns "how much can one runaway
   story cost" into a number chosen in advance.
-- **`--allowedTools`** — what the session can actually do once prompting is off. This one is
-  easy to leave out and the first hand-run of the loop did: `--permission-prompts none` plus
-  `--permission-mode acceptEdits` covers file edits, and `.claude/settings.json` adds the
-  project's npm/npx commands and read-only git — but nothing that writes to the repository, so
-  `git commit` is silently **denied**. The coder does the work, runs the suite
-  green, and then cannot commit it. (`git push` was denied the same way until OQ-84 moved the push
-  to the dispatcher, which is why the coder's list now denies it on purpose.) The two flags are a pair — the first decides that
-  nothing may prompt, the second decides what does not need to.
+- **`--allowedTools`** — what the session can actually do once prompting is off. This one is easy to
+  leave out and the first hand-run of the loop did: `--permission-prompts none` plus
+  `--permission-mode acceptEdits` covers file edits, and `.claude/settings.json` adds the project's
+  npm/npx commands and read-only git — but nothing that writes to the repository, so `git commit` is
+  silently **denied**. The coder does the work, runs the suite green, and then cannot commit it.
+  (`git push` was denied the same way until OQ-84 moved the push to ATC, which is why the coder's
+  list now denies it on purpose.) The two flags are a pair — the first decides that nothing may
+  prompt, the second decides what does not need to.
 
-**The coder no longer holds a GitHub API credential at all (OQ-63).** It commits and emits the PR
-title and body as the last thing in its report; the dispatcher pushes the branch and opens the pull
-request with the owner's credential (**Credential minimalism**, below). (The coder's reach of git's own SSH
-authentication is untouched by anything below; that is OQ-73's.) `gh` is not on the coder's allowlist, and `--env
-"$(coderEnv)"` (`scripts/dispatch/coder-env.mjs`) strips `GH_TOKEN`, `GITHUB_TOKEN` and
-`GH_ENTERPRISE_TOKEN` from its process environment and points `GH_CONFIG_DIR` at an empty
-directory, so nothing capable of setting a commit status, dispatching a workflow, or writing to a
-pull request is reachable — not through `gh` directly, not through `node -e` spawning `gh` or
-`curl` via `child_process`, and not through an `npm`/`npx` script doing either, because none of
-those paths can read a token that was never in the environment. This is the same shape as
-**credential minimalism** below, applied to the coder rather than the reviewer, and it is the
-reason `Bash(gh:*)` disappears from the coder's list entirely rather than being narrowed: there is
-no longer a legitimate use for it to allowlist.
+**The coder's environment holds no GitHub credential**, so `Bash(gh:*)` is not on its list at all
+rather than narrowed: there is no use for it (**Credential minimalism**, below).
 
 The reviewer's list is the mirror image, and narrower on purpose: `git` subcommands
 enumerated rather than `Bash(git:*)`, so `git push` is not in the allowlist *before* the
 `--disallowedTools` deny rule also removes it. Two barriers against the accidental path beats one.
 
 The coder's `--disallowedTools` carries the same blanket `"Bash(git push:*)"` as the reviewer's
-(`CODER_DISALLOWED_TOOLS` in `scripts/dispatch/coder-env.mjs`). Before OQ-84 it could not: the coder's
-allowlist granted scoped push patterns, and a deny rule takes precedence over an allow rule, so the
-deny would have shadowed them. The push is now the dispatcher's, `coderAllowedTools` grants none,
-and the deny is a second barrier with nothing to shadow.
+(`CODER_DISALLOWED_TOOLS` in `scripts/dispatch/coder-env.mjs`). Before OQ-84 it could not: the
+coder's allowlist granted scoped push patterns, and a deny rule takes precedence over an allow rule,
+so the deny would have shadowed them. The push is now ATC's, `coderAllowedTools` grants none, and
+the deny is a second barrier with nothing to shadow.
 
 **That is defence in depth, not containment.** The same list grants `npm`, `npx` and `node`,
 because verifying the author's claims means running the suite — and those are arbitrary execution.
@@ -836,138 +776,72 @@ That is the same conclusion **credential minimalism** reaches below by a differe
 not built yet.
 
 That narrowness has its own cost, and it is not symmetric with the coder's. A hole in the
-**coder's** allowlist fails loudly and late — it cannot run a command it needs, and someone notices. A hole in
-the **reviewer's** fails *quietly*: a reviewer that cannot run `npm test` or `git merge-base` can
-still return a confident `pass`, having checked less than it thinks. The `git` verbs above are
-therefore a deliberately broad set rather than a minimal one — not a complete one, since `blame`,
-`rev-list`, `describe`, `remote`, `shortlog` and `config --get` are all plausible and none are
-listed. Calling it complete would be the same overstatement this section exists to correct. They
+**coder's** allowlist fails loudly and late — it cannot run a command it needs, and someone notices.
+A hole in the **reviewer's** fails *quietly*: a reviewer that cannot run `npm test` or `git
+merge-base` can still return a confident `pass`, having checked less than it thinks. The `git` verbs
+above are therefore a deliberately broad set rather than a minimal one — not a complete one, since
+`blame`, `rev-list`, `describe`, `remote`, `shortlog` and `config --get` are all plausible and none
+are listed. Calling it complete would be the same overstatement this section exists to correct. They
 are read-only except `git merge-tree`, which writes unreferenced objects (above). `ls-remote`,
 `ls-tree` and `merge-tree` were added on 2026-09-24, after reviewers were refused all three while
 checking branch listings and merge claims. The rest of the list is not read-only at all, per the
-paragraph above.
-`reviewer.md` instructs the
-reviewer to treat a denied read-only command as a finding about its own invocation rather than
-something to work around. An enumerated allowlist has to be maintained; the alternative is a gate
-that silently reviews by reading.
+paragraph above. `reviewer.md` instructs the reviewer to treat a denied read-only command as a
+finding about its own invocation rather than something to work around. An enumerated allowlist has
+to be maintained; the alternative is a gate that silently reviews by reading.
 
-**What a spawn actually costs**, measured across the OQ-63, OQ-66 and OQ-51 hand-runs rather than
-guessed, so that the budget (`invocation.mjs`, OQ-74) and the timeout (`spawn.mjs`, OQ-65) are
-picked from data:
-
-| Role | Model | Cost | Wall time |
-|---|---|---|---|
-| Coder, first pass on a fresh story | sonnet | $0.96 – $3.17 | 3 – 16 min |
-| Coder, retry round carrying findings | sonnet | $0.75 – $1.05 | 2.9 – 4.8 min |
-| Reviewer, full diff plus re-running the suite | opus | $0.95 – $1.88 | 1.8 – 4.8 min |
-
-Three things follow. The sketch's `6` and `3` are **generous** — no spawn has come close, and the
-one that ended early ended on a session limit rather than the budget. *(No longer true, 2026-10-08:
-OQ-122's first coder spent its whole `6`, $6.03 over 119 turns, and committed nothing. Its story
-covered seven modules (`coder.mjs`, `land.mjs`, `loop.mjs`, `review.mjs`, `story.mjs`, `queue.mjs`
-and `lint-stories.mjs`) and their tests. The owner chose to split it into smaller stories, OQ-122
-and OQ-125 to OQ-129, rather than raise the budget: smaller stories are cheaper to run and to
-review. OQ-123 was split the same way, into OQ-123, OQ-130 and OQ-131.)* A **retry round is
-markedly cheaper than a first pass**, because the findings do the searching the coder would
-otherwise pay for, so the expensive spawn is the first one rather than the loop. And a reviewer
-costs about what a retry round does, so review is not the expensive half of a retry either. A
-timeout wants to be well clear of 16 minutes, not tuned to the median.
-
-**The reviewer range widened on contact with a real story.** These figures originally read
-$0.95 – $1.38 and 1.8 – 2.7 min, taken from two reviews of docs-shaped PRs. OQ-51's four rounds ran
-$1.24 – $1.88 and 3.0 – 4.8 min — every round outside the recorded wall-time range, and the top of
-the cost range. Reviewing a diff with real logic in it costs more than reviewing prose, which is
-obvious in hindsight and was not in the table. A timeout fitted to the original numbers would have
-cut off every round of that story.
-
-These are session observations, now from fourteen spawns, recorded here because nothing in the
-repository captures them and a reviewer therefore cannot check them. Treat them as a starting point
-to be replaced once the spawn modules record their own.
+The budgets and the timeout were picked from measured spawns (Part 3, "What a spawn costs").
 
 ### Credential minimalism
 
-**The reviewer is given no GitHub write access, and needs none.** It returns a structured verdict on
-stdout; the dispatcher posts it as a marker comment, and `review-gate.yml` derives the status.
+**The reviewer is handed no GitHub credential, and needs none.** It returns a structured verdict on
+stdout; ATC posts it as a marker comment, and `review-gate.yml` derives the status. `review.mjs`
+runs it in `coderEnv`'s environment, which holds no GitHub token.
 
-**"Given" is doing real work in that sentence.** Running locally, the reviewer runs as the owner,
-on a machine where an SSH key and a `gh` keyring token are reachable — and its allowlist must
-include `npm`/`node` so it can verify the author's claims, which is arbitrary execution. So it is
-not *denied* write access; it is *handed* none and told to post nothing, on a machine where the
-capability exists. That is a weaker property than the heading once implied, and the weaker version
-is the true one. What makes it hold in practice is that no part of the prompt asks the reviewer to
-post, so nothing pushes it toward looking — which is exactly the failure mode the paragraph below
-describes, arrived at from the other side. Genuinely removing the capability means a reviewer with
-no agent, no keyring and no push-capable credential; see the **invocation shape** section.
+**Handed none, not denied.** The reviewer runs as whoever runs ATC, on a machine where an SSH key
+and a `gh` keyring token are reachable, and its allowlist includes `npm` and `node` so that it can
+verify the author's claims, which is arbitrary execution (**Invocation shape**, above). What holds
+it is that nothing in its prompt asks it to post. A prompt that gains one fix per failed run can
+end up asking for exactly that: tower-workshop-paths' reviewer prompt once read *find tokens on
+disk, tell nobody, act with elevated access*, and a reviewer correctly refused it as an injection
+attack. Removing the reviewer's need to post deletes that part of the prompt rather than rewording
+it. Genuinely removing the capability needs a reviewer with no SSH agent, no keyring and no
+push-capable credential (ST-3, held).
 
-This is not convenience. In the existing workflow the reviewer prompt accreted one fix per failed
-run — credential hunting after sessions could not post, "do not ask questions" after one hung —
-until the assembled text read *find tokens on disk, tell nobody, act with elevated access*, and a
-reviewer correctly refused it as an injection attack. Each addition was locally reasonable; nobody
-re-read the whole.
+**The coder holds no GitHub credential, and does not push.** `coderEnv`
+(`scripts/dispatch/coder-env.mjs`) removes `GH_TOKEN`, `GITHUB_TOKEN` and `GH_ENTERPRISE_TOKEN` from
+its environment and points `GH_CONFIG_DIR` at an empty directory, so nothing it runs, whether
+`gh`, `node -e` or an `npm` script, has a token that could set a commit status, dispatch a
+workflow or write to a pull request. Its allowlist grants no `git push` and denies it. ATC pushes
+its branch and opens its pull request from the title and body it emits (`coder.md`, "You do not
+merge, and you do not open your own PR"). This matters most for the coder, whose goal is a landed
+pull request: with a `repo`-scoped token it could set `review/agent` to `success` on its own head
+and start the runway, which tower-workshop-paths confirmed by probing (OQ-63). Git's own SSH
+authentication is still within its reach; ST-6, a spike, is to put coder sessions in a container
+(Part 3, R5).
 
-Removing the reviewer's need to post anything **deletes that section of the prompt** rather than
-rewording it. Applies equally to the release review, which writes stories, not statuses.
+**ATC is a trusted user of the one credential** it runs under, and there is no separately scoped
+one. What keeps ATC from clearing its own gate is not credential scope:
 
-**The coder was first given a narrower credential rather than the same treatment, because it then
-needed to push (OQ-63); since OQ-84 the dispatcher pushes, and it does not.** This was the more urgent of the two
-gaps (OQ-63, filed `tier: fix` where the reviewer's twin, OQ-62, is `normal`): the coder's *goal* is
-a landed PR, where the reviewer's prompt only ever tells it to post nothing and it gains nothing
-from a merge. With the owner's `repo`-scoped token, a coder holding `Bash(gh:*)` could set
-`review/agent` to `success` on its own head and then dispatch `land-approved.yml` — confirmed
-against this repository the same way the reviewer's gap was, by probing with deliberately invalid
-payloads and getting `422` (authorised, only validation failed) rather than `403` (denied). Both of
-the rules this workflow is built on — *you do not clear your own gate*, *triggering the sweep is
-the owner's* — were held by `CLAUDE.md`'s prose and nothing else. (The second has since been
-widened to the controller running the pilot, `land.mjs`; see **The controller**.)
-
-The coder no longer pushes (OQ-84). The dispatcher pushes its branch, and the coder's allowlist
-grants no `git push` and denies it outright. That removes the reason given above for treating the
-coder differently from the reviewer. What still reaches the owner's stored credentials from a
-coder session is OQ-73's.
-
-So the coder's GitHub credential is removed rather than scoped: `coderEnv`
-(`scripts/dispatch/coder-env.mjs`) hands it an environment with no `GH_TOKEN`, `GITHUB_TOKEN` or
-`GH_ENTERPRISE_TOKEN`, and a `GH_CONFIG_DIR` pointed at an empty directory — so `gh`, and anything
-that reaches the GitHub API the way `gh` does, has no credential capable of a commit status, a
-workflow dispatch, or a pull-request write, regardless of whether the call is made directly, from
-inside `node -e`, or from an `npm`/`npx` script. Git's own authentication over SSH is not touched
-by any of that, which is why the push is the dispatcher's rather than something the coder is
-trusted to do with it (OQ-84). The coder still cannot open its own PR — that capability moves to
-whatever spawned it. "A coder session is trusted, not contained" — the wording this section carried
-while OQ-63 was open — is no longer true of the write path that mattered; see `coder.md`, "You
-do not merge, and you do not open your own PR".
-
-**Corrected 2026-09-19, while writing OQ-68.** This paragraph used to claim the dispatcher holds a
-*third, separately-scoped credential* with pull-request write but neither commit-status nor
-workflow-dispatch, "so the thing that opens the PR still cannot clear the gate". That was never
-true, and it could not become true without contradicting Phase 1: a dispatcher has to record
-verdicts, and there is exactly one credential in this project — the owner's `repo`-scoped token.
-**The dispatcher is a trusted user of it, and that is the design rather than a gap.**
-
-What actually keeps the dispatcher from clearing its own gate is not credential scope, and saying
-it was obscured the real mechanism:
-
-- **The dispatcher does not decide the verdict.** It relays a judgement made by a separate session
-  that holds no credential at all. A credential split inside one trusted script buys nothing,
-  because the script holding both halves can always call both.
-- **`review/agent` is posted by `review-gate.yml`, not by the dispatcher** — the workflow reads the
-  marker comment and derives the status. So the dispatcher's output is a *comment*, and enforcement
-  is a GitHub Actions job it does not control. That split is the guarantee, and it already exists.
-- **`land-approved.yml` is started only by the crew, by hand, or when the pilot, `land.mjs`, run by
-  ATC or the controller, requests landing; no other agent session starts it.**
-  Enforced as a tested prohibition in OQ-68 and OQ-48 rather than by scope on a token. For the
-  controller it is a rule, not a mechanism (**The controller**, above). `land.mjs`
-  (OQ-50) is the one module that triggers it. Its own allowlist permits that one dispatch (`main`,
-  with the one input `pr` naming its pull request) and no other write, and neither `coder.mjs` nor `review.mjs` imports it. `github.mjs`'s prohibition stays as it is.
+- **ATC does not decide the verdict.** It relays a judgement made by a separate session that holds
+  no credential at all. A credential split inside one trusted script buys nothing, because the
+  script holding both halves can always call both.
+- **`review/agent` is posted by `review-gate.yml`, not by ATC**: the workflow reads the marker
+  comment and derives the status. So ATC's output is a *comment*, and enforcement is a GitHub
+  Actions job it does not control.
+- **`land-approved.yml` is started only by the crew, by hand, or when the pilot, `land.mjs`,
+  requests landing; no other agent session starts it.** `land.mjs` is the one module that
+  starts it. Its own allowlist permits that one dispatch (`main`, with the one input `pr` naming
+  its pull request) and no other write, and neither `coder.mjs` nor `review.mjs` imports it. For
+  the controller it is a rule, not a mechanism (**The controller**, above).
 
 A genuinely separated credential needs a second GitHub identity, which is item 10 of the open
-questions table below and is not built. Until it is, this section says what is true.
+questions table below and is not built.
 
 ### Watchdog
 
-The dispatcher is a script, so it cannot lose context — but it can stop, and nothing would notice.
+Not built. ATC is scripts, so it cannot lose context, but it can stop, and nothing would notice.
 Because state is derived, a **scheduled GitHub Action** can compute "is anything stuck?" from
-branches and PRs alone, independently of the dispatcher, and survives the machine being off.
+branches and pull requests alone, independently of ATC, and survives the machine being off.
 
 It should also check the observable consequence of branch-protection regression: **did any PR merge
 without a successful `review/agent` status?** A required check vanished silently once. Reading
@@ -996,29 +870,29 @@ main
 
 ### Release branches are optional and deferred
 
-Their purpose is to freeze a candidate while development continues. With one dispatcher working one
-story at a time, the simpler thing is to **pause dispatch, review, tag, resume**. Cut
-`release/vX.Y` only when you need to stabilise while other work keeps landing — most likely once
-parallel dispatch arrives.
+Their purpose is to freeze a candidate while development continues. While work is not parallel,
+the simpler thing is to **pause the coders, review, tag, resume**. Cut `release/vX.Y` only when
+you need to stabilise while other work keeps landing — most likely once parallel work arrives.
 
 ### Mechanics
 
 - `story/ST-49-slug` and `fix/ST-51-slug` — parseable both ways, so any component can find the
-  story from the branch and vice versa.
+  story from the branch and vice versa. The planning session's branches are `write-story/<slug>`
+  (`docs/planning-session.md`).
 - **Squash-merge.** One story = one commit on main, which makes `git log <tag>..HEAD` a direct list
   of completed stories — the release review's input assembles itself.
 - Branch protection: `test` + `review/agent` required, `enforce_admins: true`, no force-push, no
-  deletions. **Already configured correctly.**
-- Coder rebases before committing for the dispatcher to push and open the PR from; cap branch age rather than
-  merging against a moved world.
+  deletions (checked 2026-10-14).
+- Not built: the coder rebasing before it commits, and a cap on branch age, rather than merging
+  against a moved world.
 
 ### Rollback
 
 Everything above prevents bad changes landing. This covers one landing anyway.
 
-- **Caught by the release review** → a `fix/` story, ordinary loop, prioritised ahead of the queue.
-- **Caught after a tag** → revert PR through the same loop, then a `fix/` story to redo it properly.
-  Revert first, diagnose second.
+- **Caught by the release review** → a `fix` story, built as any other, ahead of the queue.
+- **Caught after a tag** → a revert pull request through the gate, then a `fix` story to redo it
+  properly. Revert first, diagnose second.
 - The release review asks both questions: *is this good to ship*, and **what did we ship that we
   shouldn't have.**
 
@@ -1027,9 +901,10 @@ Everything above prevents bad changes landing. This covers one landing anyway.
 ## The release review
 
 Runs when a batch worth reviewing has accumulated (currently: human call, roughly every ten merged
-PRs). This is the existing OQ-46, and it is the only thing standing between the crew and a silently
-degrading mental model of their own app — every other guard is a *regression* detector that passes
-when a change is self-consistent.
+PRs). Not yet run, and no steward story plans it: OQ-46, tower-workshop-paths' walkthrough story,
+stayed there (Part 3, "Decided so far"). It is the only thing standing between the crew and a
+silently degrading mental model of their own app — every other guard is a *regression* detector that
+passes when a change is self-consistent.
 
 ### Input assembly (mechanical)
 
@@ -1037,15 +912,15 @@ when a change is self-consistent.
 - **Reviewer findings recorded as `pass-with-observations`** — highest-yield items, because a
   machine already suspected something and chose not to stop the line
 - Anything `blocked:` or deferred during the batch
-- **Screenshot baselines that moved** across the batch — before/after from `e2e/__screenshots__/`
+- **For a project with screenshot baselines, those that moved** across the batch — before and after
 
 ### The walkthrough
 
 Organised by **user-visible capability**, not by PR or story. Several stories often compose into one
 capability. Doing that grouping is the release review's first real piece of work.
 
-Per capability: what it does now that it didn't before, in user language — then **put it on screen**,
-driving a deployment or a local dev server. That is the difference between reviewing work
+Per capability: what it does now that it didn't before, in user language — then **put it on
+screen**, driving a deployment or a local dev server. That is the difference between reviewing work
 and reviewing a summary of work. Then: contributing stories, what the reviewer flagged but let
 through, and known gaps.
 
@@ -1055,10 +930,10 @@ through, and known gaps.
 releases/v0.4.0-rc.md    ← capabilities, with a verdict on each
 ```
 
-`accepted` / `accepted-with-followup` / `blocks-release`. Blockers become `fix/` stories that jump
+`accepted` / `accepted-with-followup` / `blocks-release`. Blockers become `fix` stories that jump
 the queue. Acceptance of the whole batch → tag.
 
-**Explicitly not a gate on merging.** It does not block the loop or stop agents — a review that
+**Explicitly not a gate on merging.** It does not stop the rotations or the coders — a review that
 halts all progress while waiting for a human stops being run.
 
 ### Feedback capture
@@ -1103,7 +978,7 @@ Later if wanted: mutation testing, differential testing for refactors.
 
 ### Measuring
 
-OQ-47 built this as `scripts/report/review-verdicts.mjs`: a pure tally over the marker comments
+`scripts/report/review-verdicts.mjs` does this (OQ-47): a pure tally over the marker comments
 that already exist, run on demand rather than by a scheduled workflow — its story scoped out a
 logger, a dashboard, or storing the tally, since a second copy of the record could drift from it.
 
@@ -1139,33 +1014,33 @@ should not be assumed. Stating it wider than the evidence is the failure this wh
 to record.
 
 The consequence is structural and easy to miss: **no coder can deliver a story that changes the
-prompts.** That is not a rare case here — OQ-51, OQ-64 and OQ-66 all touch `.claude/prompts/`, and
-OQ-63 did (OQ-66 was retired on 2026-10-10). A story whose acceptance criteria require prompt
-edits will be blocked on delivery no matter how well the coder performs.
+prompts.** That is not rare: in steward, ST-21 and ST-22 change `reviewer.md`, so each is built by
+hand (Part 3, "Decided so far"). A story whose acceptance criteria require prompt edits will be
+blocked on delivery no matter how well the coder performs.
 
 **An interactive session is not restricted the same way.** The same edits succeed from a session a
 person is attached to. So the restriction is a property of the *spawn*, not of the file, which is
 what makes the workaround legitimate rather than a bypass:
 
 > **The coder emits, the dispatcher writes.** The coder publishes the intended change as a diff in
-> its PR body, and whoever is running the loop applies it with `git apply`, by hand, in a separate,
+> its PR body, and whoever runs the coder applies it with `git apply`, by hand, in a separate,
 > attributed commit. For this relay the "dispatcher" in the name is always a person, never the
-> dispatcher script (see below). Used for the first time in #112, where the diff applied cleanly.
+> scripts of ATC (see below). Used for the first time in #112, where the diff applied cleanly.
 
 Until 2026-09-24 only this document described the relay, and `coder.md` did not. The OQ-52 coder
 (#137) was refused its `coder.md` edit and, following its prompt, took the write-and-exit route and
 set `blocked:`. `coder.md` now tells the coder to put a prompt edit in its PR body as a diff under
 `### Proposed prompt edit`, to leave the dependent AC unticked, and to finish the rest as normal.
 
-That is the same division of labour the loop already uses twice — the reviewer returns a verdict and
-the runner records it, and under OQ-63 the coder emits a PR body and the dispatcher opens the PR.
-Prompt edits are the third instance, with one difference: **the dispatcher script does not automate
-this one**, whatever the principle's name suggests. OQ-70 considered applying the emitted diff
-automatically and rejected it on 2026-09-19. That would mean a script taking patch text from a PR
-body written by the agent under review and applying it to the one directory that agent is forbidden
-to touch, and the paths it would check come from the same untrusted patch. So a story that changes a
-prompt stays partly manual, permanently: whoever runs the loop applies the diff by hand, in a
-separate, attributed commit (OQ-70, AC-7b).
+That is the same division of labour ATC already uses twice — the reviewer returns a verdict and ATC
+records it, and under OQ-63 the coder emits a PR body and ATC opens the PR. Prompt edits are the
+third instance, with one difference: **ATC does not automate this one**, whatever the principle's
+name suggests. OQ-70 considered applying the emitted diff automatically and rejected it on
+2026-09-19. That would mean a script taking patch text from a PR body written by the agent under
+review and applying it to the one directory that agent is forbidden to touch, and the paths it would
+check come from the same untrusted patch. So a story that changes a prompt stays partly manual,
+permanently: whoever runs the coder applies the diff by hand, in a separate, attributed commit
+(OQ-70, AC-7b).
 
 ### `GH_TOKEN=""` does not remove a credential
 
@@ -1175,9 +1050,9 @@ non-empty token returns `HTTP 401`, while an empty one authenticates normally as
 
 So a spawn that tries to de-credential a session by setting the variable to empty string **still has
 a fully authenticated `gh`**, and nothing about it looks wrong. `coderEnv` avoids this by *deleting*
-the variables rather than blanking them, which is why it works. Whoever implements OQ-62 — the
-reviewer's half of the same problem — is the person most likely to reach for the empty string, which
-is why this is recorded here rather than only in a code comment.
+the variables rather than blanking them, which is why it works. Whoever builds ST-3
+(tower-workshop-paths' OQ-62), the reviewer's half of the same problem, is the one most likely to
+reach for the empty string, which is why this is recorded here rather than only in a code comment.
 
 ### Long shell commands
 
@@ -1197,8 +1072,8 @@ in a headless session".
   failing/pending), `unstable` (only non-required), `dirty`, `behind`, `unknown`. The
   `blocked`/`unstable` split is the only way to tell from outside whether a check is required.
 - **Computed asynchronously** — never merge twice in one pass.
-- **Recomputed after a merge, so other open PRs can read `unknown` for a while.** Observed on
-  2026-09-24: #123 merged at 02:13:42Z, and a sweep run at 02:17:14Z
+- **Recomputed after a merge, so other open PRs can read `unknown` for a while.** Observed in
+  tower-workshop-paths on 2026-09-24: #123 merged at 02:13:42Z, and a sweep run at 02:17:14Z
   (run 35946602221) skipped #125 as `unknown`. The next run, 35947256705 at 02:26:30Z, found it
   `clean` and landed it. That is one observation. How long the window lasts, and whether every open
   PR is affected, has not been measured. A trigger that fires straight after a merge should expect
@@ -1209,13 +1084,11 @@ in a headless session".
   into committed scripts with unit tests.** The untestable surface shrinks to YAML wiring.
 - **`GITHUB_TOKEN` pushes do not trigger further workflows.** The exceptions are
   `workflow_dispatch` and `repository_dispatch` (GitHub's documentation, read 2026-10-08). So the
-  sweep's merges, made with `github.token`, started no `push` run of `ci.yml` or `deploy-pages.yml`
-  on their own. The `push` runs on `main` for #155 (2026-09-28) came from the owner's own merge,
-  triggered by `luplows`, not from the sweep. Both workflows (OQ-124) also run on
-  `workflow_run` of `Land approved PRs`, and each job with no `needs:` skips unless the sweep moved
-  `main` (`github.event.workflow_run.head_sha != github.sha`), so a sweep that landed nothing costs
-  no runner. The sweep itself gains no permission, token or secret (decided 2026-10-08 by the
-  owner; see "Portability", "Decided so far").
+  runway's merges, made with `github.token`, start no `push` run of `ci.yml`. `ci.yml` also runs on
+  `workflow_run` of `Land approved PRs`, and skips unless the runway moved `main`
+  (`github.event.workflow_run.head_sha != github.sha`), so a runway run that landed nothing costs
+  no runner (OQ-124). The runway itself gains no permission, token or secret (decided 2026-10-08
+  by the owner; see "Portability", "Decided so far").
 - **Converting a PR to draft is GraphQL only.** REST's "Update a pull request" takes `title`,
   `body`, `state`, `base` and `maintainer_can_modify`, with no `draft`; the GraphQL mutation
   `convertPullRequestToDraft` does it (checked 2026-09-25). `github.mjs`
@@ -1239,7 +1112,7 @@ under the local execution model it no longer matters.
 
 - **More agent roles.** Two roles plus a script is the right complexity.
 - **Agents conversing with each other.** Artifacts only.
-- **A model in the dispatcher.** If it needs judgment, the schema is underspecified.
+- **A model in ATC.** If it needs judgment, the schema is underspecified.
 - **Merging without a recorded verdict.**
 - **Coverage-percentage tooling.**
 - **A `develop` trunk.** `main` is the integration trunk.
@@ -1318,11 +1191,12 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
   applies in full. **Decided 2026-10-08 by the owner: the Codex CLI is the first adapter, for the
   reviewer (M2), after a spike** that runs it here and shows it can run `npm test` inside its
   read-only sandbox and return a verdict the gate can parse.
-- **M2. Which role first.** **Decided 2026-10-08 by the owner: the reviewer.** Goal 2's value is largest there, and a
-  reviewer that cannot write is a smaller guarantee to re-establish than a coder's.
-- **M3. Guarantees before use.** **Decided 2026-10-08 by the owner:** no tool runs a role until that role's guarantees are
-  shown to hold for it by tests, in the way the guarantee checks in OQ-73's Context test the
+- **M2. Which role first.** **Decided 2026-10-08 by the owner: the reviewer.** Goal 2's value is
+  largest there, and a reviewer that cannot write is a smaller guarantee to re-establish than a
   coder's.
+- **M3. Guarantees before use.** **Decided 2026-10-08 by the owner:** no tool runs a role until that
+  role's guarantees are shown to hold for it by tests, in the way the guarantee checks in OQ-73's
+  Context test the coder's.
 - **M4. How a story or role names its model.** Today a bare Claude model name. It needs the tool as
   well. OQ-54 (one declared default coder model) would be reworked or folded in. **Left open for
   the workflow's own repository** (owner, 2026-10-08): it works best as configurable for the
@@ -1330,8 +1204,8 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
 - **M5. Prompts.** One prompt per role with per-tool parts, or one per tool? **Decided 2026-10-08
   by the owner: one prompt per role**, holding the role's rules once, with a small section per tool
   for that tool's specifics, so the rules cannot drift between tools.
-- **M6. Switching away (goal 3).** **Decided 2026-10-08 by the owner:** replacing a tool for a role is a configuration change,
-  with no code change beyond its adapter.
+- **M6. Switching away (goal 3).** **Decided 2026-10-08 by the owner:** replacing a tool for a role
+  is a configuration change, with no code change beyond its adapter.
 
 ---
 
@@ -1728,24 +1602,25 @@ shortened where it is long, so that it can be found there with its date.
 - **OQ-136 is fixed on its own pull request, #241, by the planning session** (decided 2026-10-09 by
   the owner, an exception to the rule against editing a story whose branch is on origin). Its
   coder's run stopped at `ci-round-bound` because the Linux-only test quoted its stand-in's paths,
-  so the stand-in never ran. The fix also narrows the clean-up to the try's own processes ("What CI
-  runs"), and OQ-136's AC-1 and AC-4 are amended to say so, in a `write-story/` pull request,
-  since a story's own pull request may not reword it (`story-containment.mjs`). Because the
-  narrowed clean-up still stops a process something else starts in a new session during a try,
-  OQ-136's behavioural test runs alone, in a CI step of its own, not in `npm test`; in the real
-  install step only a system service started mid-try is exposed. OQ-136 is a prerequisite of the
-  move: it unblocks OQ-130. When #241's review then blocked on the wait's lock probe, the owner
-  amended AC-2 to AC-4 again (the same day) and kept the exception for the planning session to make
-  the fix, because OQ-136 blocks the move, while saying such exceptions are not to become the rule.
+  so the stand-in never ran. The fix also narrows the clean-up to the try's own processes
+  ("Tower-workshop-paths' CI install step"), and OQ-136's AC-1 and AC-4 are amended to say so, in a
+  `write-story/` pull request, since a story's own pull request may not reword it
+  (`story-containment.mjs`). Because the narrowed clean-up still stops a process something else
+  starts in a new session during a try, OQ-136's behavioural test runs alone, in a CI step of its
+  own, not in `npm test`; in the real install step only a system service started mid-try is exposed.
+  OQ-136 is a prerequisite of the move: it unblocks OQ-130. When #241's review then blocked on the
+  wait's lock probe, the owner amended AC-2 to AC-4 again (the same day) and kept the exception for
+  the planning session to make the fix, because OQ-136 blocks the move, while saying such exceptions
+  are not to become the rule.
 - **#243's held review observation becomes OQ-137** (decided 2026-10-09 by the owner): the install
   step's worst case counts the clean-up after the first try, and the clean-up test checks its
-  allowance ("What CI runs"). #242's two held observations were already resolved by OQ-136's own
-  pull request, #241. OQ-137 stays here, as a story about this repository's CI (R4), and is built
-  after OQ-132, which now also carries OQ-136's tests and its clean-up test out of
-  `scripts/dispatch/` (decided the same day by the owner). OQ-131's held observation, that this
-  document and `cli.mjs` say "this repository's own package" will point `bin` at `cli.mjs` though
-  the package is steward's (`steward-bootstrap.md`, B4), is left as it is: the words are true in
-  steward's copies, and OQ-132 and OQ-134 remove the copies here. The held observations on #240,
+  allowance ("Tower-workshop-paths' CI install step"). #242's two held observations were already
+  resolved by OQ-136's own pull request, #241. OQ-137 stays here, as a story about this repository's
+  CI (R4), and is built after OQ-132, which now also carries OQ-136's tests and its clean-up test
+  out of `scripts/dispatch/` (decided the same day by the owner). OQ-131's held observation, that
+  this document and `cli.mjs` say "this repository's own package" will point `bin` at `cli.mjs`
+  though the package is steward's (`steward-bootstrap.md`, B4), is left as it is: the words are true
+  in steward's copies, and OQ-132 and OQ-134 remove the copies here. The held observations on #240,
   #241 and #244, stale numbers in their merged pull requests' Verification sections, are left as
   they are: the current figures are in the same sections, and no repository content is wrong.
 - **The fresh dry run's three findings are settled** (decided 2026-10-09 by the owner, from the
@@ -2465,6 +2340,41 @@ is still open.
 
 ## Trials and measurements
 
+### What a spawn costs
+
+**What a spawn actually costs**, measured across the OQ-63, OQ-66 and OQ-51 hand-runs rather than
+guessed, so that the budget (`invocation.mjs`, OQ-74) and the timeout (`spawn.mjs`, OQ-65) are
+picked from data:
+
+| Role | Model | Cost | Wall time |
+|---|---|---|---|
+| Coder, first pass on a fresh story | sonnet | $0.96 – $3.17 | 3 – 16 min |
+| Coder, retry round carrying findings | sonnet | $0.75 – $1.05 | 2.9 – 4.8 min |
+| Reviewer, full diff plus re-running the suite | opus | $0.95 – $1.88 | 1.8 – 4.8 min |
+
+Three things follow. The sketch's `6` and `3` are **generous** — no spawn has come close, and the
+one that ended early ended on a session limit rather than the budget. *(No longer true, 2026-10-08:
+OQ-122's first coder spent its whole `6`, $6.03 over 119 turns, and committed nothing. Its story
+covered seven modules (`coder.mjs`, `land.mjs`, `loop.mjs`, `review.mjs`, `story.mjs`, `queue.mjs`
+and `lint-stories.mjs`) and their tests. The owner chose to split it into smaller stories, OQ-122
+and OQ-125 to OQ-129, rather than raise the budget: smaller stories are cheaper to run and to
+review. OQ-123 was split the same way, into OQ-123, OQ-130 and OQ-131.)* A **retry round is
+markedly cheaper than a first pass**, because the findings do the searching the coder would
+otherwise pay for, so the expensive spawn is the first one rather than the loop. And a reviewer
+costs about what a retry round does, so review is not the expensive half of a retry either. A
+timeout wants to be well clear of 16 minutes, not tuned to the median.
+
+**The reviewer range widened on contact with a real story.** These figures originally read
+$0.95 – $1.38 and 1.8 – 2.7 min, taken from two reviews of docs-shaped PRs. OQ-51's four rounds ran
+$1.24 – $1.88 and 3.0 – 4.8 min — every round outside the recorded wall-time range, and the top of
+the cost range. Reviewing a diff with real logic in it costs more than reviewing prose, which is
+obvious in hindsight and was not in the table. A timeout fitted to the original numbers would have
+cut off every round of that story.
+
+These are session observations, now from fourteen spawns, recorded here because nothing in the
+repository captures them and a reviewer therefore cannot check them. Treat them as a starting point
+to be replaced once the spawn modules record their own.
+
 ### A long shell command in a headless session
 
 **A `-p` session loses a shell command that outlasts the shell timeout.** Claude Code moves the
@@ -2740,3 +2650,47 @@ Public repo, so Actions minutes are not a constraint; **model usage is.** A clea
 readiness test, whether the gate works at all. Both arguments point at the planning session.
 
 `--max-budget-usd` makes the ceiling explicit per invocation rather than discovered afterwards.
+
+---
+
+## Tower-workshop-paths' CI install step
+
+Steward's CI installs no browser. Tower-workshop-paths' did, and this is how its install step was
+bounded, kept for a project whose CI needs the same.
+
+**Setup is cached and bounded.** CI caches Playwright's browser, keyed on the runner's OS and the
+installed `@playwright/test` version, and on a hit installs only the system packages. The install
+step has a 5-minute limit and tries twice within it, two minutes each; the job has a 20-minute
+limit, well inside `story.mjs`'s 30-minute CI wait. `update-screenshots.yml` does the same with the
+same key, so baselines are minted by the browser CI compares against. Decided 2026-10-07 by the
+owner, after installs hung in apt and one browser download was refused, with no limit short of
+GitHub's 360-minute default. Retrying the install is a retry of setup, not of a test, so it does not
+contradict "no retries in the merge gate": the checks themselves still run once. `detect-drift.yml`'s
+weekly install is left as it is (decided 2026-10-08 by the owner): it gates no pull request.
+
+A try that fails or reaches its limit leaves nothing running: after each try the step kills every
+process that started during it and is still alive, `apt-get` and `dpkg` under sudo included,
+trying a plain `kill` first and falling back to `sudo kill` only when that is refused. A try runs
+under `timeout`, in a process group of its own, and what it starts with `setsid` or under sudo's
+pty has a session of its own, so the try's processes are the new ones whose group or session is
+new too. A new process whose group and session both existed before the try, such as a test
+runner's child, is not the try's, and is left alone (amended 2026-10-09 by the owner). A new
+process in a new session that the try did not start, such as a system service init starts during
+it, cannot be told apart, and is killed too.
+Before the second try it waits up to 30 seconds for `/var/lib/dpkg/lock-frontend` to be free and
+then runs `sudo dpkg --configure -a`, so a package the first try left half-installed is finished.
+The wait tests the lock with an `fcntl` lock, as apt and dpkg take it, since a `flock` probe
+cannot see theirs; the repair is limited to 20 seconds, and a repair that fails or times out is
+logged and does not stop the second try, though the step runs under `bash -e` (amended again
+2026-10-09 by the owner, after #241's review).
+Decided 2026-10-09 by the owner (OQ-136), after a first try timed out while apt was slowly fetching
+fonts: the limit ended `npx` but not the `apt-get` under it, which kept the dpkg lock, so the
+second try failed at once and the retry could not recover from the hang it was added for. The
+test that runs this clean-up for real is in a file of its own, `*.alone.test.mjs`, which `npm test`
+leaves out and CI runs in a step of its own after it, so that no other test's processes are
+running for the clean-up to stop (decided 2026-10-09 by the owner).
+
+In tower-workshop-paths, its OQ-137 plans for the step's worst case to count the clean-up after the
+first try, with a 5-second allowance that the clean-up test checks: 2 × 120 + 5 + 30 + 20 = 295
+seconds of the 300 (decided 2026-10-09 by the owner, from #243's review). The clean-up after the
+second try is not counted: the step fails then whatever happens.
