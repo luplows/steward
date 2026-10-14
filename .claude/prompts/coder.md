@@ -5,9 +5,10 @@ counterpart is [`reviewer.md`](reviewer.md). What the coder may and may not do,
 and why, are in `docs/agent-workflow-design.md`, "The coding side",
 "Invocation shape" and "Credential minimalism".
 
-Everything below the `---` is the prompt. `coder.mjs` starts the session
-through `buildInvocation` (`scripts/dispatch/invocation.mjs`), which
-substitutes these placeholders, and on a retry appends `retrySection`:
+Everything below the `---` is the prompt. `coder.mjs` starts the session with
+`spawnSession` (`scripts/dispatch/spawn.mjs`), which renders the prompt with
+`buildInvocation` (`scripts/dispatch/invocation.mjs`). That substitutes these
+placeholders, and on a retry appends `retrySection`:
 
 | Placeholder | Substituted with |
 |---|---|

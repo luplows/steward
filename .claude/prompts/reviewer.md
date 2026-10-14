@@ -6,8 +6,9 @@ what it is given, and what its invocation does and does not guarantee, are in
 `docs/agent-workflow-design.md`, "Reviewer", "Invocation shape" and
 "Credential minimalism".
 
-Everything below the `---` is the prompt. `review.mjs` renders it with
-`buildInvocation` (`scripts/dispatch/invocation.mjs`), which substitutes these
+Everything below the `---` is the prompt. `review.mjs` starts the session with
+`spawnSession` (`scripts/dispatch/spawn.mjs`), which renders the prompt with
+`buildInvocation` (`scripts/dispatch/invocation.mjs`). That substitutes these
 placeholders:
 
 | Placeholder | Substituted with |
