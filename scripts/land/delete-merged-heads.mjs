@@ -1,10 +1,10 @@
 // Deletes the head branch of every merged PR whose branch is still on origin.
 //
-// `land-approved.yml` used to rely on the repository's `delete_branch_on_merge`
-// setting, which is enabled and observably does not fire (OQ-52). This makes the
-// deletion an explicit act of the sweep. It is cleanup, not a gate: nothing here
-// throws, so a branch that is already gone or cannot be deleted never fails the
-// landing run (AC-2).
+// The runway deletes merged heads itself rather than relying on the repository's
+// `delete_branch_on_merge` setting (`AGENTS.md`, "Every session"; OQ-52). It is
+// cleanup, not a gate: nothing here throws, so a branch that is already gone --
+// deleted by that setting, for instance -- or cannot be deleted never fails the
+// landing run (OQ-52's AC-2).
 //
 // A branch is deleted only if it is a same-repository head, is not the base
 // branch, and still points at the exact commit the merged PR had as its head.
