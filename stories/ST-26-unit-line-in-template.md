@@ -26,10 +26,9 @@ a pull request with no unit meant to have one.
       `Unit: none`, since it writes the unit rather than implementing it, and `AGENTS.md`'s
       "Every pull request" says every pull request fills the `Unit:` line along with the
       template's three sections.
-- [ ] **AC-3** — `REVIEW.md`'s item on the pull request body's sections ("Every PR, including
-      docs-only" today, or its successor after ST-21) is unchanged in substance: the `Unit:` line is
-      not a fourth required section, and whether a missing one fails a review is for the rules to
-      say (ST-21, ST-22).
+- [ ] **AC-3** — `REVIEW.md`'s item on the pull request body's sections ("Reading the pull
+      request body", item 1) is unchanged in substance: the `Unit:` line is not a fourth required
+      section, and whether a missing one fails a review is for the rules to say (ST-21, ST-22).
 - [ ] **AC-4** — The `**Planned (ST-26)**` marker in `docs/agent-workflow-design.md` loses
       `ST-26`, and the passage is corrected wherever what was built differs.
 
