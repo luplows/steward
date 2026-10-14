@@ -59,7 +59,8 @@ whole check, which CI already runs as a peer check.
   it opens for a coder comes with the coder's stories; steward runs no coder until then.
 - Removing `npm`, `npx` or `node` from the reviewer's allowlist, or a setting for allowed
   commands (later, by the owner's decision).
-- Reading CI results into the prompt: not chosen (`docs/harness-outline.md`, "Land").
+- Reading CI results into the prompt: not chosen (`docs/agent-workflow-design.md`, "The outline's
+  reasoning", "Land").
 
 ## Constraints
 
