@@ -852,7 +852,7 @@ Additions that earn their place now:
 |---|---|
 | **Story schema lint** | Frontmatter valid, required sections present, AC ids well-formed. Carries the schema burden now that stories are files. |
 | **AC↔test traceability** | Every AC id in the story appears in at least one test name. Converts "did you do what was asked" from judgment into a gate. |
-| **Existing-test-modification flag** | Flags any PR touching tests outside its own story's additions. Today this is an item of `REVIEW.md`'s "PRs that change app code" — prose the reviewer must notice. |
+| **Existing-test-modification flag** | Flags any PR touching tests outside its own story's additions. Today this is `REVIEW.md`, "Changes to code", item 1 — prose the reviewer must notice. |
 
 AC ids appear in test names directly:
 

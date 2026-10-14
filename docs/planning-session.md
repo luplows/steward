@@ -18,8 +18,7 @@ pull request" section included, except where this file says otherwise.
 
 - Read [`stories/README.md`](../stories/README.md) for the schema, the status derivation and the
   readiness test, and start from [`stories/_TEMPLATE.md`](../stories/_TEMPLATE.md).
-- Read `REVIEW.md`, "PRs that add or change a story". That is what the story's pull request is
-  reviewed against.
+- Read `REVIEW.md`, "Changes to stories". That is what the story's pull request is reviewed against.
 - Sizing is the planning session's judgement, and so is saying when a story is too big
   (`docs/agent-workflow-design.md`, "Sizing is a judgment, and it is the planning session's").
 

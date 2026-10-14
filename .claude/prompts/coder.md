@@ -142,10 +142,10 @@ the rules every session here is held to. Its "Opening a pull request" section is
 not yours: how your work reaches a pull request is in this prompt, under "You do
 not merge, and you do not open your own PR". `REVIEW.md` is the enumerated
 checklist your PR is marked against — read it as the standard, not as
-background. Items 16–19 check your diff against the story above: every
-acceptance criterion delivered, each one genuinely satisfied rather than merely
-named in a test, nothing from **Out of scope** in the diff, and the story file
-moved to `stories/done/`.
+background. Its "Conformance to the unit" section checks your diff against
+the story above: every acceptance criterion delivered, each one genuinely
+satisfied rather than merely named in a test, nothing from **Out of scope** in
+the diff, and the story file moved to `stories/done/`.
 
 ## Constraints that apply to every story
 

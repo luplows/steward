@@ -292,7 +292,8 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
  * `already-reviewed` are not failures; `install-failed`, `rereview-refused`
  * and `rules-unreadable` are. `rules-unreadable` (ST-21/AC-1) is a checklist
  * (the settings' `rulesFile`) that is missing from the base branch or does
- * not parse: it carries `problems`, and comes before any install or session. Every result returned after a session started carries `sessions`, the
+ * not parse: it carries `problems`, and comes before any install or session.
+ * Every result returned after a session started carries `sessions`, the
  * number of reviewer sessions run (1 or 2, OQ-121). A verdict that does not
  * parse (`parseReviewerVerdict` rejects it) gets one re-run, in the same
  * worktree with the same prompt, story, pull request, environment and model;

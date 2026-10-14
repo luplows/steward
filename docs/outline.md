@@ -221,7 +221,8 @@ design doc, "The outline's reasoning", under the same headings.
     review with no verdict, what the gate's workflow enforces, how the coder's pull request is
     opened) goes in the reviewer's prompt and steward's own documents. The owner's reason:
     `REVIEW.md` had grown those parts because it was the living process the reviewer was built
-    from. "Reading the PR body" is a rule, so it stays, as a section of the example checklist.
+    from. "Reading the pull request body" is a rule, so it stays, as a section of the example
+    checklist.
   - **A section is a heading, then one `Applies when:` line in plain words, then its items.** The
     reviewer judges the line, and a section without one always applies.
   - **Each section numbers its own items, and a finding cites the section and the item** (owner,
