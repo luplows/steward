@@ -52,7 +52,7 @@ with no branch protection, where GitHub's `mergeable_state` says nothing about r
 ## Out of scope
 
 - Landing once without waiting, and `land: false`: ST-23.
-- Waiting for checks before a review: reviews do not wait (`docs/harness-outline.md`, "Land").
+- Waiting for checks before a review: reviews do not wait (`docs/outline.md`, "Land").
 - Branch protection itself, or `init` offering it.
 
 ## Constraints
@@ -62,7 +62,7 @@ with no branch protection, where GitHub's `mergeable_state` says nothing about r
 
 ## Context
 
-- `docs/harness-outline.md`, "Defining steward", "Land" (a project says which checks must pass;
+- `docs/outline.md`, "Defining steward", "Land" (a project says which checks must pass;
   the default is every check on the head green) and "Settings" (`landWhen`).
 - `scripts/dispatch/land.mjs`'s `assess`: `clean` lands, `blocked` and `unknown` wait, `dirty` is
   a conflict.

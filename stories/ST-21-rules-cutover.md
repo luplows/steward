@@ -97,7 +97,7 @@ only.
 
 ## Context
 
-- `docs/harness-outline.md`, "Defining steward", "Review", "The checklist's shape": the
+- `docs/outline.md`, "Defining steward", "Review", "The checklist's shape": the
   decisions this story builds. Section names must be unique so that a finding's `section` names
   one (ST-20's AC-2).
 - Sizing (the planning session, 2026-10-11): this is one cut-over rather than three stories because

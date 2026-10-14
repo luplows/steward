@@ -1623,7 +1623,7 @@ repository.
 
 ### What the workflow is for
 
-[`harness-outline.md`](harness-outline.md) is steward's product outline, the owner's own account
+[`outline.md`](outline.md) is steward's product outline, the owner's own account
 of it from 2026-10-07 on: what it is, who it is for, why, the three things it must never do, the
 view for deciding what is next, and the owner's decisions defining steward. The questions it
 leaves open are under "Open questions", "Defining steward", below, and the options it considered
@@ -1631,7 +1631,7 @@ are under "The outline's reasoning", next.
 
 ### The outline's reasoning
 
-Moved from `harness-outline.md`, "Defining steward", on 2026-10-13 ("The outline is a current
+Moved from `outline.md`, "Defining steward", on 2026-10-13 ("The outline is a current
 document", below): for each statement there, the options considered and not chosen, and what
 follows from it. The headings are the outline's, and each entry starts with the statement,
 shortened where it is long, so that it can be found there with its date.
@@ -1865,7 +1865,7 @@ shortened where it is long, so that it can be found there with its date.
   pass only when the project they run in is this repository (`steward-bootstrap.md`, section 3).
   The owner's view: the engine grew here from "that might be nice" rather than from a definition
   of steward, so story, coder and review probably have gaps of the same kind. Steward is defined
-  first, starting from its outline (`harness-outline.md`), and the move waits for that. Nothing
+  first, starting from its outline (`outline.md`), and the move waits for that. Nothing
   was created or pushed; what is decided above stands, and the stories held for the move (R4)
   stay held.
 - **Steward starts from the extracted engine, and is changed in steward to match its outline**
@@ -1875,7 +1875,7 @@ shortened where it is long, so that it can be found there with its date.
   starting steward fresh from the outline and bringing code over piece by piece. The planning
   session's case for extracting, put to the owner the same day: the gate already works, as do the
   session bounds, the allowlists, the sweep and the claim, and most of what the outline changes is a
-  change to existing code. In `harness-outline.md`, "Defining steward", decisions that differ from
+  change to existing code. In `outline.md`, "Defining steward", decisions that differ from
   the engine say what it does today, each in a note starting "For reference" (removed on
   2026-10-13, "The outline is a current document", below). The planning session
   proposed three more decisions before the extraction resumes: what steward runs for its own pull
@@ -1891,7 +1891,7 @@ shortened where it is long, so that it can be found there with its date.
   as R6 decided for the second project. The first follow-ups in steward are the stories that get its
   coder working to its outline. Considered and not chosen: steward dispatching its own `ST-<n>`
   stories from the day it exists, which "The move, in order" was built for; that would run the
-  engine's single loop, which the outline replaces with two (`harness-outline.md`, "The two
+  engine's single loop, which the outline replaces with two (`outline.md`, "The two
   sides"). This revises the order of steward's first stories in R4 and in `steward-bootstrap.md`
   (D-5 and section 8): the prompts' slot, closing `REVIEW.md`'s gaps (dropped on 2026-10-11, R1)
   and `init` now come after the coder's stories. Until steward's review loop is built, its reviews
@@ -1903,7 +1903,7 @@ shortened where it is long, so that it can be found there with its date.
     keep the story tooling as their own convention.** Story files, the story lint
     (`scripts/lint-stories.mjs`), story containment (`scripts/dispatch/story-containment.mjs`)
     and the story schema (`stories/README.md`, `stories/_TEMPLATE.md`) are how a project organises
-    its units, not something steward requires of one (`harness-outline.md`, "Review"). The engine
+    its units, not something steward requires of one (`outline.md`, "Review"). The engine
     reads story files today: `queue.mjs` is imported by `coder.mjs`, `loop.mjs`, `review.mjs` and
     `story.mjs`. So the 29 paths move as R1 and the bootstrap list them, and this repository keeps
     its own story tooling in full. That revises R1 (this repository keeps a full
@@ -1916,7 +1916,7 @@ shortened where it is long, so that it can be found there with its date.
     OQ-100 (the story lint's gaps) and OQ-105 (story containment, and `update-screenshots.yml`)
     stay as this project's own tooling. OQ-66 is retired (`stories/retired/`): its reason,
     workflow work using up this repository's slots, goes with the move, and parallel work comes
-    after steward's MVP (`harness-outline.md`, "What matters most").
+    after steward's MVP (`outline.md`, "What matters most").
   - **Every moved story is held in steward until its coder works.** B1 sets `blocked:` on each
     rather than clearing it; OQ-73 and OQ-108 keep their own. So nothing is ready in steward on its
     first day, which keeps it to the gate. As B1 was first written, the extract's queue at
@@ -1981,9 +1981,8 @@ shortened where it is long, so that it can be found there with its date.
   Considered and not chosen: a short `blocked:` on every story, such as "Built by hand: steward
   has no coder yet"; and `null` on all of them, with that rule changed. The stories moved from
   tower-workshop-paths keep their "Held until steward's coder works" until each is refined (owner,
-  2026-10-12). The review side's design is in `harness-outline.md`,
-  "Defining steward" (Review, Land, Settings and Loops), decided the same day; each part is built
-  by the story named:
+  2026-10-12). The review side's design is in `outline.md`, "Defining steward" (Review, Land,
+  Settings and The two sides), decided the same day; each part is built by the story named:
   - Built (ST-18): the settings keys `setup`, `check`, `landWhen`, `land`, `unitLinks` and
     `rulesFile`, each required, with no default in the code (`docs/settings.md`).
   - **Planned (ST-7):** the project's `setup` command, within its time limit, in place of
@@ -2024,7 +2023,7 @@ shortened where it is long, so that it can be found there with its date.
 - **Section 8's outcome** (2026-10-12; `steward-bootstrap.md`, section 8). Steward has no loop of
   its own, and its loop's worktree (`loop --init`) was not made: its review side is run by the
   dispatcher session from its own worktree, with `review.mjs` and `land.mjs` until the pass
-  (ST-25) is built (`harness-outline.md`, "The two sides"), and `loop.mjs` is not to be run on
+  (ST-25) is built (`outline.md`, "The two sides"), and `loop.mjs` is not to be run on
   steward as it is configured (owner, 2026-10-12, above). Its first stories are the review side's,
   ST-18 to ST-26 with ST-7 rewritten, at tier `next`, landed in #4. Its first pull request through
   its own gate was #1, landed on 2026-10-11: `review/agent` passed at its head, the sweep merged
@@ -2053,7 +2052,7 @@ shortened where it is long, so that it can be found there with its date.
   two alternatives, maintainer and operator, are kept under the glossary's "Proposed names", the
   only names not decided. Dated records keep their words, "the owner" among them, and older text
   takes the new words as it is touched (`AGENTS.md`, "Every pull request"). The same day the owner
-  widened who steward is for, to any trusted contributor to a project (`harness-outline.md`, "Who
+  widened who steward is for, to any trusted contributor to a project (`outline.md`, "Who
   it is for").
 - **The controller works as a rotation will** (decided 2026-10-12 by the owner, from the notes the
   dispatcher session made on its own instructions, taken one by one in the documents review). The
@@ -2100,7 +2099,7 @@ shortened where it is long, so that it can be found there with its date.
     existed before it had story files, and steward has neither. Considered and not chosen: a
     backlog file of steward's own.
   - **`REVIEW.md` is cited by section name, not item number**, everywhere, since ST-21 gives each
-    section its own numbering (`harness-outline.md`, "The checklist's shape"). Older citations take
+    section its own numbering (`outline.md`, "The checklist's shape"). Older citations take
     the section name as they are touched. **Clarified 2026-10-13 by the owner: the section, and the
     item within it where one item is meant**, after #9's review found this entry at odds with the
     outline ("a finding cites the section and the item") and with ST-21's AC-7 (AC-6 since
@@ -2111,14 +2110,14 @@ shortened where it is long, so that it can be found there with its date.
     and the item always.
   - **The crew, not the owner, in every current rule.** Each act a rule gives "the owner" today is
     the crew's: the owner is not the default, and steward is for any trusted contributor
-    (`harness-outline.md`, "Who it is for"). Dated records keep "the owner". Considered and not
+    (`outline.md`, "Who it is for"). Dated records keep "the owner". Considered and not
     chosen: deciding rule by rule, which was the planning session's caution while the glossary
     was written. In this repository the crew is the owner alone, so nothing changes in practice.
 - **`REVIEW.md` is concise, without history** (decided 2026-10-13 by the owner, in the documents
   review, while tower-workshop-paths' leftovers were taken out of it: "concise instructions for the
   coder and reviewer"). How a rule or a mechanism came about is recorded in this document, not in
   the checklist, which the reviewer reads in full on every review. This extends
-  `harness-outline.md`, "The checklist's shape" ("The file holds rules only"). Considered and not
+  `outline.md`, "The checklist's shape" ("The file holds rules only"). Considered and not
   chosen: leaving the history in the sections ST-21 moves to `docs/review-mechanics.md` until it
   moves them. **The same day, also by the owner: `REVIEW.md` is the checklist only**, with each
   section's intro reduced to the `Applies when:` line that says when it applies. The reviewer's
@@ -2127,7 +2126,7 @@ shortened where it is long, so that it can be found there with its date.
   Considered and not chosen: a new `docs/review-mechanics.md`, which ST-21 planned until then; and
   new instruction files under `docs/` that the prompts point to.
 - **The outline is a current document** (decided 2026-10-13 by the owner, in the documents
-  review). `harness-outline.md` is steward's product outline, and its opening says so, without the
+  review). `outline.md` is steward's product outline, and its opening says so, without the
   move or tower-workshop-paths' pull requests. It holds what is decided. What is open moves to
   "Open questions", "Defining steward", below, where `stories/README.md` already puts open
   questions about steward's design. Notes on what a statement superseded, and the planning
@@ -2139,7 +2138,11 @@ shortened where it is long, so that it can be found there with its date.
   and not chosen" and "What follows" lines move to this document**, to "The outline's reasoning",
   above, so that the outline holds the decided product and this document the reasoning, as
   `REVIEW.md` holds the checklist and this document its history. The outline points there once,
-  in its "Defining steward" introduction, rather than from each statement.
+  in its "Defining steward" introduction, rather than from each statement. **Also decided the
+  same day by the owner: the file is renamed `docs/outline.md`**, from `docs/harness-outline.md`,
+  since "harness" is the glossary's former word for steward. Considered and not chosen:
+  `docs/project-outline.md`, after tower-workshop-paths' `Project-Outline.md`, since a project
+  is a repository that uses steward (`glossary.md`).
 
 ### The move, in order
 
@@ -2297,7 +2300,7 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   **`REVIEW.md` items 8 and 10 are removed from steward's copy** (decided 2026-10-08 by the owner),
   leaving gaps in the numbering. A story in steward closes the gaps and updates every reference to
   an item number. **Revised 2026-10-11 by the owner:** no such story. Each section of a rules file
-  numbers its own items, and a finding cites the section and the item (`harness-outline.md`,
+  numbers its own items, and a finding cites the section and the item (`outline.md`,
   "Review", "The checklist's shape"), so the gaps are left to go with the file's restructuring.
 
   A side effect worth having: in the workflow's repository the prompts need not live under
@@ -2494,7 +2497,7 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   and lands the pull requests the owner or the owner's interactive sessions open there, each
   against the issue it closes, and runs no unattended coder until coder sessions are isolated
   (OQ-73's containers, R5). That is the review-and-land pipeline the owner called worth having on
-  its own (`docs/harness-outline.md`, "Why"). The issue-as-story design it needs is R7.
+  its own (`docs/outline.md`, "Why"). The issue-as-story design it needs is R7.
 
   A private repository changes things this design assumes about this public one:
   - **Branch protection.** GitHub's documentation ("About protected branches", read 2026-10-07)
@@ -2556,7 +2559,7 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   `steward`**, the repository `luplows/steward` (no repository by that name existed under `luplows`
   on that date, by `gh repo view`) and the package `steward`. It looks after the work on the
   owner's behalf while the owner keeps the decisions, which is the "why" in
-  [`harness-outline.md`](harness-outline.md). The owner wanted that future state settled first.
+  [`outline.md`](outline.md). The owner wanted that future state settled first.
 
   The question as it stood: with the git-tag pin (R2), only the
   repository name is needed at the move; the package name is whatever its `package.json` says. The
@@ -2593,7 +2596,7 @@ Checked on 2026-10-07 against `main` at `66c578d`:
 
 ### Defining steward
 
-Moved from `harness-outline.md`, "Defining steward", on 2026-10-13 ("The outline is a current
+Moved from `outline.md`, "Defining steward", on 2026-10-13 ("The outline is a current
 document", above). Each names the outline's section it belongs to.
 
 - **D1. The ground stop** ("What it is", "The two sides"). Steward keeps working while ready work

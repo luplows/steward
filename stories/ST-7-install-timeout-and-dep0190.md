@@ -55,7 +55,7 @@ warning today's install prints.
 ## Context
 
 Formerly tower-workshop-paths OQ-88. Rewritten on 2026-10-11 by the planning session, with the
-owner, for the `setup` setting (`docs/harness-outline.md`, "Settings"). Its earlier version bounded
+owner, for the `setup` setting (`docs/outline.md`, "Settings"). Its earlier version bounded
 the fixed `npm ci` at 10 minutes; the limit is now the project's, and steward's own is 5 minutes
 (ST-18's AC-3).
 

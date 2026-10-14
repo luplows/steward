@@ -3,7 +3,7 @@
 A project's `steward.config.json`, at its root. `readSettings` in
 [`scripts/dispatch/settings.mjs`](../scripts/dispatch/settings.mjs) reads it and is the definition
 of what is valid; this page is the reference to it, and the code wins where they differ. The
-decisions behind the keys are in [`harness-outline.md`](harness-outline.md), "Defining steward",
+decisions behind the keys are in [`outline.md`](outline.md), "Defining steward",
 "Settings".
 
 - Every key is required. Steward's code holds no default for any of them.

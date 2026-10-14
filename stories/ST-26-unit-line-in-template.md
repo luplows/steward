@@ -47,7 +47,7 @@ a pull request with no unit meant to have one.
 
 ## Context
 
-- `docs/harness-outline.md`, "Defining steward", "Review": the `Unit:` line and `Unit: none`;
+- `docs/outline.md`, "Defining steward", "Review": the `Unit:` line and `Unit: none`;
   `docs/agent-workflow-design.md`, "Open questions", D4: the options left open for requiring it.
 - `.github/pull_request_template.md` today: three sections, "What changed", "Verification" and
   "Docs check", each with a comment.

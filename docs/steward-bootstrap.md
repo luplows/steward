@@ -376,7 +376,7 @@ Sections 5 to 7 were ticked at the retried extraction, on 2026-10-10 (section 3)
       `node scripts/dispatch/cli.mjs loop --init <path>`. `TW_MACHINE_LABEL` exported.
       **Superseded, 2026-10-12:** the checkout exists, but the loop's worktree was not made.
       Steward runs no loop: its review side is run by the dispatcher session from its own worktree,
-      with `review.mjs` and `land.mjs` until the pass (ST-25) is built (`harness-outline.md`,
+      with `review.mjs` and `land.mjs` until the pass (ST-25) is built (`outline.md`,
       "The two sides"), and `loop.mjs` is not to be run on steward as it is configured (owner,
       2026-10-12). `TW_MACHINE_LABEL` names the machine in a coder's claim (`machineLabel`,
       `scripts/dispatch/coder.mjs`), so it waits for steward's coder.

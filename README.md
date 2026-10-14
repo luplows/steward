@@ -5,7 +5,7 @@ the owner. A coder session builds it on a branch and opens a pull request. A rev
 different model checks the diff against the story, and the gate lands it only on a recorded
 verdict. The owner keeps the decisions: what to build, and what is fit to release.
 
-- [`docs/harness-outline.md`](docs/harness-outline.md): what steward is for, who it is for, and
+- [`docs/outline.md`](docs/outline.md): what steward is for, who it is for, and
   what it must never do.
 - [`docs/agent-workflow-design.md`](docs/agent-workflow-design.md): how it works, and why. The
   design of record.

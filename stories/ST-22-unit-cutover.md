@@ -68,7 +68,7 @@ whole check, which CI already runs as a peer check.
 
 ## Context
 
-- `docs/harness-outline.md`, "Defining steward": "Review" (the unit link, read from `main`; the
+- `docs/outline.md`, "Defining steward": "Review" (the unit link, read from `main`; the
   reviewer decides on a missing link) and "Land" (the review and CI are peer checks; the reviewer
   runs narrower commands).
 - `scripts/dispatch/review.mjs`: `resolveStory`, `chooseReviewerModel` (which reads the story's

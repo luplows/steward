@@ -54,7 +54,7 @@ and well formed, and a project that leaves one out is told which.
 - Using any new key: `setup` (ST-7), the rules file (ST-20, ST-21), unit links (ST-19, ST-22),
   `land` (ST-23) and `landWhen` (ST-24) each take their key into use in their own story.
 - Removing `storyPrefix`, which the queue, the story lint and the coder still read
-  (`docs/harness-outline.md`, "Settings").
+  (`docs/outline.md`, "Settings").
 - Grouping keys beyond the `setup` and `check` objects, and a version field.
 - A key for which commands the reviewer and coder may run (later, by the owner's decision).
 
@@ -64,8 +64,9 @@ and well formed, and a project that leaves one out is told which.
 
 ## Context
 
-- `docs/harness-outline.md`, "Defining steward", "Settings": the decisions this story builds,
-  with the options considered.
+- `docs/outline.md`, "Defining steward", "Settings": the decisions this story builds; the
+  options considered are in `docs/agent-workflow-design.md`, "The outline's reasoning",
+  "Settings".
 - `scripts/dispatch/settings.mjs`: `ALLOWED_KEYS` is `['repo', 'storyPrefix']` today, and its
   header says it "Holds no default for either value".
 - Twelve test files mention `steward.config.json` (`grep -rln steward.config.json
