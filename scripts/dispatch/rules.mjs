@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Reads a project's rules file from `main` and parses it into sections
- * (ST-20; `docs/harness-outline.md`, "The rules file's shape"). A section is
- * a `## ` heading, an optional `Applies when:` line, and its own numbered
- * items; a finding cites a section and an item.
+ * Reads a project's checklist from `main` and parses it into sections
+ * (ST-20; `docs/outline.md`, "The checklist's shape"). A section is a `## `
+ * heading, an optional `Applies when:` line, and its own numbered items; a
+ * finding cites a section and an item.
  *
- * Its caller will be the review pass, which parses the file before it starts
+ * Its caller will be the rotation, which parses the file before it starts
  * a reviewer so that a file that does not parse costs no review (ST-21).
  */
 import { execFile } from 'node:child_process'
