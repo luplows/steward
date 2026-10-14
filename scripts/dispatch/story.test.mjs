@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { fixtureSettings } from './settings-fixture.mjs'
 import { assertAllowedCiRequest } from './ci.mjs'
 import { assertAllowedRequest, parseMarkerComment } from './github.mjs'
 import { parseFrontmatter } from './queue.mjs'
@@ -37,7 +38,7 @@ const [H1, H2, H3, H4] = SHAS
 const SETTINGS_DIR = mkdtempSync(path.join(tmpdir(), 'tw-story-settings-'))
 writeFileSync(
   path.join(SETTINGS_DIR, 'steward.config.json'),
-  JSON.stringify({ repo: REPO, storyPrefix: 'OQ' }),
+  JSON.stringify(fixtureSettings({ repo: REPO, storyPrefix: 'OQ' })),
 )
 afterAll(() => rmSync(SETTINGS_DIR, { recursive: true, force: true }))
 
@@ -622,7 +623,7 @@ describe('OQ-48/AC-9: resuming an existing pull request', () => {
 /** A directory holding only a `steward.config.json` with the given `storyPrefix`. */
 function withSettings(storyPrefix, fn) {
   const dir = mkdtempSync(path.join(tmpdir(), 'tw-story-settings-'))
-  writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify({ repo: REPO, storyPrefix }))
+  writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO, storyPrefix })))
   return fn(dir).finally(() => rmSync(dir, { recursive: true, force: true }))
 }
 

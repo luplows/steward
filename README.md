@@ -13,6 +13,7 @@ verdict. The owner keeps the decisions: what to build, and what is fit to releas
   `CLAUDE.md` imports it for Claude Code.
 - [`docs/glossary.md`](docs/glossary.md): the words these documents use, and what each means.
 - [`stories/README.md`](stories/README.md): the story queue, `ST-<n>`.
+- [`docs/settings.md`](docs/settings.md): the keys of a project's `steward.config.json`.
 
 steward was moved out of [tower-workshop-paths](https://github.com/luplows/tower-workshop-paths)
 with its history; [`docs/steward-bootstrap.md`](docs/steward-bootstrap.md) records how. An

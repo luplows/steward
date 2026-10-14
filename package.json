@@ -8,6 +8,7 @@
   },
   "scripts": {
     "lint": "oxlint",
+    "check": "npm run lint && npm test",
     "test": "vitest run"
   },
   "devDependencies": {

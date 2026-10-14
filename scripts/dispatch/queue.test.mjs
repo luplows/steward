@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { fixtureSettings } from './settings-fixture.mjs'
 import { execFileSync } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -48,7 +49,7 @@ beforeEach(async () => {
   tmpRoot = await mkdtemp(path.join(tmpdir(), 'queue-test-'))
   await writeFile(
     path.join(tmpRoot, 'steward.config.json'),
-    JSON.stringify({ repo: 'luplows/tower-workshop-paths', storyPrefix: 'OQ' }),
+    JSON.stringify(fixtureSettings({ repo: 'luplows/tower-workshop-paths', storyPrefix: 'OQ' })),
     'utf8',
   )
 })
@@ -91,7 +92,7 @@ describe('OQ-126/AC-3: the story-id prefix comes from settings, not a hardcoded 
     const storiesDir = path.join(tmpRoot, 'stories')
     await writeFile(
       path.join(tmpRoot, 'steward.config.json'),
-      JSON.stringify({ repo: 'owner/repo', storyPrefix: 'ST' }),
+      JSON.stringify(fixtureSettings({ repo: 'owner/repo', storyPrefix: 'ST' })),
       'utf8',
     )
     await writeStory(storiesDir, 'ST-3-thing.md', storySource({ id: 'ST-3' }))

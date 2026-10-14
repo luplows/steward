@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { fixtureSettings } from './settings-fixture.mjs'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { readdirSync } from 'node:fs'
@@ -78,7 +79,7 @@ beforeAll(() => {
   git(root, 'init', '-q', '--bare', '-b', 'main', originDir)
   git(root, 'clone', '-q', originDir, seedDir)
   git(seedDir, 'checkout', '-q', '-b', 'main')
-  writeFileSync(path.join(seedDir, 'steward.config.json'), JSON.stringify({ repo: REPO, storyPrefix: 'OQ' }))
+  writeFileSync(path.join(seedDir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO, storyPrefix: 'OQ' })))
   mkdirSync(path.join(seedDir, 'stories'))
   writeFileSync(path.join(seedDir, 'stories', 'OQ-99-thing.md'), STORY('sonnet'))
   writeFileSync(path.join(seedDir, 'stories', 'OQ-98-other.md'), STORY('opus').replace('OQ-99', 'OQ-98'))
@@ -872,7 +873,7 @@ describe('OQ-123: the project root is the working directory, not the engine root
     const dir = mkdtempSync(path.join(root, 'project-'))
     try {
       git(dir, 'init', '-q', '-b', 'main')
-      writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify({ repo: 'owner/other', storyPrefix: 'ST' }))
+      writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: 'owner/other', storyPrefix: 'ST' })))
       let threw
       try {
         execFileSync('node', [path.join(here, 'review.mjs'), '7'], { cwd: dir, encoding: 'utf8' })

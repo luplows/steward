@@ -17,14 +17,75 @@ const SETTINGS_FILENAME = 'steward.config.json'
 const REPO_RE = /^[^/\s]+\/[^/\s]+$/
 const STORY_PREFIX_RE = /^[A-Z]{1,8}$/
 
-const ALLOWED_KEYS = ['repo', 'storyPrefix']
+const COMMAND_KEYS = ['command', 'timeoutMinutes']
+const LAND_WHEN_ALL = 'all-checks'
+const UNIT_LINK_KINDS = ['issue', 'file', 'other']
+
+const ALLOWED_KEYS = [
+  'repo',
+  'storyPrefix',
+  'setup',
+  'check',
+  'landWhen',
+  'land',
+  'unitLinks',
+  'rulesFile',
+]
+
+/** A non-empty array of distinct values, each passing `itemOk`. */
+function isDistinctArray(value, itemOk, { allowEmpty }) {
+  return (
+    Array.isArray(value) &&
+    (allowEmpty || value.length > 0) &&
+    value.every(itemOk) &&
+    new Set(value).size === value.length
+  )
+}
+
+/** A relative path with forward slashes: not absolute, no `..` segment, no empty segment. */
+function isRelativeForwardPath(value) {
+  if (typeof value !== 'string' || value === '') return false
+  if (value.includes('\\') || value.startsWith('/') || /^[A-Za-z]:/.test(value)) return false
+  return value.split('/').every((segment) => segment !== '' && segment !== '..')
+}
+
+/** Validates a `setup` or `check` value: `null`, or { command, timeoutMinutes }. */
+function validateCommand(filePath, name, value) {
+  if (value === null) return null
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(
+      `${filePath}: '${name}' must be null or an object with 'command' and 'timeoutMinutes', got ${JSON.stringify(value)}`,
+    )
+  }
+  for (const key of Object.keys(value)) {
+    if (!COMMAND_KEYS.includes(key)) {
+      throw new Error(`${filePath}: unrecognised key '${name}.${key}'`)
+    }
+  }
+  for (const key of COMMAND_KEYS) {
+    if (!(key in value)) {
+      throw new Error(`${filePath}: missing required key '${name}.${key}'`)
+    }
+  }
+  const { command, timeoutMinutes } = value
+  if (typeof command !== 'string' || command.trim() === '') {
+    throw new Error(`${filePath}: '${name}.command' must be a non-empty string, got ${JSON.stringify(command)}`)
+  }
+  if (!Number.isInteger(timeoutMinutes) || timeoutMinutes < 1) {
+    throw new Error(
+      `${filePath}: '${name}.timeoutMinutes' must be a positive integer, got ${JSON.stringify(timeoutMinutes)}`,
+    )
+  }
+  return { command, timeoutMinutes }
+}
 
 /**
  * Reads and validates `<projectRoot>/steward.config.json`. Throws, naming the
  * file and the problem, on a missing file, invalid JSON, a missing key, an
- * invalid value, or any key beyond `repo` and `storyPrefix`. Holds no default
- * for either value -- a project without the file, or with an incomplete one,
- * fails rather than running with one assumed.
+ * invalid value, or any key beyond those listed in `docs/settings.md`
+ * (inside a `setup` or `check` object too). Holds no default for any value --
+ * a project without the file, or with an incomplete one, fails rather than
+ * running with one assumed (ST-18).
  */
 export async function readSettings(projectRoot) {
   const filePath = path.join(projectRoot, SETTINGS_FILENAME)
@@ -58,21 +119,47 @@ export async function readSettings(projectRoot) {
 
   const { repo, storyPrefix } = data
 
-  if (!('repo' in data)) {
-    throw new Error(`${filePath}: missing required key 'repo'`)
+  for (const key of ALLOWED_KEYS) {
+    if (!(key in data)) {
+      throw new Error(`${filePath}: missing required key '${key}'`)
+    }
   }
+
   if (typeof repo !== 'string' || !REPO_RE.test(repo)) {
     throw new Error(`${filePath}: 'repo' must be of the form owner/name, got ${JSON.stringify(repo)}`)
   }
 
-  if (!('storyPrefix' in data)) {
-    throw new Error(`${filePath}: missing required key 'storyPrefix'`)
-  }
   if (typeof storyPrefix !== 'string' || !STORY_PREFIX_RE.test(storyPrefix)) {
     throw new Error(
       `${filePath}: 'storyPrefix' must match ${STORY_PREFIX_RE}, got ${JSON.stringify(storyPrefix)}`,
     )
   }
 
-  return { repo, storyPrefix }
+  const setup = validateCommand(filePath, 'setup', data.setup)
+  const check = validateCommand(filePath, 'check', data.check)
+
+  const { landWhen, land, unitLinks, rulesFile } = data
+  if (
+    landWhen !== LAND_WHEN_ALL &&
+    !isDistinctArray(landWhen, (name) => typeof name === 'string' && name !== '', { allowEmpty: false })
+  ) {
+    throw new Error(
+      `${filePath}: 'landWhen' must be "${LAND_WHEN_ALL}" or a non-empty array of distinct, non-empty strings, got ${JSON.stringify(landWhen)}`,
+    )
+  }
+  if (typeof land !== 'boolean') {
+    throw new Error(`${filePath}: 'land' must be a boolean, got ${JSON.stringify(land)}`)
+  }
+  if (!isDistinctArray(unitLinks, (kind) => UNIT_LINK_KINDS.includes(kind), { allowEmpty: true })) {
+    throw new Error(
+      `${filePath}: 'unitLinks' must be an array of distinct values from ${JSON.stringify(UNIT_LINK_KINDS)}, got ${JSON.stringify(unitLinks)}`,
+    )
+  }
+  if (!isRelativeForwardPath(rulesFile)) {
+    throw new Error(
+      `${filePath}: 'rulesFile' must be a relative path with forward slashes and no '..' segment, got ${JSON.stringify(rulesFile)}`,
+    )
+  }
+
+  return { repo, storyPrefix, setup, check, landWhen, land, unitLinks, rulesFile }
 }

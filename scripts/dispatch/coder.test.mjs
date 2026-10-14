@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { fixtureSettings } from './settings-fixture.mjs'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -76,7 +77,7 @@ function makeWorld() {
   git(dir, 'init', '-q', '--bare', '-b', 'main', origin)
   git(dir, 'clone', '-q', origin, seed)
   git(seed, 'checkout', '-q', '-b', 'main')
-  writeFileSync(path.join(seed, 'steward.config.json'), JSON.stringify({ repo: REPO, storyPrefix: 'OQ' }))
+  writeFileSync(path.join(seed, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO, storyPrefix: 'OQ' })))
   mkdirSync(path.join(seed, 'stories'))
   writeFileSync(path.join(seed, 'stories', 'OQ-96-waits.md'), story('OQ-96', { deps: 'OQ-95' }))
   writeFileSync(path.join(seed, 'stories', 'OQ-98-first.md'), story('OQ-98'))
@@ -715,7 +716,7 @@ describe('OQ-123: the project root is the working directory, not the engine root
     const dir = mkdtempSync(path.join(root, 'project-'))
     try {
       git(dir, 'init', '-q', '-b', 'main')
-      writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify({ repo: 'owner/other', storyPrefix: 'ST' }))
+      writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: 'owner/other', storyPrefix: 'ST' })))
       let threw
       try {
         execFileSync('node', [path.join(here, 'coder.mjs')], { cwd: dir, encoding: 'utf8' })
@@ -1549,7 +1550,7 @@ describe("OQ-112/AC-2: a claim's age", () => {
 /** A directory holding only a `steward.config.json` with the given `storyPrefix`. */
 function withSettings(storyPrefix, fn) {
   const dir = mkdtempSync(path.join(tmpdir(), 'tw-coder-settings-'))
-  writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify({ repo: REPO, storyPrefix }))
+  writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO, storyPrefix })))
   return fn(dir).finally(() => rmSync(dir, { recursive: true, force: true }))
 }
 

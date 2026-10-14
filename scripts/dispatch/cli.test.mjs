@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { fixtureSettings } from './settings-fixture.mjs'
 import { execFileSync } from 'node:child_process'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -62,7 +63,7 @@ describe('OQ-131/AC-2: cli.mjs runs the project in the working directory, not th
     execFileSync('git', ['config', 'user.name', 'Test'], { cwd: tmpRoot })
     await writeFile(
       path.join(tmpRoot, 'steward.config.json'),
-      JSON.stringify({ repo: 'owner/repo', storyPrefix: 'ST' }),
+      JSON.stringify(fixtureSettings({ repo: 'owner/repo', storyPrefix: 'ST' })),
       'utf8',
     )
     const storiesDir = path.join(tmpRoot, 'stories')

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { fixtureSettings } from './settings-fixture.mjs'
 import { createContext } from './github.mjs'
 import {
   STUCK_ISSUE_LIMIT,
@@ -34,7 +35,7 @@ const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8' 
 async function withTempSettings(settings, fn) {
   const dir = mkdtempSync(path.join(tmpdir(), 'tw-loop-settings-'))
   try {
-    writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(settings))
+    writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings(settings)))
     return await fn(dir)
   } finally {
     rmSync(dir, { recursive: true, force: true })
@@ -58,7 +59,7 @@ function makeRepo(root) {
   const repoDir = path.join(root, 'clone')
   git(root, 'clone', origin, repoDir)
   writeFileSync(path.join(repoDir, 'README.md'), 'init\n')
-  writeFileSync(path.join(repoDir, 'steward.config.json'), JSON.stringify({ repo: 'luplows/tower-workshop-paths', storyPrefix: 'OQ' }))
+  writeFileSync(path.join(repoDir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: 'luplows/tower-workshop-paths', storyPrefix: 'OQ' })))
   git(repoDir, 'add', '.')
   git(repoDir, 'commit', '-m', 'init')
   git(repoDir, 'push', 'origin', 'main')
@@ -1197,7 +1198,7 @@ describe('OQ-130: the project root is the working directory, not the engine root
     async () => {
       const projectRoot = mkdtempSync(path.join(tmpdir(), 'tw-loop-defaults-'))
       try {
-        writeFileSync(path.join(projectRoot, 'steward.config.json'), JSON.stringify({ repo: 'owner/other', storyPrefix: 'OQ' }))
+        writeFileSync(path.join(projectRoot, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: 'owner/other', storyPrefix: 'OQ' })))
         // runLoop itself cannot be called in-process with a chosen process.cwd()
         // (process.chdir is unavailable in this suite's worker pool), so a small
         // child script imports it and calls it directly, started with its cwd
