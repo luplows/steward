@@ -1,22 +1,28 @@
-# Agent-Driven Development Workflow
+# Steward's design
 
-**Status:** Design v2 — architecture settled, implementation sequenced in [`migration-plan.md`](migration-plan.md)
-**Last updated:** 2026-09-18
-**Target:** `luplows/steward`
+Steward's design of record: how it works, and what is decided but not yet built.
+[`outline.md`](outline.md) says what steward is for and what it must never do, and
+[`glossary.md`](glossary.md) defines the words this document uses. Instructions are not here:
+they are in `AGENTS.md`, the session files under `docs/` and the prompts.
 
-> v2 supersedes the first draft. It incorporates the gap analysis against `origin/main @ e06e677`,
-> adopts the mechanisms the existing repo got right, and revises three things the first draft got
-> wrong: the deployment model, the execution environment, and the nature of the dispatcher.
+The document is in three parts:
+
+1. **Steward's design**: how steward works, and what is decided for it.
+2. **The engine from tower-workshop-paths**: the single loop steward's code came with, which
+   steward carries but does not run. It is advisory.
+3. **The record**: the decisions as they were made, the move from tower-workshop-paths, and the
+   trials and measurements behind some of Part 1's facts.
 
 > **Reading this document: goal state, marked.** This document records the design as decided,
 > including parts not yet built, so that anyone deciding what to build next works towards the goal
-> state. A passage that is decided but not built starts **Planned (OQ-n)**, naming the story or
+> state. A passage that is decided but not built starts **Planned (ST-n)**, naming the story or
 > stories that will build it. A decision is written here, marked, in the same pull request that
 > records it (usually the one that writes its story), so it reaches `main` when it is made. The
 > pull request that implements a story takes that story's id out of every marker that names it,
 > and corrects the passage wherever what was built differs. A marker naming several stories keeps
 > the others and stays until the last of them is built; only then does the marker go. Each such
-> story has an acceptance criterion saying so. The convention dates
+> story has an acceptance criterion saying so. **A built item is a plain statement**, naming no
+> story: the story file and git history record which story built it. The convention dates
 > from 2026-09-25. Passages written before then may describe unbuilt parts without a marker; the
 > migration plan tracks those. `scripts/lint-stories.mjs` fails CI if a marker names a story whose
 > file is already in `stories/done/`, or a numeric id with no story file at all.
@@ -35,13 +41,13 @@
 
 ## Purpose
 
-A repeatable loop for building software where agents implement and review, and the human stays in
-the two places where judgment is most expensive and least automatable: **deciding what to build**
-and **deciding what is fit to release**.
+A path from a ready unit of work to a merged change: agents code and review, and a pull request
+lands only on a passing verdict (`outline.md`, "What it is"). The crew stays in the two places
+where judgment is most expensive and least automatable: **deciding what to build** and **deciding
+what is fit to release**.
 
-The goal is not "agents write code." It is a system where work can only enter the product through
-one explicit, gated path, so quality is a property of the pipeline rather than of any individual
-prompt.
+The goal is not "agents write code." It is a system where work can only enter `main` through one
+explicit, gated path, so quality is a property of the path rather than of any individual prompt.
 
 ### Goals
 
@@ -64,7 +70,7 @@ repository.
 of it from 2026-10-07 on: what it is, who it is for, why, the three things it must never do, the
 view for deciding what is next, and the owner's decisions defining steward. The questions it
 leaves open are under "Open questions", "Defining steward", below, and the options it considered
-are under "The outline's reasoning", next.
+are under "The outline's reasoning", in Part 3.
 
 ---
 
@@ -75,9 +81,10 @@ Resolve new situations against these rather than inventing mechanisms.
 **1. Artifacts, not conversations.** Every handoff is a file or a PR. Chat context dies with the
 session, cannot be diffed, and cannot be replayed.
 
-**2. One explicit loop.** Exactly one path into the product: story → coder → reviewer → merge.
-Anything that doesn't fit is adapted or is a named exception. The moment there are two ways in,
-the one without gates becomes the default under pressure.
+**2. One gated path.** Exactly one way into `main`: a pull request, reviewed against its unit and
+the project's checklist, and merged by the runway on a passing verdict. Anything that doesn't fit
+is adapted or is a named exception. The moment there are two ways in, the one without gates
+becomes the default under pressure.
 
 **3. Spend on judgment, save on mechanics.** Planning and review are judgment. Dispatch is
 mechanics — and therefore should not involve a model at all.
@@ -94,42 +101,54 @@ disk. Nothing accumulates across units.
 
 **7. An unsupervised author optimizes for the success criterion.** The cheapest path to "green" is
 not always the intended one. Every gate is designed against that, not merely against broken code.
-*(Adopted verbatim in spirit from the existing `REVIEW.md`, which states it better than the first
-draft of this document did.)*
 
 ---
 
 ## The shape
 
+Two sides, run separately (`outline.md`, "The two sides"). The **review side** reviews any open
+pull request from an author the gate honours, whoever wrote it, and lands what passes. It is
+built, and the controller runs it by hand, one rotation at a time (**Planned (ST-25):** one
+command per rotation). The **coding side** takes ready units, and pull requests on a go-around. It
+is decided but not built (**The coding side**, below). Until it is, steward's pull requests are
+written in the crew's own sessions.
+
 ```
-  ┌─ PLANNING SESSION (human, frequent) ───────────────────────┐
-  │  vision · refinement · story authoring · triage of kickbacks│
-  └────────────────────────┬───────────────────────────────────┘
-                           │ writes
-                    stories/OQ-NN-*.md
-                           │ reads
-  ┌────────────────────────▼───────────────────────────────────┐
-  │  DISPATCHER  —  a script, no model, no context              │
-  │  picks one ready story → worktree → coder → PR → reviewer   │
-  │  → posts verdict status → lets the gate land it             │
-  └────────────────────────┬───────────────────────────────────┘
-                           │ lands on
-                         main
-                           │
-  ┌────────────────────────▼───────────────────────────────────┐
-  │  RELEASE REVIEW (human, periodic)                           │
-  │  walkthrough of accumulated main · verdicts · fix stories   │
-  │  → tag vN = reviewed checkpoint                             │
-  └─────────────────────────────────────────────────────────────┘
+  ┌─ PLANNING (the crew, with the planning session) ───────────┐
+  │  writes units: stories, or GitHub issues                   │
+  └──────────────────────────────┬─────────────────────────────┘
+                                 │ a ready unit
+  ┌──────────────────────────────▼─────────────────────────────┐
+  │  CODING SIDE (decided, not yet built)                      │
+  │  a coder takes the unit; ATC pushes its work and opens     │
+  │  the pull request                                          │
+  └──────────────────────────────┬─────────────────────────────┘
+                                 │ pull requests: a coder's, or from the crew's
+                                 │ own sessions
+  ┌──────────────────────────────▼─────────────────────────────┐
+  │  REVIEW SIDE: one rotation per run (the controller)        │
+  │  ATC starts a reviewer for each pull request needing a     │
+  │  verdict, and posts the verdict; the gate records          │
+  │  `review/agent`; the pilot requests landing; the runway    │
+  │  merges                                                    │
+  └──────────────────────────────┬─────────────────────────────┘
+                                 │ lands on
+                               main
+                                 │
+  ┌──────────────────────────────▼─────────────────────────────┐
+  │  RELEASE REVIEW (the crew, periodic; not yet run)          │
+  │  a walkthrough of what has landed; fix stories; a tag      │
+  └────────────────────────────────────────────────────────────┘
 ```
 
-| Role | Interaction | Model | Writes code? |
+| Role | What it is | Model | Writes code? |
 |---|---|---|---|
-| **Planning session** | Frequent, conversational | Opus / high | No |
-| **Dispatcher** | None | **None — it is a script** | No |
-| **Coder** | None | Sonnet (per-story override) | Yes |
-| **Reviewer** | None | Opus / high — *never the coder's model* | **No** (tool-enforced) |
-| **Release review** | Periodic, conversational | Opus / high | No |
+| **Planning session** | The session the crew plans with (`docs/planning-session.md`) | The crew's choice | No |
+| **ATC** | Steward's dispatch scripts, `scripts/dispatch/` | **None: scripts** | No |
+| **Controller** | The session that runs ATC's scripts by hand (`docs/controller.md`) | The crew's choice | No |
+| **Coder** | A session ATC starts for one unit | The story's `model:` (`sonnet` in `stories/_TEMPLATE.md`) | Yes |
+| **Reviewer** | A session ATC starts for one head | `opus`, never the coder's model (`ROLE_DEFAULTS`, `chooseReviewerModel`) | **No** (handed no credential) |
+| **Release review** | The periodic walkthrough of what has landed | The crew's choice | No |
 
 ---
 
@@ -378,6 +397,26 @@ Three things to get right:
   group. Robust workaround worth building preemptively: a `merge_group`-triggered workflow that
   resolves the originating PR, confirms `review/agent` was `success` on its head SHA, and reports
   itself green — correct however the semantics fall.
+
+---
+
+## The coding side
+
+Decided, not yet built: the review side comes first, then the coder's stories, which are not yet
+written (owner, 2026-10-11; Part 3, "Decided so far"). What `outline.md` ("The two sides",
+"Land" and "Settings") decides for it:
+
+- **A project opts in**, and what makes a unit ready is the project's setting.
+- **A coder may take any ready unit, and any pull request on a go-around**, with the review's
+  findings. A pull request does not belong to a coder. Coder work always needs a unit.
+- **A coder claims its work with a claim commit**, as `claimPushArgs` in
+  `scripts/dispatch/coder.mjs` does for a story.
+- **The coder session runs the project's pre-flight check** (`check`) before its work is pushed.
+  ATC does not run it again.
+- **The coder holds no GitHub credential and does not push.** ATC pushes its branch and opens its
+  pull request (**Credential minimalism**, below).
+
+The engine's coder runs inside its single loop, with retries on a `block` or red CI (Part 2).
 
 ---
 
@@ -1140,6 +1179,18 @@ the variables rather than blanking them, which is why it works. Whoever implemen
 reviewer's half of the same problem — is the person most likely to reach for the empty string, which
 is why this is recorded here rather than only in a code comment.
 
+### Long shell commands
+
+A headless session loses a shell command that outlasts the shell's timeout: Claude Code moves it
+to the background, the session ends its turn to wait, and the command is killed when the session
+exits. So `buildInvocation` pins `BASH_DEFAULT_TIMEOUT_MS` and `BASH_MAX_TIMEOUT_MS` to 10
+minutes for both roles and removes `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` (`SHELL_TIMEOUT_MS`,
+`scripts/dispatch/invocation.mjs`), and `coder.md` and `reviewer.md` tell a session never to end
+its turn while a command runs. A session's timeout is 60 minutes, and its stall interval is the
+shell's limit plus 2 minutes (`DEFAULT_TIMEOUT_MS` and `DEFAULT_STALL_MS`,
+`scripts/dispatch/spawn.mjs`). The trials and the decisions are in Part 3, "A long shell command
+in a headless session".
+
 ### GitHub mechanics
 
 - **`mergeable_state`**: `clean` (all *required* checks green), `blocked` (required check
@@ -1199,22 +1250,15 @@ under the local execution model it no longer matters.
 
 | # | Question | Status |
 |---|---|---|
-| 1 | Queue location | **Resolved:** one file per story under `stories/`, OQ numbering preserved. |
-| 2 | Reviewer local vs. CI | **Resolved: local** — Action cannot authenticate; now moot since everything runs locally. |
-| 3 | Dispatcher implementation | **Resolved:** a local script, no model. |
 | 4 | Release cut trigger | Open. Human call, roughly every ten merged PRs. |
 | 5 | Fresh vs. resumed coder on retry | Open. Fresh matches the context principle; resumed may be cheaper. Untested. |
-| 6 | Story sizing proxies | **Resolved:** guideline, not a cap. The planning session's judgment governs readiness, and carries an obligation to push back when scope is too large. Better proxy is distinct mechanisms than criterion count — see [Sizing is a judgment](#sizing-is-a-judgment-and-it-is-the-planning-sessions). |
-| 7 | Verdict mechanism | **Resolved:** `review/agent` status, SHA-keyed. Already built and required. |
-| 8 | What CI runs | **Resolved:** current suite plus schema lint, AC traceability, existing-test flag. No tiering at 70 s. |
 | 10 | Second GitHub identity | Open. The only thing that fully closes self-marking. Cost: a machine account or App. |
-| 11 | Other companies' models | Open. Goals decided 2026-10-07, and comes after the move; questions M1–M6 under [Portability](#portability-other-projects-other-companies-models). OQ-114. |
-| 12 | The workflow in a repository of its own | Open. Goals decided 2026-10-07, and comes first; questions R1–R10 under [Portability](#portability-other-projects-other-companies-models). OQ-115. |
+| 11 | Other companies' models | Open. Goals decided 2026-10-07, and comes after the move; questions M1–M6 under "Other companies' models (OQ-114)", below. ST-15. |
 
 ### Defining steward
 
 Moved from `outline.md`, "Defining steward", on 2026-10-13 ("The outline is a current
-document", above). Each names the outline's section it belongs to.
+document", Part 3, "Decided so far"). Each names the outline's section it belongs to.
 
 - **D1. The ground stop** ("What it is", "The two sides"). Steward keeps working while ready work
   remains, up to a point where too much has stopped without landing. Open: whether "too much
@@ -1293,6 +1337,14 @@ document", above). Each names the outline's section it belongs to.
 
 # Part 2: The engine from tower-workshop-paths
 
+Steward's code came from tower-workshop-paths with its single loop: story, coder, review, retry
+and land, run unattended by `loop.mjs` and `story.mjs`. Steward carries that code but does not
+run it: `loop.mjs` is not to be run on steward as it is configured (owner, 2026-10-12), and
+steward's design has two sides instead (Part 1, "The shape"). So this part is **advisory**: a
+reference for how the code behaves, not steward's design. When a story takes a part of it into
+use, as the review side took the engine's reviewer, that part is described in Part 1 as steward's
+(owner, 2026-10-14).
+
 ## The loop
 
 ### Happy path
@@ -1350,7 +1402,7 @@ document", above). Each names the outline's section it belongs to.
 6. Dispatcher posts the verdict as a marker comment, and `review-gate.yml` derives
    `review/agent` = `success` on the head SHA from it.
 7. The landing sweep merges it (squash) once `mergeable_state` is `clean`. The crew
-   runs the runway by hand, or the crew or the controller (**The controller**, below) runs the
+   runs the runway by hand, or the crew or the controller (**The controller**, Part 1) runs the
    pilot, `scripts/dispatch/land.mjs` (OQ-50), which waits until the PR is landable, requests
    landing and waits for the merge. `story.mjs` calls `land.mjs`.
    The loop starts the next story only once this one has merged, or stopped with its stop fully
@@ -1413,7 +1465,7 @@ without a dispatcher session in between.
 
 - **Planned (ST-11):** a Windows scheduled task starts the loop every 15 minutes while the machine
   is on, on mains power only. The task is a script: a run with nothing ready starts no model
-  session. GitHub's cron is not used (**Watchdog**, below).
+  session. GitHub's cron is not used (**Watchdog**, Part 1).
 - **Planned (ST-11):** a run takes a lock that a dead holder does not keep, and appends one line to
   a local run log. That log is how the crew hears about the loop's own stops. A leftover
   `tw-coder-*` worktree from an interrupted run is raised as a GitHub issue, as OQ-112 raises a
@@ -1460,12 +1512,17 @@ without a dispatcher session in between.
 
 # Part 3: The record
 
+The decisions as they were made, dated, with the options considered ("Decided so far" and "The
+outline's reasoning"); the move from tower-workshop-paths; and the trials and measurements behind
+some of Part 1's facts. Part 1 says what holds; this part says how it came to. Dated records keep
+the words they were written with.
+
 ## Portability: other projects, other companies' models
 
-Refined with the owner from 2026-10-07. The goals, the move's shape and its order are decided;
-M4 (how a role names its model) and R7's issue queue are still
-open, and both wait for the workflow's own repository. Each answer is recorded here, dated, in
-the pull request that makes it.
+Refined with the owner from 2026-10-07. The goals (Part 1, "Goals"), the move's shape and its
+order are decided; M4 (how a role names its model; Part 1, "Other companies' models (OQ-114)")
+and R7's issue queue are still open, and both wait for the workflow's own repository. Each answer
+is recorded here, dated, in the pull request that makes it.
 
 ### The outline's reasoning
 
@@ -1821,7 +1878,7 @@ shortened where it is long, so that it can be found there with its date.
   tower-workshop-paths keep their "Held until steward's coder works" until each is refined (owner,
   2026-10-12). The review side's design is in `outline.md`, "Defining steward" (Review, Land,
   Settings and The two sides), decided the same day; each part is built by the story named:
-  - Built (ST-18): the settings keys `setup`, `check`, `landWhen`, `land`, `unitLinks` and
+  - The settings keys `setup`, `check`, `landWhen`, `land`, `unitLinks` and
     `rulesFile`, each required, with no default in the code (`docs/settings.md`).
   - **Planned (ST-7):** the project's `setup` command, within its time limit, in place of
     `npm ci`.
@@ -1859,7 +1916,10 @@ shortened where it is long, so that it can be found there with its date.
   included (owner, the same day). The old names remain only where they mean tower-workshop-paths'
   own session, or the file as it moved (`docs/session-a.md`). Considered and not chosen: renaming
   only instructions and current descriptions. What `init` gives a project of these files is left
-  for later.
+  for later. Three of tower-workshop-paths' `CLAUDE.md` rules were its own, and were dropped
+  from `AGENTS.md` (#5): committing a regeneration of data files separately from a change to
+  logic; the agent containers' lack of `gh`, with the GitHub MCP tools or the REST API in its
+  place; and nothing dispatching from `Open-Questions.md`, tower-workshop-paths' idea backlog.
 - **Section 8's outcome** (2026-10-12; `steward-bootstrap.md`, section 8). Steward has no loop of
   its own, and its loop's worktree (`loop --init`) was not made: its review side is run by the
   dispatcher session from its own worktree, with `review.mjs` and `land.mjs` until the pass
@@ -1968,7 +2028,7 @@ shortened where it is long, so that it can be found there with its date.
 - **The outline is a current document** (decided 2026-10-13 by the owner, in the documents
   review). `outline.md` is steward's product outline, and its opening says so, without the
   move or tower-workshop-paths' pull requests. It holds what is decided. What is open moves to
-  "Open questions", "Defining steward", below, where `stories/README.md` already puts open
+  "Open questions", "Defining steward", in Part 1, where `stories/README.md` already puts open
   questions about steward's design. Notes on what a statement superseded, and the planning
   session's "For reference" snapshots of tower-workshop-paths' code, are removed. It takes the
   glossary's words, though its statements are the owner's and dated, since it describes steward as
@@ -1995,6 +2055,15 @@ shortened where it is long, so that it can be found there with its date.
   checkout, where tools run in the checkout, such as Vitest and oxlint, can pick up the nested
   copies. The scripts' own scratch checkouts (`tw-review-*`, `tw-coder-*`, `tw-stop-*` in the
   system temporary directory) are not sessions' worktrees, and are not changed by this decision.
+- **This document is in three parts, and a built item is a plain statement** (decided 2026-10-14
+  by the owner, in the documents review). Part 1 is steward's design; Part 2 the engine from
+  tower-workshop-paths, which steward carries but does not run, advisory until a story takes a
+  part of it into use, as the review side took the engine's reviewer; Part 3 the record.
+  Considered and not chosen: rewriting only the opening, and leaving the rest in place with a note
+  on the loop's section. **A built item names no story**, as the "Reading this document" note
+  already had it: "Built (ST-n)" records what the story file and git history already do, and
+  would need changing whenever the item is superseded (owner). Considered and not chosen:
+  defining "Built (ST-n)" and adding it to every built item.
 
 ### The move, in order
 
@@ -2085,7 +2154,10 @@ Checked on 2026-10-07 against `main` at `66c578d`:
 - The rules the gate enforces mix the general with this project's own: `REVIEW.md`, `AGENTS.md`,
   `stories/README.md`, `stories/_TEMPLATE.md` and this document.
 
-**A repository of its own (OQ-115)**
+### A repository of its own (OQ-115)
+
+The questions the move raised, R1 to R10, with each answer as it was decided. R7's issue queue
+is still open.
 
 - **R1. What moves.** Proposed by the planning session, 2026-10-07, from `main` at `21fdb52`;
   **decided 2026-10-08 by the owner, as proposed**. It is the extraction list for the bootstrap
@@ -2334,7 +2406,7 @@ Checked on 2026-10-07 against `main` at `66c578d`:
     the owner works alone. Contributors will be added only if they are trusted and understand the
     process and this limitation. Before bringing in anyone less trusted, the owner will upgrade to
     GitHub Pro or make the repository public, so that the guardrails are enforced by GitHub.
-  - **Actions minutes.** **Costs**, above, says minutes are not a constraint *because the
+  - **Actions minutes.** **Costs**, below, says minutes are not a constraint *because the
     repository is public*. Private repositories draw on the plan's included minutes.
   - **Privacy choices made because this repository is public**, such as naming a machine by a
     label rather than its hostname (OQ-112), may be relaxed per project, but do not have to be.
