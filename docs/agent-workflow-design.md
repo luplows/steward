@@ -25,8 +25,9 @@ The document is in three parts:
 > story: the story file and git history record which story built it. The convention dates
 > from 2026-09-25. Passages written before then may describe unbuilt parts without a marker; the
 > migration plan tracks those. `scripts/lint-stories.mjs` reports a marker that names a story
-> whose file is already in `stories/done/`, or a numeric id with no story file at all. CI does not
-> run it; the planning session does, before it opens a pull request (`docs/planning-session.md`).
+> whose file is already in `stories/done/`, or a numeric id with no story file at all, and CI fails
+> on it, since Vitest runs the lint over this repository (`scripts/lint-stories.test.mjs`). The
+> planning session also runs it before it opens a pull request (`docs/planning-session.md`).
 
 > **OQ numbers.** This document was written in tower-workshop-paths, and moved to steward with its
 > history. An `OQ-<n>` in it means a tower-workshop-paths story, found in that repository's
@@ -165,14 +166,16 @@ assert.** A coder that misreads a story writes tests confirming the misreading. 
 Steward's CI is one job, `test` in `.github/workflows/ci.yml`: `npm ci`, `npm run lint` (oxlint),
 `npm test` (Vitest), and on a pull request story containment
 (`scripts/dispatch/story-containment.mjs`), which fails a story's own pull request that changes
-`stories/` beyond its story's move, ticks and `blocked:` line. The six runs before 05:20 UTC on
-2026-10-14 took 25 to 41 seconds, so **tiering is premature**: everything runs on every push.
+`stories/` beyond its story's move, ticks and `blocked:` line. Vitest includes the **story schema
+lint** (`scripts/lint-stories.mjs`) over every story in `stories/` and `stories/done/` and every
+`**Planned (ST-n)**` marker in `docs/`: frontmatter, sections, AC ids and markers
+(`scripts/lint-stories.test.mjs`, "the real repository lints clean"). The six runs before 05:20 UTC
+on 2026-10-14 took 25 to 41 seconds, so **tiering is premature**: everything runs on every push.
 
 Checks on stories that CI does not make:
 
 | Check | Where it is |
 |---|---|
-| **Story schema lint** | `scripts/lint-stories.mjs`: frontmatter, sections, AC ids, and the `**Planned (ST-n)**` markers in `docs/`. The planning session runs it before opening a pull request (`docs/planning-session.md`, "Writing it"). |
 | **AC↔test traceability** | Not built. Tests are named after the AC they cover (`stories/README.md`, "Acceptance criteria and tests"), and the reviewer checks each AC is genuinely delivered (`REVIEW.md`, "Conformance to the unit", item 2). |
 | **Existing-test-modification flag** | Not built. `REVIEW.md`, "Changes to code", item 1: prose the reviewer must notice. |
 
