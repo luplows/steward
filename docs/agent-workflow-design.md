@@ -1942,6 +1942,17 @@ shortened where it is long, so that it can be found there with its date.
   already had it: "Built (ST-n)" records what the story file and git history already do, and
   would need changing whenever the item is superseded (owner). Considered and not chosen:
   defining "Built (ST-n)" and adding it to every built item.
+- **A claim only `gh` can check is named, not judged** (decided 2026-10-14 by the owner, in the
+  documents review of `reviewer.md`). The reviewer has no `gh` and no GitHub credential
+  (**Credential minimalism**, Part 1), so it cannot check a pull request's claim about a setting,
+  branch protection, a CI run's duration or a comment's id. Reviewers had met such claims and
+  handled them differently: #12's and #20's named one in the verdict and let it stand, and the
+  review of #21 that passed it recorded its CI run times and branch protection statements as an
+  observation under "Every pull request", item 3. The reviewer now names each such claim in its
+  summary as not checked, and why, and it is neither a finding nor a reason to change the verdict
+  (`reviewer.md`, "Verify rather than accept"). Considered and not chosen: an observation for
+  each, which would make every pull request carrying one at most `pass-with-observations`; and
+  accepting such a claim only where the body quotes the command and its output.
 
 ### The move, in order
 
