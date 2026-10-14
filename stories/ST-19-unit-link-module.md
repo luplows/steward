@@ -62,7 +62,7 @@ form the project keeps its units in. This story builds the module; ST-22 puts it
 
 - Using the module in `review.mjs`, removing `resolveStory`, and the reviewer prompt: ST-22.
 - Deciding whether a missing link blocks: the reviewer decides, by the project's rules
-  (`docs/harness-outline.md`, "Review").
+  (`docs/outline.md`, "Review").
 - Links into other repositories or other trackers beyond passing their text on as `other`.
 - Requiring a `Unit:` line, and the pull request template: ST-26.
 
@@ -73,7 +73,7 @@ form the project keeps its units in. This story builds the module; ST-22 puts it
 
 ## Context
 
-- `docs/harness-outline.md`, "Defining steward", "Review", "Refined 2026-10-11 by the owner: how
+- `docs/outline.md`, "Defining steward", "Review", "Refined 2026-10-11 by the owner: how
   the link is written and read": the decisions this story builds.
 - `scripts/dispatch/review.mjs`'s `resolveStory`: today's way of finding the unit, from the story
   file the diff moves into `stories/done/`, read at the head. It stays until ST-22.

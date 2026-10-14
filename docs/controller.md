@@ -28,7 +28,7 @@ enough, are in [`agent-workflow-design.md`](agent-workflow-design.md), "The cont
 ## A rotation
 
 Until the rotation is built (ST-25), you run its steps by hand
-([`harness-outline.md`](harness-outline.md), "The two sides"), and handle each
+([`outline.md`](outline.md), "The two sides"), and handle each
 outcome as it will.
 
 - A rotation takes the pull requests it was asked for, or, when none are named, each open pull
