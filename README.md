@@ -59,7 +59,3 @@ To work on steward itself: `npm ci`, then `npm test` and `npm run lint`.
 - [`AGENTS.md`](AGENTS.md): the rules every agent session here follows, whatever tool runs it.
   `CLAUDE.md` imports it for Claude Code.
 - [`stories/README.md`](stories/README.md): steward's own queue of work, `ST-<n>`.
-
-Steward was moved out of [tower-workshop-paths](https://github.com/luplows/tower-workshop-paths)
-with its history, as [`docs/steward-bootstrap.md`](docs/steward-bootstrap.md) records. An `OQ-<n>`
-in this repository means a tower-workshop-paths story.
