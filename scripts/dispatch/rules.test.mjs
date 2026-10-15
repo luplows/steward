@@ -3,7 +3,12 @@ import { execFileSync } from 'node:child_process'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { readFileSync } from 'node:fs'
 import { parseRules, readRules } from './rules.mjs'
+
+// The readRules tests build git repositories before each test; a slow machine
+// needs more than Vitest's default 10 s (hook) and 5 s (test). ST-28/AC-4.
+const GIT_TIMEOUT = 30_000
 
 const SEVERAL = `Preamble line.
 
@@ -82,6 +87,26 @@ describe('parseRules', () => {
     expect(r.problems.join('\n')).toMatch(/"A".*same name/)
   })
 
+  it('ST-28/AC-1 keeps the lead text before the first item, with or without a condition', () => {
+    const r = parseRules('## With\n\nApplies when: always.\n\nA lead paragraph.\n\nAnother line.\n\n- a bullet\n\n1. one\n\n## Without\n\n1. two\n\n## Bare lead\n\nLead, no condition.\n1. three\n')
+    expect(r.ok).toBe(true)
+    expect(r.sections[0].appliesWhen).toBe('always.')
+    expect(r.sections[0].lead).toBe('A lead paragraph.\n\nAnother line.\n\n- a bullet')
+    expect(r.sections[0].items).toEqual([{ number: 1, text: 'one' }])
+    expect(r.sections[1].appliesWhen).toBeNull()
+    expect(r.sections[1].lead).toBe('')
+    expect(r.sections[2].appliesWhen).toBeNull()
+    expect(r.sections[2].lead).toBe('Lead, no condition.')
+  })
+
+  it('ST-28/AC-3 gives REVIEW.md "Reading the pull request body" its lead', () => {
+    const text = readFileSync(new URL('../../REVIEW.md', import.meta.url), 'utf8')
+    const r = parseRules(text)
+    expect(r.ok).toBe(true)
+    const section = r.sections.find((s) => s.name === 'Reading the pull request body')
+    expect(section.lead).toContain('Check the content of each section')
+  })
+
   it('ST-20/AC-4 two sections may each have an item 1, and numbers need not be consecutive', () => {
     const r = parseRules('## A\n\n1. a\n5. b\n\n## B\n\n1. c\n')
     expect(r.ok).toBe(true)
@@ -90,7 +115,7 @@ describe('parseRules', () => {
   })
 })
 
-describe('readRules', () => {
+describe('readRules', { timeout: GIT_TIMEOUT }, () => {
   let tmp
   let repoDir
   const git = (cwd, ...args) =>
@@ -121,11 +146,11 @@ describe('readRules', () => {
     git(tmp, 'clone', '-q', origin, repoDir)
     git(repoDir, 'fetch', '-q', 'origin', 'feature')
     git(repoDir, 'checkout', '-q', 'feature')
-  })
+  }, GIT_TIMEOUT)
 
   afterEach(async () => {
     await rm(tmp, { recursive: true, force: true })
-  })
+  }, GIT_TIMEOUT)
 
   it('ST-20/AC-3 reports a file present at a branch head but not on main as missing', async () => {
     expect(await readRules({ repoDir, base: 'feature', rulesFile: 'RULES.md' })).toMatchObject({

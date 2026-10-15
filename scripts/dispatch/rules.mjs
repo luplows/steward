@@ -21,11 +21,13 @@ const ITEM_RE = /^(\d+)\. (.*)$/
 
 /**
  * Parses the text of a rules file. Pure. Returns
- * `{ ok: true, preamble, sections: [{ name, appliesWhen, items: [{ number, text }] }] }`,
+ * `{ ok: true, preamble, sections: [{ name, appliesWhen, lead, items: [{ number, text }] }] }`,
  * or `{ ok: false, problems }` listing every problem found, each naming its
  * section. `appliesWhen` is `null` for a section without a condition, which
- * always applies. An item's text runs from its line to the next item or the
- * end of its section.
+ * always applies. `lead` is the text between the heading, or the
+ * `Applies when:` line, and the first item, trimmed, and `''` when there is
+ * none (ST-28). An item's text runs from its line to the next item or the end
+ * of its section.
  */
 export function parseRules(text) {
   const preambleLines = []
@@ -50,14 +52,17 @@ export function parseRules(text) {
     }
 
     const items = []
+    const leadLines = []
     for (const line of lines.slice(start)) {
       const item = ITEM_RE.exec(line)
       if (item) items.push({ number: Number(item[1]), lines: [item[2]] })
       else if (items.length > 0) items[items.length - 1].lines.push(line)
+      else leadLines.push(line)
     }
     return {
       name,
       appliesWhen,
+      lead: leadLines.join('\n').trim(),
       items: items.map(({ number, lines: itemLines }) => ({
         number,
         text: itemLines.join('\n').trim(),
