@@ -639,6 +639,13 @@ That is not cryptographic independence — closing that properly still needs a s
 identity — but "read the script and see it cannot fabricate" is a real improvement over "trust the
 orchestrating agent."
 
+**Planned (ST-31):** ATC reads the plan's usage before it starts a coder or a reviewer session,
+and starts none when either window, the 5-hour one or the weekly one, is at or over the limit the
+settings give that role (`usageLimits`). When the usage cannot be read, it starts nothing. Claude
+Code reports the usage, with no model call, to `claude -p /usage --output-format stream-json`
+("Trials and measurements", "Reading the plan's usage from a script"; Part 3, "Decided so far",
+2026-10-15).
+
 ### The controller
 
 Decided 2026-09-28 by the owner, in tower-workshop-paths, as the dispatcher session; named the
@@ -1216,11 +1223,14 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
   what the session may run, confinement to its working directory, and a time or cost bound.
   OpenAI's own documentation (developers.openai.com/codex/noninteractive, read 2026-10-07)
   describes the Codex CLI's `codex exec` for this: the prompt as an argument, `--json` for JSON
-  Lines output, and `--sandbox read-only | workspace-write | danger-full-access`. Not yet run here.
-  Its restrictions are a sandbox policy, not a per-command allowlist like Claude Code's, so M3
-  applies in full. **Decided 2026-10-08 by the owner: the Codex CLI is the first adapter, for the
-  reviewer (M2), after a spike** that runs it here and shows it can run `npm test` inside its
-  read-only sandbox and return a verdict the gate can parse.
+  Lines output, and `--sandbox read-only | workspace-write | danger-full-access`. First run here on
+  2026-10-15, as reviewer ("Trials and measurements", "Codex as reviewer"): its verdict parsed, but
+  it did not run `npm test`, so the spike's condition below is not yet met. **Planned (ST-32):**
+  the reviewer runs through Codex when the settings name it. Its restrictions are a sandbox
+  policy, not a per-command allowlist like Claude Code's, so M3 applies in full. **Decided
+  2026-10-08 by the owner: the Codex CLI is the first adapter, for the reviewer (M2), after a
+  spike** that runs it here and shows it can run `npm test` inside its read-only sandbox and
+  return a verdict the gate can parse.
 - **M2. Which role first.** **Decided 2026-10-08 by the owner: the reviewer.** Goal 2's value is
   largest there, and a reviewer that cannot write is a smaller guarantee to re-establish than a
   coder's.
@@ -1400,7 +1410,9 @@ without a dispatcher session in between.
 - **Planned (ST-12):** past a usage threshold, the loop starts no coder session, first dispatch or
   retry, but reviews and landing carry on, so every pull request ends with a review posted. A
   story that would have been retried is paused, and resumes on a later run under the threshold.
-  What is measured, and over what window, is open.
+  *(Revised 2026-10-15 by the owner: the plan's 5-hour and weekly windows are measured against the
+  settings' `usageLimits`, and reviews carry on only to their own, higher limit.
+  **Planned (ST-31)** for the check: Part 1, "ATC is scripts".)*
 - Any pull request from an account with write access (OQ-81) that passes review may land
   unattended, including one that changes this document, `AGENTS.md`, `CLAUDE.md`, `.github/` or
   `.claude/`.
@@ -2052,6 +2064,20 @@ shortened where it is long, so that it can be found there with its date.
   pull request first. This is steward's own convention for its own stories: steward does not parse
   or lint a project's units (`outline.md`, "Review"), and for an issue a diff cannot change the
   unit at all, so in a project containment is the reviewer's judgement against its checklist.
+- **No session starts while the plan's usage is over a limit** (decided 2026-10-15 by the owner,
+  with the planning session; **Planned (ST-31)**). Before starting a coder or a reviewer session,
+  ATC reads the plan's 5-hour and weekly windows, and starts none when either is at or over the
+  role's limit: for coders 70% of the 5-hour window and 75% of the weekly one, for reviewers 90% of
+  each. Coders stop first so that work in flight still gets its review, and so that a coder is not
+  cut off mid-run by the plan's own limit. A usage that cannot be read starts nothing, since the
+  trial showed it can be read reliably ("Trials and measurements", "Reading the plan's usage from a
+  script"). The limits are a required settings key, `usageLimits`. This revises the decision of
+  2026-09-28 that reviews carry on past the threshold (ST-12's Context): they now carry on to their
+  own, higher limit. Considered and not chosen: one limit for both roles; the weekly window alone;
+  and starting sessions when the usage is unknown. **Also decided the same day by the owner:**
+  reading Codex's usage is left open while the owner is on a free ChatGPT plan (ST-32's open
+  question 1); and a Codex coder waits until steward's coder stories are built, perhaps with the
+  same permissions as a Codex reviewer until a full sandbox is decided (ST-6).
 
 ### The move, in order
 
@@ -2752,6 +2778,52 @@ minutes, together with the 12-minute stall interval that streamed output makes p
 Once a session's output shows it working, the stall interval catches one that has hung, and
 `--max-budget-usd` caps its spending. That leaves the timeout to stop a session that is busy but
 not finishing, and 30 minutes is shorter than a real story needs.
+
+### Reading the plan's usage from a script
+
+Run on 2026-10-15 by the planning session, with the owner's agreement, on Claude Code 2.1.300 under
+the owner's claude.ai login, from a scratch directory:
+
+| Command | Result | Cost | Wall time |
+|---|---|---|---|
+| `MSYS_NO_PATHCONV=1 claude -p "/usage" --output-format stream-json --verbose` | an `assistant` message carrying `usage_report.rate_limits.limits`: `session`, 20%, and `weekly_all`, 21%, each with `resets_at`; 0 turns | $0 | 2.2 s |
+| The same without `MSYS_NO_PATHCONV=1`, from Git Bash | `/usage` rewritten into a Windows path and sent to the model as a prompt | $0.12 | 8.1 s |
+
+Every `stream-json` run also emitted `rate_limit_event` messages whose
+`rate_limit_info.unifiedWindows` held `five_hour` and `seven_day` `utilization` (0.19 to 0.20,
+and 0.21) with `resetsAt`, so a running session reports the same windows as it goes. Claude Code
+documents `usage_report` as experimental, and attaches it only for a claude.ai login (Agent SDK
+reference, TypeScript, read 2026-10-15).
+
+Codex's session logs (`~/.codex/sessions/**/rollout-*.jsonl`) record `rate_limits.primary`
+`used_percent`, which on the owner's free plan was a single 30-day window (`window_minutes`
+43200), 0% then 1%, with no secondary window. `codex exec --json` reported token counts, not the
+usage, and with `--ephemeral` no log was written.
+
+### Codex as reviewer
+
+Run on 2026-10-15 by the planning session, with the owner's agreement, on codex-cli
+0.162.0-alpha.17.2 (bundled with the Codex desktop app) under the owner's ChatGPT login, as
+`codex exec -s read-only -C <checkout> --json -o <file> --ephemeral -`, with no GitHub token in
+its environment and an empty `GH_CONFIG_DIR`. The prompt was the one `buildInvocation` renders for
+#34 at `da6e5c5`, with `REVIEW.md` and `reviewer.md` as on `main` before #34 (`52f5838`). Nothing
+was posted.
+
+| Run | What happened | Verdict | Wall time |
+|---|---|---|---|
+| Checkout under `%LOCALAPPDATA%\Temp\claude` | The sandbox could not read the checkout, so its commands ran in `C:\`. | `null`, well formed, saying why | 15 s |
+| Checkout in `steward.worktrees\codex-trial` | `git fetch`, which `reviewer.md` asks for, failed: no network, and git could not write `FETCH_HEAD` outside the checkout. | `null`, well formed, saying why | 11 s |
+| The same, with a four-line Codex section added to the prompt | It confirmed the head with `git rev-parse HEAD`, diffed against the base, read the story and the code, and ran the story lint. `npm test` was refused: PowerShell's execution policy would not load `npm.ps1`. | `pass-with-observations`, accepted by `parseReviewerVerdict` with all six sections; its one observation named the unrun tests | 32 s |
+
+Commands ran in Windows PowerShell 5.1, where `&&` does not parse. The checkout was unchanged after
+each run. The Claude Code reviewer had given #34 `pass-with-observations` too.
+
+A probe run inside `codex sandbox`, which reports only whether each thing was reachable, found: no
+`gh` token (`gh` could not read its config), no SSH to GitHub (port 22 refused), no `git credential
+fill` password, no network, and no new file creatable outside its working directory, in a scratch
+directory or the home directory. Outside the sandbox, `gh auth token` returned a token and SSH
+authenticated. It did not read Windows Credential Manager directly, as tower-workshop-paths' #209
+did (ST-32, open question 4).
 
 ### Costs
 

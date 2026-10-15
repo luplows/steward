@@ -57,6 +57,11 @@ only meant "after the move").
 - OQ-54: one declared default coder model. M4 may rework or absorb it.
 - OQ-62, OQ-73: the reviewer's and coder's guarantees still being built for
   the Claude Code CLI.
+- **The reviewer's half is ST-32** (2026-10-15): running the reviewer through
+  the Codex CLI, chosen in the settings, written from the first trial of Codex
+  here (design doc, "Trials and measurements", "Codex as reviewer"). This
+  story keeps the coder's half, which waits until steward's coder stories are
+  built (owner, 2026-10-15; design doc, Part 3, "Decided so far").
 
 ## Open questions
 
