@@ -3,7 +3,7 @@ id: ST-12
 title: Stop starting coder sessions once a usage threshold is reached, and let reviews finish
 tier: next
 kind: workflow
-depends_on: [ST-11]
+depends_on: [ST-11, ST-31]
 model: sonnet
 blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
 ---
@@ -20,8 +20,9 @@ up again once usage is back under the threshold.
 
 - [ ] **AC-1** — **Past the threshold, no coder session starts.** Before
       starting any coder session, whether a story's first dispatch or a
-      retry, the loop checks usage against the threshold. At or over it,
-      the loop starts none:
+      retry, the loop checks usage against the coder's limits, with ST-31's
+      check. At or over either, or when the usage cannot be read, the loop
+      starts none:
       - a ready story that has not been dispatched is not dispatched;
       - a story in flight whose next step is a retry is **paused**. Its pull
         request stays open and ready, gets no `blocked:`, and is not turned
@@ -29,11 +30,12 @@ up again once usage is back under the threshold.
 
       A coder session that is already running is not stopped.
 - [ ] **AC-2** — **Past the threshold, everything else carries on.** Waiting
-      for CI, reviews and landing continue. So a run past the threshold still
-      reviews every pull request that is waiting for one: an in-flight
-      story's new head, and every ready pull request from a trusted author
-      (OQ-83). A pull request whose review passes still lands. The run log
-      records that the threshold was reached.
+      for CI, reviews and landing continue. So a run past the coder's limits,
+      but under the reviewer's, still reviews every pull request that is
+      waiting for one: an in-flight story's new head, and every ready pull
+      request from a trusted author (OQ-83). A pull request whose review
+      passes still lands. The run log records that the threshold was reached.
+      Past the reviewer's limits, ST-31's check starts no review either.
 - [ ] **AC-3** — **A paused story resumes.** On a run under the threshold,
       before it dispatches a new story, the loop resumes each paused story
       through OQ-48's entry point (`story.mjs OQ-<n> --pr <number>`), which
@@ -87,12 +89,19 @@ OQ-86, which are tower-workshop-paths' own, so they were dropped at the move
 - Decided by the owner on 2026-09-28, in the dispatcher session: past the
   threshold, no new coder session starts, retries included, and reviews carry
   on, "I'd like the end state to be everything has a review posted".
-- What the loop can measure today: every coder and reviewer session's JSON
-  output carries `total_cost_usd`, which `scripts/dispatch/coder.mjs` already
-  reads as `costUsd`. `claude --help` (Claude Code 2.1.281) has no command
-  that reports a plan's usage, and a coder session's transcript holds only
-  per-message token `usage`. Whether a plan's usage window can be read by a
-  script is unknown.
+- **Revised on 2026-10-15 by the owner** (design doc, Part 3, "Decided so
+  far", "No session starts while the plan's usage is over a limit"): the
+  plan's 5-hour and weekly windows are measured, read with
+  `claude -p /usage`; coders stop at 70% and 75% of them, reviewers at 90%
+  of each; the limits are the settings' `usageLimits`; and a usage that
+  cannot be read starts nothing. ST-31 builds that check, for `coder.mjs`
+  and `review.mjs`. This story is the loop's part: pausing a retry, and
+  resuming it. That answers what were this story's first two open questions,
+  what is measured and over what window.
+- Before that, on 2026-10-09: every coder and reviewer session's JSON output
+  carries `total_cost_usd`, which `scripts/dispatch/coder.mjs` reads as
+  `costUsd`, and `claude --help` (Claude Code 2.1.281) named no command that
+  reports a plan's usage.
 - `story.mjs --pr` refuses a draft pull request, or one with `blocked:` at
   its head (`already-stopped`). That is why AC-1 pauses without either.
   Resumed on a pull request whose head has a block verdict, it retries
@@ -101,15 +110,7 @@ OQ-86, which are tower-workshop-paths' own, so they were dropped at the move
 
 ## Open questions
 
-1. **What is measured?** Spend summed from each session's `costUsd`; a count
-   of sessions; the plan's usage window, if a script can read it; or
-   something else. The owner is researching this.
-2. **Over what window, and where is the threshold set?** For example per day,
-   or a rolling window matching the plan's, set in a config file or passed as
-   a flag. Any running total is state the loop would keep, which the design
-   otherwise avoids ("Status is derived, not stored"), so the answer should
-   say where it lives.
-3. **Should the loop also resume a story whose run was interrupted?** AC-3
+1. **Should the loop also resume a story whose run was interrupted?** AC-3
    derives a paused story from GitHub alone. A story whose OQ-48 process was
    killed at the same two points looks the same, so the loop would resume it
    too. Today resuming an interrupted story is the owner's: OQ-86's AC-4,
