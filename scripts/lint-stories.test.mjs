@@ -144,6 +144,13 @@ describe('OQ-61/AC-2: frontmatter schema', () => {
     expect(violations.some((v) => v.rule === 'AC-2' && /'kind'/.test(v.message))).toBe(true)
   })
 
+  it('ST-30/AC-1: accepts kind: spike, and still rejects a kind outside product|workflow|spike', () => {
+    const spike = lintStory('OQ-9001-fixture.md', storySource({ kind: 'spike' }), 'OQ')
+    expect(spike).toEqual([])
+    const other = lintStory('OQ-9001-fixture.md', storySource({ kind: 'business' }), 'OQ')
+    expect(other.some((v) => v.rule === 'AC-2' && /'kind'/.test(v.message))).toBe(true)
+  })
+
   it('rejects depends_on when it is not a list', () => {
     const source = storySource().replace('depends_on: []', 'depends_on: OQ-45')
     const violations = lintStory('OQ-9001-fixture.md', source, 'OQ')

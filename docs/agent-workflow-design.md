@@ -166,11 +166,14 @@ assert.** A coder that misreads a story writes tests confirming the misreading. 
 Steward's CI is one job, `test` in `.github/workflows/ci.yml`: `npm ci`, `npm run lint` (oxlint),
 `npm test` (Vitest), and on a pull request story containment
 (`scripts/dispatch/story-containment.mjs`), which fails a story's own pull request that changes
-`stories/` beyond its story's move, ticks and `blocked:` line. Vitest includes the **story schema
-lint** (`scripts/lint-stories.mjs`) over every story in `stories/` and `stories/done/` and every
-`**Planned (ST-n)**` marker in `docs/`: frontmatter, sections, AC ids and markers
-(`scripts/lint-stories.test.mjs`, "the real repository lints clean"). The six runs before 05:20 UTC
-on 2026-10-14 took 25 to 41 seconds, so **tiering is premature**: everything runs on every push.
+`stories/` beyond its story's move, ticks and `blocked:` line. The one exception: the pull request
+of a story with `kind: spike` may also add new stories, as drafts, on the conditions
+`checkAddedDraft` defines in the same file (Part 3, "Decided so far", 2026-10-15). Vitest includes
+the **story schema lint** (`scripts/lint-stories.mjs`) over every story in `stories/` and
+`stories/done/` and every `**Planned (ST-n)**` marker in `docs/`: frontmatter, sections, AC ids and
+markers (`scripts/lint-stories.test.mjs`, "the real repository lints clean"). The six runs before
+05:20 UTC on 2026-10-14 took 25 to 41 seconds, so **tiering is premature**: everything runs on
+every push.
 
 Checks on stories that CI does not make:
 
@@ -215,9 +218,9 @@ is not true of **the authored unit**, which is the standard the diff must meet.
 
 So the reviewer receives **the unit, the pull request body and the checklist from `main`**, and
 reads the diff in its own checkout of the head (`reviewer.md`). Today `review.mjs` finds the unit
-as the story file the diff moves into `stories/done/` (`resolveStory`); ST-19 and ST-22 change
-that to the unit the body links, read from `main` (Part 3, "Decided so far"). It does not receive
-the coder's session, summary or reasoning, or any commentary from ATC.
+as the story file the diff moves into `stories/done/` (`resolveStory`); ST-22 changes that to
+the unit the body links, read from `main` with `scripts/dispatch/unit.mjs` (Part 3, "Decided so
+far"). It does not receive the coder's session, summary or reasoning, or any commentary from ATC.
 
 **The PR description is itself in scope.** After forming findings from the diff, check whether the
 description honestly describes the change. Prose that oversells a diff is real signal.
@@ -419,7 +422,7 @@ It keeps its file and its number in a directory nothing dispatches from, so revi
 id: ST-49
 title: Print the queue as JSON
 tier: normal               # fix | next | normal | later — priority only
-kind: workflow             # product | workflow — never read by ATC
+kind: workflow             # product | workflow | spike — never read by the ordering
 depends_on: []             # [ST-45] — waiting until those are done
 model: sonnet              # per-story escalation
 blocked: null              # null | "reason text" — set by a kickback
@@ -511,11 +514,16 @@ ordering file, and re-prioritising means editing one file's `tier`.
 
 ### Kind is for people, not ATC
 
-`kind: product | workflow` groups stories for reading — release-review assembly, or answering "how
-much of this batch was tooling." **Nothing in ATC reads it, and nothing in the ordering may.** That
+`kind: product | workflow | spike` groups stories for reading — release-review assembly, or
+answering "how much of this batch was tooling." **Nothing in the ordering reads it, or may.** That
 is stated as a rule because a field that exists eventually attracts a sort: a future change that
 orders by `kind` should be a visible violation of something written down rather than a
 natural-looking extension. Adding a value is cheap for the same reason.
+
+This repository's story tooling may read it. `kind: spike` marks a spike, a story whose output is
+findings and the stories they recommend, and story containment reads it to let the spike's own pull
+request add those stories as drafts (`scripts/dispatch/story-containment.mjs`; Part 3, "Decided so
+far", 2026-10-15).
 
 ### The starvation valve
 
@@ -1783,8 +1791,8 @@ shortened where it is long, so that it can be found there with its date.
     `rulesFile`, each required, with no default in the code (`docs/settings.md`).
   - **Planned (ST-7):** the project's `setup` command, within its time limit, in place of
     `npm ci`.
-  - **Planned (ST-19):** finding a pull request's unit from the link in its body, and reading it
-    from `main`.
+  - Finding a pull request's unit from the link in its body, and reading it from `main`
+    (`scripts/dispatch/unit.mjs`). The review does not use it until ST-22.
   - Reading the rules file from `main`, in sections that each say when they apply and number
     their own items, and refusing a file that does not parse (`scripts/dispatch/rules.mjs`).
   - The reviewer judged by those rules, given in its prompt from `main`, naming every section
@@ -2023,10 +2031,27 @@ shortened where it is long, so that it can be found there with its date.
   own check). It is a cheap check until containment exists. Considered and not chosen: leaving
   detection to the stories ST-6 recommends.
 - **A body that says `Unit: none` and also links a unit is a contradiction** (decided 2026-10-15
-  by the owner, when ST-19's coder found the story silent on it; **Planned (ST-19)**, its AC-2a).
-  ATC reads neither, and tells the reviewer it found several links, with `Unit: none` among them,
-  as it does for two links. Considered and not chosen: the link wins, which the first build did;
+  by the owner, when ST-19's coder found the story silent on it). ATC
+  reads neither, and tells the reviewer it found several links, with `Unit: none` among them, as it
+  does for two links. Considered and not chosen: the link wins, which the first build did;
   and `Unit: none` wins, ignoring the link.
+- **A spike's own pull request adds the stories it recommends, as drafts** (decided 2026-10-15 by
+  the owner, with the planning session, after #28's second `block`). A spike's findings are what its
+  follow-up stories are written from, but story containment let a story's own pull request change
+  nothing under `stories/` but its own move, ticks and `blocked:` line, so ST-6, as #28 rewrites
+  it, needed a planning-session pull request to land first. A story marks itself a spike with
+  `kind: spike`. Its own pull request may add new stories, each with a new id and something under
+  its Open questions, so that no coder can take one until the planning session and the crew refine
+  it. It still may not change an existing story. It re-points its
+  **Planned** markers onto the drafts in the design doc, which containment does not restrict, and
+  the story lint accepts a marker naming a draft. The rule that nothing in ATC reads `kind` is
+  narrowed to its reason, the ordering: this repository's story tooling may read it. The owner's
+  view: a field not read today may be read when there is a reason. Considered and not chosen: a
+  title starting `Spike:`, a convention nothing enforces; a new required frontmatter key, which
+  every story would have to carry; and keeping containment as it is, with the planning session's
+  pull request first. This is steward's own convention for its own stories: steward does not parse
+  or lint a project's units (`outline.md`, "Review"), and for an issue a diff cannot change the
+  unit at all, so in a project containment is the reviewer's judgement against its checklist.
 
 ### The move, in order
 
