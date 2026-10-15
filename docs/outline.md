@@ -160,7 +160,9 @@ design doc, "The outline's reasoning", under the same headings.
     2026-10-11, asked whether steward should record the block itself): only judgment can tell a
     code change from a docs change, and a pull request that writes the document it would link to
     has nothing to link. ATC tells the reviewer, deterministically, which of four it found: a link
-    it read, a link it could not read and why, `Unit: none`, or no `Unit:` line at all.
+    it read, a link it could not read and why, `Unit: none`, or no `Unit:` line at all. A body
+    with more than one link, or with `Unit: none` and a link, is reported as several, none read
+    (ST-19; owner, 2026-10-15).
   - **`Unit: none` says the pull request implements no unit** (owner, 2026-10-11), so the reviewer
     judges only whether that is believable for the diff, rather than guessing. Whether and how the
     line is required is open (design doc, "Open questions", D4).
