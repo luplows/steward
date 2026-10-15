@@ -3,7 +3,7 @@ id: ST-6
 title: "Spike: find out how to run coder and reviewer sessions where the crew member's credentials and files cannot be reached"
 tier: next
 kind: workflow
-depends_on: []
+depends_on: [ST-30]
 model: sonnet
 blocked: "Owner-run with the planning session, not dispatched (owner, 2026-10-09; design doc, R4 and R5)."
 ---
@@ -17,17 +17,18 @@ stories that put them there are written from what works. The guarantee they
 serve: a spawned session cannot obtain a GitHub token or use an SSH key from
 the machine it runs on, and cannot write outside its own checkout, because
 those are unreachable, not because a command was denied. **This is a spike.
-Its output is written findings and a recommendation, not code.** It is run by
-the owner with the planning session, by hand, not dispatched.
+Its output is written findings, a recommendation and the stories it
+recommends, as drafts, not code.** It is run by the owner with the planning
+session, by hand, not dispatched.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — **Only findings are committed.** The pull request's diff
-      changes `docs/agent-workflow-design.md`, and moves this story to
-      `stories/done/` with its ticks, and nothing else. Any script,
-      image definition or configuration used for the trials lives outside the
-      repository's tree and is not committed. Its full text is given in the
-      pull request body.
+- [ ] **AC-1** — **Only findings and draft stories are committed.** The
+      pull request's diff changes `docs/agent-workflow-design.md`, adds the
+      stories AC-4 recommends, and moves this story to `stories/done/` with
+      its ticks, and nothing else. Any script, image definition or
+      configuration used for the trials lives outside the repository's tree
+      and is not committed. Its full text is given in the pull request body.
 - [ ] **AC-2** — A new subsection under "Platform constraints" in
       `docs/agent-workflow-design.md`, titled "Sessions that cannot reach the
       crew member's credentials", records the trials. For each trial it gives:
@@ -80,30 +81,30 @@ the owner with the planning session, by hand, not dispatched.
         own writes redirected into its scratch directory;
       - a separate Windows account.
 - [ ] **AC-4** — The subsection ends with a **Recommendation**: the mechanism
-      chosen, and the stories that build it for each role, in order, each
-      with its intent and the acceptance criteria it carries, naming the
-      trial each rests on. Between them they carry every guarantee check
-      listed under Context. It also says which story takes over OQ-101's
-      dependency on OQ-73.
+      chosen, and the stories that build it for each role, in order, naming
+      the trial each rests on, and which story takes over OQ-101's dependency
+      on OQ-73. The pull request adds each of those stories as a draft, under
+      `stories/` with the next unused `ST-<n>`: its intent, the acceptance
+      criteria it proposes, and under Open questions what the crew is to
+      decide before it is refined. Between them they carry every guarantee
+      check listed under Context.
 - [ ] **AC-5** — No **Planned (ST-6)** marker is left at this pull request's
-      head, and this pull request changes none. They are moved first, by the
-      planning session's own pull request, which lands before this one: it
-      writes the stories AC-4 recommends, with the owner, points every
-      **Planned (ST-6)** marker in `docs/agent-workflow-design.md` at them,
-      and has `stories/ST-13-review-tools-node-scripts.md` and
-      `stories/ST-27-land-scheduled-outside-prs.md` cite them in place of
-      ST-6. That order is forced: the story lint fails on a marker naming a
-      story in `stories/done/`, and CI's containment check
-      (`scripts/dispatch/story-containment.mjs`) lets this pull request change
-      nothing under `stories/` but its own move, ticks and `blocked:` line.
+      head: each in `docs/agent-workflow-design.md` names, in place of ST-6,
+      the drafts AC-4 adds that take over its passage. The story lint fails on
+      a marker naming a story in `stories/done/`, and accepts one naming a
+      draft.
 
 ## Out of scope
 
 - **Building it**: any change to code, prompts, tests, settings or workflows,
   `coder-env.mjs`, `invocation.mjs` and `spawn.mjs` included. That is the
   stories AC-4 recommends.
-- **Writing those stories**, and moving the markers and citations to them.
-  That is the planning session's pull request, which lands first (AC-5).
+- **Refining the drafts**, making any of them ready, and having other
+  stories, ST-13 and ST-27 among them, cite the drafts in place of ST-6. That
+  is the planning session's, with the crew, once this has landed. Once ST-30
+  is built, CI's containment check (`scripts/dispatch/story-containment.mjs`)
+  lets this pull request add new stories as drafts, but change no story that
+  exists.
 - **Changes to the owner's machine** made by anyone but the owner. Installing
   or configuring a mechanism is the owner's, by hand, and Q1 records it.
 - **A second GitHub identity** (the design doc's open question 10).
@@ -124,6 +125,10 @@ the owner with the planning session, by hand, not dispatched.
 
 Formerly tower-workshop-paths OQ-73.
 
+- **Its own pull request adds the drafts** (owner, 2026-10-15; design doc,
+  Part 3, "Decided so far", "A spike's own pull request adds the stories it
+  recommends"). ST-30 is to let a story with `kind: spike` do so, which
+  is why this story waits on it.
 - **Widened on 2026-10-15 to both roles and to local files, with ST-3 folded
   in** (owner, with the planning session; design doc, Part 3, "Decided so
   far"). ST-3 (formerly tower-workshop-paths OQ-62), the reviewer's half, was

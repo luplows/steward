@@ -2012,8 +2012,8 @@ shortened where it is long, so that it can be found there with its date.
   anywhere that account can, the controller's worktree included, from which the pilot runs next.
   So ST-6 now tries a container, WSL2 with Claude Code's sandboxed Bash tool, a low integrity
   level and a separate Windows account, for the coder and the reviewer, and recommends the stories
-  that build one; the planning session writes them in a pull request of its own, which lands
-  before ST-6's. ST-3 is retired, its checks carried into ST-6. The owner's
+  that build one, adding them as drafts in its own pull request (ST-30, below). ST-3 is retired,
+  its checks carried into ST-6. The owner's
   reason for a spike rather than a build: the danger is a malicious model or a prompt injection,
   of low likelihood while the owner works alone. Considered and not chosen: building ST-3 as
   written, with the environment scrubbed, which would make the guarantee look stronger than it
@@ -2336,10 +2336,9 @@ is still open.
   spike's open question. Known questions for the spike: a git worktree's `.git` file holds an
   absolute host path, and `node_modules` on a bind mount from Windows is slow.
   The **Planned (ST-6)** markers here and under "Decided so far" were added on 2026-10-08 at the
-  owner's decision, after #199's review. The spike builds nothing, so the planning session's pull
-  request that writes the stories it recommends moves these markers onto them, and lands before
-  the spike's own (its AC-5, revised 2026-10-15): the story lint fails on a marker naming a story in
-  `stories/done/`, and CI's containment check lets a story's pull request change no other story.
+  owner's decision, after #199's review. The spike builds nothing, so its own pull request adds
+  the stories it recommends, as drafts, and moves these markers onto them (its AC-4 and AC-5,
+  revised 2026-10-15; ST-30): the story lint fails on a marker naming a story in `stories/done/`.
   **Revised 2026-10-15 by the owner:** the container is one of four mechanisms ST-6 now tries, for
   the reviewer as well as the coder, and it stands until the spike's recommendation says otherwise
   (Part 3, "Decided so far", "Containing a session is a spike").
