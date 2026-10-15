@@ -203,3 +203,134 @@ describe('OQ-82/AC-3: a story-writing PR is not restricted', () => {
     expect(result).toEqual({ ok: true })
   }, CONTAINMENT_TEST_TIMEOUT)
 })
+
+// ST-30: a base where OQ-82 is a `kind: spike` story and OQ-91 is already done.
+const DRAFT = (id) => STORY(id).replace('## Open questions\n\n*(none)*', '## Open questions\n\n- Which way should it go?')
+
+function spikeBase(kind) {
+  git(repo, 'checkout', '-q', '-B', `${kind}-base`, 'main')
+  write('stories/OQ-82-foo.md', STORY('OQ-82').replace('kind: workflow', `kind: ${kind}`))
+  write('stories/done/OQ-91-finished.md', STORY('OQ-91'))
+  git(repo, 'add', '-A')
+  git(repo, 'commit', '-q', '-m', `${kind} base`)
+  const sha = git(repo, 'rev-parse', 'HEAD')
+  git(repo, 'checkout', '-q', 'main')
+  return sha
+}
+
+function spikeScenario(name, edit, kind = 'spike') {
+  return scenario(name, spikeBase(kind), () => {
+    move('stories/OQ-82-foo.md', 'stories/done/OQ-82-foo.md')
+    write(
+      'stories/done/OQ-82-foo.md',
+      STORY('OQ-82').replace('kind: workflow', `kind: ${kind}`).replace('- [ ] **AC-1**', '- [x] **AC-1**'),
+    )
+    edit()
+  })
+}
+
+describe("ST-30/AC-2 and AC-4: a spike's pull request adding drafts", () => {
+  it('passes when it adds two drafts', async () => {
+    const args = spikeScenario('two-drafts', () => {
+      write('stories/OQ-300-first.md', DRAFT('OQ-300'))
+      write('stories/OQ-301-second.md', DRAFT('OQ-301'))
+    })
+    await expect(checkStoryContainment(args)).resolves.toEqual({ ok: true })
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it("fails when an added story's Open questions holds only a placeholder", async () => {
+    const args = spikeScenario('placeholder', () => {
+      write('stories/OQ-300-first.md', STORY('OQ-300'))
+    })
+    const result = await checkStoryContainment(args)
+    expect(result.ok).toBe(false)
+    expect(result.violations).toContainEqual(
+      expect.objectContaining({ file: 'stories/OQ-300-first.md', message: expect.stringContaining("not 'draft'") }),
+    )
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it('fails when an added story has blocked: set', async () => {
+    const args = spikeScenario('blocked', () => {
+      write('stories/OQ-300-first.md', DRAFT('OQ-300').replace('blocked: null', 'blocked: "waiting"'))
+    })
+    const result = await checkStoryContainment(args)
+    expect(result.ok).toBe(false)
+    expect(result.violations).toContainEqual(
+      expect.objectContaining({ file: 'stories/OQ-300-first.md', message: expect.stringContaining("'blocked'") }),
+    )
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it("fails when an added story's id is in stories/done/ at the merge base", async () => {
+    const args = spikeScenario('id-in-done', () => {
+      write('stories/OQ-91-again.md', DRAFT('OQ-91'))
+    })
+    const result = await checkStoryContainment(args)
+    expect(result.ok).toBe(false)
+    expect(result.violations).toContainEqual(
+      expect.objectContaining({ file: 'stories/OQ-91-again.md', message: expect.stringContaining('merge base') }),
+    )
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it('fails when two added files share one id', async () => {
+    const args = spikeScenario('one-id-twice', () => {
+      write('stories/OQ-300-first.md', DRAFT('OQ-300'))
+      write('stories/OQ-300-second.md', DRAFT('OQ-300'))
+    })
+    const result = await checkStoryContainment(args)
+    expect(result.ok).toBe(false)
+    expect(result.violations.filter((v) => v.message.includes('another file the pull request adds'))).toHaveLength(2)
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it("fails when an added file's name does not match the story filename pattern", async () => {
+    const args = spikeScenario('bad-name', () => {
+      write('stories/notes.md', DRAFT('OQ-300'))
+    })
+    const result = await checkStoryContainment(args)
+    expect(result.ok).toBe(false)
+    expect(result.violations).toContainEqual(
+      expect.objectContaining({ file: 'stories/notes.md', message: expect.stringContaining('filename pattern') }),
+    )
+  }, CONTAINMENT_TEST_TIMEOUT)
+})
+
+describe("ST-30/AC-3 and AC-4: nothing else a spike's pull request does changes", () => {
+  it('fails when it changes a story that exists at the merge base', async () => {
+    const args = spikeScenario('changes-existing', () => {
+      write('stories/OQ-300-first.md', DRAFT('OQ-300'))
+      write('stories/OQ-90-other.md', STORY('OQ-90').replace('- [ ] **AC-1**', '- [x] **AC-1**'))
+    })
+    const result = await checkStoryContainment(args)
+    expect(result.ok).toBe(false)
+    expect(result.violations).toContainEqual(expect.objectContaining({ file: 'stories/OQ-90-other.md' }))
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it('fails when it deletes a story', async () => {
+    const args = spikeScenario('deletes-existing', () => {
+      git(repo, 'rm', '-q', 'stories/OQ-90-other.md')
+    })
+    const result = await checkStoryContainment(args)
+    expect(result.ok).toBe(false)
+    expect(result.violations).toContainEqual(expect.objectContaining({ file: 'stories/OQ-90-other.md' }))
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it('fails when it adds a file in stories/done/ or stories/retired/', async () => {
+    const args = spikeScenario('adds-done-retired', () => {
+      write('stories/done/OQ-300-first.md', DRAFT('OQ-300'))
+      write('stories/retired/OQ-301-second.md', DRAFT('OQ-301'))
+    })
+    const result = await checkStoryContainment(args)
+    expect(result.ok).toBe(false)
+    expect(result.violations.map((v) => v.file)).toEqual(
+      expect.arrayContaining(['stories/done/OQ-300-first.md', 'stories/retired/OQ-301-second.md']),
+    )
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it("fails when a kind: workflow story's pull request adds a draft", async () => {
+    const args = spikeScenario('workflow-adds-draft', () => {
+      write('stories/OQ-300-first.md', DRAFT('OQ-300'))
+    }, 'workflow')
+    const result = await checkStoryContainment(args)
+    expect(result.ok).toBe(false)
+    expect(result.violations).toContainEqual(expect.objectContaining({ file: 'stories/OQ-300-first.md' }))
+  }, CONTAINMENT_TEST_TIMEOUT)
+})

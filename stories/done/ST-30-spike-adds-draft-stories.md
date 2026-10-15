@@ -18,10 +18,10 @@ planning session and the crew refine them.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `KINDS` in `scripts/lint-stories.mjs` gains `spike`. A story with `kind: spike`
+- [x] **AC-1** — `KINDS` in `scripts/lint-stories.mjs` gains `spike`. A story with `kind: spike`
       lints with no violation, and a `kind` outside `product`, `workflow` and `spike` is still a
       blocking violation.
-- [ ] **AC-2** — In `scripts/dispatch/story-containment.mjs`, when the pull request moves its own
+- [x] **AC-2** — In `scripts/dispatch/story-containment.mjs`, when the pull request moves its own
       story into `stories/done/` (`resolveStory`'s `moved`), and that story's frontmatter has
       `kind: spike` as its file reads at the merge base, a file the pull request adds directly
       under `stories/` is not a violation when all of these hold at the head:
@@ -32,12 +32,12 @@ planning session and the crew refine them.
         merge base, nor by another file the pull request adds.
 
       An added file that fails one of these is a violation, and its message says which.
-- [ ] **AC-3** — Nothing else changes. A spike's own story file may still change only by its move,
+- [x] **AC-3** — Nothing else changes. A spike's own story file may still change only by its move,
       its ticks and its `blocked:` line. Any change to a story that exists at the merge base, a
       deletion, and a file added in `stories/done/` or `stories/retired/` (other than the spike's
       own move) are still violations. A pull request whose own story is not `kind: spike` at the
       merge base still may not add a story, a draft included.
-- [ ] **AC-4** — Tests in `scripts/dispatch/story-containment.test.mjs`, each named after the AC it
+- [x] **AC-4** — Tests in `scripts/dispatch/story-containment.test.mjs`, each named after the AC it
       covers (`ST-30/AC-<n>`), with the pull request moving its own story to `stories/done/`:
       - a `kind: spike` story's pull request adding two drafts passes;
       - the same adding a story whose Open questions holds only a placeholder fails;
@@ -49,11 +49,11 @@ planning session and the crew refine them.
 
       A test in `scripts/lint-stories.test.mjs` covers AC-1. The existing `OQ-82/AC-<n>` tests
       pass unchanged.
-- [ ] **AC-5** — `REVIEW.md`, "Conformance to the unit", item 3, says that a spike's own pull
+- [x] **AC-5** — `REVIEW.md`, "Conformance to the unit", item 3, says that a spike's own pull
       request may also add new stories as drafts, pointing at `story-containment.mjs` for the
       conditions rather than restating them. "Changes to stories" applies to the stories a
       spike's pull request adds: its `Applies when:` line says so.
-- [ ] **AC-6** — `docs/agent-workflow-design.md` describes what was built: "What CI runs", where it
+- [x] **AC-6** — `docs/agent-workflow-design.md` describes what was built: "What CI runs", where it
       says what story containment fails, and "Kind is for people, not ATC", which says the
       ordering never reads `kind`, this repository's story tooling may, and `kind: spike` marks a
       spike. The format block's `kind:` comment lists `spike`. Every **Planned (ST-30)** marker

@@ -8,6 +8,10 @@
  * restricted -- that is the planning session's territory, covered by `REVIEW.md`'s
  * "Changes to stories" section instead.
  *
+ * ST-30: a pull request that moves its own story, when that story reads
+ * `kind: spike` at the merge base, may also add stories directly under
+ * `stories/` as drafts -- see `checkAddedDraft` for the conditions.
+ *
  * `resolveStory` (review.mjs) decides whether a diff implements a story --
  * reused here rather than re-derived, per this story's Context.
  *
@@ -21,6 +25,7 @@
 import { execFile } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { buildStory, deriveStatus, isStoryFilename, parseFrontmatter } from './queue.mjs'
 import { resolveStory } from './review.mjs'
 import { readSettings } from './settings.mjs'
 
@@ -124,6 +129,44 @@ function checkOtherFile(file, oldText, newText) {
   return [{ file, line: prefix + 1, message: 'changed under stories/ by a pull request that implements a different story' }]
 }
 
+// ST-30: the ids in use at the merge base -- every file in stories/,
+// stories/done/ and stories/retired/ -- taken from the filenames, which the
+// story lint holds equal to each file's frontmatter id.
+async function idsAtBase(cwd, mergeBase, prefix) {
+  const listing = await git(cwd, ['ls-tree', '-r', '--name-only', mergeBase, '--', 'stories/'])
+  const idRe = new RegExp(`^(${prefix}-\\d+)-`)
+  const ids = new Set()
+  for (const file of listing.split(/\r?\n/)) {
+    const name = file.match(/^stories\/(?:done\/|retired\/)?([^/]+)$/)?.[1]
+    const id = name?.match(idRe)?.[1]
+    if (id) ids.add(id)
+  }
+  return ids
+}
+
+// ST-30: a file a spike's pull request adds directly under stories/ must be a
+// draft story with a fresh id. `claimed` maps each id the pull request's added
+// files carry to how many carry it; `baseIds` is the merge base's.
+function checkAddedDraft(file, newText, prefix, baseIds, claimed) {
+  const fail = (message) => [{ file, line: 1, message: `added by a spike's pull request, but ${message}` }]
+  const name = file.slice('stories/'.length)
+  if (!isStoryFilename(name, prefix)) return fail(`its name does not match the story filename pattern for ${prefix}`)
+  let story
+  try {
+    story = buildStory(file, newText, false, prefix)
+  } catch (error) {
+    return fail(`it does not parse as a story: ${error.message}`)
+  }
+  const status = deriveStatus(story, new Set()).status
+  if (status !== 'draft') return fail(`its status is '${status}', not 'draft'`)
+  const nameId = name.match(new RegExp(`^(${prefix}-\\d+)-`))[1]
+  for (const id of new Set([story.id, nameId])) {
+    if (baseIds.has(id)) return fail(`its id ${id} is already used in stories/, stories/done/ or stories/retired/ at the merge base`)
+    if (claimed.get(id) > 1) return fail(`its id ${id} is also used by another file the pull request adds`)
+  }
+  return []
+}
+
 /**
  * `cwd` is a git checkout with both `base` and `head` reachable as commits.
  * `branch` is the head branch name, used only as `resolveStory`'s fallback.
@@ -144,6 +187,7 @@ export async function checkStoryContainment({ cwd, base, head, branch }) {
     touched.set(file, status)
   }
 
+  const mergeBase = (await git(cwd, ['merge-base', base, head])).trim()
   let ownBefore = null
   let ownAfter = null
   if (resolved.kind === 'moved') {
@@ -160,9 +204,40 @@ export async function checkStoryContainment({ cwd, base, head, branch }) {
   // resolved.kind === 'ambiguous': no own file is recognised, so every
   // touched file -- including both moved stories -- is reported below.
 
-  const mergeBase = (await git(cwd, ['merge-base', base, head])).trim()
   const violations = []
+
+  // ST-30: a spike's own pull request may add drafts directly under stories/.
+  let spike = false
+  if (resolved.kind === 'moved') {
+    try {
+      const own = await showFile(cwd, mergeBase, ownBefore)
+      spike = parseFrontmatter(own, ownBefore).data.kind === 'spike'
+    } catch {
+      spike = false
+    }
+  }
+  const addedDrafts = new Map()
+  if (spike) {
+    for (const [file, status] of touched) {
+      if (status === 'A' && /^stories\/[^/]+$/.test(file)) addedDrafts.set(file, await showFile(cwd, head, file))
+    }
+  }
+  const baseIds = spike ? await idsAtBase(cwd, mergeBase, storyPrefix) : new Set()
+  const claimed = new Map()
+  const idRe = new RegExp(`^(${storyPrefix}-\\d+)-`)
+  for (const [file, text] of addedDrafts) {
+    let fmId = null
+    try { fmId = parseFrontmatter(text, file).data.id } catch { /* reported by checkAddedDraft */ }
+    for (const id of new Set([fmId, file.slice('stories/'.length).match(idRe)?.[1]].filter(Boolean))) {
+      claimed.set(id, (claimed.get(id) ?? 0) + 1)
+    }
+  }
+
   for (const file of touched.keys()) {
+    if (addedDrafts.has(file)) {
+      violations.push(...checkAddedDraft(file, addedDrafts.get(file), storyPrefix, baseIds, claimed))
+      continue
+    }
     if (file === ownBefore && file === ownAfter) {
       const oldText = await showFile(cwd, mergeBase, file)
       const newText = await showFile(cwd, head, file)

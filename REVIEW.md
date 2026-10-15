@@ -73,14 +73,16 @@ Applies when: the pull request implements a unit.
    (`scripts/dispatch/story-containment.mjs`): the only changes a
    story's own pull request may make under `stories/` are that story's move
    into `stories/done/`, its acceptance-criterion lines ticking, and its
-   `blocked:` edit. The reviewer's judgement is still needed for the rest —
+   `blocked:` edit. A spike's own pull request (`kind: spike` in its
+   story) may also add new stories as drafts, on the conditions in the same
+   file. The reviewer's judgement is still needed for the rest —
    whether the diff outside `stories/` strays into the unit's Out of scope,
    or implements a decision it left open.
 4. When the unit is a story file, it is moved to `stories/done/` in this PR.
 
 ## Changes to stories
 
-Applies when: the pull request adds or changes a file under `stories/` without implementing one.
+Applies when: the pull request adds or changes a file under `stories/` without implementing one, or is a spike's own pull request and adds a story.
 
 1. A new story takes the next unused `ST-<n>`, checked as `stories/README.md`,
    "Numbering", says: against `stories/` (`done/` and `retired/` included) and
