@@ -17,19 +17,19 @@ a pull request with no unit meant to have one.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `.github/pull_request_template.md` starts with a `Unit:` line, before "What
+- [x] **AC-1** — `.github/pull_request_template.md` starts with a `Unit:` line, before "What
       changed", with a comment saying what it takes: a path to a file in this repository, such as
       a story under `stories/`; `#<n>` for one of this repository's issues; or `none` when the
       pull request implements no unit. The comment says the file is read from `main`, so a story
       the pull request moves into `stories/done/` is named by its path before the move.
-- [ ] **AC-2** — `docs/planning-session.md`, "Handing it over", says a story's pull request carries
+- [x] **AC-2** — `docs/planning-session.md`, "Handing it over", says a story's pull request carries
       `Unit: none`, since it writes the unit rather than implementing it, and `AGENTS.md`'s
       "Every pull request" says every pull request fills the `Unit:` line along with the
       template's three sections.
-- [ ] **AC-3** — `REVIEW.md`'s item on the pull request body's sections ("Reading the pull
+- [x] **AC-3** — `REVIEW.md`'s item on the pull request body's sections ("Reading the pull
       request body", item 1) is unchanged in substance: the `Unit:` line is not a fourth required
       section, and whether a missing one fails a review is for the rules to say (ST-21, ST-22).
-- [ ] **AC-4** — The `**Planned (ST-26)**` marker in `docs/agent-workflow-design.md` loses
+- [x] **AC-4** — The `**Planned (ST-26)**` marker in `docs/agent-workflow-design.md` loses
       `ST-26`, and the passage is corrected wherever what was built differs.
 
 ## Out of scope

@@ -55,6 +55,9 @@ Decided by the owner on 2026-09-28.
   on the pull request's description alone is fixed by editing the description, then asking the
   controller for a `--rereview`, naming the finding (`docs/controller.md`, "Re-review").
 
+A story's pull request carries `Unit: none`, since the planning session writes the unit rather than
+implementing it.
+
 ## Stopped stories
 
 - A story that comes back with `blocked:` set is the planning session's to resolve with the crew.

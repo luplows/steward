@@ -1,3 +1,10 @@
+Unit:
+<!-- Complete this line with the unit this PR implements: a path to a file in
+     this repository, such as a story under stories/; `#<n>` for one of this
+     repository's issues; or `none` when it implements no unit. The file is
+     read from main, so a story this PR moves into stories/done/ is named by
+     its path before the move. -->
+
 ## What changed
 
 <!-- What this PR does and why. Enough that a reviewer can tell whether the

@@ -52,8 +52,9 @@ For everyone:
   what CI runs. Add tests alongside new logic.
 - **Every change goes through a pull request.** `main` is protected, and nothing is pushed to it
   directly.
-- **Fill in the pull request template's three sections**: what changed, how you verified it (the
-  commands you ran and their real results), and whether this README needed updating.
+- **Fill in the pull request template**: its `Unit:` line (the file or issue the pull request
+  implements, or `none`), and its three sections: what changed, how you verified it (the commands
+  you ran and their real results), and whether this README needed updating.
 - **Agent sessions** working here follow [`AGENTS.md`](AGENTS.md).
 
 ### From the crew
