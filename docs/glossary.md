@@ -105,7 +105,7 @@ Where a file defines the thing, the entry names it, and the file is the authorit
   and in a project the file its settings name (`rulesFile`), read from `main`
   (`scripts/dispatch/review.mjs`). *Formerly: the rules file.*
 - **pre-flight check** — the `check` command in a project's settings, which a coder runs before its
-  work is pushed. No story yet has the coder run it. *Formerly: the `check` command.*
+  work is pushed. *Formerly: the `check` command.*
 - **setup** — the `setup` command in a project's settings, which prepares a fresh checkout before a
   session starts. Today `npm ci` runs in its place (`scripts/dispatch/install.mjs`; planned: ST-7).
 - **settings** — a project's `steward.config.json`, read by `scripts/dispatch/settings.mjs`, with

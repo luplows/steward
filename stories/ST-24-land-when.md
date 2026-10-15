@@ -1,6 +1,6 @@
 ---
 id: ST-24
-title: Land when the checks the settings name are green, in both the lander and the sweep
+title: Land when the checks the settings name are green, in both the pilot and the runway
 tier: next
 kind: workflow
 depends_on: [ST-18, ST-23]
@@ -10,7 +10,7 @@ blocked: null
 
 ## Intent
 
-As a member of the crew, I want the lander and the sweep to merge only once the checks the project's
+As a member of the crew, I want the pilot and the runway to merge only once the checks the project's
 `landWhen` setting names are green on the head, as well as `review/agent`, so that a project's
 own rule for when a pull request may merge is what steward follows, including on a repository
 with no branch protection, where GitHub's `mergeable_state` says nothing about required checks.
@@ -24,7 +24,7 @@ with no branch protection, where GitHub's `mergeable_state` says nothing about r
       - the latest check run of each name, and the latest status of each context;
       - a check run as green when its conclusion is `success`, `neutral` or `skipped`, and a
         status when its state is `success`; anything unfinished is waiting, anything else failing;
-      - `review/agent` never, in either direction: the lander and the sweep check it themselves.
+      - `review/agent` never, in either direction: the pilot and the runway check it themselves.
       With `"all-checks"`, every other check on the head must be green; with a list, each named
       check must be present and green, and one absent is waiting.
 - [ ] **AC-2** — `land.mjs` decides landability with AC-1's function, for the settings'
@@ -32,7 +32,7 @@ with no branch protection, where GitHub's `mergeable_state` says nothing about r
       `review/agent` to be `success`, no `review-blocked` label, and not a draft. A
       `mergeable_state` of `dirty` is a conflict, as today. A `mergeable_state` of `blocked` with
       the named checks green means GitHub requires something `landWhen` does not name, and GitHub
-      would refuse the merge: the sweep is not triggered, and the result is a distinct
+      would refuse the merge: the runway is not started, and the result is a distinct
       `github-blocked`, which a later call may try again. With ST-23's `once: true`, that case
       returns `github-blocked` rather than `not-landable`. Its request allowlist gains one read,
       the head's check runs (`GET /repos/<repo>/commits/<sha>/check-runs`), and nothing else.
@@ -58,7 +58,7 @@ with no branch protection, where GitHub's `mergeable_state` says nothing about r
 ## Constraints
 
 - Node, ESM, no new runtime dependencies.
-- The sweep still takes no new permission, token or secret.
+- The runway still takes no new permission, token or secret.
 
 ## Context
 
