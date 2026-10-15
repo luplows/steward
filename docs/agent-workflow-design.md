@@ -215,9 +215,9 @@ is not true of **the authored unit**, which is the standard the diff must meet.
 
 So the reviewer receives **the unit, the pull request body and the checklist from `main`**, and
 reads the diff in its own checkout of the head (`reviewer.md`). Today `review.mjs` finds the unit
-as the story file the diff moves into `stories/done/` (`resolveStory`); ST-19 and ST-22 change
-that to the unit the body links, read from `main` (Part 3, "Decided so far"). It does not receive
-the coder's session, summary or reasoning, or any commentary from ATC.
+as the story file the diff moves into `stories/done/` (`resolveStory`); ST-22 changes that to
+the unit the body links, read from `main` with `scripts/dispatch/unit.mjs` (Part 3, "Decided so
+far"). It does not receive the coder's session, summary or reasoning, or any commentary from ATC.
 
 **The PR description is itself in scope.** After forming findings from the diff, check whether the
 description honestly describes the change. Prose that oversells a diff is real signal.
@@ -1770,8 +1770,8 @@ shortened where it is long, so that it can be found there with its date.
     `rulesFile`, each required, with no default in the code (`docs/settings.md`).
   - **Planned (ST-7):** the project's `setup` command, within its time limit, in place of
     `npm ci`.
-  - **Planned (ST-19):** finding a pull request's unit from the link in its body, and reading it
-    from `main`.
+  - Finding a pull request's unit from the link in its body, and reading it from `main`
+    (`scripts/dispatch/unit.mjs`). The review does not use it until ST-22.
   - Reading the rules file from `main`, in sections that each say when they apply and number
     their own items, and refusing a file that does not parse (`scripts/dispatch/rules.mjs`).
   - The reviewer judged by those rules, given in its prompt from `main`, naming every section

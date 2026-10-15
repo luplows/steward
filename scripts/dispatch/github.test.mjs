@@ -9,6 +9,7 @@ import {
   buildConvertPullRequestToDraft,
   buildCreateIssue,
   buildCreatePullRequest,
+  buildGetIssue,
   buildGetPullRequestLabels,
   buildGetPullRequestState,
   buildListComments,
@@ -22,6 +23,7 @@ import {
   createContext,
   createIssue,
   createPullRequest,
+  getIssue,
   getPullRequestLabels,
   getPullRequestState,
   listIssuesByLabels,
@@ -62,6 +64,7 @@ function allBuiltRequests() {
     buildListOpenPullRequests: buildListOpenPullRequests(REPO, { base: 'main', page: 1 }),
     buildListIssuesByLabels: buildListIssuesByLabels(REPO, ['loop-stuck']),
     buildCreateIssue: buildCreateIssue(REPO, { title: 't', body: 'b', labels: ['loop-stuck'] }),
+    buildGetIssue: buildGetIssue(REPO, 7),
   }
 }
 
@@ -374,6 +377,7 @@ describe('OQ-68/AC-7: module surface', () => {
         'buildConvertPullRequestToDraft',
         'buildCreateIssue',
         'buildCreatePullRequest',
+        'buildGetIssue',
         'buildGetPullRequestLabels',
         'buildGetPullRequestState',
         'buildListComments',
@@ -389,12 +393,14 @@ describe('OQ-68/AC-7: module surface', () => {
         'createPullRequest',
         'getPullRequestLabels',
         'getPullRequestState',
+        'getIssue',
         'ghAuthToken',
         'listIssuesByLabels',
         'listOpenPullRequests',
         'listOpenPullRequestsForHead',
         'listPullRequestComments',
         'parseComments',
+        'parseIssue',
         'parseIssues',
         'parseLabels',
         'parseMarkerComment',
@@ -467,6 +473,44 @@ describe('OQ-112/AC-1: three more operations', () => {
       { method: 'GET', url: `${base}/pulls?head=x&state=open&extra=1` },
       { method: 'GET', url: `${base}/issues?labels=x&state=open&per_page=50&page=1` },
       { method: 'POST', url: `${base}/issues`, body: { title: 't', body: 'b', labels: ['x'], assignee: 'nope' } },
+    ]
+    for (const request of refused) await expect(ctx.send(request)).rejects.toThrow(/refusing/)
+    expect(fetch.calls).toHaveLength(0)
+  })
+})
+
+describe('ST-19/AC-4: getting one issue by number', () => {
+  it('ST-19/AC-4: builds a GET of /issues/<n>, and reads the issue through the context', async () => {
+    expect(buildGetIssue(REPO, 12)).toEqual({
+      method: 'GET',
+      url: `https://api.github.com/repos/${REPO}/issues/12`,
+    })
+    expect(() => buildGetIssue(REPO, 0)).toThrow(/positive integer/)
+    const fetch = fakeFetch([
+      { json: { number: 12, title: 'T', body: null } },
+      { json: { number: 13, title: 'P', body: 'B', pull_request: { url: 'x' } } },
+    ])
+    const ctx = createContext({ repo: REPO, fetch, getToken: async () => 't' })
+    expect(await getIssue(ctx, 12)).toEqual({ number: 12, title: 'T', body: '', isPullRequest: false })
+    expect(await getIssue(ctx, 13)).toMatchObject({ number: 13, isPullRequest: true })
+    expect(fetch.calls.map((c) => c.init.method)).toEqual(['GET', 'GET'])
+  })
+
+  it('ST-19/AC-4: the allowlist admits the read and still refuses any other new request', async () => {
+    const fetch = fakeFetch([{ json: {} }])
+    const ctx = createContext({ repo: REPO, fetch, getToken: async () => 't' })
+    const base = `https://api.github.com/repos/${REPO}`
+    expect(() => github.assertAllowedRequest(REPO, buildGetIssue(REPO, 12))).not.toThrow()
+    const refused = [
+      { method: 'PATCH', url: `${base}/issues/12`, body: { state: 'closed' } },
+      { method: 'DELETE', url: `${base}/issues/12` },
+      { method: 'PUT', url: `${base}/issues/12` },
+      { method: 'GET', url: `${base}/issues/12`, body: { x: 1 } },
+      { method: 'GET', url: `${base}/issues/0` },
+      { method: 'GET', url: `${base}/issues/12/events` },
+      { method: 'GET', url: `${base}/issues/abc` },
+      { method: 'GET', url: `${base}/issues/12?x=1` },
+      { method: 'GET', url: `https://api.github.com/repos/other/repo/issues/12` },
     ]
     for (const request of refused) await expect(ctx.send(request)).rejects.toThrow(/refusing/)
     expect(fetch.calls).toHaveLength(0)

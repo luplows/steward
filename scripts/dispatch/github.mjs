@@ -9,6 +9,8 @@
  * open issues carrying a given set of labels, and create an issue. OQ-83 adds a
  * fourth: list every open pull request against a given base branch, with its
  * draft state and its author's association -- what `writer-prs.mjs` scans.
+ * ST-19 adds a fifth, a read: one issue of the repository by number, which
+ * `unit.mjs` uses to read a pull request's unit.
  *
  * Shape (AC-2): every operation has a pure `build*` function that returns the
  * request that *would* be sent, and a pure `parse*` function for the response.
@@ -131,6 +133,11 @@ export function buildListComments(repo, number, page = 1) {
   }
 }
 
+/** Request to read one issue of the repository by number (ST-19's AC-4). */
+export function buildGetIssue(repo, number) {
+  return { method: 'GET', url: `${repoPath(repo)}/issues/${requirePrNumber(number)}` }
+}
+
 /** Request to list open pull requests whose head is `branch` (OQ-112's AC-1). */
 export function buildListPullRequestsForHead(repo, branch) {
   const owner = repo.split('/')[0]
@@ -199,6 +206,20 @@ export function parsePullRequestState(json) {
 
 export function parseLabels(json) {
   return json.map((label) => label.name)
+}
+
+/**
+ * Reduces an issue response to what the unit reader needs (ST-19's AC-4).
+ * `isPullRequest` is set because the issues endpoint also answers for a pull
+ * request's number. Interprets nothing.
+ */
+export function parseIssue(json) {
+  return {
+    number: json.number,
+    title: json.title ?? '',
+    body: json.body ?? '',
+    isPullRequest: json.pull_request !== undefined && json.pull_request !== null,
+  }
 }
 
 /** Reduces a page of pull requests to what the loop reads (OQ-112's AC-1). */
@@ -312,6 +333,7 @@ const ALLOWED = [
   ['PATCH', new RegExp(`^/pulls/${PR}$`), ['title', 'body']],
   ['POST', new RegExp(`^/issues/${PR}/comments$`), ['body']],
   ['GET', new RegExp(`^/pulls/${PR}$`), null],
+  ['GET', new RegExp(`^/issues/${PR}$`), null],
   ['GET', new RegExp(`^/issues/${PR}/labels\\?per_page=100$`), null],
   ['GET', new RegExp(`^/issues/${PR}/comments\\?per_page=100&page=[1-9][0-9]*$`), null],
   ['GET', new RegExp('^/pulls\\?head=[^&]+&state=open$'), null],
@@ -425,6 +447,11 @@ export async function convertPullRequestToDraft(ctx, number) {
   const draft = json.data?.convertPullRequestToDraft?.pullRequest?.isDraft
   if (typeof draft !== 'boolean') throw new Error(`convert #${number} to draft: unexpected response ${JSON.stringify(json)}`)
   return { draft, alreadyDraft: false }
+}
+
+/** One issue of the repository, by number (ST-19's AC-4). */
+export async function getIssue(ctx, number) {
+  return parseIssue(await ctx.send(buildGetIssue(ctx.repo, number)))
 }
 
 export async function getPullRequestLabels(ctx, number) {
