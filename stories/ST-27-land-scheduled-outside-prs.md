@@ -94,3 +94,6 @@ A first sketch, to be settled with the Open questions below.
 - **Does the rotation review a scheduled outside pull request on its own**, or
   only when a crew member names it in a rotation request? AC-4 assumes on its
   own.
+- **Does inspection (ST-29) watch a scheduled outside pull request** for a
+  stall? ST-29 skips every pull request from outside the crew, since none is
+  reviewed today.
