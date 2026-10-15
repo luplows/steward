@@ -51,7 +51,8 @@ recalled — in story files, docs, commit messages, pull request bodies and revi
 
 These hold for every pull request's content, whoever writes it, the coder included.
 
-- Fill all three sections of [`.github/pull_request_template.md`](.github/pull_request_template.md).
+- Fill the `Unit:` line of [`.github/pull_request_template.md`](.github/pull_request_template.md)
+  with the unit the pull request implements, or `none`, along with the template's three sections.
   An empty section is a missing one. **Verification** gives the commands run and their real results.
 - Check whether `README.md` needs updating as a result of the change. Include any such update in
   the same pull request.

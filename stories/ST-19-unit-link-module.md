@@ -34,6 +34,14 @@ form the project keeps its units in. This story builds the module; ST-22 puts it
       than one distinct link. A closing keyword naming the same issue as a `Unit: #<n>` line is
       one link, not two. With `unitLinks` empty it returns `{ kind: 'missing' }` or
       `{ kind: 'none' }` only, and reports any `Unit:` text as unread.
+- [ ] **AC-2a** — A body that says `Unit: none` and also has one or more links, of any type AC-1
+      finds, whether `unitLinks` lets it read them or not, is a contradiction, not a link (owner,
+      2026-10-15). `findUnitLink` returns `{ kind: 'several', links, none: true }`, listing every
+      link it found; `readUnit` is not called for it; and `describeUnit` says, in fixed words,
+      that the body both says `Unit: none` and links a unit, lists the links, and says none was
+      read. With `unitLinks` empty, AC-2 still holds: `Unit: none` gives `{ kind: 'none' }`. A
+      test, named `ST-19/AC-2a`, covers `Unit: none` with a file link, and with a closing keyword
+      when `unitLinks` includes `"issue"`.
 - [ ] **AC-3** — `readUnit(link, { repoDir, base, ctx })` reads a link `findUnitLink` returned:
       - a file, with `git show <remote>/<base>:<path>` in `repoDir`, so the copy on `main`, never
         the pull request's head; a path that is absolute, contains a `..` segment, or is not on
@@ -55,8 +63,8 @@ form the project keeps its units in. This story builds the module; ST-22 puts it
       form in AC-1 and each result in AC-2 and AC-3, with the git and GitHub reads injected or
       against a temporary repository; including a file present at the head but not on `main`,
       which is unreadable.
-- [ ] **AC-7** — The `**Planned (ST-19)**` marker in `docs/agent-workflow-design.md` loses
-      `ST-19`, and the passage is corrected wherever what was built differs.
+- [ ] **AC-7** — Each `**Planned (ST-19)**` marker in `docs/agent-workflow-design.md` loses
+      `ST-19`, and each passage is corrected wherever what was built differs.
 
 ## Out of scope
 

@@ -18,18 +18,18 @@ want of time.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — Each section `parseRules` returns (`scripts/dispatch/rules.mjs`) has a `lead`: the
+- [x] **AC-1** — Each section `parseRules` returns (`scripts/dispatch/rules.mjs`) has a `lead`: the
       text between its heading, or its `Applies when:` line when it has one, and its first
       numbered item, trimmed, and `''` when there is none. Items, conditions and the problems
       `parseRules` reports are unchanged.
-- [ ] **AC-2** — A test, named `ST-28/AC-1`, parses a section with a lead paragraph after its
+- [x] **AC-2** — A test, named `ST-28/AC-1`, parses a section with a lead paragraph after its
       `Applies when:` line and one without a condition, and asserts each `lead`. The existing
       `ST-20/AC-<n>` tests still pass, changed only where they compare whole section objects, to
       include `lead`.
-- [ ] **AC-3** — `parseRules` run on this repository's `REVIEW.md` gives "Reading the pull request
+- [x] **AC-3** — `parseRules` run on this repository's `REVIEW.md` gives "Reading the pull request
       body" a `lead` that contains "Check the content of each section", and a test, named
       `ST-28/AC-3`, asserts it.
-- [ ] **AC-4** — In `scripts/dispatch/rules.test.mjs`, the `readRules` tests and their `beforeEach`
+- [x] **AC-4** — In `scripts/dispatch/rules.test.mjs`, the `readRules` tests and their `beforeEach`
       run with a 30-second timeout, set in that file. `vitest.config.mjs` is unchanged.
 
 ## Out of scope

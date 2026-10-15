@@ -63,7 +63,7 @@ Where a file defines the thing, the entry names it, and the file is the authorit
 - **story** — steward's own form of unit: a file under `stories/` with the schema in
   `stories/README.md`. A project need not use stories.
 - **flight plan** — the unit a flight links to, with a `Unit:` line in its body, or `Unit: none`
-  (planned: ST-19, ST-26).
+  (planned: ST-19).
 - **rotation** — one run of the review side: it reviews open flights that need a verdict, up to a
   cap, then has the pilot request landing for each that is cleared, and exits (planned: ST-25;
   run by hand by the controller until then). *Formerly: a pass.*
