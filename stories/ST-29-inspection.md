@@ -22,8 +22,10 @@ around the gate.
 - [ ] **AC-1** — `node scripts/dispatch/cli.mjs inspect [--repo owner/name] [--since-days N]` runs
       a new module, `scripts/dispatch/inspect.mjs`, and `cli.mjs`'s table of commands gains
       `inspect`. `--repo` defaults to the settings' `repo`. `--since-days` takes a positive
-      integer and defaults to 7. The token is `GH_TOKEN` when it is set and not empty, and
-      otherwise `gh auth token`, as `github.mjs`'s `ghAuthToken` reads it.
+      integer and defaults to 7. The token is `GH_TOKEN` when it is set and not empty, so that
+      the workflow (AC-8) uses `github.token`, and otherwise the output of `gh auth token`, which
+      is how `github.mjs`'s `ghAuthToken` obtains it. `ghAuthToken` reads no environment
+      variable, so the `GH_TOKEN` step is new in `inspect.mjs`.
 - [ ] **AC-2** — **Merges.** For each commit on `main` committed within the last `--since-days`
       days, it asks GitHub for the pull requests associated with that commit
       (`GET /repos/{repo}/commits/{sha}/pulls`), and keeps those that are merged and whose base is
