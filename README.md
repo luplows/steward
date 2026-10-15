@@ -46,17 +46,29 @@ What the review side reads:
 
 ## Contributing
 
+For everyone:
+
 - **Run the checks:** `npm ci`, then `npm test` (Vitest) and `npm run lint` (oxlint), which are
   what CI runs. Add tests alongside new logic.
 - **Every change goes through a pull request.** `main` is protected, and nothing is pushed to it
   directly.
 - **Fill in the pull request template's three sections**: what changed, how you verified it (the
   commands you ran and their real results), and whether this README needed updating.
-- **Steward reviews and lands its own pull requests**, against [`REVIEW.md`](REVIEW.md), once CI
-  is green. Only pull requests from the repository's owner, members and collaborators are landed
-  (`HONOURED_ASSOCIATIONS`, `scripts/land/check-author.mjs`), and only theirs are reviewed
-  ([`docs/controller.md`](docs/controller.md)).
 - **Agent sessions** working here follow [`AGENTS.md`](AGENTS.md).
+
+### From the crew
+
+The crew is the repository's owner, members and collaborators (`HONOURED_ASSOCIATIONS`,
+`scripts/land/check-author.mjs`). Steward picks up a crew member's pull request once it is marked
+ready: it is reviewed against [`REVIEW.md`](REVIEW.md), and lands once it passes and CI is green
+([`docs/controller.md`](docs/controller.md)).
+
+### From outside the crew
+
+Open a pull request as usual. Steward does not pick it up on its own: a member of the crew decides
+whether to schedule it. Landing a scheduled pull request, with its author's name on the change, is
+planned but not yet built ([ST-27](stories/ST-27-land-scheduled-outside-prs.md)). Until then it can
+be reviewed, but the runway does not land it.
 
 ## Further reading
 
