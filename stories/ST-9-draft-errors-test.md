@@ -5,23 +5,23 @@ tier: normal
 kind: workflow
 depends_on: []
 model: sonnet
-blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
+blocked: null
 ---
 
 ## Intent
 
-As the owner, I want a test to fail if `convertPullRequestToDraft` stops
-checking a GraphQL `errors` array, so that a refactor cannot quietly turn a
-failed conversion into a success. `story.mjs` commits `blocked:` on a stopped
-story only after the conversion reports the pull request is a draft. If an
-error response were taken as success, that commit would land on a pull request
-that is still ready, which breaks the rule that a `blocked:` story is always a
-draft.
+As a member of the crew, I want a test to fail if `convertPullRequestToDraft`
+stops checking a GraphQL `errors` array, so that a refactor cannot quietly
+turn a failed conversion into a success. `story.mjs` commits `blocked:` on a
+stopped story only after the conversion reports the pull request is a draft.
+If an error response were taken as success, that commit would land on a pull
+request that is still ready, which breaks the rule that a `blocked:` story is
+always a draft.
 
 ## Acceptance criteria
 
 - [ ] **AC-1** — `scripts/dispatch/github.test.mjs` has a new test, named for
-      `OQ-98/AC-1`. Its GraphQL response carries a non-empty `errors` array
+      `ST-9/AC-1`. Its GraphQL response carries a non-empty `errors` array
       **and** `data.convertPullRequestToDraft.pullRequest.isDraft: true`. The
       test asserts that `convertPullRequestToDraft` rejects, with a message
       that includes the error's `message`.
@@ -48,25 +48,26 @@ draft.
 
 Formerly tower-workshop-paths OQ-98.
 
-- `scripts/dispatch/github.mjs`, `convertPullRequestToDraft` (OQ-87, #153):
-  after the mutation, it throws if `json.errors` is a non-empty array, then
-  reads `json.data?.convertPullRequestToDraft?.pullRequest?.isDraft` and
-  throws if that is not a boolean.
+- `scripts/dispatch/github.mjs`, `convertPullRequestToDraft` (OQ-87,
+  tower-workshop-paths' #153): after the mutation, it throws if `json.errors`
+  is a non-empty array, then reads
+  `json.data?.convertPullRequestToDraft?.pullRequest?.isDraft` and throws if
+  that is not a boolean.
 - `scripts/dispatch/github.test.mjs`, `describe('OQ-87/AC-1: converting a pull
   request to a draft')`: the existing error test's fixture is
   `{ errors: [{ message: 'Resource not accessible' }] }` with no `data`. With
   the `errors` check removed, the missing `isDraft` still throws, so that test
   still passes. The fixtures there use `ctxWith` and `NODE_ID`.
-- #153's "Notes from the runner": "One probe survives. With the `json.errors`
-  check removed, the GraphQL-error test still passes. The fixture's `data` is
-  null, so the missing `isDraft` throws anyway. A response carrying both
-  `errors` and `isDraft: true` would be taken as success, and no test pins
-  that case."
-- `scripts/dispatch/story.mjs`, `stop()`: it records `blocked:` only when
-  `convertPullRequestToDraft` returned `draft: true`, and says so in a comment,
-  so that a `blocked:` story is never left ready.
-- Raised by the dispatcher session on 2026-09-28; the owner chose a
-  test-only story.
+- Tower-workshop-paths' #153, "Notes from the runner": "One probe survives.
+  With the `json.errors` check removed, the GraphQL-error test still passes.
+  The fixture's `data` is null, so the missing `isDraft` throws anyway. A
+  response carrying both `errors` and `isDraft: true` would be taken as
+  success, and no test pins that case."
+- `scripts/dispatch/story.mjs`, `runStory`'s `stop()`: it records
+  `blocked:` only when `convertPullRequestToDraft` returned `draft: true`,
+  and says so in a comment, so that a `blocked:` story is never left ready.
+- Raised by tower-workshop-paths' dispatcher session on 2026-09-28; the
+  owner chose a test-only story.
 
 ## Open questions
 
