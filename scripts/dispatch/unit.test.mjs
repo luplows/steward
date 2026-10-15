@@ -125,6 +125,41 @@ describe('ST-19/AC-2: what findUnitLink returns', () => {
   })
 })
 
+describe('ST-19/AC-2a: Unit: none with a link is a contradiction', () => {
+  it('ST-19/AC-2a: Unit: none with a file link is several, with none: true, whether or not unitLinks reads it', () => {
+    expect(findUnitLink('Unit: none\nUnit: a.md', ALL)).toEqual({
+      kind: 'several',
+      links: [{ type: 'file', target: 'a.md' }],
+      none: true,
+    })
+    expect(findUnitLink('Unit: a.md\nUnit: None', ['issue'])).toEqual({
+      kind: 'several',
+      links: [{ type: 'file', target: 'a.md', unread: true }],
+      none: true,
+    })
+  })
+
+  it('ST-19/AC-2a: Unit: none with a closing keyword is several when unitLinks includes issue', () => {
+    expect(findUnitLink('Unit: none\nFixes #9', ['issue'])).toEqual({
+      kind: 'several',
+      links: [{ type: 'issue', target: 9 }],
+      none: true,
+    })
+    expect(findUnitLink('Unit: none\nFixes #9', ['file'])).toEqual({ kind: 'none' })
+  })
+
+  it('ST-19/AC-2a: with unitLinks empty, Unit: none still gives none', () => {
+    expect(findUnitLink('Unit: none\nUnit: a.md', [])).toEqual({ kind: 'none' })
+  })
+
+  it('ST-19/AC-2a: describeUnit says the body both says Unit: none and links a unit, listing the links, none read', () => {
+    const found = findUnitLink('Unit: none\nUnit: a.md\nFixes #9', ALL)
+    expect(describeUnit(found)).toBe(
+      'Unit: the pull request body both says Unit: none and links a unit. None was read:\n- file a.md\n- issue #9',
+    )
+  })
+})
+
 describe('ST-19/AC-3: readUnit', { timeout: GIT_TIMEOUT }, () => {
   let tmp
   let repoDir

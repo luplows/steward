@@ -35,8 +35,9 @@ function classify(text) {
  * Finds the link in a pull request body, deterministically. Returns exactly one of
  * `{ kind: 'link', type, target }` (`type` is `issue`, `file` or `other`; an issue's
  * `target` is its number), `{ kind: 'none' }`, `{ kind: 'missing' }` and
- * `{ kind: 'several', links }`. A link whose type `unitLinks` does not include is
- * returned with `unread: true`; with `unitLinks` empty, `Unit:` text is not a link
+ * `{ kind: 'several', links }` (with `none: true` as well when the body also says
+ * `Unit: none`, which is a contradiction: AC-2a). A link whose type `unitLinks` does not
+ * include is returned with `unread: true`; with `unitLinks` empty, `Unit:` text is not a link
  * and comes back as `{ kind: 'missing', unread: [text, ...] }`.
  * `Unit: none` is `none` whichever `unitLinks` is. Pure.
  */
@@ -65,6 +66,7 @@ export function findUnitLink(body, unitLinks) {
   }
 
   const links = found.map((l) => (allowed.has(l.type) ? l : { ...l, unread: true }))
+  if (none && links.length > 0) return { kind: 'several', links, none: true }
   if (links.length > 1) return { kind: 'several', links }
   if (links.length === 1) return { kind: 'link', ...links[0] }
   if (none) return { kind: 'none' }
@@ -159,7 +161,9 @@ export function describeUnit(found, read) {
       return 'Unit: none. The pull request body states that it implements no unit.'
     case 'several':
       return [
-        'Unit: the pull request body links several units. None was read:',
+        found.none === true
+          ? 'Unit: the pull request body both says Unit: none and links a unit. None was read:'
+          : 'Unit: the pull request body links several units. None was read:',
         ...found.links.map((link) => `- ${name(link)}`),
       ].join('\n')
     default:
