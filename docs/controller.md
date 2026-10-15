@@ -56,6 +56,10 @@ outcome as it will.
 - Stop the whole rotation only when the rotation itself cannot go on: your worktree cannot be
   brought to `origin/main`, or has anything uncommitted, or a script fails with an error instead of
   returning a status. Report it, and start nothing more until the crew says how to go on.
+- After each review, before the next review or the pilot, run `git rev-parse HEAD` and
+  `git status --porcelain` in your worktree. If `HEAD` is not the commit you checked out, or
+  `git status` prints anything, a review has changed the files the pilot runs from: stop the
+  rotation as above, and report which pull request's review came before it.
 - Within a rotation, run each command at most once per pull request. Do not re-run it, or reach
   the same end another way, except for a `--rereview` asked for as below. A later rotation reviews
   or lands a pull request again only as the rotation's steps say.

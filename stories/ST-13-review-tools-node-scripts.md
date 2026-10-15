@@ -56,8 +56,9 @@ such an exit code.
 ## Out of scope
 
 - **Changing any allowlist.** `reviewerAllowedTools()` is unchanged.
-- **Narrowing the reviewer's direct `node` access.** That is ST-3's
-  (formerly tower-workshop-paths OQ-62), as OQ-92 said.
+- **Narrowing the reviewer's direct `node` access.** OQ-92 left it to
+  tower-workshop-paths' OQ-62, which became ST-3 and was folded on 2026-10-15
+  into ST-6, a spike, and the stories it recommends.
 
 ## Constraints
 

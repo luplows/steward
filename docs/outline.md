@@ -53,11 +53,12 @@ readability and must not drift from the files named.
 2. **Never push directly to main.** Every push ATC makes is built by `pushArgs` or
    `claimPushArgs` in `scripts/dispatch/coder.mjs`, and both refuse `main`
    (`assertPlainBranch`). A coder session may not run `git push` (its allowlist grants none and
-   denies it), but it can still reach the owner's SSH key. OQ-73 is scoped to the GitHub token and
-   names SSH keys out of scope, but its chosen mechanism, a container for coder sessions (decided
-   2026-10-08; ST-6), would close this too. This matters more on the second project: its account
-   is on GitHub Free, so nothing on GitHub stops a push to `main` there (R6 in the design
-   document).
+   denies it), but it can still reach the owner's SSH key. OQ-73 was scoped to the GitHub token
+   and named SSH keys out of scope. ST-6, the spike that took it over, now asks about SSH keys for
+   both the coder and the reviewer (2026-10-15), and the mechanism it recommends, a container
+   unless the spike shows another is better (chosen 2026-10-08), would close this too. This
+   matters more on the second project: its account is on GitHub Free, so nothing on GitHub stops a
+   push to `main` there (R6 in the design document).
 3. **Always bound the sessions it starts.** Each session has a spend ceiling (`--max-budget-usd`,
    `ROLE_DEFAULTS` in `scripts/dispatch/invocation.mjs`), a timeout and a stall interval
    (`DEFAULT_TIMEOUT_MS` and `DEFAULT_STALL_MS`, `scripts/dispatch/spawn.mjs`). The spend ceiling

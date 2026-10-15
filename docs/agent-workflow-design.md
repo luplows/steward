@@ -676,6 +676,13 @@ Why this is safe enough:
   runway some other way. The rule names `land.mjs` because that module's own allowlist permits the
   one dispatch and no other write.
 
+It also stops if a review changes its worktree: after each review, before the next review or the
+pilot, it checks that `HEAD` is the commit it checked out and that `git status` shows nothing,
+since a reviewer's `node -e` can write there and the pilot runs from there (owner, 2026-10-15;
+`docs/controller.md`, "Reporting and stopping"). **Planned (ST-25):** the rotation makes the same
+check itself. Neither notices a write outside the worktree, or to a file git ignores; that is
+ST-6's.
+
 The crew can tell the controller to hold a pull request back. That is an instruction to the
 session, not part of this design: a pull request whose head passed review lands without a
 go-ahead of its own (owner, 2026-10-12).
@@ -818,7 +825,8 @@ end up asking for exactly that: tower-workshop-paths' reviewer prompt once read 
 disk, tell nobody, act with elevated access*, and a reviewer correctly refused it as an injection
 attack. Removing the reviewer's need to post deletes that part of the prompt rather than rewording
 it. Genuinely removing the capability needs a reviewer with no SSH agent, no keyring and no
-push-capable credential (ST-3, held).
+push-capable credential, which no environment on the crew member's own account gives, so it is
+ST-6's question, a spike (Part 3, "Decided so far", 2026-10-15).
 
 **The coder holds no GitHub credential, and does not push.** `coderEnv`
 (`scripts/dispatch/coder-env.mjs`) removes `GH_TOKEN`, `GITHUB_TOKEN` and `GH_ENTERPRISE_TOKEN` from
@@ -829,8 +837,8 @@ its branch and opens its pull request from the title and body it emits (`coder.m
 merge, and you do not open your own PR"). This matters most for the coder, whose goal is a landed
 pull request: with a `repo`-scoped token it could set `review/agent` to `success` on its own head
 and start the runway, which tower-workshop-paths confirmed by probing (OQ-63). Git's own SSH
-authentication is still within its reach; ST-6, a spike, is to put coder sessions in a container
-(Part 3, R5).
+authentication is still within its reach; ST-6, a spike, is to find out how to run coder and
+reviewer sessions where it is not (Part 3, R5, and "Decided so far", 2026-10-15).
 
 **ATC is a trusted user of the one credential** it runs under, and there is no separately scoped
 one. What keeps ATC from clearing its own gate is not credential scope:
@@ -1071,9 +1079,10 @@ non-empty token returns `HTTP 401`, while an empty one authenticates normally as
 
 So a spawn that tries to de-credential a session by setting the variable to empty string **still has
 a fully authenticated `gh`**, and nothing about it looks wrong. `coderEnv` avoids this by *deleting*
-the variables rather than blanking them, which is why it works. Whoever builds ST-3
-(tower-workshop-paths' OQ-62), the reviewer's half of the same problem, is the one most likely to
-reach for the empty string, which is why this is recorded here rather than only in a code comment.
+the variables rather than blanking them, which is why it works. Whoever builds the reviewer's half
+of the same problem (the stories ST-6 recommends; formerly ST-3, tower-workshop-paths' OQ-62) is the
+one most likely to reach for the empty string, which is why this is recorded here rather than only
+in a code comment.
 
 ### Long shell commands
 
@@ -1561,6 +1570,10 @@ shortened where it is long, so that it can be found there with its date.
   2026-10-07, revised 2026-10-08 by the owner). See R5.
 - **Planned (ST-6): coder sessions are isolated in a container** (decided 2026-10-08 by the
   owner). OQ-73, a spike, finds out how, and the stories it recommends build it. See R5.
+  **Revised 2026-10-15 by the owner:** ST-6 now covers the reviewer too, and tries three other
+  mechanisms beside a container (WSL2 with Claude Code's sandboxed Bash tool, a low integrity
+  level, and a separate Windows account), recommending one. The container stands until its
+  recommendation says otherwise ("Containing a session is a spike", below).
 - **A project takes the workflow as a package pinned by git tag**, with no npm publishing planned,
   runs the loop from its own worktree, and keeps thin gate workflow files written by an `init`
   command (decided 2026-10-07 by the owner). See R2.
@@ -1998,6 +2011,25 @@ shortened where it is long, so that it can be found there with its date.
   it, which costs minutes; the local run alone, which notices nothing while no rotation runs; any
   `review/agent` `success`, whoever posted it; one rolling issue, or a failed run alone; a stall
   age fixed in the code; and the coder's stuck stories, which are the coding side's.
+- **Containing a session is a spike, ST-6, for both roles, and ST-3 is folded into it** (decided
+  2026-10-15 by the owner, with the planning session, while asking what a solid review side
+  needs). ST-3 asked for the reviewer's capability to write to be removed rather than its commands
+  denied. On one Windows account no environment does that: Windows Credential Manager gave a
+  coder's `node -e` child the `gh` credential with no prompt (tower-workshop-paths' #209), the
+  account's SSH keys are open to any process running as it, and the reviewer's `node -e` can write
+  anywhere that account can, the controller's worktree included, from which the pilot runs next.
+  So ST-6 now tries a container, WSL2 with Claude Code's sandboxed Bash tool, a low integrity
+  level and a separate Windows account, for the coder and the reviewer, and recommends the stories
+  that build one, adding them as drafts in its own pull request (ST-30, below). ST-3 is retired,
+  its checks carried into ST-6. The owner's
+  reason for a spike rather than a build: the danger is a malicious model or a prompt injection,
+  of low likelihood while the owner works alone. Considered and not chosen: building ST-3 as
+  written, with the environment scrubbed, which would make the guarantee look stronger than it
+  is; and a separate spike for the reviewer beside ST-6. **Also decided the same day by the
+  owner: a review that changes the controller's worktree stops the rotation**, checked after each
+  review (`docs/controller.md`, "Reporting and stopping"; **Planned (ST-25)** for the rotation's
+  own check). It is a cheap check until containment exists. Considered and not chosen: leaving
+  detection to the stories ST-6 recommends.
 - **A body that says `Unit: none` and also links a unit is a contradiction** (decided 2026-10-15
   by the owner, when ST-19's coder found the story silent on it). ATC
   reads neither, and tells the reviewer it found several links, with `Unit: none` among them, as it
@@ -2329,9 +2361,12 @@ is still open.
   spike's open question. Known questions for the spike: a git worktree's `.git` file holds an
   absolute host path, and `node_modules` on a bind mount from Windows is slow.
   The **Planned (ST-6)** markers here and under "Decided so far" were added on 2026-10-08 at the
-  owner's decision, after #199's review. The spike builds nothing, so its AC-5 leaves them in
-  place, and the stories written from its recommendation take them over (its AC-4). They take
-  those stories' `ST-<n>` once written in steward.
+  owner's decision, after #199's review. The spike builds nothing, so its own pull request adds
+  the stories it recommends, as drafts, and moves these markers onto them (its AC-4 and AC-5,
+  revised 2026-10-15; ST-30): the story lint fails on a marker naming a story in `stories/done/`.
+  **Revised 2026-10-15 by the owner:** the container is one of four mechanisms ST-6 now tries, for
+  the reviewer as well as the coder, and it stands until the spike's recommendation says otherwise
+  (Part 3, "Decided so far", "Containing a session is a spike").
 
   Superseded: **decided 2026-10-07 by the owner: after OQ-73, before OQ-101.** The owner's build
   order is OQ-80 (landed as #203 on 2026-10-07), then OQ-73, then OQ-101, so the move comes after OQ-80 and

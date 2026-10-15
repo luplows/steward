@@ -41,7 +41,7 @@ A first sketch, to be settled with the Open questions below.
 - Who is honoured. `HONOURED_ASSOCIATIONS` is unchanged.
 - Reviewing or landing an outside pull request without a crew member's act.
 - Removing the reviewer's or the coder's access to the crew member's
-  credentials: ST-3 and ST-6.
+  credentials: ST-6, a spike, and the stories it recommends.
 - `scripts/dispatch/writer-prs.mjs` and the loop that runs it, which steward
   does not run.
 
@@ -66,7 +66,7 @@ A first sketch, to be settled with the Open questions below.
   in the reviewer's checkout (`install.mjs`, `npm ci`, install scripts
   included), and the reviewer runs its tests. That checkout is on the crew
   member's machine, where an SSH key and a `gh` token are reachable
-  (`docs/agent-workflow-design.md`, "Credential minimalism"; ST-3, ST-6).
+  (`docs/agent-workflow-design.md`, "Credential minimalism"; ST-6).
 - Decided 2026-10-14 by the owner, while writing `README.md`'s contributing
   notes: outside work is scheduled by a member of the crew, and this story
   makes that possible, so that an outside contributor keeps the attribution
@@ -87,10 +87,10 @@ A first sketch, to be settled with the Open questions below.
 - **Is the schedule bound to a head?** A label or an approval survives a push,
   so a contributor could push a head no crew member looked at. Options: the
   schedule names the head SHA, as a verdict marker does; or a push clears it.
-- **Does scheduling wait for ST-3 and ST-6?** Reviewing an outside pull request
-  runs its install scripts and tests with the crew member's credentials
-  reachable (Context). Options: wait for them; or let the crew member's own
-  look at the diff, before scheduling, be the guard.
+- **Does scheduling wait for ST-6 and the stories it recommends?** Reviewing
+  an outside pull request runs its install scripts and tests with the crew
+  member's credentials reachable (Context). Options: wait for them; or let the
+  crew member's own look at the diff, before scheduling, be the guard.
 - **Does the rotation review a scheduled outside pull request on its own**, or
   only when a crew member names it in a rotation request? AC-4 assumes on its
   own.
