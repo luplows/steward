@@ -19,12 +19,13 @@ whole check, which CI already runs as a peer check.
 ## Acceptance criteria
 
 - [ ] **AC-1** — `review.mjs` finds the unit with ST-19's `findUnitLink`, from the pull request's
-      body and the settings' `unitLinks`, and reads it with `readUnit`. `resolveStory` is
-      removed, and so are the results `review.mjs` returned for it: `story-not-moved`,
-      `story-ambiguous` and its `story-unreadable` (`coder.mjs` and `story.mjs` keep their own
-      `story-unreadable`). A
-      missing, unreadable, `Unit: none` or several-link case does not stop the review: it is
-      reviewed, with ST-19's `describeUnit` note.
+      body and the settings' `unitLinks`, and reads it with `readUnit`. `resolveStory` leaves
+      `review.mjs` for `scripts/dispatch/story-containment.mjs`, its one other user, with its
+      tests, and story containment behaves as before. The results `review.mjs` returned for it
+      are removed: `story-not-moved`, `story-ambiguous` and its `story-unreadable` (`coder.mjs`
+      and `story.mjs` keep their own `story-unreadable`). A missing, unreadable, `Unit: none` or
+      several-link case does not stop the review: it is reviewed, with ST-19's `describeUnit`
+      note.
 - [ ] **AC-2** — `reviewer.md` replaces `{{STORY_ID}}`, `{{STORY_PATH}}` and `{{STORY}}` with
       `{{UNIT_NOTE}}`, the note, and `{{UNIT}}`, the unit's text when one was read and otherwise
       a fixed line saying none was. Both are bounded as injected values are. The prompt tells the
