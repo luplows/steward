@@ -1990,6 +1990,11 @@ shortened where it is long, so that it can be found there with its date.
   it, which costs minutes; the local run alone, which notices nothing while no rotation runs; any
   `review/agent` `success`, whoever posted it; one rolling issue, or a failed run alone; a stall
   age fixed in the code; and the coder's stuck stories, which are the coding side's.
+- **A body that says `Unit: none` and also links a unit is a contradiction** (decided 2026-10-15
+  by the owner, when ST-19's coder found the story silent on it; **Planned (ST-19)**, its AC-2a).
+  ATC reads neither, and tells the reviewer it found several links, with `Unit: none` among them,
+  as it does for two links. Considered and not chosen: the link wins, which the first build did;
+  and `Unit: none` wins, ignoring the link.
 
 ### The move, in order
 
