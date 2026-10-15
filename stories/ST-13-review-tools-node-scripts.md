@@ -5,18 +5,18 @@ tier: normal
 kind: workflow
 depends_on: []
 model: sonnet
-blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
+blocked: "Built by hand: changes .claude/prompts/reviewer.md, which a spawned coder session cannot edit (docs/agent-workflow-design.md, A spawned session cannot edit .claude/prompts/)"
 ---
 
 ## Intent
 
-As the owner, I want a reviewer to be able to capture the exit code of a
-repository script, such as `node scripts/lint-stories.mjs`, so that a review
-can confirm a check passed rather than inferring it from what the check
-printed. `scripts/dispatch/review-tools.mjs` refuses every `node` command,
-to keep `node -e` out of it. That also refuses the repository's own scripts,
-and a shell's `$?` is refused too. So today no reviewer can capture such an
-exit code.
+As a member of the crew, I want a reviewer to be able to capture the exit
+code of a repository script, such as `node scripts/lint-stories.mjs`, so that
+a review can confirm a check passed rather than inferring it from what the
+check printed. `scripts/dispatch/review-tools.mjs` refuses every `node`
+command, to keep `node -e` out of it. That also refuses the repository's own
+scripts, and a shell's `$?` is refused too. So today no reviewer can capture
+such an exit code.
 
 ## Acceptance criteria
 
@@ -52,14 +52,12 @@ exit code.
 - [ ] **AC-4** — `.claude/prompts/reviewer.md`, "Verify rather than accept",
       which says the helper refuses every `node` command, says instead that
       it runs a repository script with `node`, and refuses `node`'s flags.
-      A spawned coder session cannot edit `.claude/prompts/`, so the coder
-      gives this edit as a `### Proposed prompt edit` in its pull request
-      body (`coder.md`, "Constraints that apply to every story").
 
 ## Out of scope
 
 - **Changing any allowlist.** `reviewerAllowedTools()` is unchanged.
-- **Narrowing the reviewer's direct `node` access.** OQ-62's, as OQ-92 said.
+- **Narrowing the reviewer's direct `node` access.** That is ST-3's
+  (formerly tower-workshop-paths OQ-62), as OQ-92 said.
 
 ## Constraints
 
@@ -80,19 +78,22 @@ Formerly tower-workshop-paths OQ-103.
     allowed prefix, with the message `"<program>" is not an allowed reviewer
     command`.
   - `startProcess` starts commands with `execFile`, no shell.
-- `stories/done/OQ-92-reviewer-refused-commands.md`, AC-2: the helper runs a command only if it
-  matches a `Bash(<prefix>:*)` entry "and is not `node` itself", and its
-  tests refuse `node -e`. This story keeps that intent, keeping arbitrary
-  code out of the helper, and admits only a file in the repository.
+- Tower-workshop-paths' `stories/done/OQ-92-reviewer-refused-commands.md`,
+  AC-2: the helper runs a command only if it matches a `Bash(<prefix>:*)`
+  entry "and is not `node` itself", and its tests refuse `node -e`. This
+  story keeps that intent, keeping arbitrary code out of the helper, and
+  admits only a file in the repository.
 - `scripts/dispatch/review-tools.test.mjs`: the `OQ-92/AC-2` refusal table
   includes `['node -e', ['node', '-e', '1']]`, and "still refuses node on
   win32" refuses `node -v`.
-- Seen in reviews of #172, #173 and #174 on 2026-09-28: each reviewer had
+- Seen in reviews of tower-workshop-paths' #172, #173 and #174 on
+  2026-09-28: each reviewer had
   `review-tools.mjs exit -- node scripts/lint-stories.mjs` refused. The
   reviewers of #172 and #174 also had `$?` refused. Each fell back to running
   the lint directly and reading its output, or to `node -e` calling `lintAll`
   or `spawnSync`.
-- Raised by the dispatcher session; the owner asked for this follow-up.
+- Raised by tower-workshop-paths' dispatcher session; the owner asked for
+  this follow-up.
 
 ## Open questions
 

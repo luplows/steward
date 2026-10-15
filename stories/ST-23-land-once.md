@@ -62,6 +62,8 @@ that has turned steward's landing off never to have the runway started by stewar
 - `scripts/dispatch/writer-prs.mjs`: skips a pull request that already has a verdict at its head,
   so a landing that gave up there is never tried again (`docs/agent-workflow-design.md`, "The
   outline's reasoning", "The two sides").
+- ST-8 depends on this story: it adds `reviewPassedAt` to the latency log line that AC-4's `once`
+  calls append, and tests it for a `once` call.
 
 ## Open questions
 
