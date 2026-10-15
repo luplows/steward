@@ -33,9 +33,6 @@ node scripts/dispatch/cli.mjs review <pr-number>   # review the pull request at 
 node scripts/dispatch/cli.mjs land <pr-number>     # land it, once it has passed and is green
 ```
 
-Neither command needs `npm ci`: the review runs in a scratch checkout of its own, and installs
-there. Run `node scripts/dispatch/cli.mjs` alone to list the other commands.
-
 What the review side reads:
 
 - **`steward.config.json`**, the project's settings: its repository, its setup and check commands,
@@ -47,7 +44,19 @@ What the review side reads:
   turns a posted verdict into the `review/agent` status, and `land-approved.yml`, the runway, does
   the merge. Here, `main` is protected and requires `test` and `review/agent`.
 
-To work on steward itself: `npm ci`, then `npm test` and `npm run lint`.
+## Contributing
+
+- **Run the checks:** `npm ci`, then `npm test` (Vitest) and `npm run lint` (oxlint), which are
+  what CI runs. Add tests alongside new logic.
+- **Every change goes through a pull request.** `main` is protected, and nothing is pushed to it
+  directly.
+- **Fill in the pull request template's three sections**: what changed, how you verified it (the
+  commands you ran and their real results), and whether this README needed updating.
+- **Steward reviews and lands its own pull requests**, against [`REVIEW.md`](REVIEW.md), once CI
+  is green. Only pull requests from the repository's owner, members and collaborators are landed
+  (`HONOURED_ASSOCIATIONS`, `scripts/land/check-author.mjs`), and only theirs are reviewed
+  ([`docs/controller.md`](docs/controller.md)).
+- **Agent sessions** working here follow [`AGENTS.md`](AGENTS.md).
 
 ## Further reading
 
