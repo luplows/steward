@@ -317,6 +317,8 @@ it:
   roughly 5% of that rate (**Watchdog**, below).
 - **It lands only pull requests whose author the gate honours** (`HONOURED_ASSOCIATIONS`,
   `scripts/land/check-author.mjs`), because a landed story is work a coder will take (OQ-81).
+  **Planned (ST-27):** it also lands one from outside the crew that a member of the crew has
+  scheduled, at the head scheduled. How it is scheduled is open (ST-27's Open questions).
 - **One pull request per run.** `mergeable_state` is computed asynchronously, so a second merge in
   the same run decides on stale data. The same fact has a cost between runs: straight after a
   merge, other open pull requests can read `unknown` for a while, and the runway skips `unknown`
@@ -1953,6 +1955,15 @@ shortened where it is long, so that it can be found there with its date.
   (`reviewer.md`, "Verify rather than accept"). Considered and not chosen: an observation for
   each, which would make every pull request carrying one at most `pass-with-observations`; and
   accepting such a claim only where the body quotes the command and its output.
+- **Outside contributors' pull requests land once a member of the crew schedules them** (decided
+  2026-10-14 by the owner, while writing `README.md`'s contributing notes; **Planned (ST-27)**).
+  Today a rotation reviews only the crew's pull requests, and the runway lands only theirs
+  (**Merging**, Part 1). The owner's reason: an outside contributor keeps the attribution for their
+  work. Considered and not chosen: a crew member carrying the change in a pull request of their
+  own, which lands as the crew member's, since the runway squash-merges; and saying that only the
+  crew's pull requests are reviewed and landed. How the crew schedules one, whether the schedule is
+  bound to a head, and whether it waits for ST-3 and ST-6, since reviewing a pull request runs its
+  code where the crew member's credentials are reachable, are ST-27's open questions.
 
 ### The move, in order
 
