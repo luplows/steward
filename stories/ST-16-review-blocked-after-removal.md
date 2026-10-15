@@ -67,7 +67,8 @@ applying it again.
 - **Comments edited after the removal.** A comment counts by its
   `created_at`, not by when it was last edited.
 - **The breaker's threshold and exemptions** in `land-approved.yml`.
-- **Sharing the marker parser with `github.mjs`.** That is ST-17.
+- **Sharing the marker parser with `github.mjs`.** That is ST-17, which
+  depends on this story, since both change `apply-review-blocked.mjs`.
 
 ## Constraints
 
