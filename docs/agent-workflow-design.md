@@ -1020,8 +1020,9 @@ to record.
 
 The consequence is structural and easy to miss: **no coder can deliver a story that changes the
 prompts.** That is not rare: in steward, ST-13, ST-21 and ST-22 change `reviewer.md`, so each is
-built by hand (Part 3, "Decided so far"). A story whose acceptance criteria require prompt edits
-will be blocked on delivery no matter how well the coder performs.
+built by hand (for ST-21 and ST-22, Part 3, "Decided so far"; for ST-13, its own `blocked:`). A
+story whose acceptance criteria require prompt edits will be blocked on delivery no matter how well
+the coder performs.
 
 **An interactive session is not restricted the same way.** The same edits succeed from a session a
 person is attached to. So the restriction is a property of the *spawn*, not of the file, which is
