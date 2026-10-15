@@ -61,8 +61,8 @@ as it is on `main`.
       the head); a pull request that passed in an earlier rotation and lands in this one;
       `land: false` landing nothing; a review that records no verdict leaving that pull request to
       the next rotation; a thrown error stopping the rotation (AC-5a); and the refusals in AC-2.
-- [ ] **AC-7** — The `**Planned (ST-25)**` marker in `docs/agent-workflow-design.md` loses
-      `ST-25`, and the passage is corrected wherever what was built differs.
+- [ ] **AC-7** — Each `**Planned (ST-25)**` marker in `docs/agent-workflow-design.md` loses
+      `ST-25`, and each passage is corrected wherever what was built differs.
 - [ ] **AC-8** — `docs/controller.md` tells the controller to run a rotation with this command, in
       place of running its steps by hand, and drops each instruction the command now carries out
       itself; `docs/agent-workflow-design.md`, "The controller", is corrected to match.

@@ -17,16 +17,14 @@ stories that put them there are written from what works. The guarantee they
 serve: a spawned session cannot obtain a GitHub token or use an SSH key from
 the machine it runs on, and cannot write outside its own checkout, because
 those are unreachable, not because a command was denied. **This is a spike.
-Its output is written findings, a recommendation, and the stories it
-recommends, not code.** It is run by the owner with the planning session, by
-hand, not dispatched.
+Its output is written findings and a recommendation, not code.** It is run by
+the owner with the planning session, by hand, not dispatched.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — **Only findings and stories are committed.** The pull
-      request's diff changes `docs/agent-workflow-design.md`, adds the stories
-      AC-4 recommends under `stories/`, makes AC-5's edits, and moves this
-      story to `stories/done/` with its ticks, and nothing else. Any script,
+- [ ] **AC-1** — **Only findings are committed.** The pull request's diff
+      changes `docs/agent-workflow-design.md`, and moves this story to
+      `stories/done/` with its ticks, and nothing else. Any script,
       image definition or configuration used for the trials lives outside the
       repository's tree and is not committed. Its full text is given in the
       pull request body.
@@ -87,19 +85,25 @@ hand, not dispatched.
       trial each rests on. Between them they carry every guarantee check
       listed under Context. It also says which story takes over OQ-101's
       dependency on OQ-73.
-- [ ] **AC-5** — The stories AC-4 recommends are written, with the owner, in
-      this pull request. Every **Planned (ST-6)** marker in
-      `docs/agent-workflow-design.md` names them in place of ST-6, since this
-      story builds nothing and the story lint fails on a marker naming a story
-      in `stories/done/`. `stories/ST-13-review-tools-node-scripts.md` and
-      `stories/ST-27-land-scheduled-outside-prs.md`, which cite this story for
-      the reviewer's access, cite the new stories instead.
+- [ ] **AC-5** — No **Planned (ST-6)** marker is left at this pull request's
+      head, and this pull request changes none. They are moved first, by the
+      planning session's own pull request, which lands before this one: it
+      writes the stories AC-4 recommends, with the owner, points every
+      **Planned (ST-6)** marker in `docs/agent-workflow-design.md` at them,
+      and has `stories/ST-13-review-tools-node-scripts.md` and
+      `stories/ST-27-land-scheduled-outside-prs.md` cite them in place of
+      ST-6. That order is forced: the story lint fails on a marker naming a
+      story in `stories/done/`, and CI's containment check
+      (`scripts/dispatch/story-containment.mjs`) lets this pull request change
+      nothing under `stories/` but its own move, ticks and `blocked:` line.
 
 ## Out of scope
 
 - **Building it**: any change to code, prompts, tests, settings or workflows,
   `coder-env.mjs`, `invocation.mjs` and `spawn.mjs` included. That is the
   stories AC-4 recommends.
+- **Writing those stories**, and moving the markers and citations to them.
+  That is the planning session's pull request, which lands first (AC-5).
 - **Changes to the owner's machine** made by anyone but the owner. Installing
   or configuring a mechanism is the owner's, by hand, and Q1 records it.
 - **A second GitHub identity** (the design doc's open question 10).
