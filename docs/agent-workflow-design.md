@@ -1165,11 +1165,11 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
   2026-10-10). Open: whether it is steward's. The release review (above) is meant for it, a
   periodic walkthrough of `main` ending in a release tag, but it has not yet run, so its scope is
   unknown (owner, 2026-10-10); steward's `origin` has no tags (2026-10-13).
-- **D4. Whether and how the `Unit:` line is required** ("Review"). ST-26 puts the line in
-  steward's pull request template and leaves this open. The planning session's options
-  (2026-10-11): the pull request template carries it; ATC always writes it on a pull request it
-  opens; or a check on the pull request body, posted by steward's gate, fails without it, which
-  would sit with "Steward enforces nothing about CI" ("Land").
+- **D4. Whether and how the `Unit:` line is required** ("Review"). Steward's pull request
+  template carries the line and this is left open. The planning session's options (2026-10-11): the
+  pull request template carries it; ATC always writes it on a pull request it opens; or a check on
+  the pull request body, posted by steward's gate, fails without it, which would sit with "Steward
+  enforces nothing about CI" ("Land").
 - **D5. The `unitLinks` value `init` writes** ("Review").
 - **D6. A tool that compares a project's checklist with the example in the version it pins**
   ("Review"): a possibility, not decided (owner, 2026-10-09).
@@ -1787,7 +1787,8 @@ shortened where it is long, so that it can be found there with its date.
     sweep, rather than on `mergeable_state` `clean`.
   - **Planned (ST-25):** the review-and-land pass, one command per pass, started by the dispatcher
     session for now.
-  - **Planned (ST-26):** a `Unit:` line in steward's pull request template.
+  - A `Unit:` line in steward's pull request template (`.github/pull_request_template.md`), a path,
+    `#<n>` or `none`.
 - **Agents' instructions are split by who needs them, and written for any tool** (decided
   2026-10-12 by the owner, from the planning session's proposal). The rules every agent here
   follows are in `AGENTS.md`, which other companies' agent tools read by convention, and
