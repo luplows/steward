@@ -167,11 +167,9 @@ Steward's CI is one job, `test` in `.github/workflows/ci.yml`: `npm ci`, `npm ru
 `npm test` (Vitest), and on a pull request story containment
 (`scripts/dispatch/story-containment.mjs`), which fails a story's own pull request that changes
 `stories/` beyond its story's move, ticks and `blocked:` line. The one exception: the pull request
-of a story with `kind: spike` may also add stories directly under `stories/`, each a draft (it
-parses as a story, has `blocked: null` and something under its Open questions, so no coder can take
-it) with an id that no file in `stories/`, `stories/done/` or `stories/retired/` at the merge base
-uses and no other added file uses (Part 3, "Decided so far", 2026-10-15). Vitest includes the
-**story schema lint** (`scripts/lint-stories.mjs`) over every story in `stories/` and
+of a story with `kind: spike` may also add new stories, as drafts, on the conditions
+`checkAddedDraft` defines in the same file (Part 3, "Decided so far", 2026-10-15). Vitest includes
+the **story schema lint** (`scripts/lint-stories.mjs`) over every story in `stories/` and
 `stories/done/` and every `**Planned (ST-n)**` marker in `docs/`: frontmatter, sections, AC ids and
 markers (`scripts/lint-stories.test.mjs`, "the real repository lints clean"). The six runs before
 05:20 UTC on 2026-10-14 took 25 to 41 seconds, so **tiering is premature**: everything runs on
@@ -517,15 +515,15 @@ ordering file, and re-prioritising means editing one file's `tier`.
 ### Kind is for people, not ATC
 
 `kind: product | workflow | spike` groups stories for reading — release-review assembly, or
-answering "how much of this batch was tooling." **The ordering never reads it, and nothing in the
-ordering may.** That is stated as a rule because a field that exists eventually attracts a sort: a
-future change that orders by `kind` should be a visible violation of something written down rather
-than a natural-looking extension. Adding a value is cheap for the same reason.
+answering "how much of this batch was tooling." **Nothing in the ordering reads it, or may.** That
+is stated as a rule because a field that exists eventually attracts a sort: a future change that
+orders by `kind` should be a visible violation of something written down rather than a
+natural-looking extension. Adding a value is cheap for the same reason.
 
-The rule is narrowed to the ordering, its reason: the ordering never reads `kind`, and this
-repository's story tooling may. `kind: spike` marks a spike, a story whose output is findings and
-the stories they recommend, and story containment reads it to let the spike's own pull request add
-those stories as drafts (Part 3, "Decided so far", 2026-10-15).
+This repository's story tooling may read it. `kind: spike` marks a spike, a story whose output is
+findings and the stories they recommend, and story containment reads it to let the spike's own pull
+request add those stories as drafts (`scripts/dispatch/story-containment.mjs`; Part 3, "Decided so
+far", 2026-10-15).
 
 ### The starvation valve
 
