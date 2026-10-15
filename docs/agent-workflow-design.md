@@ -852,6 +852,13 @@ It should also check the observable consequence of branch-protection regression:
 without a successful `review/agent` status?** A required check vanished silently once. Reading
 protection config needs admin scope; merge history needs none.
 
+**Planned (ST-29):** inspection, as the glossary names it, is one command, `inspect`, run after
+each rotation and by a scheduled workflow, `inspection.yml`, that a project keeps or drops. It
+raises each finding as one issue labelled `inspection`: a merge to `main` whose pull request's head
+had no `review/agent` `success` posted by the gate before it merged, a commit on `main` without a
+pull request, and a pull request from the crew left pending or holding longer than the settings'
+`inspectAfterHours` (Part 3, "Decided so far", 2026-10-15).
+
 **Scheduled workflows are best-effort, and here they proved far worse than that.** A `*/15` cron on
 `land-approved.yml` delivered about one run every five hours — roughly 5% of the configured rate,
 with gaps of 4–5 hours. So: put nothing on a schedule whose *latency* matters. A watchdog is still
@@ -1965,6 +1972,23 @@ shortened where it is long, so that it can be found there with its date.
   crew's pull requests are reviewed and landed. How the crew schedules one, whether the schedule is
   bound to a head, and whether it waits for ST-3 and ST-6, since reviewing a pull request runs its
   code where the crew member's credentials are reachable, are ST-27's open questions.
+- **Inspection runs after each rotation and on a schedule, and raises each finding as an issue**
+  (decided 2026-10-15 by the owner, with the planning session, while asking what a solid review
+  side needs; **Planned (ST-29)**). It checks for a merge to `main` without a passing verdict, the
+  outline's definition, and for two stalls on the review side: a pull request from the crew left
+  pending, or holding, longer than a new setting, `inspectAfterHours`. A passing verdict is a
+  `review/agent` `success` created by `github-actions[bot]`, the account the gate posts as, on the
+  merged head before the merge, so that a status any other account posts does not count. One
+  command, `inspect`, does it: the controller runs it after each rotation until ST-25's rotation
+  does, and a scheduled workflow a project may keep or drop runs it too. Each finding is one issue
+  labelled `inspection`, never opened twice, so closing it is how the crew says it has seen it. The
+  owner's reasons: the next project the owner will use steward on is private, where Actions minutes
+  are limited, so the local run costs nothing and the schedule is the project's choice; and on a
+  private repository on GitHub Free, which has no branch protection, inspection is the only guard
+  on `main`. Considered and not chosen: the scheduled workflow alone, as **Watchdog** (Part 1) had
+  it, which costs minutes; the local run alone, which notices nothing while no rotation runs; any
+  `review/agent` `success`, whoever posted it; one rolling issue, or a failed run alone; a stall
+  age fixed in the code; and the coder's stuck stories, which are the coding side's.
 
 ### The move, in order
 

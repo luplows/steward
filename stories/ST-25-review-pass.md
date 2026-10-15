@@ -3,7 +3,7 @@ id: ST-25
 title: A rotation of the review side, started as one command
 tier: next
 kind: workflow
-depends_on: [ST-21, ST-22, ST-23, ST-24]
+depends_on: [ST-21, ST-22, ST-23, ST-24, ST-29]
 model: sonnet
 blocked: null
 ---
@@ -35,6 +35,11 @@ as it is on `main`.
       the list again and, one at a time, calls `landPullRequest` with `once: true` (ST-23) for
       each whose current head has an honoured `pass` or `pass-with-observations` verdict,
       including one that passed in an earlier rotation. When `land` is false it lands nothing.
+- [ ] **AC-4a** — Step 4a: after step 4, it runs inspection (ST-29) once, as
+      `node scripts/dispatch/cli.mjs inspect` does, and prints what inspection prints. Inspection's
+      exit code, and an error inside it, are printed and change neither what the rotation has done
+      nor its own exit code. A test shows inspection runs after the landings, and that a failing
+      inspection leaves the rotation's exit code as it was.
 - [ ] **AC-5** — Step 5: it prints one line per pull request considered, with its number and
       outcome (skipped and why, reviewed with its result, landed or not and why), and exits 0. It
       exits non-zero only when the rotation itself could not run: a checkout with a branch, a dirty
@@ -60,6 +65,7 @@ as it is on `main`.
 - What starts a rotation: the controller, for now (`docs/outline.md`, "The two sides").
   A scheduled task or another trigger is later.
 - Raising problems a rotation meets as GitHub issues, and the stop measure shared with the coder.
+  Inspection (ST-29) raises its own findings as issues, as that story defines.
 - Remembering a pull request whose review keeps failing. A rotation stores nothing (AC-5), so the
   next one reviews it again and pays for that session again, every rotation, until it succeeds.
 - Re-reviewing after a fix to the description alone. A `block` is an honoured verdict at the
