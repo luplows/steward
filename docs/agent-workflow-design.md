@@ -172,6 +172,10 @@ lint** (`scripts/lint-stories.mjs`) over every story in `stories/` and `stories/
 (`scripts/lint-stories.test.mjs`, "the real repository lints clean"). The six runs before 05:20 UTC
 on 2026-10-14 took 25 to 41 seconds, so **tiering is premature**: everything runs on every push.
 
+**Planned (ST-30):** story containment also lets a spike's own pull request add new stories, as
+drafts: a story with `kind: spike` may add the stories its findings recommend, each with a new id
+and something under its Open questions (Part 3, "Decided so far", 2026-10-15).
+
 Checks on stories that CI does not make:
 
 | Check | Where it is |
@@ -516,6 +520,11 @@ much of this batch was tooling." **Nothing in ATC reads it, and nothing in the o
 is stated as a rule because a field that exists eventually attracts a sort: a future change that
 orders by `kind` should be a visible violation of something written down rather than a
 natural-looking extension. Adding a value is cheap for the same reason.
+
+**Planned (ST-30):** the rule is narrowed to the ordering, its reason: the ordering never reads
+`kind`, and this repository's story tooling may. `kind: spike` marks a spike, a story whose
+output is findings and the stories they recommend, and story containment reads it to let the
+spike's own pull request add those stories as drafts (Part 3, "Decided so far", 2026-10-15).
 
 ### The starvation valve
 
@@ -1995,6 +2004,23 @@ shortened where it is long, so that it can be found there with its date.
   reads neither, and tells the reviewer it found several links, with `Unit: none` among them, as it
   does for two links. Considered and not chosen: the link wins, which the first build did;
   and `Unit: none` wins, ignoring the link.
+- **A spike's own pull request adds the stories it recommends, as drafts** (decided 2026-10-15 by
+  the owner, with the planning session, after #28's second `block`; **Planned (ST-30)**). A
+  spike's findings are what its follow-up stories are written from, but story containment lets a
+  story's own pull request change nothing under `stories/` but its own move, ticks and `blocked:`
+  line, so ST-6, as #28 rewrites it, needs a planning-session pull request to land first. A story
+  marks itself a spike with `kind: spike`. Its own pull request may add new stories, each with a
+  new id and something under its Open questions, so that no coder can take one until the planning
+  session and the crew refine it. It still may not change an existing story. It re-points its
+  **Planned** markers onto the drafts in the design doc, which containment does not restrict, and
+  the story lint accepts a marker naming a draft. The rule that nothing in ATC reads `kind` is
+  narrowed to its reason, the ordering: this repository's story tooling may read it. The owner's
+  view: a field not read today may be read when there is a reason. Considered and not chosen: a
+  title starting `Spike:`, a convention nothing enforces; a new required frontmatter key, which
+  every story would have to carry; and keeping containment as it is, with the planning session's
+  pull request first. This is steward's own convention for its own stories: steward does not parse
+  or lint a project's units (`outline.md`, "Review"), and for an issue a diff cannot change the
+  unit at all, so in a project containment is the reviewer's judgement against its checklist.
 
 ### The move, in order
 
