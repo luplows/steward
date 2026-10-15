@@ -5,18 +5,19 @@ tier: normal
 kind: workflow
 depends_on: []
 model: sonnet
-blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
+blocked: null
 ---
 
 ## Intent
 
-As the owner, I want removing `review-blocked` from a pull request to mean
-"I've seen it, carry on", so that the next block does not put the label straight
-back. Today `decideReviewBlocked` (`scripts/land/apply-review-blocked.mjs`)
-applies the label whenever it is absent and the pull request has three or more
-blocking verdicts. After a removal by hand, the count is still three or more, so
-the next marker comment re-applies it. Only blocks recorded after the removal
-should count towards applying it again.
+As a member of the crew, I want removing `review-blocked` from a pull request
+to mean "I've seen it, carry on", so that the next block does not put the label
+straight back. Today `decideReviewBlocked`
+(`scripts/land/apply-review-blocked.mjs`) applies the label whenever it is
+absent and the pull request has three or more blocking verdicts. After a
+removal by hand, the count is still three or more, so the next marker comment
+re-applies it. Only blocks recorded after the removal should count towards
+applying it again.
 
 ## Acceptance criteria
 
@@ -43,12 +44,16 @@ should count towards applying it again.
       cover") is corrected to match.
 - [ ] **AC-5** — The three places that say the label is never reapplied are
       corrected to say what AC-1 does: the header of
-      `scripts/land/apply-review-blocked.mjs` (lines 18–20), the comment in
+      `scripts/land/apply-review-blocked.mjs` (lines 19–21), the comment in
       `review-gate.yml` (lines 38–39), and the title of the
       `describe` block in `scripts/land/apply-review-blocked.test.mjs`
       (line 65, "OQ-80/AC-2: applied once, never removed or reapplied"), whose
       `OQ-80/AC-2` id stays.
-- [ ] **AC-6** — The **Planned (OQ-119)** sentence in
+- [ ] **AC-5a** — `docs/glossary.md`'s `review-blocked` entry, which says
+      the gate puts the label on a flight after three `block` verdicts, says
+      that once the label has been removed by hand, only verdicts recorded
+      since the latest removal count.
+- [ ] **AC-6** — The **Planned (ST-16)** sentence in
       `docs/agent-workflow-design.md`, "Merging", is resolved as that
       document's "Reading this document" note says.
 
@@ -62,7 +67,7 @@ should count towards applying it again.
 - **Comments edited after the removal.** A comment counts by its
   `created_at`, not by when it was last edited.
 - **The breaker's threshold and exemptions** in `land-approved.yml`.
-- **Sharing the marker parser with `github.mjs`.** That is OQ-120.
+- **Sharing the marker parser with `github.mjs`.** That is ST-17.
 
 ## Constraints
 
@@ -93,11 +98,13 @@ Formerly tower-workshop-paths OQ-119.
 - GitHub's "Issue event types" reference (read 2026-10-08): an `unlabeled`
   event carries `created_at` and `label.name`, and applies to pull requests as
   well as issues.
-- OQ-80's AC-2 (`stories/done/OQ-80-review-blocked-label.md`): "Removing it
-  is a deliberate human act meaning 'I have seen the cost, proceed'". Its
-  test covers a pull request that still carries the label, not one it was
-  removed from. The dispatcher raised the gap after #203 landed; the owner
-  decided on 2026-10-08 to count only blocks recorded after the removal.
+- OQ-80's AC-2 (tower-workshop-paths'
+  `stories/done/OQ-80-review-blocked-label.md`): "Removing it is a
+  deliberate human act meaning 'I have seen the cost, proceed'". Its test
+  covers a pull request that still carries the label, not one it was removed
+  from. Tower-workshop-paths' dispatcher raised the gap after its #203
+  landed; the owner decided on 2026-10-08 to count only blocks recorded after
+  the removal.
 
 ## Open questions
 
