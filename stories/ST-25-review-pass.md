@@ -67,6 +67,8 @@ as it is on `main`.
   (`docs/controller.md`, "Re-review").
 - Running passes on more than one machine, and a review claim.
 - Changing `loop.mjs` or `writer-prs.mjs`, which the frozen loop still uses.
+- Reviewing a pull request from outside the crew that a member of the crew has scheduled: ST-27,
+  which depends on this story and narrows AC-3's `outsider` skip to one that is not scheduled.
 
 ## Constraints
 
