@@ -10,10 +10,10 @@ blocked: null
 
 ## Intent
 
-As a member of the crew, I want a review-and-land pass to look once at whether a passed pull request
-is safe to merge, land it if so, and otherwise leave it for a later pass, so that one pull request's
-slow checks hold up nothing and a landing that did not happen is simply tried again. I want a
-project that has turned steward's landing off never to have the sweep triggered by steward.
+As a member of the crew, I want a rotation to look once at whether a passed pull request is safe to
+merge, land it if so, and otherwise leave it for a later rotation, so that one pull request's slow
+checks hold up nothing and a landing that did not happen is simply tried again. I want a project
+that has turned steward's landing off never to have the runway started by steward.
 
 ## Acceptance criteria
 
@@ -24,7 +24,7 @@ project that has turned steward's landing off never to have the sweep triggered 
       - a state that is not landable yet (today's waits: `review-pending`, `gate-lag`, `blocked`,
         `unknown`) is returned at once as `not-landable`, with the reason, and nothing is
         triggered;
-      - a landable pull request has the sweep triggered once, and is then polled for its merge
+      - a landable pull request has the runway started once, and is then polled for its merge
         for at most `SWEEP_RUN_BOUND_MS`, returning `merged`, or `sweep-pending` if it has not
         merged by then. It is never triggered a second time in the same call.
 - [ ] **AC-2** — Without `once`, and with `landing: true`, `landPullRequest` behaves exactly as
@@ -44,13 +44,13 @@ project that has turned steward's landing off never to have the sweep triggered 
 ## Out of scope
 
 - Which checks must be green (`landWhen`): ST-24. Landability here is today's.
-- The pass that calls `once`: ST-25.
-- Changing the sweep, `land-approved.yml`.
+- The rotation that calls `once`: ST-25.
+- Changing the runway, `land-approved.yml`.
 
 ## Constraints
 
 - Node, ESM, no new runtime dependencies.
-- `land.mjs` stays the only module that triggers the sweep, and its request allowlist gains
+- `land.mjs` stays the only module that starts the runway, and its request allowlist gains
   nothing.
 
 ## Context
