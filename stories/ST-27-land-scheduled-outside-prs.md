@@ -3,7 +3,7 @@ id: ST-27
 title: Review and land an outside pull request once a member of the crew schedules it
 tier: normal
 kind: workflow
-depends_on: []
+depends_on: [ST-25]
 model: sonnet
 blocked: null
 ---
@@ -29,9 +29,9 @@ A first sketch, to be settled with the Open questions below.
 - [ ] **AC-3** — A scheduling act counts only from an account the gate
       honours (`HONOURED_ASSOCIATIONS`, `scripts/land/check-author.mjs`). The
       same act by anyone else is ignored, and a test shows it.
-- [ ] **AC-4** — A rotation reviews a scheduled pull request from outside the
-      crew, and no outside pull request that is not scheduled
-      (`docs/controller.md`, "A rotation").
+- [ ] **AC-4** — ST-25's rotation command reviews a scheduled pull request
+      from outside the crew. Its `outsider` skip (ST-25's AC-3 and AC-6)
+      applies only to one that is not scheduled, and a test shows both.
 - [ ] **AC-5** — `README.md`'s "From outside the crew" and
       `docs/agent-workflow-design.md` describe what is then built, and the
       `**Planned (ST-27)**` markers lose `ST-27`.
@@ -42,6 +42,8 @@ A first sketch, to be settled with the Open questions below.
 - Reviewing or landing an outside pull request without a crew member's act.
 - Removing the reviewer's or the coder's access to the crew member's
   credentials: ST-3 and ST-6.
+- `scripts/dispatch/writer-prs.mjs` and the loop that runs it, which steward
+  does not run.
 
 ## Constraints
 
@@ -52,11 +54,14 @@ A first sketch, to be settled with the Open questions below.
 - `.github/workflows/land-approved.yml`, the candidate loop: each pull request's
   `author_association` goes to `scripts/land/check-author.mjs`, and one not
   honoured is skipped before the breaker's exemptions (OQ-81).
-- `scripts/dispatch/review.mjs` does not check the pull request's author. Only
-  the rotation does, by rule: `docs/controller.md`, "A rotation", reviews a pull
-  request "whose author the gate honours". A crew member can already have one
-  reviewed by naming it, and the verdict counts, since ATC posts it under the
-  crew member's credential.
+- Who is reviewed: `scripts/dispatch/writer-prs.mjs` skips a pull request
+  whose author is not honoured, with the outcome `outsider`, and `loop.mjs`
+  runs it. ST-25's rotation command does the same (its AC-3 and AC-6), which is
+  why this story depends on it, and until then the controller follows the same
+  rule by hand (`docs/controller.md`, "A rotation"). `review.mjs` itself does
+  not check the author, so a crew member can already have one reviewed by
+  naming it, and the verdict counts, since ATC posts it under the crew member's
+  credential.
 - Reviewing a pull request runs its code: `review.mjs` installs its dependencies
   in the reviewer's checkout (`install.mjs`, `npm ci`, install scripts
   included), and the reviewer runs its tests. That checkout is on the crew
@@ -87,4 +92,5 @@ A first sketch, to be settled with the Open questions below.
   reachable (Context). Options: wait for them; or let the crew member's own
   look at the diff, before scheduling, be the guard.
 - **Does the rotation review a scheduled outside pull request on its own**, or
-  only when a crew member names it in a rotation request (AC-4)?
+  only when a crew member names it in a rotation request? AC-4 assumes on its
+  own.
