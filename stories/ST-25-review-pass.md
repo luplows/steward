@@ -37,13 +37,20 @@ as it is on `main`.
       including one that passed in an earlier rotation. When `land` is false it lands nothing.
 - [ ] **AC-5** — Step 5: it prints one line per pull request considered, with its number and
       outcome (skipped and why, reviewed with its result, landed or not and why), and exits 0. It
-      exits non-zero only when the rotation itself could not run: a checkout with a branch, a dirty
-      worktree, settings that do not read, or a listing that fails. It stores nothing.
+      exits non-zero only when the rotation itself could not run or go on: a checkout with a
+      branch, a dirty worktree, settings that do not read, a listing that fails, a script error
+      (AC-5a), or a worktree a review changed (AC-5b). It stores nothing.
 - [ ] **AC-5a** — A script error stops the rotation (owner, 2026-10-14). When `reviewPullRequest`
       or `landPullRequest` throws, rather than returning a status, the rotation prints which pull
       request and step it was, reviews and lands nothing more, and exits non-zero. A status other
       than `recorded` or `merged` is that pull request's outcome, printed as AC-5 says, and the
       rotation goes on (`docs/controller.md`, "Reporting and stopping").
+- [ ] **AC-5b** — A worktree changed by a review stops the rotation (owner, 2026-10-15). After
+      each review in step 3, before the next review or step 4, the rotation checks its worktree
+      again: `HEAD` is still the commit step 1 checked out, and `git status --porcelain` prints
+      nothing. Otherwise it prints which pull request's review preceded the change, reviews and
+      lands nothing more, and exits non-zero. A test, with git injected, shows a change found after
+      the first review stopping the rotation before any landing.
 - [ ] **AC-6** — Tests in `rotation.test.mjs`, named `ST-25/AC-<n>`, with the GitHub, review and
       land functions injected: the order and the cap; each skip (draft, outsider, verdict already at
       the head); a pull request that passed in an earlier rotation and lands in this one;
@@ -67,6 +74,8 @@ as it is on `main`.
   (`docs/controller.md`, "Re-review").
 - Running rotations on more than one machine, and a review claim.
 - Changing `loop.mjs` or `writer-prs.mjs`, which the frozen loop still uses.
+- Stopping a review from writing outside the rotation's worktree, or to files git ignores there.
+  AC-5b only notices a change `git status` shows. Containment is ST-6's, a spike.
 - Reviewing a pull request from outside the crew that a member of the crew has scheduled: ST-27,
   which depends on this story and narrows AC-3's `outsider` skip to one that is not scheduled.
 

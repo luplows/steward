@@ -68,6 +68,18 @@ instruction.
 
 ## Context
 
+**Retired on 2026-10-15** (owner, with the planning session): folded into
+ST-6, a spike, which now finds out how to run both coder and reviewer sessions
+where the crew member's credentials and files cannot be reached. Asked to
+remove the reviewer's capability, rather than deny the command, on one Windows
+account, nothing in the environment can: Windows Credential Manager gave a
+coder's `node -e` child the `gh` credential with no prompt
+(tower-workshop-paths' #209), the account's SSH keys are open to any process
+running as it, and `node -e` can write anywhere that account can. So the
+capability is removed only by running the session somewhere else, which is
+ST-6's question. This story's AC-1 to AC-6 are carried into ST-6's Context as
+the reviewer's guarantee checks (design doc, Part 3, "Decided so far").
+
 Formerly tower-workshop-paths OQ-62.
 
 Found reviewing [#109](https://github.com/luplows/tower-workshop-paths/pull/109),

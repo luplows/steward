@@ -668,6 +668,13 @@ Why this is safe enough:
   runway some other way. The rule names `land.mjs` because that module's own allowlist permits the
   one dispatch and no other write.
 
+It also stops if a review changes its worktree: after each review, before the next review or the
+pilot, it checks that `HEAD` is the commit it checked out and that `git status` shows nothing,
+since a reviewer's `node -e` can write there and the pilot runs from there (owner, 2026-10-15;
+`docs/controller.md`, "Reporting and stopping"). **Planned (ST-25):** the rotation makes the same
+check itself. Neither notices a write outside the worktree, or to a file git ignores; that is
+ST-6's.
+
 The crew can tell the controller to hold a pull request back. That is an instruction to the
 session, not part of this design: a pull request whose head passed review lands without a
 go-ahead of its own (owner, 2026-10-12).
@@ -810,7 +817,8 @@ end up asking for exactly that: tower-workshop-paths' reviewer prompt once read 
 disk, tell nobody, act with elevated access*, and a reviewer correctly refused it as an injection
 attack. Removing the reviewer's need to post deletes that part of the prompt rather than rewording
 it. Genuinely removing the capability needs a reviewer with no SSH agent, no keyring and no
-push-capable credential (ST-3, held).
+push-capable credential, which no environment on the crew member's own account gives, so it is
+ST-6's question, a spike (Part 3, "Decided so far", 2026-10-15).
 
 **The coder holds no GitHub credential, and does not push.** `coderEnv`
 (`scripts/dispatch/coder-env.mjs`) removes `GH_TOKEN`, `GITHUB_TOKEN` and `GH_ENTERPRISE_TOKEN` from
@@ -1055,9 +1063,10 @@ non-empty token returns `HTTP 401`, while an empty one authenticates normally as
 
 So a spawn that tries to de-credential a session by setting the variable to empty string **still has
 a fully authenticated `gh`**, and nothing about it looks wrong. `coderEnv` avoids this by *deleting*
-the variables rather than blanking them, which is why it works. Whoever builds ST-3
-(tower-workshop-paths' OQ-62), the reviewer's half of the same problem, is the one most likely to
-reach for the empty string, which is why this is recorded here rather than only in a code comment.
+the variables rather than blanking them, which is why it works. Whoever builds the reviewer's half
+of the same problem (the stories ST-6 recommends; formerly ST-3, tower-workshop-paths' OQ-62) is the
+one most likely to reach for the empty string, which is why this is recorded here rather than only
+in a code comment.
 
 ### Long shell commands
 
@@ -1964,6 +1973,24 @@ shortened where it is long, so that it can be found there with its date.
   crew's pull requests are reviewed and landed. How the crew schedules one, whether the schedule is
   bound to a head, and whether it waits for ST-3 and ST-6, since reviewing a pull request runs its
   code where the crew member's credentials are reachable, are ST-27's open questions.
+- **Containing a session is a spike, ST-6, for both roles, and ST-3 is folded into it** (decided
+  2026-10-15 by the owner, with the planning session, while asking what a solid review side
+  needs). ST-3 asked for the reviewer's capability to write to be removed rather than its commands
+  denied. On one Windows account no environment does that: Windows Credential Manager gave a
+  coder's `node -e` child the `gh` credential with no prompt (tower-workshop-paths' #209), the
+  account's SSH keys are open to any process running as it, and the reviewer's `node -e` can write
+  anywhere that account can, the controller's worktree included, from which the pilot runs next.
+  So ST-6 now tries a container, WSL2 with Claude Code's sandboxed Bash tool, a low integrity
+  level and a separate Windows account, for the coder and the reviewer, and its pull request
+  writes the stories it recommends. ST-3 is retired, its checks carried into ST-6. The owner's
+  reason for a spike rather than a build: the danger is a malicious model or a prompt injection,
+  of low likelihood while the owner works alone. Considered and not chosen: building ST-3 as
+  written, with the environment scrubbed, which would make the guarantee look stronger than it
+  is; and a separate spike for the reviewer beside ST-6. **Also decided the same day by the
+  owner: a review that changes the controller's worktree stops the rotation**, checked after each
+  review (`docs/controller.md`, "Reporting and stopping"; **Planned (ST-25)** for the rotation's
+  own check). It is a cheap check until containment exists. Considered and not chosen: leaving
+  detection to the stories ST-6 recommends.
 
 ### The move, in order
 
