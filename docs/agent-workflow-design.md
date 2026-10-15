@@ -166,15 +166,14 @@ assert.** A coder that misreads a story writes tests confirming the misreading. 
 Steward's CI is one job, `test` in `.github/workflows/ci.yml`: `npm ci`, `npm run lint` (oxlint),
 `npm test` (Vitest), and on a pull request story containment
 (`scripts/dispatch/story-containment.mjs`), which fails a story's own pull request that changes
-`stories/` beyond its story's move, ticks and `blocked:` line. Vitest includes the **story schema
-lint** (`scripts/lint-stories.mjs`) over every story in `stories/` and `stories/done/` and every
-`**Planned (ST-n)**` marker in `docs/`: frontmatter, sections, AC ids and markers
-(`scripts/lint-stories.test.mjs`, "the real repository lints clean"). The six runs before 05:20 UTC
-on 2026-10-14 took 25 to 41 seconds, so **tiering is premature**: everything runs on every push.
-
-**Planned (ST-30):** story containment also lets a spike's own pull request add new stories, as
-drafts: a story with `kind: spike` may add the stories its findings recommend, each with a new id
-and something under its Open questions (Part 3, "Decided so far", 2026-10-15).
+`stories/` beyond its story's move, ticks and `blocked:` line. The one exception: the pull request
+of a story with `kind: spike` may also add new stories, as drafts, on the conditions
+`checkAddedDraft` defines in the same file (Part 3, "Decided so far", 2026-10-15). Vitest includes
+the **story schema lint** (`scripts/lint-stories.mjs`) over every story in `stories/` and
+`stories/done/` and every `**Planned (ST-n)**` marker in `docs/`: frontmatter, sections, AC ids and
+markers (`scripts/lint-stories.test.mjs`, "the real repository lints clean"). The six runs before
+05:20 UTC on 2026-10-14 took 25 to 41 seconds, so **tiering is premature**: everything runs on
+every push.
 
 Checks on stories that CI does not make:
 
@@ -423,7 +422,7 @@ It keeps its file and its number in a directory nothing dispatches from, so revi
 id: ST-49
 title: Print the queue as JSON
 tier: normal               # fix | next | normal | later — priority only
-kind: workflow             # product | workflow — never read by ATC
+kind: workflow             # product | workflow | spike — never read by the ordering
 depends_on: []             # [ST-45] — waiting until those are done
 model: sonnet              # per-story escalation
 blocked: null              # null | "reason text" — set by a kickback
@@ -515,16 +514,16 @@ ordering file, and re-prioritising means editing one file's `tier`.
 
 ### Kind is for people, not ATC
 
-`kind: product | workflow` groups stories for reading — release-review assembly, or answering "how
-much of this batch was tooling." **Nothing in ATC reads it, and nothing in the ordering may.** That
+`kind: product | workflow | spike` groups stories for reading — release-review assembly, or
+answering "how much of this batch was tooling." **Nothing in the ordering reads it, or may.** That
 is stated as a rule because a field that exists eventually attracts a sort: a future change that
 orders by `kind` should be a visible violation of something written down rather than a
 natural-looking extension. Adding a value is cheap for the same reason.
 
-**Planned (ST-30):** the rule is narrowed to the ordering, its reason: the ordering never reads
-`kind`, and this repository's story tooling may. `kind: spike` marks a spike, a story whose
-output is findings and the stories they recommend, and story containment reads it to let the
-spike's own pull request add those stories as drafts (Part 3, "Decided so far", 2026-10-15).
+This repository's story tooling may read it. `kind: spike` marks a spike, a story whose output is
+findings and the stories they recommend, and story containment reads it to let the spike's own pull
+request add those stories as drafts (`scripts/dispatch/story-containment.mjs`; Part 3, "Decided so
+far", 2026-10-15).
 
 ### The starvation valve
 
@@ -2005,13 +2004,13 @@ shortened where it is long, so that it can be found there with its date.
   does for two links. Considered and not chosen: the link wins, which the first build did;
   and `Unit: none` wins, ignoring the link.
 - **A spike's own pull request adds the stories it recommends, as drafts** (decided 2026-10-15 by
-  the owner, with the planning session, after #28's second `block`; **Planned (ST-30)**). A
-  spike's findings are what its follow-up stories are written from, but story containment lets a
-  story's own pull request change nothing under `stories/` but its own move, ticks and `blocked:`
-  line, so ST-6, as #28 rewrites it, needs a planning-session pull request to land first. A story
-  marks itself a spike with `kind: spike`. Its own pull request may add new stories, each with a
-  new id and something under its Open questions, so that no coder can take one until the planning
-  session and the crew refine it. It still may not change an existing story. It re-points its
+  the owner, with the planning session, after #28's second `block`). A spike's findings are what its
+  follow-up stories are written from, but story containment let a story's own pull request change
+  nothing under `stories/` but its own move, ticks and `blocked:` line, so ST-6, as #28 rewrites
+  it, needed a planning-session pull request to land first. A story marks itself a spike with
+  `kind: spike`. Its own pull request may add new stories, each with a new id and something under
+  its Open questions, so that no coder can take one until the planning session and the crew refine
+  it. It still may not change an existing story. It re-points its
   **Planned** markers onto the drafts in the design doc, which containment does not restrict, and
   the story lint accepts a marker naming a draft. The rule that nothing in ATC reads `kind` is
   narrowed to its reason, the ordering: this repository's story tooling may read it. The owner's

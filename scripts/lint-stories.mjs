@@ -31,7 +31,7 @@ export function storyFilenameRe(prefix) {
 
 const REQUIRED_FRONTMATTER_FIELDS = ['id', 'title', 'tier', 'kind', 'depends_on', 'model', 'blocked']
 const TIERS = ['fix', 'next', 'normal', 'later']
-const KINDS = ['product', 'workflow']
+const KINDS = ['product', 'workflow', 'spike']
 const REQUIRED_HEADINGS = ['Intent', 'Acceptance criteria', 'Out of scope', 'Constraints', 'Context', 'Open questions']
 
 function violation(file, line, rule, message, blocking = true) {
