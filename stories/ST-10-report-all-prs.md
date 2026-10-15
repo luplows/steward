@@ -5,17 +5,17 @@ tier: later
 kind: workflow
 depends_on: []
 model: sonnet
-blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
+blocked: null
 ---
 
 ## Intent
 
-As the owner, I want `scripts/report/review-verdicts.mjs` run with no flags
-to report on every pull request, and a run capped by `--limit` to say that it
-is partial. OQ-47's AC-1 asks for a tally "across all gated pull requests".
-Today the default covers only the 60 most recent (`DEFAULT_LIMIT`), and the
-output does not say so, so whoever runs it next gets a partial count that
-looks complete.
+As a member of the crew, I want `scripts/report/review-verdicts.mjs` run with
+no flags to report on every pull request, and a run capped by `--limit` to say
+that it is partial. OQ-47's AC-1 asks for a tally "across all gated pull
+requests". Today the default covers only the 60 most recent (`DEFAULT_LIMIT`),
+and the output does not say so, so whoever runs it next gets a partial count
+that looks complete.
 
 ## Acceptance criteria
 
@@ -48,13 +48,21 @@ looks complete.
       other to what OQ-47's tests assert. An existing test's call may change
       to a new signature or return shape, as long as it still asserts what it
       asserted before.
+- [ ] **AC-3a** — With no `--limit`, `parseArgs` returns `limit: null`,
+      meaning no cap, and `gatherVerdicts` and `listRecentPullRequests`
+      apply no cap when `limit` is `null` or not given. The three
+      `OQ-125/AC-3` tests of `parseArgs` in
+      `scripts/report/review-verdicts.test.mjs` expect `limit: null` in
+      place of `limit: DEFAULT_LIMIT`, and their `repo` expectations are
+      unchanged. This criterion authorises that change and no other to what
+      those tests assert.
 
 ## Out of scope
 
 - **The over-count of stale markers.** `actedOnVerdicts` applies no head
   check, so it also counts a marker the gate ignored as stale when it was
-  posted (#169's round-4 review). On 2026-09-28 the owner chose to follow
-  up only the default limit.
+  posted (tower-workshop-paths' #169, its round-4 review). On 2026-09-28 the
+  owner chose to follow up only the default limit.
 - **Rate limits, tokens and caching.** A full run needs a token in practice.
   How the script reads `GITHUB_TOKEN` or `GH_TOKEN` does not change.
 - **Changing the tally's other fields**, or the order and wording of the
@@ -68,13 +76,14 @@ looks complete.
 
 Formerly tower-workshop-paths OQ-99.
 
-- `scripts/report/review-verdicts.mjs` (OQ-47, #169):
+- `scripts/report/review-verdicts.mjs` (OQ-47, tower-workshop-paths' #169):
   - `DEFAULT_LIMIT` is 60.
   - `listRecentPullRequests(ctx, limit)` pages 100 at a time, newest first,
     stops when `all.length >= limit` or a page holds fewer than 100, and
     returns `all.slice(0, limit)`.
-  - `gatherVerdicts(ctx, { limit = DEFAULT_LIMIT })` calls it, and `main`
-    passes `--limit` or `DEFAULT_LIMIT`.
+  - `gatherVerdicts(ctx, { limit = DEFAULT_LIMIT })` calls it.
+    `parseArgs` (OQ-125) returns the `--limit` given, or `DEFAULT_LIMIT`
+    when there is none, and `main` passes that to `gatherVerdicts`.
   - `tallyVerdicts` sets `pullRequestsScanned`, and `formatReport` prints it
     as `Pull requests scanned: <n>`.
   - The module's allowlist admits the pull-request listing only as
@@ -82,13 +91,15 @@ Formerly tower-workshop-paths OQ-99.
 - `scripts/report/review-verdicts.test.mjs`: the existing tests call
   `gatherVerdicts` with `limit: 1` and `limit: 3` through an injected `fetch`.
   The test "DEFAULT_LIMIT is a positive integer the CLI falls back to" asserts
-  only that `DEFAULT_LIMIT` is a positive integer (AC-3).
-- #169's round-4 review, observation 2: "DEFAULT_LIMIT is 60 … so a run
-  without --limit reports only the 60 most recent. Full coverage needs
-  --limit of at least the PR count." The run recorded in #169 used
-  `--limit 500` and scanned all 169.
-- Raised by the dispatcher session on 2026-09-28. The owner asked for a small
-  story at low priority, so it is `later`.
+  only that `DEFAULT_LIMIT` is a positive integer (AC-3). The three
+  `OQ-125/AC-3` tests of `parseArgs` expect `limit: DEFAULT_LIMIT`
+  (AC-3a).
+- Tower-workshop-paths' #169, its round-4 review, observation 2:
+  "DEFAULT_LIMIT is 60 … so a run without --limit reports only the 60 most
+  recent. Full coverage needs --limit of at least the PR count." The run
+  recorded in #169 used `--limit 500` and scanned all 169.
+- Raised by tower-workshop-paths' dispatcher session on 2026-09-28. The owner
+  asked for a small story at low priority, so it is `later`.
 
 ## Open questions
 
