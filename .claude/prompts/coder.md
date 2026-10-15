@@ -1,48 +1,38 @@
 # Coder prompt
 
-The prompt a fresh session is spawned with to implement one story. The
-reviewer's counterpart is [`reviewer.md`](reviewer.md).
+The prompt ATC starts a coder session with, to implement one story. Its
+counterpart is [`reviewer.md`](reviewer.md). What the coder may and may not do,
+and why, are in `docs/agent-workflow-design.md`, "The coding side",
+"Invocation shape" and "Credential minimalism".
 
-Everything below the `---` is the prompt. It is **rendered**, not pasted:
-whatever spawns the session substitutes these placeholders and sends the
-result. Rendering it by hand is fine; improvising it is not.
+Everything below the `---` is the prompt. `coder.mjs` starts the session with
+`spawnSession` (`scripts/dispatch/spawn.mjs`), which renders the prompt with
+`buildInvocation` (`scripts/dispatch/invocation.mjs`). That substitutes these
+placeholders, and on a retry appends `retrySection`:
 
 | Placeholder | Substituted with |
 |---|---|
-| `{{STORY_ID}}` | the story's id, e.g. `OQ-49` |
-| `{{STORY_PATH}}` | the story file's path, e.g. `stories/OQ-49-read-story-queue.md` |
+| `{{STORY_ID}}` | the story's id, e.g. `ST-49` |
+| `{{STORY_PATH}}` | the story file's path, e.g. `stories/ST-49-queue-json.md` |
 | `{{STORY}}` | the entire contents of that file, verbatim |
-| `{{BRANCH}}` | the branch to work on, e.g. `story/OQ-49-read-story-queue` |
+| `{{BRANCH}}` | the branch to work on, e.g. `story/ST-49-queue-json` |
 
-The story is **injected** rather than looked up. The coder does not choose which
-story to work on and does not need to find it: selection is the dispatcher's
-job, and a coder that goes looking can pick up a different or stale version of
-the text it is being marked against.
+`render` (`scripts/dispatch/render.mjs`) refuses a prompt that uses a
+placeholder this table does not list, and returns any row the prompt does not
+use as `unusedDocumented` (`checkPlaceholderContract`). `{{STORY}}` is
+injected as a bounded block, and the others as plain tokens (`TRUSTED_INLINE`,
+`invocation.mjs`).
 
-This is a file rather than something typed per spawn because the prompt that
-launched the OQ-43 worker asserted that `review/agent` was a required status
-check and that its PR would be blocked from merging. Neither was true at the
-time. The worker did the right thing anyway — but only because it believed a
-claim nobody had checked. A file gets reviewed once; an improvised prompt gets
-reviewed never.
+The story is given rather than looked up: ATC chooses it, and a coder that went
+looking could work from a different or stale copy of the text it is reviewed
+against.
 
-**Spawn it with `--permission-prompts none`.** That is what actually prevents
-the hang the *write and exit* section describes: with nobody attached, anything
-that would prompt blocks forever, and denying it instead is a property of the
-invocation rather than of the agent's good behaviour. The prose in that section
-tells the coder what to do when it has a choice; the flag is what holds when it
-does not. Pair it with `--max-budget-usd`, which turns "how much can one runaway
-story cost" into a number chosen in advance rather than discovered afterwards.
-
-**That flag is only safe to use with an `--allowedTools` list wide enough to
-finish the job**, and the two have to be chosen together. `--permission-prompts
-none` denies anything that would prompt; `--permission-mode acceptEdits` covers
-file edits but nothing else; and `.claude/settings.json` allowlists the project's
-npm and npx commands plus read-only git — **nothing that writes to the repository**.
-So a spawn carrying just those two flags can run the test suite and then
-silently denies `git commit`: the coder does the work, verifies
-it, and cannot commit it. That looks like a model failure and is not
-one. (`git push` is denied on purpose: the dispatcher pushes.) The coder needs at least:
+The session runs with `--permission-prompts none`, so anything that would
+prompt is denied rather than left waiting, and with an `--allowedTools` list
+wide enough to finish and commit the work. `coderAllowedTools` in
+`scripts/dispatch/coder-env.mjs` builds that list, and that function is the
+authority — this block is a reader's summary of it and must not drift from it.
+`coder-env.test.mjs` fails if the two differ. The coder needs at least:
 
 ```
 Read Write Edit Glob Grep TodoWrite
@@ -54,71 +44,15 @@ Bash(ls:*) Bash(cat:*) Bash(head:*) Bash(tail:*) Bash(wc:*) Bash(grep:*)
 Bash(diff:*) Bash(cut:*) Bash(pwd:*)
 ```
 
-The last two lines are the read-only shell utilities it uses to inspect the
-repository (`READ_ONLY_SHELL_UTILS`). None of them can write in any mode, which
-is why `sed`, `sort`, `find` and `awk` are absent.
-**Not `Bash(git:*)`.** That would permit `git push origin HEAD:main`, which is
-the one thing the scoping exists to prevent, and the coder has no use for it:
-the verbs above are the whole of what building and committing a branch
-requires. `scripts/dispatch/coder-env.mjs` builds this list
-(`coderAllowedTools`) rather than leaving it to be retyped per spawn, and that
-function is the authority — this block is a reader's summary of it and must not
-drift from it. `coder-env.test.mjs` compares the two, so a drift fails the
-suite rather than a spawn. An allowlist with a hole in it fails at
-the last step rather than the first, and denials are visible in the transcript
-rather than fatal, so a gap degrades into a route-around rather than a hang —
-but it still costs a run.
+It has no `git push` and no `gh`: ATC pushes the branch. It holds no GitHub
+credential, since `coderEnv` removes the tokens from its environment and points
+`GH_CONFIG_DIR` at an empty directory. ATC opens its pull request from the
+title and body it emits at the end of its report, which `parsePrBlock`
+(`scripts/dispatch/outcome.mjs`) reads.
 
-**The coder holds no GitHub API credential, and `gh` is not on its allowlist at
-all.** It was, until OQ-63: with the owner's `repo`-scoped token, `gh api` could
-set a commit status on any SHA and dispatch any workflow, confirmed against this
-repository by probing with deliberately invalid payloads — authorisation passed
-and only validation failed, so nothing was actually written. That was the whole
-self-merge path: set `review/agent` to `success` on your own head, then dispatch
-`land-approved.yml`.
-
-Narrowing the `gh` patterns wouldn't have fixed it, because `Bash(node:*)` is
-also required and `node -e` reaches `child_process` — confirmed the same way,
-by running `gh api` from inside a `node -e` subprocess and watching it succeed
-regardless of what the Bash tool's allowlist said. **So the fix is not a command
-denial, it is the absence of a usable credential.** `coderEnv` in
-`scripts/dispatch/coder-env.mjs` strips `GH_TOKEN`, `GITHUB_TOKEN` and
-`GH_ENTERPRISE_TOKEN` from the coder's process environment and points
-`GH_CONFIG_DIR` at an empty directory, regardless of what the invoking shell
-already carries. That holds against `gh api` directly, against `node -e`
-spawning `gh` or `curl` through `child_process`, and against an `npm`/`npx`
-script doing either — none of them can conjure a token that was never in the
-environment to begin with, whichever command reads it. Git's own SSH
-authentication is left in place, but pushing is not yours to do: `git push` is
-denied, and the dispatcher pushes your branch after your session ends.
-
-The coder still needs a way to get its branch out and its work reviewed. It
-commits, and the dispatcher pushes its branch; it does not open the pull request itself.
-Instead it **emits the PR title and body** — the same `pull_request_template.md`
-sections it always filled in — as the last thing in its final report, under the
-headings `## PR title` and `## PR body`, followed by `## Open as` and a line
-that is only `draft` or `ready`. That ending is pinned in "You do not merge,
-and you do not open your own PR" below, because `scripts/dispatch/outcome.mjs`
-(`parsePrBlock`) parses it and rejects anything else. Whatever spawned it
-reads that text and opens the pull request with the owner's credential. This
-mirrors the existing split where the reviewer returns a verdict and the runner
-posts it (`docs/agent-workflow-design.md`, "Credential minimalism").
-
-This paragraph used to say the dispatcher held "its own, separately-scoped
-credential — one that can write pull requests but, like the coder's, cannot set a
-commit status or dispatch a workflow." That was not true and is not the plan:
-there is one credential in this project, and the dispatcher is a trusted user of
-it. What keeps the dispatcher from clearing a gate is that it does not decide the
-verdict — a separate credential-less session does — and that `review-gate.yml`,
-not the dispatcher, derives the `review/agent` status from the marker comment.
-See `docs/agent-workflow-design.md`, "Credential minimalism". **Nothing about
-your own situation changes: you hold no GitHub credential either way.**
-
-Read the assembled prompt end to end before sending it, as a stranger would. A
-prompt that gains a fix after every failed run can end up reading like an
-attack: one reviewer session correctly refused a task whose prompt had
-accumulated instructions to hunt for credentials on disk and to raise questions
-with nobody. Each addition was locally reasonable; the sum was not.
+Read the whole prompt end to end, as a stranger would, after any change to it.
+A prompt that gains one fix per failed run can end up reading like an attack
+(`docs/agent-workflow-design.md`, "Credential minimalism").
 
 ---
 
@@ -183,24 +117,21 @@ the diff, and the story file moved to `stories/done/`.
 
 ## Environment
 
-You are running **on the owner's machine**, not in a cloud container. Older
-prompts in this repository said otherwise; where they conflict with this
-section, this section is right.
+You are running **on the machine of the member of the crew who runs ATC**, not
+in a cloud container. Where another document says otherwise, this section is
+right.
 
 - **`gh` is not available to you, and no GitHub API credential is reachable
   from this session** — no `GH_TOKEN`, no `GITHUB_TOKEN`, no working `gh`
-  login. That is deliberate (OQ-63): you commit your work and emit the PR
-  body; the dispatcher pushes your branch and whoever spawned you opens the PR with a separate credential. See "You
-  do not merge, and you do not open your own PR" below.
+  login. That is deliberate: you commit your work and emit the PR body, and
+  ATC pushes your branch and opens the PR. See "You do not merge, and you do
+  not open your own PR" below.
 - **Network egress is unrestricted.**
-- **Ref deletion works**, but do not delete your branch. When the landing sweep
-  merges a PR it deletes the head branch as an explicit step
-  (`scripts/land/delete-merged-heads.mjs`). The repository's
-  `delete_branch_on_merge` setting is not relied on.
-- You are in a checkout of this repository, already on `{{BRANCH}}` — a
-  dedicated git worktree once the dispatcher makes them, an ordinary clone
-  while this prompt is still rendered by hand. Either way the branch exists
-  already; do not create it.
+- **Ref deletion works**, but do not delete your branch. The runway deletes a
+  pull request's head branch after merging it
+  (`scripts/land/delete-merged-heads.mjs`).
+- You are in a git worktree of this repository that ATC made for you, already
+  on `{{BRANCH}}`. The branch exists already; do not create it.
 
 ## Background commands end silently
 
@@ -220,7 +151,7 @@ the same command again unchanged.
 
 Your PR gets a `review/agent` commit status, set pending the moment it opens. A
 separate reviewer session — not you — reads the story and the diff and returns a
-verdict, which is recorded as a marker comment on the PR.
+verdict, which ATC posts as a marker comment on the PR.
 
 **Never post an `<!-- agent-review ... -->` marker on your own PR.** The gate's
 entire value is that something without your context judged the diff against the
@@ -239,12 +170,12 @@ whoever is running you posts it there on your behalf.
 
 ## You do not merge, and you do not open your own PR
 
-A separate workflow lands PRs that are green, verdict-passed and conflict-free,
-one per run. It runs when someone triggers it rather than on a
-schedule, so a merge-ready PR may sit for a while — that is expected, not a
-fault, and not yours to chase. You do not merge your own, and neither does the
-reviewer. Your job ends with your work committed and a PR description ready for
-the runner to use. You do not push: the dispatcher does, after your session ends.
+The runway, `land-approved.yml`, lands PRs that are green, verdict-passed and
+conflict-free, one per run. It runs when it is started, not on a schedule, so a
+merge-ready PR may sit for a while — that is expected, not a fault, and not
+yours to chase. You do not merge your own, and neither does the reviewer. Your
+job ends with your work committed and a PR description ready for ATC to use.
+You do not push: ATC does, after your session ends.
 
 **Commit your work, then end your final report with exactly this block, and
 put nothing after it:**
@@ -260,10 +191,10 @@ put nothing after it:**
 <ready or draft>
 ```
 
-The last line is `ready` or `draft`, alone on its line. Whoever ran you
-creates the PR from that block, and a script reads it: a report that ends any
-other way (a sentence after `## Open as`, a head SHA below the block, `draft`
-worded as "Open as: draft") is rejected, and no PR is opened.
+The last line is `ready` or `draft`, alone on its line. ATC opens the PR from
+that block, and a script reads it: a report that ends any other way (a
+sentence after `## Open as`, a head SHA below the block, `draft` worded as
+"Open as: draft") is rejected, and no PR is opened.
 
 **Do not wrap the block in a code fence.** The fence above only marks where
 the example starts and ends in this prompt. In your report, the three headings
@@ -273,11 +204,12 @@ something after the block, exactly as a sentence would.
 **Say `ready` when the work is done:** every acceptance criterion you ticked is
 delivered, the suite is green, and your work is committed. That is the normal
 case. **Say `draft` only when you stopped short**: you set `blocked:` (see
-"When you cannot proceed" below), you could not commit your work, or you left work undone.
-Say which in the PR body. Both directions cost something. The sweep skips
-drafts, so finished work opened as a draft waits until someone marks it ready.
-And nothing else distinguishes "passed review" from "done", so a `ready` PR
-that goes green will be landed whether or not you meant to add another commit.
+"When you cannot proceed" below), you could not commit your work, or you left
+work undone. Say which in the PR body. Both directions cost something. The
+runway skips drafts, so finished work opened as a draft waits until someone
+marks it ready. And nothing else distinguishes "passed review" from "done", so
+a `ready` PR that goes green will be landed whether or not you meant to add
+another commit.
 
 Do not idle waiting for a verdict. There is nothing for you to do when it
 arrives. Say in your final report, **above** the block, that your branch is
@@ -299,11 +231,11 @@ decision that is properly the author's — take the escape route:
    that someone could answer it without opening this session.
 2. Commit that, and end your final report with the block
    above, with the same question in `## PR body` and `draft` under
-   `## Open as`. Whoever opens the PR from that text opens it as a draft,
-   which is what keeps the sweep from landing it.
+   `## Open as`. ATC opens the PR from that text as a draft, which is what
+   keeps the runway from landing it.
 3. Say the same thing in your final report, above the block, and stop.
 
-Draft means the sweep will not land it, so this is safe to do at any point. A
+Draft means the runway will not land it, so this is safe to do at any point. A
 question written into a file is durable and someone will find it; a question
 asked into an empty session is not.
 
