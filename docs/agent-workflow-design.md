@@ -829,8 +829,8 @@ its branch and opens its pull request from the title and body it emits (`coder.m
 merge, and you do not open your own PR"). This matters most for the coder, whose goal is a landed
 pull request: with a `repo`-scoped token it could set `review/agent` to `success` on its own head
 and start the runway, which tower-workshop-paths confirmed by probing (OQ-63). Git's own SSH
-authentication is still within its reach; ST-6, a spike, is to put coder sessions in a container
-(Part 3, R5).
+authentication is still within its reach; ST-6, a spike, is to find out how to run coder and
+reviewer sessions where it is not (Part 3, R5, and "Decided so far", 2026-10-15).
 
 **ATC is a trusted user of the one credential** it runs under, and there is no separately scoped
 one. What keeps ATC from clearing its own gate is not credential scope:
@@ -1562,6 +1562,10 @@ shortened where it is long, so that it can be found there with its date.
   2026-10-07, revised 2026-10-08 by the owner). See R5.
 - **Planned (ST-6): coder sessions are isolated in a container** (decided 2026-10-08 by the
   owner). OQ-73, a spike, finds out how, and the stories it recommends build it. See R5.
+  **Revised 2026-10-15 by the owner:** ST-6 now covers the reviewer too, and tries three other
+  mechanisms beside a container (WSL2 with Claude Code's sandboxed Bash tool, a low integrity
+  level, and a separate Windows account), recommending one. The container stands until its
+  recommendation says otherwise ("Containing a session is a spike", below).
 - **A project takes the workflow as a package pinned by git tag**, with no npm publishing planned,
   runs the loop from its own worktree, and keeps thin gate workflow files written by an `init`
   command (decided 2026-10-07 by the owner). See R2.
@@ -2325,9 +2329,12 @@ is still open.
   spike's open question. Known questions for the spike: a git worktree's `.git` file holds an
   absolute host path, and `node_modules` on a bind mount from Windows is slow.
   The **Planned (ST-6)** markers here and under "Decided so far" were added on 2026-10-08 at the
-  owner's decision, after #199's review. The spike builds nothing, so its AC-5 leaves them in
-  place, and the stories written from its recommendation take them over (its AC-4). They take
-  those stories' `ST-<n>` once written in steward.
+  owner's decision, after #199's review. The spike builds nothing, so its pull request writes the
+  stories it recommends and moves these markers onto them (its AC-5, revised 2026-10-15), since the
+  story lint fails on a marker naming a story in `stories/done/`. **Revised 2026-10-15 by the
+  owner:** the container is one of four mechanisms ST-6 now tries, for the reviewer as well as the
+  coder, and it stands until the spike's recommendation says otherwise (Part 3, "Decided so far",
+  "Containing a session is a spike").
 
   Superseded: **decided 2026-10-07 by the owner: after OQ-73, before OQ-101.** The owner's build
   order is OQ-80 (landed as #203 on 2026-10-07), then OQ-73, then OQ-101, so the move comes after OQ-80 and
