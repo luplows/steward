@@ -63,8 +63,8 @@ form the project keeps its units in. This story builds the module; ST-22 puts it
       form in AC-1 and each result in AC-2 and AC-3, with the git and GitHub reads injected or
       against a temporary repository; including a file present at the head but not on `main`,
       which is unreadable.
-- [ ] **AC-7** — The `**Planned (ST-19)**` marker in `docs/agent-workflow-design.md` loses
-      `ST-19`, and the passage is corrected wherever what was built differs.
+- [ ] **AC-7** — Each `**Planned (ST-19)**` marker in `docs/agent-workflow-design.md` loses
+      `ST-19`, and each passage is corrected wherever what was built differs.
 
 ## Out of scope
 
