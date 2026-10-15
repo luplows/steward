@@ -39,7 +39,7 @@ steward's stories began there, and each says so in its Context.
 id: ST-49                  # matches the filename
 title: Read and rank the story queue
 tier: next                 # fix | next | normal | later — priority, nothing else
-kind: workflow             # product | workflow — for reading; never read by ATC
+kind: workflow             # product | workflow | spike — never read by the ordering
 depends_on: []             # [ST-45] — not taken until those are in done/
 model: sonnet              # per-story escalation; the reviewer is never this model
 blocked: null              # null | "reason text"
@@ -61,12 +61,17 @@ dependency, and subject matter. A story can be both workflow and foundational, s
 forcing one value made the sort order arbitrary, and two of the four duplicated
 `depends_on` while being able to contradict it.
 
-**`kind` is for people, not ATC.** It groups stories for reading —
-release-review assembly, or answering "how much of this batch was tooling."
-**Nothing in ATC reads it, and nothing in the ordering may.** That is
+**`kind` is for people and story tooling, not the ordering.** It groups
+stories for reading — release-review assembly, or answering "how much of this
+batch was tooling." **Nothing in the ordering reads it, or may.** That is
 stated as a rule because a field that exists eventually attracts a sort: ordering
 by `kind` should be a visible violation of something written down rather than a
 natural-looking extension. Adding a value is cheap for the same reason.
+
+This repository's story tooling may read it. `kind: spike` marks a **spike**: a
+story whose output is findings and the stories they recommend, not code. Story
+containment reads it to let a spike's own pull request add those stories, as
+drafts (`checkAddedDraft`, `scripts/dispatch/story-containment.mjs`).
 
 ## Status
 
@@ -192,7 +197,9 @@ decided.
 3. The pull request **ticks each AC it delivered** — see above — and **moves the
    story file to `stories/done/`** (`REVIEW.md`, "Conformance to the unit").
    Completion is a `git mv` inside the story's own pull request, visible in the
-   diff and checkable by the reviewer.
+   diff and checkable by the reviewer. A spike's pull request may also add the
+   stories its findings recommend, each a draft with a new number, and points
+   its **Planned** markers at them. It changes no story that exists.
 4. If the story turns out to be wrong rather than the code, `blocked:` is set
    with the reason and it goes back to the planning session.
 5. A story the crew decides not to build is **retired**: a planning-session pull

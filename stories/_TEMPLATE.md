@@ -2,7 +2,7 @@
 id: OQ-NN
 title: One line, in the imperative or as the capability delivered
 tier: normal               # fix | next | normal | later — priority, nothing else
-kind: product              # product | workflow — for reading; never read by the dispatcher
+kind: product              # product | workflow | spike — never read by the ordering
 depends_on: []             # [OQ-45] — not dispatched until those are in done/
 model: sonnet              # per-story escalation; the reviewer is never this model
 blocked: null              # null | "reason text" — set by a kickback, cleared by the planning session

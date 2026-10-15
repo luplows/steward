@@ -2,7 +2,7 @@
 id: ST-6
 title: "Spike: find out how to run coder and reviewer sessions where the crew member's credentials and files cannot be reached"
 tier: next
-kind: workflow
+kind: spike
 depends_on: [ST-30]
 model: sonnet
 blocked: "Owner-run with the planning session, not dispatched (owner, 2026-10-09; design doc, R4 and R5)."
@@ -101,10 +101,9 @@ session, by hand, not dispatched.
   stories AC-4 recommends.
 - **Refining the drafts**, making any of them ready, and having other
   stories, ST-13 and ST-27 among them, cite the drafts in place of ST-6. That
-  is the planning session's, with the crew, once this has landed. Once ST-30
-  is built, CI's containment check (`scripts/dispatch/story-containment.mjs`)
-  lets this pull request add new stories as drafts, but change no story that
-  exists.
+  is the planning session's, with the crew, once this has landed. CI's
+  containment check (`scripts/dispatch/story-containment.mjs`) lets this pull
+  request add new stories as drafts, but change no story that exists.
 - **Changes to the owner's machine** made by anyone but the owner. Installing
   or configuring a mechanism is the owner's, by hand, and Q1 records it.
 - **A second GitHub identity** (the design doc's open question 10).
@@ -127,8 +126,8 @@ Formerly tower-workshop-paths OQ-73.
 
 - **Its own pull request adds the drafts** (owner, 2026-10-15; design doc,
   Part 3, "Decided so far", "A spike's own pull request adds the stories it
-  recommends"). ST-30 is to let a story with `kind: spike` do so, which
-  is why this story waits on it.
+  recommends"). ST-30 lets a story with `kind: spike` do so, which is why
+  this story depends on it.
 - **Widened on 2026-10-15 to both roles and to local files, with ST-3 folded
   in** (owner, with the planning session; design doc, Part 3, "Decided so
   far"). ST-3 (formerly tower-workshop-paths OQ-62), the reviewer's half, was
