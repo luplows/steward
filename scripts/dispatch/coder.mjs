@@ -10,6 +10,12 @@
  * and allowlist through `invocation.mjs`, so `coderEnv` and `coderAllowedTools`
  * are never restated here), `github.mjs` opens the pull request.
  *
+ * Each of `dispatchCoder` and `retryStory` reads the plan's usage before it
+ * starts a session (`usage.mjs`, ST-31), and starts none when either window is
+ * at or over the coder's limit in the settings (`over-usage`), or when the usage
+ * cannot be read (`usage-unknown`). A coder session already running is never
+ * stopped.
+ *
  * It sets no commit status and triggers no workflow: `review-gate.yml` sets
  * `review/agent` pending when the pull request opens, and opening it is
  * therefore sufficient.
@@ -46,6 +52,7 @@ import { RETRY_SOURCES } from './invocation.mjs'
 import { buildStory, deriveStatus, dispatchable, isStoryFilename, orderStories, parseFrontmatter } from './queue.mjs'
 import { readSettings } from './settings.mjs'
 import { spawnSession } from './spawn.mjs'
+import { checkUsage, readUsage } from './usage.mjs'
 
 const execFileAsync = promisify(execFile)
 
@@ -311,19 +318,26 @@ async function cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded }) {
  * (AC-2): `bad-machine-label` is refused before the branch is even created,
  * and `claim-failed` or `branch-exists` before the install or the session.
  *
+ *   usage          `({ cwd })`, resolving `readUsage`'s result; defaults to
+ *                  `readUsage`. Called once, in `repoDir`, after the story is
+ *                  chosen and before the branch is claimed (ST-31)
+ *
  * Resolves `{ status, ... }`. `opened` carries the pull request. Every other
  * status means none was opened, and `reason` says why. `nothing-ready` is not
- * a failure.
+ * a failure. `over-usage` (with `window`, `percent`, `limit` and `resetsAt`)
+ * and `usage-unknown` carry the story's id and leave nothing behind; they are
+ * failures, and the CLI exits 1 for them: a run that was asked for did not
+ * happen (`NON_FAILURES` does not list them).
  */
 export async function dispatchCoder({
   ctx, repoDir = process.cwd(), storyId, promptTemplate, baseEnv = process.env, sessionOptions = {},
-  install = installDependencies,
+  install = installDependencies, usage = readUsage,
 }) {
   const template = promptTemplate ?? readFileSync(CODER_PROMPT, 'utf8')
 
   // The queue is read from the tip just fetched, and the worktree is made from
   // that same commit, so the story chosen is the story the coder is handed.
-  const { storyPrefix } = await readSettings(repoDir)
+  const { storyPrefix, usageLimits } = await readSettings(repoDir)
   await git(repoDir, ['fetch', REMOTE, BASE])
   const mainSha = (await git(repoDir, ['rev-parse', `${REMOTE}/${BASE}`])).trim()
   const queue = await loadQueueAt(repoDir, mainSha, storyPrefix)
@@ -359,6 +373,12 @@ export async function dispatchCoder({
       reason: `TW_MACHINE_LABEL ${JSON.stringify(baseEnv.TW_MACHINE_LABEL)} does not match ${MACHINE_LABEL_RE}`,
     }
   }
+
+  // ST-31/AC-4: before the branch is claimed, worktree-made or anything installed.
+  const refused = await checkUsage({
+    read: usage, cwd: repoDir, limits: usageLimits.coder, extra: { storyId: chosen.id },
+  })
+  if (refused) return refused
 
   const scratch = await mkdtemp(path.join(tmpdir(), 'tw-coder-'))
   const tree = path.join(scratch, 'tree')
@@ -519,8 +539,10 @@ async function hasStoryFile(repoDir, ref, filename, storyId) {
  * `pushBranch`, and the pull request's title and body are replaced with the
  * ones it emitted. It opens no pull request and leaves the draft state alone.
  *
- *   ctx, repoDir, promptTemplate, baseEnv, sessionOptions, install
- *                    as for `dispatchCoder`
+ *   ctx, repoDir, promptTemplate, baseEnv, sessionOptions, install, usage
+ *                    as for `dispatchCoder`; `usage` is called before the
+ *                    worktree is made, so `over-usage` and `usage-unknown`
+ *                    (ST-31) come before anything is installed
  *   storyId          the story
  *   prNumber         its open pull request, whose head must be the story's branch
  *   findings         the text to address (untrusted; injected as a bounded block)
@@ -541,8 +563,9 @@ async function hasStoryFile(repoDir, ref, filename, storyId) {
 export async function retryStory({
   ctx, repoDir = process.cwd(), storyId, prNumber, findings, source, round, roundsRemaining,
   promptTemplate, baseEnv = process.env, sessionOptions = {}, install = installDependencies,
+  usage = readUsage,
 }) {
-  const { storyPrefix } = await readSettings(repoDir)
+  const { storyPrefix, usageLimits } = await readSettings(repoDir)
   if (!new RegExp(`^${storyPrefix}-\\d+$`).test(storyId ?? '')) {
     throw new Error(`retryStory requires a story id of the form ${storyPrefix}-<n>, got ${JSON.stringify(storyId)}`)
   }
@@ -575,6 +598,12 @@ export async function retryStory({
   if (!(await hasStoryFile(repoDir, baseSha, filename, storyId))) {
     return { status: 'wrong-branch', storyId, branch, prNumber, reason: `${branch} has no ${filename} with id ${storyId} in stories/ or stories/done/ at its tip on ${REMOTE}, so it is not the branch ${storyId} is worked on` }
   }
+
+  // ST-31/AC-4: before the worktree is made and dependencies are installed.
+  const refused = await checkUsage({
+    read: usage, cwd: repoDir, limits: usageLimits.coder, extra: { storyId },
+  })
+  if (refused) return refused
 
   const scratch = await mkdtemp(path.join(tmpdir(), 'tw-coder-'))
   const tree = path.join(scratch, 'tree')

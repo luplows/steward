@@ -19,6 +19,8 @@ const STORY_PREFIX_RE = /^[A-Z]{1,8}$/
 
 const COMMAND_KEYS = ['command', 'timeoutMinutes']
 const LAND_WHEN_ALL = 'all-checks'
+const USAGE_ROLES = ['coder', 'reviewer']
+const USAGE_WINDOWS = ['session', 'weekly']
 const UNIT_LINK_KINDS = ['issue', 'file', 'other']
 
 const ALLOWED_KEYS = [
@@ -30,6 +32,7 @@ const ALLOWED_KEYS = [
   'land',
   'unitLinks',
   'rulesFile',
+  'usageLimits',
 ]
 
 /** A non-empty array of distinct values, each passing `itemOk`. */
@@ -79,11 +82,45 @@ function validateCommand(filePath, name, value) {
   return { command, timeoutMinutes }
 }
 
+/** Validates `usageLimits`: { coder, reviewer }, each { session, weekly }, integers 1 to 100. */
+function validateUsageLimits(filePath, value) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${filePath}: 'usageLimits' must be an object with 'coder' and 'reviewer', got ${JSON.stringify(value)}`)
+  }
+  const checkKeys = (name, object, keys) => {
+    for (const key of Object.keys(object)) {
+      if (!keys.includes(key)) throw new Error(`${filePath}: unrecognised key '${name}.${key}'`)
+    }
+    for (const key of keys) {
+      if (!(key in object)) throw new Error(`${filePath}: missing required key '${name}.${key}'`)
+    }
+  }
+  checkKeys('usageLimits', value, USAGE_ROLES)
+  const limits = {}
+  for (const role of USAGE_ROLES) {
+    const name = `usageLimits.${role}`
+    const windows = value[role]
+    if (windows === null || typeof windows !== 'object' || Array.isArray(windows)) {
+      throw new Error(`${filePath}: '${name}' must be an object with 'session' and 'weekly', got ${JSON.stringify(windows)}`)
+    }
+    checkKeys(name, windows, USAGE_WINDOWS)
+    limits[role] = {}
+    for (const window of USAGE_WINDOWS) {
+      const limit = windows[window]
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+        throw new Error(`${filePath}: '${name}.${window}' must be an integer from 1 to 100, got ${JSON.stringify(limit)}`)
+      }
+      limits[role][window] = limit
+    }
+  }
+  return limits
+}
+
 /**
  * Reads and validates `<projectRoot>/steward.config.json`. Throws, naming the
  * file and the problem, on a missing file, invalid JSON, a missing key, an
  * invalid value, or any key beyond those listed in `docs/settings.md`
- * (inside a `setup` or `check` object too). Holds no default for any value --
+ * (inside a `setup`, `check` or `usageLimits` object too). Holds no default for any value --
  * a project without the file, or with an incomplete one, fails rather than
  * running with one assumed (ST-18).
  */
@@ -161,5 +198,7 @@ export async function readSettings(projectRoot) {
     )
   }
 
-  return { repo, storyPrefix, setup, check, landWhen, land, unitLinks, rulesFile }
+  const usageLimits = validateUsageLimits(filePath, data.usageLimits)
+
+  return { repo, storyPrefix, setup, check, landWhen, land, unitLinks, rulesFile, usageLimits }
 }

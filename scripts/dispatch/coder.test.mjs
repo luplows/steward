@@ -8,7 +8,10 @@ import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { coderAllowedTools } from './coder-env.mjs'
-import { STUCK_AFTER_MS, branchFor, claimAgeMs, claimPushArgs, dispatchCoder, findPromptChange, machineLabel, pushArgs, retryStory } from './coder.mjs'
+import {
+  STUCK_AFTER_MS, branchFor, claimAgeMs, claimPushArgs, dispatchCoder as dispatchCoderWith, findPromptChange, machineLabel,
+  pushArgs, retryStory as retryStoryWith,
+} from './coder.mjs'
 import { createContext } from './github.mjs'
 import { pickStory } from './loop.mjs'
 
@@ -19,6 +22,12 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const SOURCE = readFileSync(path.join(here, 'coder.mjs'), 'utf8')
 const TEMPLATE = readFileSync(path.join(here, '..', '..', '.claude', 'prompts', 'coder.md'), 'utf8')
 const REPO = 'luplows/tower-workshop-paths'
+
+// ST-31: `dispatchCoder` and `retryStory` read the plan's usage before they start. No test starts a
+// real `claude`, so every call is given a usage well under the limits unless the test passes its own.
+const UNDER_LIMITS = { ok: true, session: { percent: 10, resetsAt: 't1' }, weekly: { percent: 10, resetsAt: 't2' } }
+const dispatchCoder = (args) => dispatchCoderWith({ usage: async () => UNDER_LIMITS, ...args })
+const retryStory = (args) => retryStoryWith({ usage: async () => UNDER_LIMITS, ...args })
 
 const story = (id, { deps = '', blocked = 'null' } = {}) => `---
 id: ${id}
@@ -1570,4 +1579,96 @@ describe('OQ-128/AC-1: retryStory takes its story-id check from settings\' story
         ctx: {}, repoDir: dir, storyId: 'ST-3', prNumber: 7, findings: 'x', source: 'not-a-real-source', round: 1, roundsRemaining: 1,
       })).rejects.toThrow(/retryStory source must be one of/)
     }))
+})
+
+// ------------------------------------------------ ST-31: no session while the usage is over the limit
+
+describe('ST-31/AC-4: no coder session starts while the usage is over the coder\'s limit', () => {
+  // The fixture's coder limits are 70 and 75.
+  const usageOf = (session, weekly) => async () => ({
+    ok: true, session: { percent: session, resetsAt: 'reset-s' }, weekly: { percent: weekly, resetsAt: 'reset-w' },
+  })
+  const expectedOver = (window, percent, limit) => ({
+    status: 'over-usage', window, percent, limit, resetsAt: window === 'session' ? 'reset-s' : 'reset-w',
+  })
+
+  it.each([
+    ['session', 70, 10, 70], ['session', 71, 10, 70], ['weekly', 10, 75, 75], ['weekly', 10, 76, 75],
+  ])('ST-31/AC-4: dispatchCoder returns over-usage for the %s window at %s / %s, claiming nothing', async (window, session, weekly, limit) => {
+    const world = makeWorld()
+    const installs = []
+    const { result, fake, gh } = await dispatch(world, () => { throw new Error('must not spawn') }, {
+      usage: usageOf(session, weekly), install: async (o) => { installs.push(o) },
+    })
+    expect(result).toEqual({ ...expectedOver(window, window === 'session' ? session : weekly, limit), storyId: 'OQ-98' })
+    expect(fake.calls).toHaveLength(0)
+    expect(installs).toEqual([])
+    expect(pulls(gh)).toEqual([])
+    expect(remoteBranch(world, 'story/OQ-98-first')).toBeNull()
+    expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/story/OQ-98-first')).toBeNull()
+    expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
+  })
+
+  it('ST-31/AC-4: dispatchCoder returns usage-unknown with the story, claiming nothing', async () => {
+    const world = makeWorld()
+    const { result, fake } = await dispatch(world, () => { throw new Error('must not spawn') }, {
+      usage: async () => ({ ok: false, reason: 'no usage_report' }),
+    })
+    expect(result).toEqual({ status: 'usage-unknown', storyId: 'OQ-98', reason: 'no usage_report' })
+    expect(fake.calls).toHaveLength(0)
+    expect(remoteBranch(world, 'story/OQ-98-first')).toBeNull()
+  })
+
+  it('ST-31/AC-4: dispatchCoder one under each limit dispatches as before, reading the usage once in repoDir', async () => {
+    const world = makeWorld()
+    const calls = []
+    const { result } = await dispatch(world, ({ cwd }) => (finishStory(cwd), block()), {
+      usage: async (o) => { calls.push(o); return usageOf(69, 74)() },
+    })
+    expect(result.status).toBe('opened')
+    expect(calls).toEqual([{ cwd: world.repoDir }])
+  })
+
+  it('ST-31/AC-4: dispatchCoder with nothing ready does not read the usage', async () => {
+    const world = makeWorld()
+    const calls = []
+    const { result } = await dispatch(world, () => { throw new Error('must not spawn') }, {
+      storyId: 'OQ-96', usage: async (o) => { calls.push(o); return usageOf(100, 100)() },
+    })
+    expect(result.status).toBe('not-ready')
+    expect(calls).toEqual([])
+  })
+
+  it.each([
+    ['session', 70, 10, 70], ['session', 71, 10, 70], ['weekly', 10, 75, 75], ['weekly', 10, 76, 75],
+  ])('ST-31/AC-4: retryStory returns over-usage for the %s window at %s / %s, installing nothing', async (window, session, weekly, limit) => {
+    const world = makeRetryWorld()
+    const installs = []
+    const { result, fake, gh } = await retry(world, () => { throw new Error('must not spawn') }, {
+      usage: usageOf(session, weekly), install: async (o) => { installs.push(o) },
+    })
+    expect(result).toEqual({ ...expectedOver(window, window === 'session' ? session : weekly, limit), storyId: 'OQ-98' })
+    expect(fake.calls).toHaveLength(0)
+    expect(installs).toEqual([])
+    expect(patches(gh)).toEqual([])
+    expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
+    expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', `refs/heads/${RETRY_BRANCH}`)).toBeNull()
+  })
+
+  it('ST-31/AC-4: retryStory returns usage-unknown with the story, installing nothing', async () => {
+    const world = makeRetryWorld()
+    const installs = []
+    const { result, fake } = await retry(world, () => { throw new Error('must not spawn') }, {
+      usage: async () => ({ ok: false, reason: 'timed out' }), install: async (o) => { installs.push(o) },
+    })
+    expect(result).toEqual({ status: 'usage-unknown', storyId: 'OQ-98', reason: 'timed out' })
+    expect(fake.calls).toHaveLength(0)
+    expect(installs).toEqual([])
+  })
+
+  it('ST-31/AC-4: retryStory one under each limit retries as before', async () => {
+    const world = makeRetryWorld()
+    const { result } = await retry(world, ({ cwd }) => (commitWork(cwd), block()), { usage: usageOf(69, 74) })
+    expect(result.status).toBe('retried')
+  })
 })

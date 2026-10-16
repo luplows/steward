@@ -639,12 +639,15 @@ That is not cryptographic independence — closing that properly still needs a s
 identity — but "read the script and see it cannot fabricate" is a real improvement over "trust the
 orchestrating agent."
 
-**Planned (ST-31):** ATC reads the plan's usage before it starts a coder or a reviewer session,
-and starts none when either window, the 5-hour one or the weekly one, is at or over the limit the
-settings give that role (`usageLimits`). When the usage cannot be read, it starts nothing. Claude
-Code reports the usage, with no model call, to `claude -p /usage --output-format stream-json`
-("Trials and measurements", "Reading the plan's usage from a script"; Part 3, "Decided so far",
-2026-10-15).
+ATC reads the plan's usage before it starts a coder or a reviewer session, and starts none when
+either window, the 5-hour one or the weekly one, is at or over the limit the settings give that
+role (`usageLimits`). When the usage cannot be read, it starts nothing. Claude Code reports the
+usage, with no model call, to `claude -p /usage --output-format stream-json --verbose`. The weekly
+window is read from its `weekly_all` row alone, and a row without a numeric percent counts as
+unreadable (`scripts/dispatch/usage.mjs`; "Trials and measurements", "Reading the plan's usage from
+a script"; Part 3, "Decided so far", 2026-10-15). `reviewPullRequest`, `dispatchCoder` and
+`retryStory` each make the check, and return `over-usage` or `usage-unknown` without starting a
+session.
 
 ### The controller
 
@@ -1412,7 +1415,7 @@ without a dispatcher session in between.
   story that would have been retried is paused, and resumes on a later run under the threshold.
   *(Revised 2026-10-15 by the owner: the plan's 5-hour and weekly windows are measured against the
   settings' `usageLimits`, and reviews carry on only to their own, higher limit.
-  **Planned (ST-31)** for the check: Part 1, "ATC is scripts".)*
+  The check is built: Part 1, "ATC is scripts".)*
 - Any pull request from an account with write access (OQ-81) that passes review may land
   unattended, including one that changes this document, `AGENTS.md`, `CLAUDE.md`, `.github/` or
   `.claude/`.
@@ -2065,7 +2068,7 @@ shortened where it is long, so that it can be found there with its date.
   or lint a project's units (`outline.md`, "Review"), and for an issue a diff cannot change the
   unit at all, so in a project containment is the reviewer's judgement against its checklist.
 - **No session starts while the plan's usage is over a limit** (decided 2026-10-15 by the owner,
-  with the planning session; **Planned (ST-31)**). Before starting a coder or a reviewer session,
+  with the planning session). Before starting a coder or a reviewer session,
   ATC reads the plan's 5-hour and weekly windows, and starts none when either is at or over the
   role's limit: for coders 70% of the 5-hour window and 75% of the weekly one, for reviewers 90% of
   each. Coders stop first so that work in flight still gets its review, and so that a coder is not

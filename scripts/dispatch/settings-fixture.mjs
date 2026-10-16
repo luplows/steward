@@ -12,6 +12,10 @@ export const FIXTURE_SETTINGS = {
   land: true,
   unitLinks: ['file'],
   rulesFile: 'REVIEW.md',
+  usageLimits: {
+    coder: { session: 70, weekly: 75 },
+    reviewer: { session: 90, weekly: 90 },
+  },
 }
 
 export function fixtureSettings(overrides = {}) {
