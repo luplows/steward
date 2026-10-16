@@ -3,7 +3,7 @@ id: ST-25
 title: A rotation of the review side, started as one command
 tier: next
 kind: workflow
-depends_on: [ST-21, ST-22, ST-23, ST-24, ST-29]
+depends_on: [ST-21, ST-22, ST-23, ST-24, ST-29, ST-37]
 model: sonnet
 blocked: null
 ---
@@ -44,18 +44,25 @@ as it is on `main`.
       outcome (skipped and why, reviewed with its result, landed or not and why), and exits 0. It
       exits non-zero only when the rotation itself could not run or go on: a checkout with a
       branch, a dirty worktree, settings that do not read, a listing that fails, a script error
-      (AC-5a), or a worktree a review changed (AC-5b). It stores nothing.
+      (AC-5a), a worktree a review changed (AC-5b), or a reviewer that could not review (AC-5c). It
+      stores nothing.
 - [ ] **AC-5a** — A script error stops the rotation (owner, 2026-10-14). When `reviewPullRequest`
       or `landPullRequest` throws, rather than returning a status, the rotation prints which pull
       request and step it was, reviews and lands nothing more, and exits non-zero. A status other
-      than `recorded` or `merged` is that pull request's outcome, printed as AC-5 says, and the
-      rotation goes on (`docs/controller.md`, "Reporting and stopping").
+      than `recorded` or `merged`, and other than `cannot-review` (AC-5c), is that pull request's
+      outcome, printed as AC-5 says, and the rotation goes on (`docs/controller.md`, "Reporting
+      and stopping").
 - [ ] **AC-5b** — A worktree changed by a review stops the rotation (owner, 2026-10-15). After
       each review in step 3, before the next review or step 4, the rotation checks its worktree
       again: `HEAD` is still the commit step 1 checked out, and `git status --porcelain` prints
       nothing. Otherwise it prints which pull request's review preceded the change, reviews and
       lands nothing more, and exits non-zero. A test, with git injected, shows a change found after
       the first review stopping the rotation before any landing.
+- [ ] **AC-5c** — A reviewer that could not review stops the rotation (owner, 2026-10-16). When
+      `reviewPullRequest` returns `cannot-review` (ST-37), the rotation prints which pull request
+      it was and the reviewer's `summary`, reviews and lands nothing more, and exits non-zero. A
+      test, with the review function injected, shows `cannot-review` on the first of two pull
+      requests stopping the rotation before the second is reviewed and before any landing.
 - [ ] **AC-6** — Tests in `rotation.test.mjs`, named `ST-25/AC-<n>`, with the GitHub, review and
       land functions injected: the order and the cap; each skip (draft, outsider, verdict already at
       the head); a pull request that passed in an earlier rotation and lands in this one;

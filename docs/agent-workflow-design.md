@@ -2226,6 +2226,21 @@ shortened where it is long, so that it can be found there with its date.
   moved to, instead of a record of what ran; and leaving the coder's side to ST-15, which builds a
   Codex coder. Until ST-15 is built, every coder choice runs on Claude Code, so the coder's move
   finds no other choice in practice.
+- **A reviewer that returns no verdict on an unchanged head could not review** (decided 2026-10-16
+  by the owner, with the planning session, after the first rotation on the Codex reviewer;
+  **Planned (ST-37, ST-25)**). On #48, Codex's command tool would not start, because a helper was
+  missing beside `codex.exe`, so the reviewer returned a `null` verdict, and ATC reported
+  `no-verdict` with exit 0, as it does for a head that moved. Of the reasons `reviewer.md` gives
+  for a `null` verdict, only a moved head is ordinary; the others are faults in the machine or the
+  prompt that someone has to fix. So ATC tells them apart itself, by reading the pull request's
+  head again: a `null` verdict on a head that moved stays `no-verdict`, and one on an unchanged
+  head is `cannot-review`, a failure (ST-37). `cannot-review` stops the rotation, as a script
+  error does, since a reviewer that cannot work on this machine would fail every pull request the
+  same way (`docs/controller.md`, ST-37; the rotation's command, ST-25). ATC does not move the
+  review to another choice: a broken tool needs someone to fix it, and moving on would hide the
+  fault. Considered and not chosen: a reason field in the reviewer's `null` verdict, which would
+  change `reviewer.md` and rest on the reviewer classifying its own failure; going on to the next
+  pull request; and moving to the next reviewer choice, as ST-35 does for usage.
 
 ### The move, in order
 
