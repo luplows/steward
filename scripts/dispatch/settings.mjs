@@ -32,7 +32,6 @@ const ALLOWED_KEYS = [
   'land',
   'unitLinks',
   'rulesFile',
-  'usageLimits',
 ]
 
 /** A non-empty array of distinct values, each passing `itemOk`. */
@@ -82,8 +81,11 @@ function validateCommand(filePath, name, value) {
   return { command, timeoutMinutes }
 }
 
-/** Validates `usageLimits`: { coder, reviewer }, each { session, weekly }, integers 1 to 100. */
-function validateUsageLimits(filePath, value) {
+/**
+ * Validates `usageLimits`: { coder, reviewer }, each { session, weekly }, integers 1 to 100.
+ * The machine's settings hold it (ST-34); `machine-settings.mjs` calls this.
+ */
+export function validateUsageLimits(filePath, value) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${filePath}: 'usageLimits' must be an object with 'coder' and 'reviewer', got ${JSON.stringify(value)}`)
   }
@@ -120,7 +122,7 @@ function validateUsageLimits(filePath, value) {
  * Reads and validates `<projectRoot>/steward.config.json`. Throws, naming the
  * file and the problem, on a missing file, invalid JSON, a missing key, an
  * invalid value, or any key beyond those listed in `docs/settings.md`
- * (inside a `setup`, `check` or `usageLimits` object too). Holds no default for any value --
+ * (inside a `setup` or `check` object too). Holds no default for any value --
  * a project without the file, or with an incomplete one, fails rather than
  * running with one assumed (ST-18).
  */
@@ -198,7 +200,5 @@ export async function readSettings(projectRoot) {
     )
   }
 
-  const usageLimits = validateUsageLimits(filePath, data.usageLimits)
-
-  return { repo, storyPrefix, setup, check, landWhen, land, unitLinks, rulesFile, usageLimits }
+  return { repo, storyPrefix, setup, check, landWhen, land, unitLinks, rulesFile }
 }

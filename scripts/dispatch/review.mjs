@@ -42,7 +42,7 @@
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
@@ -56,7 +56,7 @@ import {
   WRITABLE_VERDICTS,
 } from './github.mjs'
 import { installDependencies } from './install.mjs'
-import { ROLE_DEFAULTS } from './invocation.mjs'
+import { readMachineSettings } from './machine-settings.mjs'
 import { parseFrontmatter } from './queue.mjs'
 import { readRules } from './rules.mjs'
 import { readSettings } from './settings.mjs'
@@ -87,39 +87,61 @@ const NO_UNIT_TEXT = '*(none — no unit was read; the note above says why.)*'
 // -------------------------------------------------------------------- unit
 
 /**
- * The `model:` a unit names, for `chooseReviewerModel` (ST-22/AC-4): only a
- * file unit that was read and parses as one of this repository's stories
- * (`parseFrontmatter`, `queue.mjs`) names one, since only a story gives the
- * coder its model. Any other unit, or a file that does not parse, names none.
+ * The `model:` of the unit's story (ST-22/AC-4, ST-34/AC-5): only a file unit that was read and
+ * parses as one of this repository's stories has one, since only a story gives the coder its model.
+ * `undefined` for any other unit or a file that does not parse; `null` for a story whose `model:`
+ * is `null`, the coder's default; otherwise the string.
  */
-export function unitModel(found, read) {
-  if (found?.kind !== 'link' || found.type !== 'file' || read?.read !== true) return null
+function storyModel(found, read) {
+  if (found?.kind !== 'link' || found.type !== 'file' || read?.read !== true) return undefined
   try {
     const { model } = parseFrontmatter(read.text, String(found.target)).data
-    return typeof model === 'string' && model !== '' ? model : null
+    if (model === null) return null
+    return typeof model === 'string' && model !== '' ? model : undefined
   } catch {
-    return null
+    return undefined
   }
 }
 
-// ------------------------------------------------------------------- model
+/** The `model:` a unit names, or `null` when it names none (a `null` `model:` names none). */
+export function unitModel(found, read) {
+  return storyModel(found, read) ?? null
+}
 
-// A different family from the coder's is the point (docs/agent-workflow-design.md,
-// "Reviewer": context isolation decorrelates knowledge, not reasoning style).
-const REVIEWER_MODEL_FALLBACK = 'sonnet'
+/**
+ * The model the coder ran for the unit, for `chooseReviewer` (ST-34/AC-5): the model of the choice
+ * the story's `model:` names in `roles.coder.available`, else that string as written; the model of
+ * `roles.coder.default` when the story's `model:` is `null`; `null` when the unit is no story, so
+ * no coder is known.
+ */
+export function unitCoderModel(machine, found, read) {
+  const named = storyModel(found, read)
+  if (named === undefined) return null
+  const { available, default: fallback } = machine.roles.coder
+  if (named === null) return available[fallback].model
+  return Object.hasOwn(available, named) ? available[named].model : named
+}
+
+// ------------------------------------------------------------------- model
 
 function sameModel(a, b) {
   const [x, y] = [a.toLowerCase(), b.toLowerCase()]
   return x.includes(y) || y.includes(x)
 }
 
-/** The reviewer's model: the role default unless that is the unit's own (`unitModel`). */
-export function chooseReviewerModel(declared) {
-  const preferred = ROLE_DEFAULTS.reviewer.model
-  if (typeof declared !== 'string' || declared === '') return preferred
-  const chosen = sameModel(preferred, declared) ? REVIEWER_MODEL_FALLBACK : preferred
-  if (sameModel(chosen, declared)) throw new Error(`no reviewer model differs from the unit's ${declared}`)
-  return chosen
+/**
+ * The reviewer's choice (ST-34/AC-5; docs/agent-workflow-design.md, "Reviewer": context isolation
+ * decorrelates knowledge, not reasoning style, so a different model from the coder's): the
+ * `default` of `roles.reviewer` unless its model is the coder's (`unitCoderModel`), else the first
+ * other choice in `available`, in the file's order, whose model differs. `null` when none does.
+ * With no coder model (`null`) it is the default.
+ */
+export function chooseReviewer(machine, coderModel) {
+  const { available, default: preferred } = machine.roles.reviewer
+  const differs = (choice) => typeof coderModel !== 'string' || !sameModel(choice.model, coderModel)
+  const name = [preferred, ...Object.keys(available).filter((key) => key !== preferred)]
+    .find((key) => differs(available[key]))
+  return name === undefined ? null : { name, ...available[name] }
 }
 
 // ----------------------------------------------------------------- verdict
@@ -277,6 +299,8 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
  *                  budget)
  *   usage          `({ cwd })`, resolving `readUsage`'s result; defaults to
  *                  `readUsage`. Called once, in `repoDir`
+ *   machineSettings  `()`, resolving the machine's settings; defaults to `readMachineSettings`
+ *                  on the real environment and home directory. Called once (ST-34)
  *
  * Resolves `{ status, ... }`. `recorded` carries the comment id; every other
  * status means nothing was posted, and `reason` says why. `no-verdict` and
@@ -287,7 +311,9 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
  * come before any install. `rules-unreadable` (ST-21/AC-1) is a checklist
  * (the settings' `rulesFile`) that is missing from the base branch or does
  * not parse: it carries `problems`, and comes before any install or session.
- * Every result returned after a session started carries `sessions`, the
+ * `reviewer-unavailable` (ST-34/AC-5) is a machine whose reviewer choices all have the coder's
+ * model: no session is started, and it is a failure like the others. Every result returned after
+ * a session started carries `sessions`, the
  * number of reviewer sessions run (1 or 2, OQ-121). A verdict that does not
  * parse (`parseReviewerVerdict` rejects it) gets one re-run, in the same
  * worktree with the same prompt, unit, pull request, environment and model;
@@ -298,9 +324,11 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
 export async function reviewPullRequest({
   number, ctx, repoDir = process.cwd(), promptTemplate, baseEnv = process.env, sessionOptions = {},
   rereview = false, install = installDependencies, scratchRoot = tmpdir(), usage = readUsage,
+  machineSettings = () => readMachineSettings({ env: process.env, homedir: homedir() }),
 }) {
   const template = promptTemplate ?? readFileSync(REVIEWER_PROMPT, 'utf8')
-  const { unitLinks, rulesFile, usageLimits } = await readSettings(repoDir)
+  const { unitLinks, rulesFile } = await readSettings(repoDir)
+  const machine = await machineSettings()
   const pr = await getPullRequestState(ctx, number)
   if (!SHA_RE.test(pr.headSha) || !pr.headRef || !pr.baseRef) {
     throw new Error(`pull request #${number} did not resolve a head SHA, head branch and base branch`)
@@ -323,7 +351,7 @@ export async function reviewPullRequest({
 
   // ST-31/AC-3: once per call, after the decision to review and before any
   // install or session. The malformed-verdict re-run below is not checked again.
-  const refused = await checkUsage({ read: usage, cwd: repoDir, limits: usageLimits.reviewer })
+  const refused = await checkUsage({ read: usage, cwd: repoDir, limits: machine.usageLimits.reviewer })
   if (refused) return refused
 
   const scratch = await mkdtemp(path.join(scratchRoot, 'tw-review-'))
@@ -355,7 +383,14 @@ export async function reviewPullRequest({
     const found = findUnitLink(pr.body, unitLinks)
     const read = found.kind === 'link' ? await readUnit(found, { repoDir, base: pr.baseRef, ctx }) : null
     const unit = { note: describeUnit(found, read), text: read?.read === true ? read.text : NO_UNIT_TEXT }
-    const model = chooseReviewerModel(unitModel(found, read))
+    // ST-34/AC-5: a choice whose model is not the coder's, or no session at all.
+    const choice = chooseReviewer(machine, unitCoderModel(machine, found, read))
+    if (choice === null) {
+      return {
+        status: 'reviewer-unavailable',
+        reason: `no choice in roles.reviewer.available has a model that differs from the coder's, ${unitCoderModel(machine, found, read)}`,
+      }
+    }
 
     await git(repoDir, ['worktree', 'add', '--detach', tree, pr.headSha])
     worktreeAdded = true
@@ -385,7 +420,8 @@ export async function reviewPullRequest({
       pr: { number, headSha: pr.headSha, body: pr.body },
       rules: rules.text,
       baseEnv: sessionEnv,
-      model,
+      model: choice.model,
+      effort: choice.effort,
       cwd: tree,
     })
 

@@ -18,13 +18,13 @@ computer uses, and a role is not limited to one model or one effort.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — A new module, `scripts/dispatch/machine-settings.mjs`, exports
+- [x] **AC-1** — A new module, `scripts/dispatch/machine-settings.mjs`, exports
       `readMachineSettings({ env, homedir })`. It reads the file that `env.STEWARD_SETTINGS`
       names when that is set, and otherwise `<homedir>/.steward/settings.json`. Like
       `readSettings`, it holds no default for any value: a missing file, invalid JSON, a missing
       or unknown key, or a value of the wrong form is an error naming the file and the key with
       all its parents (for example `roles.reviewer.available.opus.effort`).
-- [ ] **AC-2** — The file is an object with exactly the keys `usageLimits` and `roles`:
+- [x] **AC-2** — The file is an object with exactly the keys `usageLimits` and `roles`:
       - `usageLimits` has the form ST-31 gave it in the project's settings (`coder` and
         `reviewer`, each with `session` and `weekly`, integers from 1 to 100);
       - `roles` has exactly the keys `coder` and `reviewer`. Each is an object with exactly the
@@ -33,19 +33,19 @@ computer uses, and a role is not limited to one model or one effort.
         and `effort`: `tool` is `"claude"`, the only tool accepted until ST-32; `model` is a
         non-empty string; `effort` is one of `low`, `medium`, `high`, `xhigh` and `max`.
         `default` names a key of `available`.
-- [ ] **AC-3** — `usageLimits` leaves the project's settings: `readSettings` refuses it as an
+- [x] **AC-3** — `usageLimits` leaves the project's settings: `readSettings` refuses it as an
       unknown key, and it goes from this repository's `steward.config.json` and from
       `scripts/dispatch/settings-fixture.mjs`. `reviewPullRequest`, `dispatchCoder` and
       `retryStory` take the limits from the machine's settings, read once per call before the
       usage check, through an injectable option so that tests read no real file.
-- [ ] **AC-4** — The coder runs the choice its unit names: when the story's `model:` names a key
+- [x] **AC-4** — The coder runs the choice its unit names: when the story's `model:` names a key
       of `roles.coder.available`, that choice's `model` and `effort`; when it is `null`, the
       coder's `default`. The story lint already requires the field, and accepts `null`. A story
       whose `model:` names no available coder choice is not started: `dispatchCoder` and
       `retryStory` return
       `{ status: 'choice-unavailable', storyId, choice }`, before anything is claimed, made or
       installed.
-- [ ] **AC-5** — The reviewer runs its `default` choice's `model` and `effort`, unless that model
+- [x] **AC-5** — The reviewer runs its `default` choice's `model` and `effort`, unless that model
       is the coder's, compared as `chooseReviewerModel` compares models today. The coder's model
       is the one its unit names (`unitModel`, `review.mjs`, read through `roles.coder.available`
       when it names a choice there), or, when the unit's `model:` is `null`, the model of
@@ -54,7 +54,7 @@ computer uses, and a role is not limited to one model or one effort.
       `{ status: 'reviewer-unavailable', reason }` and starts no session.
       `ROLE_DEFAULTS` in `scripts/dispatch/invocation.mjs` keeps each role's `maxBudgetUsd`, and
       no longer holds a model or an effort.
-- [ ] **AC-6** — Tests, named `ST-34/AC-<n>`, with the file's path, its text and the environment
+- [x] **AC-6** — Tests, named `ST-34/AC-<n>`, with the file's path, its text and the environment
       injected:
       - `readMachineSettings` reads the file `STEWARD_SETTINGS` names, and otherwise the one under
         `homedir`; accepts a valid file; and rejects a missing file, a missing or unknown key at
@@ -68,7 +68,7 @@ computer uses, and a role is not limited to one model or one effort.
         `model:` is `null` and whose coder's default has the reviewer default's model; and
         returns `reviewer-unavailable` when no choice differs, starting no session;
       - the usage check reads its limits from the machine's settings.
-- [ ] **AC-7** — Documents:
+- [x] **AC-7** — Documents:
       - a new `docs/machine-settings.md` gives the file's path, the `STEWARD_SETTINGS` override,
         each key's form, and an example of a whole file;
       - `docs/settings.md` no longer lists `usageLimits`, and says where it went;

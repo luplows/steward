@@ -60,8 +60,9 @@ readability and must not drift from the files named.
    matters more on the second project: its account is on GitHub Free, so nothing on GitHub stops a
    push to `main` there (R6 in the design document).
 3. **Always bound the sessions it starts.** Each session has a spend ceiling (`--max-budget-usd`,
-   `ROLE_DEFAULTS` in `scripts/dispatch/invocation.mjs`), a timeout and a stall interval
-   (`DEFAULT_TIMEOUT_MS` and `DEFAULT_STALL_MS`, `scripts/dispatch/spawn.mjs`). The spend ceiling
+   `ROLE_DEFAULTS` in `scripts/dispatch/invocation.mjs`, which holds each role's budget), a
+   timeout and a stall interval (`DEFAULT_TIMEOUT_MS` and `DEFAULT_STALL_MS`,
+   `scripts/dispatch/spawn.mjs`). The spend ceiling
    is a Claude Code flag, so any other company's tool must supply its own bound before it runs a
    role (M1 and M3 in the design document).
 

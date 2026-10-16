@@ -37,11 +37,12 @@ export const ROLES = ['coder', 'reviewer']
  */
 export const SHELL_TIMEOUT_MS = '600000'
 
-// The per-role defaults are the values in docs/agent-workflow-design.md,
-// "Invocation shape". Each can be overridden by the caller.
+// Each role's budget, from docs/agent-workflow-design.md, "Invocation shape"; the caller can
+// override it. The model and the effort are the machine's settings (`machine-settings.mjs`, ST-34),
+// which the caller passes.
 export const ROLE_DEFAULTS = {
-  coder: { effort: 'medium', maxBudgetUsd: 6 },
-  reviewer: { model: 'opus', effort: 'high', maxBudgetUsd: 3 },
+  coder: { maxBudgetUsd: 6 },
+  reviewer: { maxBudgetUsd: 3 },
 }
 
 const REVIEWER_GIT_TOOLS = [
@@ -244,7 +245,8 @@ export function retrySection({ round, roundsRemaining, findings, branch, source 
  *                   (`source` is 'review' or 'ci'; `storyMoved` is false when the story file is still under stories/)
  *   baseEnv         the environment to derive the process environment from
  *   emptyGhConfigDir  coder only: see `coderEnv`
- *   model, effort, maxBudgetUsd  optional overrides of `ROLE_DEFAULTS`
+ *   model, effort  required: the role's choice from the machine's settings (ST-34)
+ *   maxBudgetUsd   optional override of `ROLE_DEFAULTS`
  *
  * Returns `{ args, env, prompt }`. `prompt` is for stdin (OQ-65) and appears
  * in no element of `args`. The coder's `env` is `coderEnv`'s, so no GitHub
@@ -267,8 +269,8 @@ export function buildInvocation(options) {
   const args = buildArgs({
     role,
     branch,
-    model: options.model ?? defaults.model ?? story?.model,
-    effort: options.effort ?? defaults.effort,
+    model: options.model,
+    effort: options.effort,
     maxBudgetUsd: options.maxBudgetUsd ?? defaults.maxBudgetUsd,
   })
 

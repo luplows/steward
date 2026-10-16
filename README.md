@@ -25,6 +25,10 @@ To run the review side, you need:
   repository. The scripts take its token from `gh auth token`.
 - **The Claude Code CLI, `claude`**, on your `PATH`, or its path in `CLAUDE_EXECUTABLE`. Reviewer
   sessions run in it.
+- **The machine's settings file**, `~/.steward/settings.json` (or the file `STEWARD_SETTINGS`
+  names). Every machine that runs steward needs it: it holds the plan's usage limits and each
+  role's default and available choices of tool, model and effort, and steward has no default for
+  any of them. Each key is described in [`docs/machine-settings.md`](docs/machine-settings.md).
 
 Then, from a checkout of the repository:
 
@@ -36,9 +40,9 @@ node scripts/dispatch/cli.mjs land <pr-number>     # land it, once it has passed
 What the review side reads:
 
 - **`steward.config.json`**, the project's settings: its repository, its setup and check commands,
-  when to land, which checklist to use, and how much of the plan's usage a coder or a reviewer
-  session may start under. Each key is described in
-  [`docs/settings.md`](docs/settings.md).
+  when to land, and which checklist to use. Each key is described in
+  [`docs/settings.md`](docs/settings.md). What depends on the computer rather than the project is
+  in the machine's settings, [`docs/machine-settings.md`](docs/machine-settings.md).
 - **The checklist**, [`REVIEW.md`](REVIEW.md) here, read from `main`, so that a pull request cannot
   change the rules it is reviewed against.
 - **Three workflows** in `.github/workflows/`: `ci.yml` runs lint and the tests, `review-gate.yml`
