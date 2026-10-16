@@ -46,10 +46,10 @@ Each is `null`, or an object with exactly these keys:
 
 An object with exactly the keys `coder` and `reviewer`, each an object with exactly the keys
 `session` and `weekly`. Each is an integer from 1 to 100: the percentage of the plan's 5-hour
-(`session`) or weekly window at or over which that role starts no session. Coders stop earlier than
-reviewers, so that work in flight still gets its review. When the usage cannot be read, nothing
-starts. `usage.mjs` reads the usage; `reviewPullRequest`, `dispatchCoder` and `retryStory` make the
-check.
+(`session`) or weekly window (its `weekly_all` row) at or over which that role starts no session.
+Coders stop earlier than reviewers, so that work in flight still gets its review. When the usage
+cannot be read, nothing starts. `usage.mjs` reads the usage; `reviewPullRequest`, `dispatchCoder`
+and `retryStory` make the check.
 
 ## `unitLinks`
 

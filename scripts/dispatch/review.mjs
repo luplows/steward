@@ -299,10 +299,11 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
  *
  * Resolves `{ status, ... }`. `recorded` carries the comment id; every other
  * status means nothing was posted, and `reason` says why. `no-verdict` and
- * `already-reviewed` are not failures; `over-usage` (with `window`, `percent`,
- * `limit` and `resetsAt`) and `usage-unknown` (ST-31) start no session and
- * are not failures either, and come before any install; `install-failed`, `rereview-refused`
- * and `rules-unreadable` are. `rules-unreadable` (ST-21/AC-1) is a checklist
+ * `already-reviewed` are not failures; `install-failed`, `rereview-refused`,
+ * `rules-unreadable`, `over-usage` (with `window`, `percent`, `limit` and
+ * `resetsAt`) and `usage-unknown` (ST-31) are, and the CLI exits 1 for them: a
+ * review that was asked for did not happen. The last two start no session and
+ * come before any install. `rules-unreadable` (ST-21/AC-1) is a checklist
  * (the settings' `rulesFile`) that is missing from the base branch or does
  * not parse: it carries `problems`, and comes before any install or session.
  * Every result returned after a session started carries `sessions`, the

@@ -325,7 +325,9 @@ async function cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded }) {
  * Resolves `{ status, ... }`. `opened` carries the pull request. Every other
  * status means none was opened, and `reason` says why. `nothing-ready` is not
  * a failure. `over-usage` (with `window`, `percent`, `limit` and `resetsAt`)
- * and `usage-unknown` carry the story's id and leave nothing behind.
+ * and `usage-unknown` carry the story's id and leave nothing behind; they are
+ * failures, and the CLI exits 1 for them: a run that was asked for did not
+ * happen (`NON_FAILURES` does not list them).
  */
 export async function dispatchCoder({
   ctx, repoDir = process.cwd(), storyId, promptTemplate, baseEnv = process.env, sessionOptions = {},

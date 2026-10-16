@@ -23,12 +23,31 @@ describe('ST-31/AC-1: readUsage reads the plan\'s usage from `claude -p /usage`'
     })
   })
 
-  it('ST-31/AC-1: takes the higher of two weekly rows', async () => {
+  it('ST-31/AC-1: reads weekly_all and ignores a higher weekly_scoped or other weekly row', async () => {
     const stdout = stream(message([
       row('session', 'session', 5), row('weekly_all', 'weekly', 30), row('weekly_scoped', 'weekly', 62), row('weekly_other', 'weekly', 41),
     ]))
-    expect((await read(stdout)).weekly).toEqual({ percent: 62, resetsAt: 'r-weekly_scoped-62' })
+    expect((await read(stdout)).weekly).toEqual({ percent: 30, resetsAt: 'r-weekly_all-30' })
   })
+
+  it('ST-31/AC-1: a stream with only weekly_scoped is ok: false', async () => {
+    const result = await read(stream(message([row('session', 'session', 5), row('weekly_scoped', 'weekly', 62)])))
+    expect(result).toMatchObject({ ok: false })
+    expect(result.reason).toContain('weekly_all')
+  })
+
+  it.each(['session', 'weekly_all'])(
+    'ST-31/AC-1: a %s row with a percent that is not a finite number is ok: false',
+    async (broken) => {
+      for (const bad of [null, undefined, '50', Number.NaN, Number.POSITIVE_INFINITY]) {
+        const rows = [row('session', 'session', 20), row('weekly_all', 'weekly', 21)]
+        rows.find((r) => r.kind === broken).percent = bad
+        const result = await read(stream(message(rows)))
+        expect(result).toMatchObject({ ok: false })
+        expect(result.reason).toContain(broken)
+      }
+    },
+  )
 
   it('ST-31/AC-1: runs the executable with the documented arguments, in the given directory, with a 30-second limit', async () => {
     const seen = []
@@ -88,7 +107,7 @@ describe('ST-31/AC-1: readUsage reads the plan\'s usage from `claude -p /usage`'
   it('ST-31/AC-1: a missing weekly row is ok: false', async () => {
     const result = await read(stream(message([row('session', 'session', 20)])))
     expect(result).toMatchObject({ ok: false })
-    expect(result.reason).toContain('weekly')
+    expect(result.reason).toContain('weekly_all')
   })
 
   it('ST-31/AC-1: the default runner reports a failed process\'s exit code, started without a shell', async () => {

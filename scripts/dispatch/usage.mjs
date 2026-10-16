@@ -73,8 +73,9 @@ function windowFrom(row) {
  *   timeoutMs   defaults to `USAGE_TIMEOUT_MS`
  *
  * Resolves `{ ok: true, session, weekly }`, each `{ percent, resetsAt }`:
- * `session` from the row whose `kind` is `session`, `weekly` from the row with
- * the highest `percent` among those whose `group` is `weekly`. Resolves
+ * `session` from the row whose `kind` is `session`, `weekly` from the row whose
+ * `kind` is `weekly_all`; any other weekly row, `weekly_scoped` included, is
+ * ignored. A row whose `percent` is not a finite number is unreadable. Resolves
  * `{ ok: false, reason }` otherwise.
  */
 export async function readUsage({ cwd, executable, run = runUsageProcess, timeoutMs = USAGE_TIMEOUT_MS }) {
@@ -94,10 +95,16 @@ export async function readUsage({ cwd, executable, run = runUsageProcess, timeou
   if (!Array.isArray(limits)) return { ok: false, reason: 'usage_report carries no rate_limits' }
 
   const session = limits.find((row) => row?.kind === 'session')
-  const weeklyRows = limits.filter((row) => row?.group === 'weekly')
+  const weekly = limits.find((row) => row?.kind === 'weekly_all')
   if (!session) return { ok: false, reason: 'usage_report has no session row' }
-  if (weeklyRows.length === 0) return { ok: false, reason: 'usage_report has no weekly row' }
-  const weekly = weeklyRows.reduce((top, row) => (row.percent > top.percent ? row : top))
+  if (!weekly) return { ok: false, reason: 'usage_report has no weekly_all row' }
+  // A percent that is not a number would compare false against every limit and
+  // let a session start, so it is an unreadable usage instead.
+  for (const [name, found] of [['session', session], ['weekly_all', weekly]]) {
+    if (typeof found.percent !== 'number' || !Number.isFinite(found.percent)) {
+      return { ok: false, reason: `usage_report's ${name} row has no numeric percent` }
+    }
+  }
   return { ok: true, session: windowFrom(session), weekly: windowFrom(weekly) }
 }
 

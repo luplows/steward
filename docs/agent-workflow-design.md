@@ -642,9 +642,10 @@ orchestrating agent."
 ATC reads the plan's usage before it starts a coder or a reviewer session, and starts none when
 either window, the 5-hour one or the weekly one, is at or over the limit the settings give that
 role (`usageLimits`). When the usage cannot be read, it starts nothing. Claude Code reports the
-usage, with no model call, to `claude -p /usage --output-format stream-json --verbose`
-(`scripts/dispatch/usage.mjs`; "Trials and measurements", "Reading the plan's usage from a
-script"; Part 3, "Decided so far", 2026-10-15). `reviewPullRequest`, `dispatchCoder` and
+usage, with no model call, to `claude -p /usage --output-format stream-json --verbose`. The weekly
+window is read from its `weekly_all` row alone, and a row without a numeric percent counts as
+unreadable (`scripts/dispatch/usage.mjs`; "Trials and measurements", "Reading the plan's usage from
+a script"; Part 3, "Decided so far", 2026-10-15). `reviewPullRequest`, `dispatchCoder` and
 `retryStory` each make the check, and return `over-usage` or `usage-unknown` without starting a
 session.
 
@@ -1414,7 +1415,7 @@ without a dispatcher session in between.
   story that would have been retried is paused, and resumes on a later run under the threshold.
   *(Revised 2026-10-15 by the owner: the plan's 5-hour and weekly windows are measured against the
   settings' `usageLimits`, and reviews carry on only to their own, higher limit.
-  The check is built (ST-31): Part 1, "ATC is scripts".)*
+  The check is built: Part 1, "ATC is scripts".)*
 - Any pull request from an account with write access (OQ-81) that passes review may land
   unattended, including one that changes this document, `AGENTS.md`, `CLAUDE.md`, `.github/` or
   `.claude/`.
