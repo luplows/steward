@@ -75,19 +75,20 @@ const REVIEWER_GIT_OBJECT_WRITERS = [
  * The reviewer's `--allowedTools` list. `git` verbs are enumerated rather than
  * granting `Bash(git:*)`, so `git push` is absent from the list before
  * `REVIEWER_DISALLOWED_TOOLS` also removes it. All are read-only except
- * `git merge-tree`, which writes unreferenced objects (see above). `npm`, `npx` and `node`
- * are granted because verifying the author's claims means running the suite;
- * that is arbitrary execution, so this is defence in depth, not containment
- * (see reviewer.md). The read-only shell utilities are `coder-env.mjs`'s
- * `READ_ONLY_SHELL_UTILS`, imported so the two roles cannot drift apart on
- * which utilities are safe. No `gh`, no `git push`.
+ * `git merge-tree`, which writes unreferenced objects (see above). The
+ * reviewer runs no test, lint or other check (reviewer.md, "Verify rather than
+ * accept"), so there is no `npm` or `npx`. `node` is granted for
+ * `review-tools.mjs` and `node -e`; that is arbitrary execution, so this is
+ * defence in depth, not containment (see reviewer.md). The read-only shell
+ * utilities are `coder-env.mjs`'s `READ_ONLY_SHELL_UTILS`, imported so the two
+ * roles cannot drift apart on which utilities are safe. No `gh`, no `git push`.
  */
 export function reviewerAllowedTools() {
   return [
     'Read', 'Glob', 'Grep', 'TodoWrite',
     ...REVIEWER_GIT_TOOLS,
     ...REVIEWER_GIT_OBJECT_WRITERS,
-    'Bash(npm:*)', 'Bash(npx:*)', 'Bash(node:*)',
+    'Bash(node:*)',
     ...READ_ONLY_SHELL_UTILS,
   ]
 }

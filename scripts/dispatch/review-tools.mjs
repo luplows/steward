@@ -18,7 +18,6 @@
 
 import { execFile } from 'node:child_process'
 import { existsSync, realpathSync } from 'node:fs'
-import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { reviewerAllowedTools } from './invocation.mjs'
 
@@ -37,27 +36,14 @@ export function allowedPrefixes() {
   return prefixes
 }
 
-/**
- * The program and arguments to start for `argv`, or a thrown `Refusal`. On
- * Windows `npm` and `npx` are started as `execPath` running npm's own CLI
- * script, because `execFile` cannot start the shell script or `.cmd` there.
- */
-export function resolveCommand(argv, {
-  platform = process.platform,
-  execPath = process.execPath,
-  exists = existsSync,
-} = {}) {
+/** The program and arguments to start for `argv`, or a thrown `Refusal`. */
+export function resolveCommand(argv) {
   if (!Array.isArray(argv) || argv.length === 0) throw new Refusal('no command given after --')
   const line = argv.join(' ')
   const allowed = allowedPrefixes().some((p) => line === p || line.startsWith(`${p} `))
   if (!allowed) throw new Refusal(`refused: "${argv[0]}" is not an allowed reviewer command: ${line}`)
 
   const [program, ...rest] = argv
-  if (platform === 'win32' && (program === 'npm' || program === 'npx')) {
-    const script = path.win32.join(path.win32.dirname(execPath), 'node_modules', 'npm', 'bin', `${program}-cli.js`)
-    if (!exists(script)) throw new Refusal(`refused: cannot start ${program} on Windows, ${script} is missing`)
-    return { file: execPath, args: [script, ...rest] }
-  }
   return { file: program, args: rest }
 }
 
@@ -75,11 +61,11 @@ export function startProcess(file, args) {
 
 const lines = (text) => text.split(/\r?\n/).filter((l, i, all) => l !== '' || i < all.length - 1)
 
-export async function repeat(n, argv, { start = startProcess, ...env } = {}) {
+export async function repeat(n, argv, { start = startProcess } = {}) {
   if (!Number.isInteger(n) || n < 1 || n > MAX_REPEAT) {
     throw new Refusal(`refused: repeat count must be an integer from 1 to ${MAX_REPEAT}, got ${n}`)
   }
-  const { file, args } = resolveCommand(argv, env)
+  const { file, args } = resolveCommand(argv)
   const out = []
   let passed = 0
   for (let i = 1; i <= n; i++) {
@@ -92,14 +78,14 @@ export async function repeat(n, argv, { start = startProcess, ...env } = {}) {
   return out.join('\n') + '\n'
 }
 
-export async function exit(argv, { start = startProcess, ...env } = {}) {
-  const { file, args } = resolveCommand(argv, env)
+export async function exit(argv, { start = startProcess } = {}) {
+  const { file, args } = resolveCommand(argv)
   const { code, output } = await start(file, args)
   return `${output}${output === '' || output.endsWith('\n') ? '' : '\n'}exit code: ${code}\n`
 }
 
-export async function sorted(argv, { unique = false, start = startProcess, ...env } = {}) {
-  const { file, args } = resolveCommand(argv, env)
+export async function sorted(argv, { unique = false, start = startProcess } = {}) {
+  const { file, args } = resolveCommand(argv)
   const { code, output } = await start(file, args)
   let sortedLines = lines(output).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
   if (unique) sortedLines = [...new Set(sortedLines)]

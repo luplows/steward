@@ -330,7 +330,10 @@ settles it.
   without a coder.
   - `setup` is run by ATC, in the session's environment without credentials, before a reviewer or
     a coder session starts, in the checkout that session will use. A failure starts no session.
-    The reviewer always gets it, since its narrower commands need what it prepares.
+    The reviewer always gets it, since its narrower commands need what it prepares. **Revised
+    2026-10-15 by the owner:** `setup` runs before a coder session only. The reviewer runs no
+    checks, so nothing is installed before a review (`agent-workflow-design.md`, Part 3, "Decided
+    so far", "The reviewer runs no checks").
   - `check` is run by the coder session itself (Land, above), so it is in effect a line of the
     coder's prompt.
   - **Each command is written with its own time limit, as one value**, so that `null` leaves no

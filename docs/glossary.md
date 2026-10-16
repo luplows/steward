@@ -107,7 +107,8 @@ Where a file defines the thing, the entry names it, and the file is the authorit
 - **pre-flight check** — the `check` command in a project's settings, which a coder runs before its
   work is pushed. *Formerly: the `check` command.*
 - **setup** — the `setup` command in a project's settings, which prepares a fresh checkout before a
-  session starts. Today `npm ci` runs in its place (`scripts/dispatch/install.mjs`; planned: ST-7).
+  coder session starts; nothing is installed before a review. Today `npm ci` runs in its place
+  (`scripts/dispatch/install.mjs`; planned: ST-7).
 - **settings** — a project's `steward.config.json`, read by `scripts/dispatch/settings.mjs`, with
   its keys listed in `docs/settings.md`.
 - **machine settings** — the settings of the computer steward runs on, kept outside any checkout:

@@ -218,6 +218,7 @@ function standIn(reply) {
       head: git(cwd, 'rev-parse', 'HEAD'),
       status: git(cwd, 'status', '--porcelain'),
       hasScratch: existsSync(path.join(cwd, 'scratch.txt')),
+      entries: readdirSync(cwd),
     }
     calls.push({ role, cwd, args, env, prompt, checkout })
     const result = typeof reply === 'function' ? reply(calls.length - 1) : reply
@@ -229,18 +230,15 @@ function standIn(reply) {
   return { calls, sessionOptions: { run, executable: 'stand-in' } }
 }
 
-// The fixture checkouts have no package.json, so the real `npm ci` is replaced.
-const noInstall = async () => {}
-
 // OQ-90/AC-3: a whole review makes a checkout and runs many git calls, which a machine that is
 // running anything else has pushed past the 5 s default. Passed to the tests that call review().
 const REVIEW_TEST_TIMEOUT = 30_000
 
-const review = (branch, { states, comments, body, reply, baseEnv = {}, repoDir, install = noInstall, rereview, scratchRoot, machineSettings } = {}) => {
+const review = (branch, { states, comments, body, reply, baseEnv = {}, repoDir, rereview, scratchRoot, machineSettings } = {}) => {
   const github = fakeGitHub({ branch, states: states ?? [shas[branch]], comments, body })
   const session = standIn(reply ?? verdictText(shas[branch]))
   const done = reviewPullRequest({
-    number: 7, ctx: github.ctx, repoDir: repoDir ?? dirtyClone(), baseEnv, install, rereview, scratchRoot,
+    number: 7, ctx: github.ctx, repoDir: repoDir ?? dirtyClone(), baseEnv, rereview, scratchRoot,
     sessionOptions: session.sessionOptions, ...(machineSettings && { machineSettings: machineOf(machineSettings) }),
   })
   return { done, github, session }
@@ -290,7 +288,7 @@ describe('OQ-69/AC-1: one entry point runs the reviewer half', () => {
       record: { role, exitCode: 1, signal: null, stdout: '', stoppedFor: null }, pid: 1,
     })
     const result = await reviewPullRequest({
-      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, install: noInstall, sessionOptions: { run, executable: 'stand-in' },
+      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, sessionOptions: { run, executable: 'stand-in' },
     })
     expect(result.status).toBe('session-failed')
     expect(github.posted).toEqual([])
@@ -383,7 +381,7 @@ describe('OQ-69/AC-3: the verdict is recorded against the SHA the reviewer revie
     const github = fakeGitHub({ branch: 'story/OQ-99-thing', states: ['e'.repeat(40)] })
     const session = standIn(verdictText('e'.repeat(40)))
     const result = await reviewPullRequest({
-      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, install: noInstall, sessionOptions: session.sessionOptions,
+      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, sessionOptions: session.sessionOptions,
     })
     expect(result.status).toBe('head-moved')
     expect(session.calls).toEqual([])
@@ -648,17 +646,15 @@ describe("ST-34/AC-5, AC-6: the reviewer's choice comes from the machine's setti
     const settings = machine((s) => {
       s.roles.reviewer.available = { opus: { tool: 'claude', model: 'opus', effort: 'high' } }
     })
-    const installs = []
     const github = fakeGitHub({ branch: 'story/OQ-98-other', states: [shas['story/OQ-98-other']], body: 'Unit: stories/OQ-98-other.md' })
     const session = standIn(verdictText(shas['story/OQ-98-other']))
     const result = await reviewPullRequest({
       number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, sessionOptions: session.sessionOptions,
-      install: async (o) => { installs.push(o) }, machineSettings: machineOf(settings),
+      machineSettings: machineOf(settings),
     })
     expect(result.status).toBe('reviewer-unavailable')
     expect(result.reason).toContain('opus')
     expect(session.calls).toEqual([])
-    expect(installs).toEqual([])
     expect(github.posted).toEqual([])
   }, REVIEW_TEST_TIMEOUT)
 })
@@ -707,7 +703,7 @@ describe('OQ-69/AC-8: a verdict already at the current head is not posted twice'
       return out
     }
     const session = standIn(verdictText(head))
-    const args = { number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, install: noInstall, sessionOptions: session.sessionOptions }
+    const args = { number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, sessionOptions: session.sessionOptions }
     expect((await reviewPullRequest(args)).status).toBe('recorded')
     expect((await reviewPullRequest(args)).status).toBe('already-reviewed')
     expect(github.posted).toHaveLength(1)
@@ -720,38 +716,21 @@ const comment = (id, head, verdict, association = 'OWNER') => ({
   id, user: { login: 'someone' }, author_association: association, created_at: '2026-09-24T00:00:00Z', body: marker(head, verdict),
 })
 const HEAD = () => shas['story/OQ-99-thing']
-const credentialEnv = { GH_TOKEN: 'a', GITHUB_TOKEN: 'b', GH_ENTERPRISE_TOKEN: 'c', PATH: '/bin' }
 
-describe('OQ-78/AC-1 and AC-2: dependencies are installed before the reviewer, or the dispatch stops', () => {
-  it('OQ-78/AC-1: npm ci runs in the review checkout with the reviewer\'s credential-free environment', async () => {
-    const installs = []
-    const install = async (options) => {
-      installs.push({ ...options, head: git(options.cwd, 'rev-parse', 'HEAD') })
-    }
-    const { done, session } = review('story/OQ-99-thing', { install, baseEnv: credentialEnv })
-    await done
-    expect(installs).toHaveLength(1)
-    // The checkout at the head under review, which is the reviewer's cwd.
-    expect(installs[0].cwd).toBe(session.calls[0].cwd)
-    expect(installs[0].head).toBe(HEAD())
-    expect(installs[0].env).not.toHaveProperty('GH_TOKEN')
-    expect(installs[0].env).not.toHaveProperty('GITHUB_TOKEN')
-    expect(installs[0].env).not.toHaveProperty('GH_ENTERPRISE_TOKEN')
-    expect(installs[0].env.GH_CONFIG_DIR).toBeTruthy()
-    expect(installs[0].env.PATH).toBe('/bin')
-  }, REVIEW_TEST_TIMEOUT)
-
-  it('OQ-78/AC-2: a failed install has its own status, spawns no reviewer, posts nothing, and is a CLI failure', async () => {
-    const { done, session, github } = review('story/OQ-99-thing', {
-      install: async () => { throw new Error('npm ci failed') },
-    })
+describe('ST-33/AC-2: nothing is installed in the review checkout', () => {
+  it('ST-33/AC-4: a checkout with no package.json is reviewed and recorded, with no install option and none run', async () => {
+    const { done, session, github } = review('story/OQ-99-thing')
     const result = await done
-    expect(result).toMatchObject({ status: 'install-failed', reason: 'npm ci failed' })
-    expect(session.calls).toEqual([])
-    expect(github.posted).toEqual([])
-    // main() exits non-zero for every status outside NON_FAILURES.
+    expect(result).toMatchObject({ status: 'recorded', headSha: HEAD() })
+    expect(github.posted).toHaveLength(1)
+    // What the reviewer found in its checkout: the fixture's files, and nothing an install makes.
+    const { entries } = session.calls[0].checkout
+    expect(entries).not.toContain('package.json')
+    expect(entries).not.toContain('node_modules')
+    expect(entries).not.toContain('package-lock.json')
+    // review.mjs has no install to inject or default to, and no install-failed status.
     const source = readFileSync(path.join(here, 'review.mjs'), 'utf8')
-    expect(source.match(/const NON_FAILURES = (\[[^\]]*\])/)[1]).not.toContain('install-failed')
+    expect(source).not.toMatch(/install\.mjs|installDependencies|install-failed/)
   }, REVIEW_TEST_TIMEOUT)
 })
 
@@ -850,7 +829,7 @@ describe('OQ-78/AC-6: a re-review still refuses to post over a marker that arriv
     return {
       github,
       done: reviewPullRequest({
-        number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, install: noInstall, rereview: true,
+        number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, rereview: true,
         sessionOptions: session.sessionOptions,
       }),
     }
@@ -889,17 +868,6 @@ describe('OQ-121: a malformed verdict is tried once more before the story stops'
     expect(github.posted).toHaveLength(1)
   }, REVIEW_TEST_TIMEOUT)
 
-  it('OQ-121/AC-1: dependencies are installed only once, before either session', async () => {
-    const installs = []
-    const install = async (options) => installs.push(options)
-    const { done } = review('story/OQ-99-thing', {
-      install,
-      reply: (callIndex) => (callIndex === 0 ? 'Looks good to me!' : verdictText(shas['story/OQ-99-thing'])),
-    })
-    await done
-    expect(installs).toHaveLength(1)
-  }, REVIEW_TEST_TIMEOUT)
-
   it('OQ-121/AC-2: two malformed replies is malformed-verdict, with two sessions, nothing posted, and both reasons given', async () => {
     const { done, github, session } = review('story/OQ-99-thing', { reply: 'Looks good to me!' })
     const result = await done
@@ -916,7 +884,7 @@ describe('OQ-121: a malformed verdict is tried once more before the story stops'
     const github = fakeGitHub({ branch: 'story/OQ-99-thing', states: [shas['story/OQ-99-thing']] })
     const run = async ({ role }) => ({ record: { role, exitCode: 1, signal: null, stdout: '', stoppedFor: null }, pid: 1 })
     const result = await reviewPullRequest({
-      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, install: noInstall, sessionOptions: { run, executable: 'stand-in' },
+      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, sessionOptions: { run, executable: 'stand-in' },
     })
     expect(result).toMatchObject({ status: 'session-failed', sessions: 1 })
   })
@@ -942,7 +910,7 @@ describe('OQ-121: a malformed verdict is tried once more before the story stops'
       return { record: { role, exitCode: 0, signal: null, stdout, stoppedFor: null }, pid: 1 }
     }
     const result = await reviewPullRequest({
-      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, install: noInstall, sessionOptions: { run, executable: 'stand-in' },
+      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, sessionOptions: { run, executable: 'stand-in' },
     })
     expect(result.status).toBe('malformed-verdict')
     expect(result.sessions).toBe(1)
@@ -1046,16 +1014,13 @@ describe('ST-21: review against the checklist from main, in sections', () => {
     ['missing from main', 'MISSING.md', 'MISSING.md'],
     ['on main but unparseable', 'stories/OQ-98-other.md', 'has no item'],
   ]) {
-    it(`ST-21/AC-1: a checklist ${what} is rules-unreadable, with no install, no session and nothing posted`, async () => {
-      const installs = []
+    it(`ST-21/AC-1: a checklist ${what} is rules-unreadable, with no session and nothing posted`, async () => {
       const { done, github, session } = review('story/OQ-99-thing', {
         repoDir: withRulesFile(rulesFile),
-        install: async (options) => { installs.push(options) },
       })
       const result = await done
       expect(result.status).toBe('rules-unreadable')
       expect(result.problems.join('\n')).toContain(expected)
-      expect(installs).toEqual([])
       expect(session.calls).toEqual([])
       expect(github.posted).toEqual([])
     }, REVIEW_TEST_TIMEOUT)
@@ -1089,9 +1054,11 @@ describe('ST-21: review against the checklist from main, in sections', () => {
     const section = TEMPLATE_BODY.slice(TEMPLATE_BODY.indexOf('## Verify rather than accept'), TEMPLATE_BODY.indexOf('## Calibration'))
     expect(section).not.toContain('run\n`npm test`')
     expect(section).not.toMatch(/npm test`?\s*\./)
-    expect(section).toContain('the narrowest command that\nsettles it: one test file rather than the whole suite, a search, or a diff of\none path')
-    expect(section).toContain("Do not rerun the project's whole check or test suite, and do not read CI's\nresults.")
-    expect(section).toContain('as a peer check of its own')
+    // ST-33/AC-1 narrowed this further: no check is run at all, and a claim only a run settles is CI's.
+    const flat = section.replace(/\s+/g, ' ')
+    expect(flat).toContain('with the narrowest command that settles it: a search, or a diff of one path')
+    expect(flat).toContain("and do not read CI's results")
+    expect(flat).toContain('as a peer check of its own')
   })
 
   it('ST-21/AC-3: a verdict citing sections and items the checklist has, listing every section, is accepted', () => {
@@ -1236,28 +1203,25 @@ describe('ST-31/AC-3: no reviewer session starts while the usage is over the rev
   async function refused(usage, options = {}) {
     const github = fakeGitHub({ branch: 'story/OQ-99-thing', states: [shas['story/OQ-99-thing']] })
     const session = standIn(verdictText(shas['story/OQ-99-thing']))
-    const installs = []
     const calls = []
     const result = await reviewPullRequestWith({
       number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, sessionOptions: session.sessionOptions,
       machineSettings: machineOf(),
-      install: async (o) => { installs.push(o) },
       usage: async (o) => { calls.push(o); return usage(o) },
       ...options,
     })
-    return { result, github, session, installs, calls }
+    return { result, github, session, calls }
   }
 
   it.each([
     ['session', 90, 10, 90], ['session', 91, 10, 90], ['weekly', 10, 90, 90], ['weekly', 10, 91, 90],
   ])('ST-31/AC-3: over-usage naming the %s window at %s / %s', async (window, session, weekly, limit) => {
-    const { result, github, session: stand, installs, calls } = await refused(usageOf(session, weekly))
+    const { result, github, session: stand, calls } = await refused(usageOf(session, weekly))
     expect(result).toEqual({
       status: 'over-usage', window, percent: window === 'session' ? session : weekly, limit,
       resetsAt: window === 'session' ? 'reset-s' : 'reset-w',
     })
     expect(stand.calls).toEqual([])
-    expect(installs).toEqual([])
     expect(github.posted).toEqual([])
     expect(calls).toHaveLength(1)
   }, REVIEW_TEST_TIMEOUT)
@@ -1279,20 +1243,18 @@ describe('ST-31/AC-3: no reviewer session starts while the usage is over the rev
     expect(result).toMatchObject({ status: 'over-usage', window: 'session', percent: 95 })
   }, REVIEW_TEST_TIMEOUT)
 
-  it('ST-31/AC-3: an unreadable usage is usage-unknown, with no install and no session', async () => {
-    const { result, github, session, installs } = await refused(async () => ({ ok: false, reason: 'no usage_report' }))
+  it('ST-31/AC-3: an unreadable usage is usage-unknown, with no session', async () => {
+    const { result, github, session } = await refused(async () => ({ ok: false, reason: 'no usage_report' }))
     expect(result).toEqual({ status: 'usage-unknown', reason: 'no usage_report' })
     expect(session.calls).toEqual([])
-    expect(installs).toEqual([])
     expect(github.posted).toEqual([])
   }, REVIEW_TEST_TIMEOUT)
 
   it('ST-31/AC-3: one under the limit reviews as before, reading the usage once in the repository directory', async () => {
     const repoDir = dirtyClone()
-    const { result, github, session, installs, calls } = await refused(usageOf(89, 89), { repoDir })
+    const { result, github, session, calls } = await refused(usageOf(89, 89), { repoDir })
     expect(result).toMatchObject({ status: 'recorded', verdict: 'pass' })
     expect(session.calls).toHaveLength(1)
-    expect(installs).toHaveLength(1)
     expect(github.posted).toHaveLength(1)
     expect(calls).toEqual([{ cwd: repoDir }])
   }, REVIEW_TEST_TIMEOUT)
@@ -1303,7 +1265,7 @@ describe('ST-31/AC-3: no reviewer session starts while the usage is over the rev
       const stand = standIn((i) => (i === 0 ? 'not a verdict' : verdictText(shas['story/OQ-99-thing'])))
       let reads = 0
       const done = reviewPullRequestWith({
-        number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, install: noInstall, sessionOptions: stand.sessionOptions,
+        number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, sessionOptions: stand.sessionOptions,
         usage: async () => { reads += 1; return UNDER_LIMITS }, machineSettings: machineOf(),
       }).then((result) => ({ result, reads }))
       return { done, session: stand }
@@ -1326,7 +1288,7 @@ describe('ST-31/AC-3: no reviewer session starts while the usage is over the rev
       }],
     })
     const result = await reviewPullRequestWith({
-      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, install: noInstall,
+      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {},
       usage: async (o) => { calls.push(o); return UNDER_LIMITS }, machineSettings: machineOf(),
     })
     expect(result.status).toBe('already-reviewed')

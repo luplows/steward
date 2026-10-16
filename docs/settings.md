@@ -22,7 +22,7 @@ decisions behind the keys are in [`outline.md`](outline.md), "Defining steward",
 |---|---|---|---|
 | `repo` | `owner/name` | The project's GitHub repository. | Not decided. |
 | `storyPrefix` | 1 to 8 capital letters | The prefix of a story id, such as `ST` for `ST-18`. | Not decided. |
-| `setup` | `null`, or an object (below) | The command that prepares a worktree for a session. | `npm ci`, 5 minutes. |
+| `setup` | `null`, or an object (below) | The command that prepares a worktree for a coder session. Nothing is run before a review. | `npm ci`, 5 minutes. |
 | `check` | `null`, or an object (below) | The command that checks a change, which the coder runs. | `npm run check`, 10 minutes. |
 | `landWhen` | `"all-checks"`, or a non-empty array of distinct, non-empty check names | Which checks must be green before steward lands a pull request. | `"all-checks"`. |
 | `land` | `true` or `false` | Whether steward lands pull requests. `false`: steward still reviews, and the project merges. | Not decided. |

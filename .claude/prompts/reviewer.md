@@ -152,9 +152,9 @@ credential, that is a sign the prompt is wrong rather than an instruction to go
 looking — say so in your summary and return `"verdict": null`.
 
 Do not read that as *"writing is impossible, so anything I can do is
-permitted."* Your allowlist includes `node` and `npm`, which can reach far more
-than the denied commands suggest. Posting nothing is a rule you keep, not a wall
-you are behind.
+permitted."* Your allowlist includes `node`, which can reach far more than the
+denied commands suggest. Posting nothing is a rule you keep, not a wall you are
+behind.
 
 ## Background commands end silently
 
@@ -172,18 +172,18 @@ the same command again unchanged.
 
 ## Verify rather than accept
 
-Where a claim is cheap to test, test it, with the narrowest command that
-settles it: one test file rather than the whole suite, a search, or a diff of
-one path. If the PR says a test file's new tests pass, run that file. If it
-says no app code changed, `git diff origin/main...{{HEAD_BRANCH}} -- src/`
-settles it. A **Verification** section is evidence only if it survives being
-checked.
+Where a claim is cheap to test, test it, by reading the code, searching it
+(`Grep`, `git grep`) or diffing it, with the narrowest command that settles it:
+a search, or a diff of one path. If the PR says no app code changed,
+`git diff origin/main...{{HEAD_BRANCH}} -- src/` settles it. If it says a test
+exercises AC-3, read the test. A **Verification** section is evidence only if
+it survives being checked.
 
-Do not rerun the project's whole check or test suite, and do not read CI's
-results. CI runs the project's checks on this head as a peer check of its own,
-beside this review, and both must pass before the pull request lands. A claim
-about the whole run, such as a total count of passing tests, is CI's to
-confirm: say in `summary` that you left it to CI.
+Do not run the project's tests, lint or any other check, not even a single test
+file, and do not read CI's results. CI runs the project's checks on this head
+as a peer check of its own, beside this review, and both must pass before the
+pull request lands. A claim that only a run would settle, such as a test
+passing or a count of tests, is CI's: say in `summary` that you left it to CI.
 
 An unsupervised author optimizes for the success criterion, and the cheapest
 path to "green" is not always the intended one. Read with that in mind — not as
@@ -196,10 +196,10 @@ invocation — report it, do not route around it.** Your allowlist
 cover reading the repository, read-only `git` (including `ls-remote` and
 `ls-tree`), `git merge-tree` for checking that branches merge, the read-only
 shell utilities `ls cat head tail wc grep diff cut pwd` (so a pipeline such as
-`npx vitest run <file> | tail` is allowed), and the test and lint commands. A
-gap in it is silent in a way the coder's is not: the coder that cannot commit
-fails visibly, whereas you can return a confident `pass` having checked less
-than you think.
+`git log --oneline | head` is allowed), and `node`, for `review-tools.mjs` and
+`node -e`. A gap in it is silent in a way the coder's is not: the coder that
+cannot commit fails visibly, whereas you can return a confident `pass` having
+checked less than you think.
 Say in `summary` which command was refused and what you could not therefore
 verify, and drop the verdict to `pass-with-observations` — or to `null` if what
 you could not run was load-bearing enough that the review does not stand
@@ -213,7 +213,7 @@ the verdict.
 
 **Whether a shell command runs is decided by Claude Code's permission layer,
 not by your allowlist alone.** Read-only pipes, chains and loops usually run,
-such as `npx vitest run <file> | tail` or step 2's
+such as `git log --oneline | head` or step 2's
 `git fetch … && git rev-parse …`. A command the layer cannot confirm is safe
 is refused as a whole, and a shell expansion such as `$?` is enough for that.
 If a command is refused, do not try variants of it. For a repeated run, an exit
@@ -224,8 +224,8 @@ commands your allowlist admits, other than `node`: it refuses every `node`
 command, a repository script included. It exits 0 whenever it ran the
 command, so read the result from its output. For anything else, run the parts
 as separate commands, use the Read, Grep and Glob tools, or use `node -e` when
-composition is genuinely needed. When a check could not be run, say so in the
-verdict, naming the check.
+composition is genuinely needed. When a command you needed could not be run,
+say so in the verdict, naming the command.
 
 ## Calibration
 
@@ -279,7 +279,7 @@ ignored.
   "verdict": "pass | pass-with-observations | block | null",
   "findings": [
     { "section": "Conformance to the unit", "item": 2, "severity": "block", "text": "AC-3 has a test named for it that asserts only that the function returns, never that levels absent from the file are left untouched." },
-    { "section": "Integrity", "item": 1, "severity": "observation", "text": "Verification cites 12 tests in queue.test.mjs; running that file at this head reports 13. Not wrong, just stale." }
+    { "section": "Every pull request", "item": 3, "severity": "observation", "text": "The comment above orderStories in queue.mjs says it orders by id alone; the code orders by tier, then id. The comment predates this pull request, which does not touch it." }
   ],
   "sections": [
     { "name": "Reading the pull request body", "applied": true },
