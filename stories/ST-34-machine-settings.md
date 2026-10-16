@@ -64,8 +64,9 @@ computer uses, and a role is not limited to one model or one effort.
       - a coder runs the choice its story names, the default when its `model:` is `null`, and
         returns `choice-unavailable` for a name not in `available`, claiming nothing;
       - a reviewer runs its default; runs the next differing choice when the default's model is
-        the coder's; and returns `reviewer-unavailable` when no choice differs, starting no
-        session;
+        the coder's, both for a story whose `model:` names a coder choice and for one whose
+        `model:` is `null` and whose coder's default has the reviewer default's model; and
+        returns `reviewer-unavailable` when no choice differs, starting no session;
       - the usage check reads its limits from the machine's settings.
 - [ ] **AC-7** — Documents:
       - a new `docs/machine-settings.md` gives the file's path, the `STEWARD_SETTINGS` override,

@@ -45,9 +45,11 @@ evidence the reviewer was reluctant.
       of four heads, as `buildInvocation` renders it, against `REVIEW.md` from
       `main`, posting nothing. Each reads its unit as it was on `main` when it
       was reviewed, at its merge base: on `main` today, #34's unit,
-      `stories/ST-30-spike-adds-draft-stories.md`, is in `stories/done/`, and
-      `readUnit` (`scripts/dispatch/unit.mjs`) reads a unit from the base it is
-      given. The four:
+      `stories/ST-30-spike-adds-draft-stories.md`, is in `stories/done/`.
+      `readUnit` (`scripts/dispatch/unit.mjs`) reads a unit at
+      `origin/<base>:<path>`, so `<base>` is a branch name, not a SHA: each
+      replay names a branch on `origin`, or a local ref under
+      `refs/remotes/origin/`, that points at its merge base. The four:
       - #41 at `14366c1` returns `block`, with a finding for the gap in ST-34's
         AC-5 that its verdict recorded as an observation (`model: null`);
       - #34 at `da6e5c5` returns `block`, with a finding for the comment it
