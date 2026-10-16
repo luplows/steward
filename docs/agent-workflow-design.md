@@ -1846,8 +1846,8 @@ shortened where it is long, so that it can be found there with its date.
     (`scripts/dispatch/review.mjs`). `REVIEW.md` is in that form: six sections, each numbering
     its own items.
   - The reviewer given the linked unit, read from `main`, and the note on what was found, as two
-    blocks, and verifying with narrower commands rather than the whole check
-    (`scripts/dispatch/review.mjs`, `.claude/prompts/reviewer.md`).
+    blocks, and verifying by reading, searching and diffing, with no check run and nothing
+    installed (`scripts/dispatch/review.mjs`, `.claude/prompts/reviewer.md`).
   - Landing in one look, without waiting, and a project able to turn steward's landing off
     (`scripts/dispatch/land.mjs`: `landPullRequest`'s `once` option, and `landing` on its context).
   - **Planned (ST-24):** landing when the checks `landWhen` names are green, in the lander and the
