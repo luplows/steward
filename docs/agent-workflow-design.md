@@ -2963,6 +2963,22 @@ same codex-cli, after the owner moved to the ChatGPT Plus plan. It reviewed no p
 | A file written to a sibling worktree, to the home directory and to `%TEMP%` | Under `read-only`, none was written. Under `workspace-write`, only the one in `%TEMP%`. |
 | Windows Credential Manager, counted with `CredEnumerate` (no secret printed) | On the host, two `gh:github.com` entries with a secret. Under `workspace-write`, each read failed with error 1312, no logon session. Under `read-only` the probe could not start, since PowerShell compiles its helper in `%TEMP%`; it was not tried further (ST-32, Out of scope). |
 
+The third trial, on 2026-10-16, ran the built reviewer (ST-32) once, on the same codex-cli and
+plan, as ST-32's AC-6 asks. `reviewPullRequest` reviewed ST-32's own pull request, #47, at its
+head `fb909d9`, as ATC would, from that branch's checkout, with two changes: the machine's
+settings were this machine's file with the reviewer's default switched to a Codex choice
+(`gpt-6.1-sol`, effort `high`), and the GitHub context sent every read and captured every write
+instead of sending it. Nothing was posted.
+
+| What | Result |
+|---|---|
+| Usage | Read from `codex app-server`, under the reviewer's limits; Claude Code's was not read. |
+| Session | One `codex exec -s read-only` session, in the review's checkout under `os.tmpdir()`, its last message written in the scratch directory. |
+| Verdict | `block`, accepted by `parseReviewerVerdict` with all six sections; its one write, the verdict comment, was captured and not sent. |
+| Findings | Four, each correct: the body was a placeholder; it gave no Docs check outcome, though `README.md` still said reviewers run in Claude Code; AC-6 was not delivered; and `tools.codex.executable` accepted a directory, since the check was `existsSync`. The last two were fixed after the trial. |
+| Commands | It confirmed the head with `git rev-parse HEAD`, diffed `origin/main...HEAD`, read the unit from `main`, and left the tests and lint to CI. |
+| Wall time | 131.7 s, for the whole of `reviewPullRequest`. |
+
 ### Costs
 
 | Thing | Cost | Wall clock |

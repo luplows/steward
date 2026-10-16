@@ -287,4 +287,19 @@ describe('ST-32/AC-1: a Codex choice for the reviewer', () => {
     const read = await readWith(fixtureMachineSettings(), () => { throw new Error('no executable should be checked') })
     expect(read).not.toHaveProperty('tools')
   })
+
+  it('ST-32/AC-1: by default the executable must be a file: a directory, or nothing, is refused', async () => {
+    await withTempHome(async (home) => {
+      const file = path.join(home, 'codex.exe')
+      writeFileSync(file, '')
+      const settings = (executable) => withSol((s) => { s.tools.codex.executable = executable })
+      writeHomeFile(home, JSON.stringify(settings(file)))
+      await expect(readMachineSettings({ env: {}, homedir: home })).resolves.toMatchObject({ tools: { codex: { executable: file } } })
+      for (const bad of [home, path.join(home, 'no-such-codex.exe')]) {
+        writeHomeFile(home, JSON.stringify(settings(bad)))
+        await expect(readMachineSettings({ env: {}, homedir: home }))
+          .rejects.toThrow("'tools.codex.executable' names no file that exists")
+      }
+    })
+  })
 })

@@ -10,7 +10,7 @@
  * incomplete one, fails rather than running with one assumed. Its callers are the dispatch scripts,
  * each reading it once per call.
  */
-import { existsSync } from 'node:fs'
+import { statSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { validateUsageLimits } from './settings.mjs'
@@ -102,12 +102,21 @@ function validateRole(filePath, name, value, tools) {
   return { default: chosen, available }
 }
 
+/** Whether `file` names a file that exists: not a directory, and not nothing. */
+function isFile(file) {
+  try {
+    return statSync(file).isFile()
+  } catch {
+    return false
+  }
+}
+
 /**
  * Validates `tools` (ST-32/AC-1): an object whose only key is `codex`, itself with exactly
  * `executable`, an absolute path to a file that exists. `used` is the set of tools the choices
  * name; a tool named there must have its entry.
  */
-function validateTools(filePath, value, used, exists) {
+function validateTools(filePath, value, used, fileExists) {
   if (value !== undefined && !isObject(value)) {
     throw new Error(`${filePath}: 'tools' must be an object, got ${JSON.stringify(value)}`)
   }
@@ -127,7 +136,7 @@ function validateTools(filePath, value, used, exists) {
     if (typeof executable !== 'string' || !(path.isAbsolute(executable) || path.win32.isAbsolute(executable))) {
       throw new Error(`${filePath}: 'tools.${tool}.executable' must be an absolute path, got ${JSON.stringify(executable)}`)
     }
-    if (!exists(executable)) {
+    if (!fileExists(executable)) {
       throw new Error(`${filePath}: 'tools.${tool}.executable' names no file that exists: ${executable}`)
     }
   }
@@ -138,10 +147,10 @@ function validateTools(filePath, value, used, exists) {
  * Reads and validates the machine's settings: `{ usageLimits, roles }`, where `roles.<role>` is
  * `{ default, available }`, `available` keeping the file's order, and `tools` when the file has
  * it. Throws, naming the file and the key with all its parents, on a missing file, invalid JSON, a
- * missing or unknown key, or a value of the wrong form. `exists` checks a tool's executable;
- * injectable for tests.
+ * missing or unknown key, or a value of the wrong form. `exists` says whether a tool's executable
+ * names a file, not a directory; injectable for tests.
  */
-export async function readMachineSettings({ env, homedir, exists = existsSync }) {
+export async function readMachineSettings({ env, homedir, exists = isFile }) {
   const filePath = machineSettingsPath({ env, homedir })
 
   let raw

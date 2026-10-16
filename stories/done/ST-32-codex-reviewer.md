@@ -58,7 +58,7 @@ by tests before it is used (M3).
       - the usage read accepts a Plus-shaped answer (a 300-minute and a 10080-minute window), and
         gives `usage-unknown` for a free-plan one (one 43200-minute window) and for a timeout;
       - a coder choice with `tool` `"codex"` is refused.
-- [ ] **AC-6** — The pull request records, in `docs/agent-workflow-design.md`, "Trials and
+- [x] **AC-6** — The pull request records, in `docs/agent-workflow-design.md`, "Trials and
       measurements", "Codex as reviewer", one review of a steward pull request by the built Codex
       reviewer at the pull request's head, with nothing posted: the verdict it returned, whether
       `parseReviewerVerdict` accepted it, and its wall time.
