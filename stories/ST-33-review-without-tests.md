@@ -54,9 +54,9 @@ request. Nothing is installed in the review's checkout, and the reviewer is gran
   `review-tools.mjs` and `node -e`.
 - The coder's install, and the project's `setup` command: ST-7, which now prepares the coder's
   checkout only.
-- Whether ST-13, which lets `review-tools.mjs` run a repository script such as
-  `node scripts/lint-stories.mjs` to capture its exit code, is still wanted. Its reason was
-  confirming that a check passed, which this story leaves to CI. That is the crew's to decide.
+- ST-13, which would have let `review-tools.mjs` run a repository script such as
+  `node scripts/lint-stories.mjs` to capture its exit code. It was retired on 2026-10-16, since
+  its reason, confirming that a check passed, goes with this story.
 - A periodic check that the tests test something useful: ST-36.
 
 ## Constraints

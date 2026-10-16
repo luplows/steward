@@ -1078,8 +1078,9 @@ should not be assumed. Stating it wider than the evidence is the failure this wh
 to record.
 
 The consequence is structural and easy to miss: **no coder can deliver a story that changes the
-prompts.** That is not rare: in steward, ST-13, ST-21 and ST-22 change `reviewer.md`, so each is
-built by hand (for ST-21 and ST-22, Part 3, "Decided so far"; for ST-13, its own `blocked:`). A
+prompts.** That is not rare: in steward, ST-21, ST-22, ST-32 and ST-33 change `reviewer.md`, so
+each is built by hand (for ST-21 and ST-22, Part 3, "Decided so far"; for ST-32 and ST-33, their own
+`blocked:`). A
 story whose acceptance criteria require prompt edits will be blocked on delivery no matter how well
 the coder performs.
 
@@ -2172,6 +2173,17 @@ shortened where it is long, so that it can be found there with its date.
   Whether its sandbox can read Windows Credential Manager under `read-only` is left to ST-6. Tool,
   model and effort are the machine's settings (above). See "Trials and measurements", "Codex as
   reviewer".
+- **`model: null` means the coder's default, and ST-1 and ST-13 are retired** (decided 2026-10-16
+  by the owner, with the planning session, while #41 was open; **Planned (ST-34)**). A story whose
+  `model:` is `null` runs the coder's default choice in the machine's settings, so that a story
+  that made no deliberate choice can be told from one that did, and changing the default is one
+  edit to the machine's file. The story lint already requires the field and accepts `null`. The
+  planning session switches `stories/_TEMPLATE.md` to `model: null` once ST-34 is built; today's
+  coder needs a model. ST-1, which asked for this with a committed file of models that the story
+  lint would also read, is retired: the machine's settings replace the file, and CI cannot read
+  them. ST-13, which would have let `review-tools.mjs` run a repository script to capture its
+  exit code, is retired: its reason, confirming during a review that a check passed, goes with
+  ST-33. Considered and not chosen: rewriting ST-1 down to `model: null`, which ST-34 now covers.
 
 ### The move, in order
 

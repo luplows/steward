@@ -100,7 +100,7 @@ session, by hand, not dispatched.
   `coder-env.mjs`, `invocation.mjs` and `spawn.mjs` included. That is the
   stories AC-4 recommends.
 - **Refining the drafts**, making any of them ready, and having other
-  stories, ST-13 and ST-27 among them, cite the drafts in place of ST-6. That
+  stories, ST-27 among them, cite the drafts in place of ST-6. That
   is the planning session's, with the crew, once this has landed. CI's
   containment check (`scripts/dispatch/story-containment.mjs`) lets this pull
   request add new stories as drafts, but change no story that exists.

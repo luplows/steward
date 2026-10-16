@@ -96,6 +96,12 @@ Formerly tower-workshop-paths OQ-103.
 - Raised by tower-workshop-paths' dispatcher session; the owner asked for
   this follow-up.
 
+**Retired on 2026-10-16** (owner, with the planning session): ST-33 takes
+every check out of the review, the story lint included, which CI runs through
+Vitest (`scripts/lint-stories.test.mjs`). A reviewer then has no repository
+script whose exit code it needs, which was this story's reason (design doc,
+Part 3, "Decided so far", 2026-10-16).
+
 ## Open questions
 
 *(none)*

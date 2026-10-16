@@ -39,9 +39,10 @@ computer uses, and a role is not limited to one model or one effort.
       `retryStory` take the limits from the machine's settings, read once per call before the
       usage check, through an injectable option so that tests read no real file.
 - [ ] **AC-4** — The coder runs the choice its unit names: when the story's `model:` names a key
-      of `roles.coder.available`, that choice's `model` and `effort`; when the story has no
-      `model:`, the coder's `default`. A story whose `model:` names no available coder choice is
-      not started: `dispatchCoder` and `retryStory` return
+      of `roles.coder.available`, that choice's `model` and `effort`; when it is `null`, the
+      coder's `default`. The story lint already requires the field, and accepts `null`. A story
+      whose `model:` names no available coder choice is not started: `dispatchCoder` and
+      `retryStory` return
       `{ status: 'choice-unavailable', storyId, choice }`, before anything is claimed, made or
       installed.
 - [ ] **AC-5** — The reviewer runs its `default` choice's `model` and `effort`, unless that model
@@ -59,8 +60,8 @@ computer uses, and a role is not limited to one model or one effort.
         each level, a `tool` other than `"claude"`, an `effort` not in the list, an empty
         `available`, and a `default` that names no choice, each error naming its key;
       - `readSettings` rejects a project file that still has `usageLimits`;
-      - a coder runs the choice its story names, the default when it names none, and returns
-        `choice-unavailable` for a name not in `available`, claiming nothing;
+      - a coder runs the choice its story names, the default when its `model:` is `null`, and
+        returns `choice-unavailable` for a name not in `available`, claiming nothing;
       - a reviewer runs its default; runs the next differing choice when the default's model is
         the coder's; and returns `reviewer-unavailable` when no choice differs, starting no
         session;
@@ -99,6 +100,9 @@ computer uses, and a role is not limited to one model or one effort.
   among the available: the unit, as today's `model:` does for the coder (this story); the crew,
   overriding for a run it starts by hand; and ATC, when one choice is out of usage and another
   is not (both ST-35).
+- **Decided on 2026-10-16 by the owner** (design doc, Part 3, "Decided so far"): `model: null`
+  means the coder's default, and the planning session switches `stories/_TEMPLATE.md` to it once
+  this story is built. ST-1, which asked for that with a committed file of models, is retired.
 - `ROLE_DEFAULTS` (`scripts/dispatch/invocation.mjs`) today is
   `coder: { effort: 'medium', maxBudgetUsd: 6 }` and
   `reviewer: { model: 'opus', effort: 'high', maxBudgetUsd: 3 }`. The coder's model is its story's
