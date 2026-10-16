@@ -192,7 +192,7 @@ export function checkPlaceholderContract(fileText) {
  * An earlier version of this function built the result by looping over
  * `used` and calling `text.replaceAll` once per placeholder name, reassigning
  * `text` each time. That reintroduced exactly this bug for placeholders
- * appearing after an already-substituted one: `{{STORY}}` precedes
+ * appearing after an already-substituted one: `{{STORY}}` then preceded
  * `{{PR_BODY}}` in reviewer.md, so a `{{PR_BODY}}` token inside the injected
  * story text was matched and substituted on the later iteration, because that
  * iteration scanned the *already-rewritten* string rather than the original

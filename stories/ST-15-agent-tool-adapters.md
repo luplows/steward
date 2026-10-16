@@ -1,6 +1,6 @@
 ---
 id: ST-15
-title: Run coder and reviewer sessions through an adapter per agent tool, so a role can use another company's model
+title: Run coder sessions through an adapter per agent tool, so the coder can use another company's model
 tier: normal
 kind: workflow
 depends_on: []
@@ -10,11 +10,11 @@ blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; doc
 
 ## Intent
 
-As the owner, I want the coder and the reviewer to be able to run on models
-from companies other than Anthropic, so that the work is not all done by
-similar models, and so that the workflow does not depend on any one company
-staying in business or affordable. Goals 2 and 3 in
-`docs/agent-workflow-design.md`, "Purpose", "Goals".
+As the owner, I want the coder to be able to run on models from companies
+other than Anthropic, so that the work is not all done by similar models, and
+so that the workflow does not depend on any one company staying in business or
+affordable. Goals 2 and 3 in `docs/agent-workflow-design.md`, "Purpose",
+"Goals". The reviewer's half is ST-32.
 
 **This is a placeholder for refinement, not a dispatchable story.** It will be
 split before anything here is `ready`. The ACs below state the outcome only;
@@ -22,11 +22,11 @@ the real ones come from the answers to the open questions.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — Provisional: a role (coder or reviewer) can be configured to
-      run through a tool other than the Claude Code CLI, with no change to
-      `story.mjs`, `loop.mjs` or `land.mjs`.
-- [ ] **AC-2** — Provisional: before a tool runs a role, tests show that the
-      role's guarantees hold for it (`docs/agent-workflow-design.md`,
+- [ ] **AC-1** — Provisional: the coder can be configured to run through a
+      tool other than the Claude Code CLI, with no change to `story.mjs`,
+      `loop.mjs` or `land.mjs`.
+- [ ] **AC-2** — Provisional: before a tool runs the coder, tests show that the
+      coder's guarantees hold for it (`docs/agent-workflow-design.md`,
       "Open questions", "Other companies' models (OQ-114)", M3).
 - [ ] **AC-3** — Every `**Planned (…)**` marker in
       `docs/agent-workflow-design.md` that names OQ-114 is resolved as that
