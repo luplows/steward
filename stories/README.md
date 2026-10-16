@@ -41,7 +41,7 @@ title: Read and rank the story queue
 tier: next                 # fix | next | normal | later — priority, nothing else
 kind: workflow             # product | workflow | spike — never read by the ordering
 depends_on: []             # [ST-45] — not taken until those are in done/
-model: sonnet              # per-story escalation; the reviewer is never this model
+model: null                # null: the coder's default, or a coder choice's name
 blocked: null              # null | "reason text"
 ```
 
