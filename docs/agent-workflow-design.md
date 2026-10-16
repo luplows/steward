@@ -1175,7 +1175,7 @@ under the local execution model it no longer matters.
 | 4 | Release cut trigger | Open. Human call, roughly every ten merged PRs. |
 | 5 | Fresh vs. resumed coder on retry | Open. Fresh matches the context principle; resumed may be cheaper. Untested. |
 | 10 | Second GitHub identity | Open. The only thing that fully closes self-marking. Cost: a machine account or App. |
-| 11 | Other companies' models | Open. Goals decided 2026-10-07, and comes after the move; questions M1–M6 under "Other companies' models (OQ-114)", below. ST-15. |
+| 11 | Other companies' models | Open. Goals decided 2026-10-07, and comes after the move; questions M1–M6 under "Other companies' models (OQ-114)", below. ST-15 (the coder) and ST-32 (the reviewer). |
 
 ### Defining steward
 
@@ -1202,10 +1202,10 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
   periodic walkthrough of `main` ending in a release tag, but it has not yet run, so its scope is
   unknown (owner, 2026-10-10); steward's `origin` has no tags (2026-10-13).
 - **D4. Whether and how the `Unit:` line is required** ("Review"). Steward's pull request
-  template carries the line and this is left open. The planning session's options (2026-10-11): the
-  pull request template carries it; ATC always writes it on a pull request it opens; or a check on
-  the pull request body, posted by steward's gate, fails without it, which would sit with "Steward
-  enforces nothing about CI" ("Land").
+  template carries the line, and whether anything more is needed is left open. The planning
+  session's options (2026-10-11) were the template carrying it, which it now does; ATC always
+  writing it on a pull request it opens; and a check on the pull request body, posted by steward's
+  gate, failing without it, which would sit with "Steward enforces nothing about CI" ("Land").
 - **D5. The `unitLinks` value `init` writes** ("Review").
 - **D6. A tool that compares a project's checklist with the example in the version it pins**
   ("Review"): a possibility, not decided (owner, 2026-10-09).
@@ -1583,10 +1583,11 @@ shortened where it is long, so that it can be found there with its date.
 
 - **The move comes first** (decided 2026-10-07 by the owner).
   The workflow has moved to a repository of its own, steward; tower-workshop-paths adopting it is
-  that repository's own work (its OQ-115, OQ-132, OQ-133 and OQ-134). **Planned (ST-15):** once
-  moved, coder and reviewer sessions run through an adapter per agent tool, so that a role can be
-  given another company's model. OQ-114 is a draft, to be split before it is dispatched; OQ-115
-  was split on 2026-10-08 (below).
+  that repository's own work (its OQ-115, OQ-132, OQ-133 and OQ-134).
+  **Planned (ST-15, ST-32):** once moved, coder and reviewer sessions run through an adapter per
+  agent tool, so that a role can be given another company's model: the coder in ST-15, the
+  reviewer through the Codex CLI in ST-32. OQ-114 is a draft, to be split before it is dispatched;
+  OQ-115 was split on 2026-10-08 (below).
 - **Goal 3 is about AI model companies, not GitHub** (decided 2026-10-07 by the owner). The gate
   stays on GitHub. Moving the hosting would be a far larger migration, and would depend on the
   target platform's rules much more than switching models does.
@@ -2095,7 +2096,10 @@ shortened where it is long, so that it can be found there with its date.
   window is the `weekly_all` row alone, for now, and the per-model `weekly_scoped` rows are not
   read; and a window whose `percent` is not a number is a usage that cannot be read, so it starts
   nothing. Considered and not chosen: the highest `percent` among the weekly rows, as ST-31 first
-  asked.
+  asked. **Also decided the same day by the owner, at the same check:** `over-usage` and
+  `usage-unknown` are failures for the command line, which exits 1 for them, since a review or a
+  coder run that was asked for did not happen (`NON_FAILURES`, `review.mjs` and `coder.mjs`).
+  Considered and not chosen: exit 0, as for `no-verdict`.
 - **The reviewer is given the unit's text apart from the note on it, and takes a model only from
   a story** (decided 2026-10-15 by the owner, with the planning session, while ST-22 was built).
   ST-19's note on what ATC found carried the unit's text when it read one, and ST-22's prompt gives
