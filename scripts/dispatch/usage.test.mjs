@@ -23,11 +23,15 @@ describe('ST-31/AC-1: readUsage reads the plan\'s usage from `claude -p /usage`'
     })
   })
 
-  it('ST-31/AC-1: reads weekly_all and ignores a higher weekly_scoped or other weekly row', async () => {
+  it('ST-31/AC-1: reads weekly_all 21 and ignores a higher weekly_scoped 40', async () => {
     const stdout = stream(message([
-      row('session', 'session', 5), row('weekly_all', 'weekly', 30), row('weekly_scoped', 'weekly', 62), row('weekly_other', 'weekly', 41),
+      row('session', 'session', 20), row('weekly_all', 'weekly', 21), row('weekly_scoped', 'weekly', 40),
     ]))
-    expect((await read(stdout)).weekly).toEqual({ percent: 30, resetsAt: 'r-weekly_all-30' })
+    expect(await read(stdout)).toEqual({
+      ok: true,
+      session: { percent: 20, resetsAt: 'r-session-20' },
+      weekly: { percent: 21, resetsAt: 'r-weekly_all-21' },
+    })
   })
 
   it('ST-31/AC-1: a stream with only weekly_scoped is ok: false', async () => {
