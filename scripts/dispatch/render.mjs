@@ -2,9 +2,10 @@
 /**
  * Assembles the coder and reviewer prompts (`.claude/prompts/coder.md`,
  * `.claude/prompts/reviewer.md`) by substituting their `{{PLACEHOLDER}}`
- * tokens. Two of those placeholders -- `{{STORY}}` in both prompts and
- * `{{PR_BODY}}` in the reviewer's -- carry text this project did not write:
- * a story file, or a PR description written by the very agent under review.
+ * tokens. Some of those placeholders -- `{{STORY}}` in the coder's, and
+ * `{{UNIT}}`, `{{UNIT_NOTE}}` and `{{PR_BODY}}` in the reviewer's -- carry text
+ * this project did not write: a story file or another unit, or a PR
+ * description written by the very agent under review.
  * Spliced in unbounded, that text sits in the assembled prompt at the same
  * structural level as the prompt's own instructions, so a heading it happens
  * to contain (or is crafted to contain) can be read as one. `wrapInjectedBlock`

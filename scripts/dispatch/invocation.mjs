@@ -140,9 +140,9 @@ export function buildArgs({ role, model, effort, maxBudgetUsd, branch }) {
 // placeholder (a `{{FINDINGS}}`) is bounded unless someone declares it
 // trusted, rather than unbounded unless someone remembers to wrap it.
 const TRUSTED_INLINE = {
-  // `n/a` is what reviewer.md says the story placeholders render as for a PR
-  // that implements no story (OQ-69/AC-6b).
-  STORY_ID: /^(?:[A-Za-z0-9][A-Za-z0-9._-]*|n\/a)$/,
+  // The coder's alone: the reviewer is given the unit as bounded blocks
+  // (`{{UNIT_NOTE}}`, `{{UNIT}}`; ST-22), not a story's id and path.
+  STORY_ID: /^[A-Za-z0-9][A-Za-z0-9._-]*$/,
   STORY_PATH: /^[A-Za-z0-9][A-Za-z0-9._/-]*$/,
   BRANCH: /^[A-Za-z0-9][A-Za-z0-9._/-]*$/,
   HEAD_BRANCH: /^[A-Za-z0-9][A-Za-z0-9._/-]*$/,
@@ -232,7 +232,10 @@ export function retrySection({ round, roundsRemaining, findings, branch, source 
  *
  *   role            'coder' | 'reviewer'
  *   promptTemplate  the text of the role's prompt file (the caller reads it)
- *   story           { id, path, text, model }
+ *   story           coder only: { id, path, text, model }
+ *   unit            reviewer only: { note, text }, the note `describeUnit`
+ *                   words and the unit's text, rendered as `{{UNIT_NOTE}}` and
+ *                   `{{UNIT}}` (ST-22)
  *   branch          coder: the branch it works on. reviewer: the PR's head branch
  *   pr              reviewer only: { number, headSha, body }
  *   rules           reviewer only: the project's checklist as read from `main`
@@ -253,15 +256,18 @@ export function retrySection({ round, roundsRemaining, findings, branch, source 
  * available (OQ-107).
  */
 export function buildInvocation(options) {
-  const { role, promptTemplate, story, branch, pr, rules, retry, baseEnv, emptyGhConfigDir } = options
+  const { role, promptTemplate, story, unit, branch, pr, rules, retry, baseEnv, emptyGhConfigDir } = options
   if (!ROLES.includes(role)) throw new Error(`unknown role: ${JSON.stringify(role)}`)
-  if (!story) throw new Error('buildInvocation requires a story')
+  if (role === 'coder' && !story) throw new Error('a coder invocation requires a story')
+  if (role === 'coder' && unit) throw new Error('a coder invocation takes no unit')
+  if (role === 'reviewer' && !unit) throw new Error('a reviewer invocation requires a unit')
+  if (role === 'reviewer' && story) throw new Error('a reviewer invocation takes no story')
 
   const defaults = ROLE_DEFAULTS[role]
   const args = buildArgs({
     role,
     branch,
-    model: options.model ?? defaults.model ?? story.model,
+    model: options.model ?? defaults.model ?? story?.model,
     effort: options.effort ?? defaults.effort,
     maxBudgetUsd: options.maxBudgetUsd ?? defaults.maxBudgetUsd,
   })
@@ -289,9 +295,8 @@ export function buildInvocation(options) {
       PR_NUMBER: String(pr.number),
       HEAD_BRANCH: branch,
       HEAD_SHA: pr.headSha,
-      STORY_ID: story.id,
-      STORY_PATH: story.path,
-      STORY: story.text,
+      UNIT_NOTE: unit.note,
+      UNIT: unit.text,
       PR_BODY: pr.body,
       RULES: rules,
     }

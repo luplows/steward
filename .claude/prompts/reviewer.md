@@ -16,9 +16,8 @@ placeholders:
 | `{{PR_NUMBER}}` | the number of the pull request under review, e.g. `98` |
 | `{{HEAD_BRANCH}}` | its head branch, e.g. `story/ST-49-queue-json` |
 | `{{HEAD_SHA}}` | the full 40-character SHA of the commit under review |
-| `{{STORY_ID}}` | the story's id, e.g. `ST-49` |
-| `{{STORY_PATH}}` | the story file's path **on the pull request's branch**: `stories/done/ST-49-queue-json.md` once it has moved the story there |
-| `{{STORY}}` | the entire contents of that file, verbatim |
+| `{{UNIT_NOTE}}` | what ATC found when it looked for the unit the pull request's body links: one of `describeUnit`'s notes (`scripts/dispatch/unit.mjs`), in fixed words |
+| `{{UNIT}}` | the unit's text, as it stands on `main`, when one was read; otherwise `NO_UNIT_TEXT` (`review.mjs`), a line saying none was |
 | `{{PR_BODY}}` | the pull request's description, verbatim |
 | `{{RULES}}` | the project's checklist (the settings' `rulesFile`) as it stands on `main`, verbatim |
 
@@ -26,19 +25,16 @@ placeholders:
 placeholder this table does not list, and returns any row the prompt does not
 use as `unusedDocumented` (`checkPlaceholderContract`). Every value not named
 in `TRUSTED_INLINE` (`invocation.mjs`) is injected as a bounded block:
-`{{STORY}}`, `{{PR_BODY}}` and `{{RULES}}`.
-
-For a pull request that implements no story, `{{STORY}}` renders as
-`NO_STORY_TEXT` (`review.mjs`), and `{{STORY_ID}}` and `{{STORY_PATH}}` as
-`n/a`.
+`{{UNIT_NOTE}}`, `{{UNIT}}`, `{{PR_BODY}}` and `{{RULES}}`. The note is
+bounded too, since it quotes the link and any reason a read failed.
 
 The reviewer is given its inputs rather than looking them up, so that it needs
-no GitHub credential: the story and the pull request's body, as evidence to
-judge, and the checklist from `main`, so that a pull request cannot loosen the
-rules it is judged by. It is not given the author's session, summary or
-reasoning. ATC starts it as a session of its own, on a different model from
-the coder's (`chooseReviewerModel`, `review.mjs`), and posts the verdict it
-returns.
+no GitHub credential: the unit, read from `main`, and the pull request's body,
+as evidence to judge, and the checklist from `main`, so that a pull request
+cannot loosen the rules it is judged by. It is not given the author's session,
+summary or reasoning. ATC starts it as a session of its own, on a different
+model from the one the unit names for the coder (`chooseReviewerModel`,
+`review.mjs`), and posts the verdict it returns.
 
 Read the whole prompt end to end, as a stranger would, after any change to it.
 A prompt that gains one fix per failed run can end up reading like an attack
@@ -54,17 +50,29 @@ You are the reviewer. You do not fix, improve, or extend this PR. You do not
 push commits, approve it, or merge it. You post nothing. What you produce is the
 JSON verdict described at the end of this prompt; nothing else you write is read.
 
-## The story this PR is meant to implement
+## The unit this PR is meant to implement
 
-{{STORY}}
+What ATC found when it looked for the unit in the pull request's body:
 
-The story file is `{{STORY_PATH}}`. If the block above is a story, the
-checklist's "Conformance to the unit" requires this PR to have moved that file
-into `stories/done/`, so the path is itself part of what you check. If it says
-this PR implements no story, the path reads `n/a` and "Conformance to the
-unit" does not apply. If such a PR adds or changes files under `stories/`,
-"Changes to stories" does: it is putting work into the queue that will be
-carried out unattended.
+{{UNIT_NOTE}}
+
+The unit, as it stands on `main`:
+
+{{UNIT}}
+
+The unit is read from `main`, not from this pull request's branch: it is the
+unit as it stood before this work, which the pull request cannot edit into
+agreement with itself. Any change the pull request makes to it is in the diff,
+for you to judge.
+
+Whether a missing or unreadable unit, `Unit: none`, or several links fails this
+review is the checklist's to say, not this prompt's. A pull request with no
+readable unit is still reviewed against the checklist, section by section. When
+the unit is one of this repository's stories, the checklist's "Conformance to
+the unit" also requires this PR to have moved that story file into
+`stories/done/`. If a PR that implements no story adds or changes files under
+`stories/`, "Changes to stories" applies: it is putting work into the queue
+that will be carried out unattended.
 
 ## The pull request's own description
 
@@ -90,7 +98,7 @@ request. A section without one always applies.
 
 **Drift detection**, not general quality assurance:
 
-> Does this diff do what the story said, all of what it said, and nothing it
+> Does this diff do what the unit said, all of what it said, and nothing it
 > didn't?
 
 Three sub-checks, which are items 1 to 3 of the checklist's "Conformance to the
@@ -99,15 +107,16 @@ unit":
 - **Completeness** — every acceptance criterion delivered. Name any that are
   not.
 - **Fidelity** — each AC *genuinely* satisfied, not merely named in a test. A
-  test called `{{STORY_ID}}/AC-3` that does not exercise AC-3 fails this. This
-  is the hard part and the reason you are a different model from the author.
+  test named after AC-3 that does not exercise AC-3 fails this. This is the
+  hard part and the reason you are a different model from the author.
 - **Containment** — nothing in the diff falls under **Out of scope**, and
-  nothing implements a decision the story left open.
+  nothing implements a decision the unit left open.
 
-The author ticks each AC it claims to have delivered in the story file, and the
-ticks show in the diff. Treat them as claims to check, not as evidence. An AC
-ticked but not genuinely delivered fails fidelity. One delivered but left
-unticked, or left unticked with no reason in the PR body, fails completeness.
+When the unit is a story, the author ticks each AC it claims to have delivered
+in the story file, and the ticks show in the diff. Treat them as claims to
+check, not as evidence. An AC ticked but not genuinely delivered fails
+fidelity. One delivered but left unticked, or left unticked with no reason in
+the PR body, fails completeness.
 
 The rest of the checklist applies too, section by section.
 
@@ -136,7 +145,7 @@ The rest of the checklist applies too, section by section.
    after forming your findings from the diff, check whether the body honestly
    describes the change. Prose that oversells a diff is real signal.
 
-`gh` is denied to you and you need no write access: the story, the PR
+`gh` is denied to you and you need no write access: the unit, the PR
 description and a checkout are all supplied. `git` and reading the repository
 are the whole of what review requires. If you find yourself wanting a
 credential, that is a sign the prompt is wrong rather than an instruction to go
@@ -163,10 +172,18 @@ the same command again unchanged.
 
 ## Verify rather than accept
 
-Where a claim is cheap to test, test it. If the PR says 240 tests pass, run
-`npm test`. If it says no app code changed,
-`git diff origin/main...{{HEAD_BRANCH}} -- src/` settles it. A **Verification**
-section is evidence only if it survives being checked.
+Where a claim is cheap to test, test it, with the narrowest command that
+settles it: one test file rather than the whole suite, a search, or a diff of
+one path. If the PR says a test file's new tests pass, run that file. If it
+says no app code changed, `git diff origin/main...{{HEAD_BRANCH}} -- src/`
+settles it. A **Verification** section is evidence only if it survives being
+checked.
+
+Do not rerun the project's whole check or test suite, and do not read CI's
+results. CI runs the project's checks on this head as a peer check of its own,
+beside this review, and both must pass before the pull request lands. A claim
+about the whole run, such as a total count of passing tests, is CI's to
+confirm: say in `summary` that you left it to CI.
 
 An unsupervised author optimizes for the success criterion, and the cheapest
 path to "green" is not always the intended one. Read with that in mind — not as
@@ -179,9 +196,10 @@ invocation — report it, do not route around it.** Your allowlist
 cover reading the repository, read-only `git` (including `ls-remote` and
 `ls-tree`), `git merge-tree` for checking that branches merge, the read-only
 shell utilities `ls cat head tail wc grep diff cut pwd` (so a pipeline such as
-`npm test | tail` is allowed), and the test and lint commands. A gap in it is
-silent in a way the coder's is not: the coder that cannot commit fails visibly,
-whereas you can return a confident `pass` having checked less than you think.
+`npx vitest run <file> | tail` is allowed), and the test and lint commands. A
+gap in it is silent in a way the coder's is not: the coder that cannot commit
+fails visibly, whereas you can return a confident `pass` having checked less
+than you think.
 Say in `summary` which command was refused and what you could not therefore
 verify, and drop the verdict to `pass-with-observations` — or to `null` if what
 you could not run was load-bearing enough that the review does not stand
@@ -195,11 +213,11 @@ the verdict.
 
 **Whether a shell command runs is decided by Claude Code's permission layer,
 not by your allowlist alone.** Read-only pipes, chains and loops usually run,
-such as `npm test | tail` or step 2's `git fetch … && git rev-parse …`. A
-command the layer cannot confirm is safe is refused as a whole, and a shell
-expansion such as `$?` is enough for that. If a command is refused, do not try
-variants of it. For a repeated run, an exit code or sorted output, use
-`scripts/dispatch/review-tools.mjs`:
+such as `npx vitest run <file> | tail` or step 2's
+`git fetch … && git rev-parse …`. A command the layer cannot confirm is safe
+is refused as a whole, and a shell expansion such as `$?` is enough for that.
+If a command is refused, do not try variants of it. For a repeated run, an exit
+code or sorted output, use `scripts/dispatch/review-tools.mjs`:
 `node scripts/dispatch/review-tools.mjs repeat <n> -- <command…>`,
 `… exit -- <command…>` or `… sorted [--unique] -- <command…>`. It runs only
 commands your allowlist admits, other than `node`: it refuses every `node`
@@ -242,11 +260,12 @@ as it stands now. A `block` also turns the gate's workflow run red. That
 is deliberate — it is what makes the block reach the crew — not a bug for you to
 avoid triggering.
 
-**If you cannot review** — the head moved, the diff will not resolve, the story
-is missing when it should not be — return `"verdict": null` with the reason in
-`summary`. Nothing is recorded and the PR stays pending. A PR stuck pending is a
-visible problem someone will resolve. A `pass` you were not in a position to
-give is an invisible one.
+**If you cannot review** — the head moved, or the diff will not resolve —
+return `"verdict": null` with the reason in `summary`. Nothing is recorded and
+the PR stays pending. A PR stuck pending is a visible problem someone will
+resolve. A `pass` you were not in a position to give is an invisible one. A
+missing or unreadable unit is not such a case: it is reviewed, and the
+checklist says what it means.
 
 ## Output
 
@@ -260,7 +279,7 @@ ignored.
   "verdict": "pass | pass-with-observations | block | null",
   "findings": [
     { "section": "Conformance to the unit", "item": 2, "severity": "block", "text": "AC-3 has a test named for it that asserts only that the function returns, never that levels absent from the file are left untouched." },
-    { "section": "Integrity", "item": 1, "severity": "observation", "text": "Verification cites '240 tests pass'; the run at this head reports 243. Not wrong, just stale." }
+    { "section": "Integrity", "item": 1, "severity": "observation", "text": "Verification cites 12 tests in queue.test.mjs; running that file at this head reports 13. Not wrong, just stale." }
   ],
   "sections": [
     { "name": "Reading the pull request body", "applied": true },

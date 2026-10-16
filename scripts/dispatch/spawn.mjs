@@ -230,8 +230,8 @@ export function runSession({
 
 /**
  * Builds a session with `buildInvocation`, runs it, and classifies it.
- * Takes `buildInvocation`'s options (role, promptTemplate, story, branch, pr,
- * retry, baseEnv, emptyGhConfigDir, model, effort, maxBudgetUsd) plus:
+ * Takes `buildInvocation`'s options (role, promptTemplate, story or unit, branch,
+ * pr, rules, retry, baseEnv, emptyGhConfigDir, model, effort, maxBudgetUsd) plus:
  *
  *   cwd         the directory the session runs in; required, passed to
  *               `run` unchanged

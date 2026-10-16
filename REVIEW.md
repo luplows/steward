@@ -33,6 +33,11 @@ A section that restates the PR title in other words is also unfilled.
 3. Statements the pull request adds about how the repository works, in
    documents, comments, commit messages or its body (what a file says, counts,
    which component does what), are true at its head.
+4. A change to code links the unit it implements, with a `Unit:` line in its
+   body. `Unit: none` is accepted only where no unit could exist, such as a
+   pull request that writes the unit itself. The review's note on the unit
+   says which it found: a link read, a link not read and why, `Unit: none`, or
+   no `Unit:` line, and several links are reported as such.
 
 ## Changes to code
 

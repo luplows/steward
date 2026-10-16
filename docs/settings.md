@@ -65,6 +65,6 @@ body and the rules.
 }
 ```
 
-Only `repo` and `storyPrefix` are used by steward's scripts today. The other keys are read and
-validated, and each is taken into use by the story that builds it (see
+Steward's scripts use `repo`, `storyPrefix`, `rulesFile` and `unitLinks` today. The other keys are
+read and validated, and each is taken into use by the story that builds it (see
 [`agent-workflow-design.md`](agent-workflow-design.md), the "Planned" markers).
