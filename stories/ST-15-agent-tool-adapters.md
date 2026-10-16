@@ -55,6 +55,10 @@ only meant "after the move").
 - `scripts/dispatch/review.mjs`, `chooseReviewer`: how the reviewer's
   choice is kept to a model other than the coder's, from the machine's
   settings.
+- ST-35 (planned): each coder choice has a `strength`, and when a story's
+  choice is out of usage, ATC moves it only to a choice at least as strong.
+  Until a coder choice runs on another tool than Claude Code, that move finds
+  none; a Codex coder choice is what lets it.
 - OQ-54: one declared default coder model. M4 may rework or absorb it.
 - OQ-62, OQ-73: the reviewer's and coder's guarantees still being built for
   the Claude Code CLI.
