@@ -758,8 +758,8 @@ established it by running CLI 2.1.281 (OQ-76's Context).
 Both argument lists, both allowlists, the coder's environment and the rendered prompt are built by
 `scripts/dispatch/invocation.mjs` (`buildInvocation`), which starts nothing (OQ-74). The prompt is
 returned separately and never becomes an argument. `reviewerAllowedTools()` is the reviewer's
-allowlist: the read-only `git` verbs plus `git merge-tree`, `Read Glob Grep TodoWrite`,
-`npm`/`npx`/`node`, and `READ_ONLY_SHELL_UTILS` imported from `coder-env.mjs`, with no `git push`
+allowlist: the read-only `git` verbs plus `git merge-tree`, `Read Glob Grep TodoWrite`, `node`,
+and `READ_ONLY_SHELL_UTILS` imported from `coder-env.mjs`, with no `npm`, no `npx`, no `git push`
 and no `gh`. `git merge-tree` is the one `git` verb there that writes: it adds unreferenced tree and
 blob objects and moves no ref, and it is kept in its own list in `invocation.mjs` so that the rest
 stays read-only. Each list is complete on its own, because `permissions.allow` in
