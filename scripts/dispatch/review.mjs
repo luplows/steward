@@ -18,11 +18,11 @@
  * the renderer, using the PR's copy to build the review prompt would be
  * circular.
  *
- * Before it installs anything or starts a session it reads the plan's usage
- * (`usage.mjs`, ST-31), and starts none when either window is at or over the
- * reviewer's limit in the settings (`over-usage`), or when the usage cannot be
- * read (`usage-unknown`). A second session for a malformed verdict is not
- * checked again.
+ * It installs nothing in the checkout: the reviewer runs no checks (ST-33).
+ * Before it starts a session it reads the plan's usage (`usage.mjs`, ST-31),
+ * and starts none when either window is at or over the reviewer's limit in the
+ * settings (`over-usage`), or when the usage cannot be read (`usage-unknown`).
+ * A second session for a malformed verdict is not checked again.
  *
  * A unit that is missing, unreadable, `Unit: none` or one of several links
  * does not stop the review: the reviewer is told which, and the rules judge it.
@@ -55,7 +55,6 @@ import {
   postComment,
   WRITABLE_VERDICTS,
 } from './github.mjs'
-import { installDependencies } from './install.mjs'
 import { ROLE_DEFAULTS } from './invocation.mjs'
 import { parseFrontmatter } from './queue.mjs'
 import { readRules } from './rules.mjs'
@@ -268,9 +267,6 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
  *                  `process.env`, with every GitHub credential removed
  *   rereview       review a head that already has a verdict, only when the
  *                  governing verdict there is `block`
- *   install        `({ cwd, env })`, the dependency install run in the checkout
- *                  before the reviewer starts; defaults to `npm ci`. It gets the
- *                  reviewer's own credential-free environment
  *   scratchRoot    the directory the `tw-review-*` scratch directory is made in;
  *                  defaults to `os.tmpdir()`. Not exposed by the CLI
  *   sessionOptions extra `spawnSession` options (executable, run, timeouts,
@@ -280,13 +276,13 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
  *
  * Resolves `{ status, ... }`. `recorded` carries the comment id; every other
  * status means nothing was posted, and `reason` says why. `no-verdict` and
- * `already-reviewed` are not failures; `install-failed`, `rereview-refused`,
+ * `already-reviewed` are not failures; `rereview-refused`,
  * `rules-unreadable`, `over-usage` (with `window`, `percent`, `limit` and
  * `resetsAt`) and `usage-unknown` (ST-31) are, and the CLI exits 1 for them: a
- * review that was asked for did not happen. The last two start no session and
- * come before any install. `rules-unreadable` (ST-21/AC-1) is a checklist
- * (the settings' `rulesFile`) that is missing from the base branch or does
- * not parse: it carries `problems`, and comes before any install or session.
+ * review that was asked for did not happen. The last two start no session.
+ * `rules-unreadable` (ST-21/AC-1) is a checklist (the settings' `rulesFile`)
+ * that is missing from the base branch or does not parse: it carries
+ * `problems`, and comes before any session.
  * Every result returned after a session started carries `sessions`, the
  * number of reviewer sessions run (1 or 2, OQ-121). A verdict that does not
  * parse (`parseReviewerVerdict` rejects it) gets one re-run, in the same
@@ -297,7 +293,7 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
  */
 export async function reviewPullRequest({
   number, ctx, repoDir = process.cwd(), promptTemplate, baseEnv = process.env, sessionOptions = {},
-  rereview = false, install = installDependencies, scratchRoot = tmpdir(), usage = readUsage,
+  rereview = false, scratchRoot = tmpdir(), usage = readUsage,
 }) {
   const template = promptTemplate ?? readFileSync(REVIEWER_PROMPT, 'utf8')
   const { unitLinks, rulesFile, usageLimits } = await readSettings(repoDir)
@@ -322,7 +318,7 @@ export async function reviewPullRequest({
   }
 
   // ST-31/AC-3: once per call, after the decision to review and before any
-  // install or session. The malformed-verdict re-run below is not checked again.
+  // session. The malformed-verdict re-run below is not checked again.
   const refused = await checkUsage({ read: usage, cwd: repoDir, limits: usageLimits.reviewer })
   if (refused) return refused
 
@@ -342,7 +338,7 @@ export async function reviewPullRequest({
     }
 
     // ST-21/AC-1: the checklist as it stands on the base branch, never the
-    // pull request's own copy, read before anything is installed or started,
+    // pull request's own copy, read before a session is started,
     // so a missing or broken file costs no review.
     const rules = await readRules({ repoDir, base: pr.baseRef, rulesFile })
     if (!rules.ok) {
@@ -366,15 +362,6 @@ export async function reviewPullRequest({
     const ghConfigDir = path.join(scratch, 'gh-config')
     await mkdir(ghConfigDir)
     const sessionEnv = coderEnv(baseEnv, ghConfigDir)
-
-    // A reviewer that cannot run a test silently reviews by reading
-    // (docs/agent-workflow-design.md, "Invocation shape"), so a failed install
-    // stops the dispatch.
-    try {
-      await install({ cwd: tree, env: sessionEnv })
-    } catch (error) {
-      return { status: 'install-failed', reason: error.message }
-    }
 
     const runSession = () => spawnSession({
       ...sessionOptions,

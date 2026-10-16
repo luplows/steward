@@ -226,13 +226,12 @@ still reviewed, and the checklist says what that means (`REVIEW.md`, "Every pull
 item 4). It does not receive the coder's session, summary or reasoning, or any commentary from
 ATC.
 
-**It verifies with narrower commands.** The reviewer tests a claim with the narrowest command that
-settles it, such as one test file, a search or a diff of one path. It neither reruns the project's
-whole check nor reads CI's results: CI is a peer check on the same head (`outline.md`,
-"Defining steward", "Land").
-**Planned (ST-33):** it runs no test, lint or other check at all, a single test file included, and
-settles a claim by reading, searching or diffing; a claim only a run would settle is CI's. Nothing
-is installed in its checkout, and its allowlist grants no `npm` or `npx`.
+**It verifies by reading, not by running.** The reviewer runs no test, lint or other check, a
+single test file included. It settles a claim by reading the code, searching it or diffing it,
+with the narrowest command that settles it, such as a search or a diff of one path. A claim only a
+run would settle is CI's, and it does not read CI's results: CI is a peer check on the same head
+(`outline.md`, "Defining steward", "Land"). Nothing is installed in its checkout, and its
+allowlist grants no `npm` or `npx`.
 
 **The PR description is itself in scope.** After forming findings from the diff, check whether the
 description honestly describes the change. Prose that oversells a diff is real signal.
@@ -768,10 +767,8 @@ everything not declared a trusted inline token is wrapped.
 
 `scripts/dispatch/review-tools.mjs` does the jobs that refused shell forms were
 doing in reviews: a command repeated N times, a command's exit code, and sorted output. It runs only
-commands the reviewer's allowlist admits, without a shell. On Windows it starts `npm` and `npx` as
-`node` running npm's own CLI scripts, since they cannot start there without a shell; elsewhere it
-starts them by name. For anything else the reviewer runs the parts as separate commands, or uses
-`node -e`.
+commands the reviewer's allowlist admits, other than `node`, without a shell. For anything else
+the reviewer runs the parts as separate commands, or uses `node -e`.
 
 **What a reviewer's shell command may do is wider than `reviewerAllowedTools()`.** Checked
 2026-09-28 with Claude Code 2.1.281, in a session with exactly the reviewer's arguments,
@@ -811,27 +808,25 @@ coder's allowlist granted scoped push patterns, and a deny rule takes precedence
 so the deny would have shadowed them. The push is now ATC's, `coderAllowedTools` grants none, and
 the deny is a second barrier with nothing to shadow.
 
-**That is defence in depth, not containment.** The same list grants `npm`, `npx` and `node`,
-because verifying the author's claims means running the suite — and those are arbitrary execution.
-`node -e` writes files despite `Edit`/`Write` being disallowed, and spawns `git push` despite the
-deny rule, which matches a command *prefix* that `node …` never trips. A reviewer session today is
-therefore **not** structurally unable to write; it is unwilling, because its prompt tells it to post
-nothing. Claiming otherwise — an earlier draft of this section said "two independent reasons it
-cannot push" — overstates the guarantee, and overstating a security property is worse than not
-having it, because it stops people looking.
-**Planned (ST-33):** the list grants no `npm` or `npx`, and the reviewer runs no checks. `node`
-stays, for `review-tools.mjs` and `node -e`, so what this paragraph says still holds for it.
+**That is defence in depth, not containment.** The same list grants `node`, for
+`review-tools.mjs` and `node -e`, and that is arbitrary execution. It grants no `npm` or `npx`,
+since the reviewer runs no checks. `node -e` writes files despite `Edit`/`Write` being disallowed,
+and spawns `git push` despite the deny rule, which matches a command *prefix* that `node …` never
+trips. A reviewer session today is therefore **not** structurally unable to write; it is
+unwilling, because its prompt tells it to post nothing. Claiming otherwise — an earlier draft of
+this section said "two independent reasons it cannot push" — overstates the guarantee, and
+overstating a security property is worse than not having it, because it stops people looking.
 
-The tension is real rather than an oversight: **verification requires execution, and execution
-defeats structural write-prevention.** Closing it needs the capability removed rather than the
-command denied — a reviewer that runs with no SSH agent, no keyring access and no push-capable
-credential, so that `git push` fails for want of authorisation rather than for want of permission.
-That is the same conclusion **credential minimalism** reaches below by a different route, and it is
-not built yet.
+The tension is real rather than an oversight: **any execution defeats structural
+write-prevention**, and the reviewer keeps `node`. Closing it needs the capability removed rather
+than the command denied — a reviewer that runs with no SSH agent, no keyring access and no
+push-capable credential, so that `git push` fails for want of authorisation rather than for want
+of permission. That is the same conclusion **credential minimalism** reaches below by a different
+route, and it is not built yet.
 
 That narrowness has its own cost, and it is not symmetric with the coder's. A hole in the
 **coder's** allowlist fails loudly and late — it cannot run a command it needs, and someone notices.
-A hole in the **reviewer's** fails *quietly*: a reviewer that cannot run `npm test` or `git
+A hole in the **reviewer's** fails *quietly*: a reviewer that cannot run `git grep` or `git
 merge-base` can still return a confident `pass`, having checked less than it thinks. The `git` verbs
 above are therefore a deliberately broad set rather than a minimal one — not a complete one, since
 `blame`, `rev-list`, `describe`, `remote`, `shortlog` and `config --get` are all plausible and none
@@ -852,8 +847,8 @@ stdout; ATC posts it as a marker comment, and `review-gate.yml` derives the stat
 runs it in `coderEnv`'s environment, which holds no GitHub token.
 
 **Handed none, not denied.** The reviewer runs as whoever runs ATC, on a machine where an SSH key
-and a `gh` keyring token are reachable, and its allowlist includes `npm` and `node` so that it can
-verify the author's claims, which is arbitrary execution (**Invocation shape**, above). What holds
+and a `gh` keyring token are reachable, and its allowlist includes `node`, for `review-tools.mjs`
+and `node -e`, which is arbitrary execution (**Invocation shape**, above). What holds
 it is that nothing in its prompt asks it to post. A prompt that gains one fix per failed run can
 end up asking for exactly that: tower-workshop-paths' reviewer prompt once read *find tokens on
 disk, tell nobody, act with elevated access*, and a reviewer correctly refused it as an injection
@@ -861,8 +856,6 @@ attack. Removing the reviewer's need to post deletes that part of the prompt rat
 it. Genuinely removing the capability needs a reviewer with no SSH agent, no keyring and no
 push-capable credential, which no environment on the crew member's own account gives, so it is
 ST-6's question, a spike (Part 3, "Decided so far", 2026-10-15).
-**Planned (ST-33):** of `npm`, `npx` and `node`, its allowlist keeps `node` alone, and it runs no
-checks, so "so that it can verify the author's claims" stops being the reason.
 
 **The coder holds no GitHub credential, and does not push.** `coderEnv`
 (`scripts/dispatch/coder-env.mjs`) removes `GH_TOKEN`, `GITHUB_TOKEN` and `GH_ENTERPRISE_TOKEN` from
@@ -2135,7 +2128,7 @@ shortened where it is long, so that it can be found there with its date.
   would parse a project's units, and steward does not (`outline.md`, "Review"); and stopping the
   review on a file that does not parse.
 - **The reviewer runs no checks** (decided 2026-10-15 by the owner, with the planning session,
-  while settling ST-32's open questions; **Planned (ST-33)**). The reviewer runs no test, lint or
+  while settling ST-32's open questions). The reviewer runs no test, lint or
   other check, a single test file included, and settles a claim by reading, searching or diffing;
   a claim only a run would settle is CI's, a peer check that still stops a pull request whose
   tests fail. Nothing is installed in its checkout, and `npm` and `npx` go from its allowlist;
