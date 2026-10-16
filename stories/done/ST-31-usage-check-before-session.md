@@ -18,7 +18,7 @@ by the plan's own limit. When the usage cannot be read, nothing starts.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — A new module, `scripts/dispatch/usage.mjs`, exports `readUsage`. It runs the
+- [x] **AC-1** — A new module, `scripts/dispatch/usage.mjs`, exports `readUsage`. It runs the
       Claude executable (`resolveClaudeExecutable`, `scripts/dispatch/spawn.mjs`) as
       `claude -p /usage --output-format stream-json --verbose`, with no shell, in the directory it
       is given, and reads the `usage_report.rate_limits.limits` rows from the message that carries
@@ -31,7 +31,7 @@ by the plan's own limit. When the usage cannot be read, nothing starts.
       carries `usage_report`, when `rate_limits` is `null`, when either window has no row, or when
       a window's `percent` is not a number. The run is given a time limit of 30 seconds. The
       process runner is injectable, so tests start no real session.
-- [ ] **AC-2** — A new required settings key, `usageLimits`, read and validated by
+- [x] **AC-2** — A new required settings key, `usageLimits`, read and validated by
       `readSettings` (`scripts/dispatch/settings.mjs`): an object with exactly the keys `coder` and
       `reviewer`, each an object with exactly the keys `session` and `weekly`, each an integer from
       1 to 100, the percentage at or over which that role starts no session. Anything else is an
@@ -45,7 +45,7 @@ by the plan's own limit. When the usage cannot be read, nothing starts.
         "reviewer": { "session": 90, "weekly": 90 }
       }
       ```
-- [ ] **AC-3** — `reviewPullRequest` (`scripts/dispatch/review.mjs`) checks usage once per call,
+- [x] **AC-3** — `reviewPullRequest` (`scripts/dispatch/review.mjs`) checks usage once per call,
       after it has decided to review and before it installs dependencies or starts the first
       session:
       - **over the limit**: when either window's `percent` is at or over the reviewer's limit for
@@ -56,15 +56,15 @@ by the plan's own limit. When the usage cannot be read, nothing starts.
         `{ status: 'usage-unknown', reason }`.
 
       A second session for a malformed verdict (OQ-121) is not checked again.
-- [ ] **AC-4** — `scripts/dispatch/coder.mjs` makes the same check, with the coder's limits:
+- [x] **AC-4** — `scripts/dispatch/coder.mjs` makes the same check, with the coder's limits:
       `dispatchCoder` before it claims a story's branch, and `retryStory` before it installs
       dependencies. Each returns the same two statuses, with the story's id. A coder session
       already running is never stopped.
-- [ ] **AC-5** — The header comments of `review.mjs` and `coder.mjs` say that each checks usage
+- [x] **AC-5** — The header comments of `review.mjs` and `coder.mjs` say that each checks usage
       before starting a session, and name the two statuses. `docs/controller.md` needs no change:
       a status other than `recorded` is that pull request's outcome, and the rotation goes on
       ("Reporting and stopping").
-- [ ] **AC-6** — Tests, named `ST-31/AC-<n>`, with the process runner and `readUsage` injected:
+- [x] **AC-6** — Tests, named `ST-31/AC-<n>`, with the process runner and `readUsage` injected:
       - `readUsage` parses a stream holding `session` 20 and `weekly_all` 21, and one holding
         `weekly_all` 21 and `weekly_scoped` 40 (taking `weekly_all`'s 21); and returns `ok: false`
         for a failed run, a timeout, no `usage_report`, `rate_limits: null`, a missing `session`
@@ -77,10 +77,10 @@ by the plan's own limit. When the usage cannot be read, nothing starts.
         reviews as before one under the limit;
       - `dispatchCoder` returns each status without claiming a branch, and `retryStory` without
         installing.
-- [ ] **AC-7** — `docs/settings.md` lists `usageLimits` in its table, describes its form in a
+- [x] **AC-7** — `docs/settings.md` lists `usageLimits` in its table, describes its form in a
       section of its own, and shows it in "This repository's file". Its statement that the file is
       flat apart from `setup` and `check` names `usageLimits` too.
-- [ ] **AC-8** — Every `**Planned (ST-31)**` marker in `docs/agent-workflow-design.md` loses
+- [x] **AC-8** — Every `**Planned (ST-31)**` marker in `docs/agent-workflow-design.md` loses
       `ST-31`, and each passage is corrected wherever what was built differs.
 
 ## Out of scope

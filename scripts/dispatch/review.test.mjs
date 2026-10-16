@@ -12,13 +12,19 @@ import { createContext, parseComments, parseMarkerComment } from './github.mjs'
 import { ROLE_DEFAULTS } from './invocation.mjs'
 import { parseRules } from './rules.mjs'
 import {
-  chooseReviewerModel, formatFindings, HONOURED_ASSOCIATIONS, parseReviewerVerdict, reviewPullRequest, unitModel,
+  chooseReviewerModel, formatFindings, HONOURED_ASSOCIATIONS, parseReviewerVerdict, unitModel,
+  reviewPullRequest as reviewPullRequestWith,
 } from './review.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const TEMPLATE = readFileSync(path.join(here, '..', '..', '.claude', 'prompts', 'reviewer.md'), 'utf8')
 const TEMPLATE_BODY = TEMPLATE.split(/\n---\r?\n/).slice(1).join('\n---\n')
 const REPO = 'luplows/tower-workshop-paths'
+
+// ST-31: `reviewPullRequest` reads the plan's usage before it starts. No test starts a real
+// `claude`, so every call is given a usage well under the limits unless the test passes its own.
+const UNDER_LIMITS = { ok: true, session: { percent: 10, resetsAt: 't1' }, weekly: { percent: 10, resetsAt: 't2' } }
+const reviewPullRequest = (args) => reviewPullRequestWith({ usage: async () => UNDER_LIMITS, ...args })
 
 // The fixture repository's checklist, on its main (ST-21): three sections, one
 // with a condition, each numbering its own items.
@@ -1127,4 +1133,98 @@ describe('OQ-123: the project root is the working directory, not the engine root
       rmSync(dir, { recursive: true, force: true })
     }
   })
+})
+
+describe('ST-31/AC-3: no reviewer session starts while the usage is over the reviewer\'s limit', () => {
+  // The fixture's reviewer limits are 90 and 90.
+  const usageOf = (session, weekly) => async () => ({
+    ok: true, session: { percent: session, resetsAt: 'reset-s' }, weekly: { percent: weekly, resetsAt: 'reset-w' },
+  })
+
+  async function refused(usage, options = {}) {
+    const github = fakeGitHub({ branch: 'story/OQ-99-thing', states: [shas['story/OQ-99-thing']] })
+    const session = standIn(verdictText(shas['story/OQ-99-thing']))
+    const installs = []
+    const calls = []
+    const result = await reviewPullRequestWith({
+      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, sessionOptions: session.sessionOptions,
+      install: async (o) => { installs.push(o) },
+      usage: async (o) => { calls.push(o); return usage(o) },
+      ...options,
+    })
+    return { result, github, session, installs, calls }
+  }
+
+  it.each([
+    ['session', 90, 10, 90], ['session', 91, 10, 90], ['weekly', 10, 90, 90], ['weekly', 10, 91, 90],
+  ])('ST-31/AC-3: over-usage naming the %s window at %s / %s', async (window, session, weekly, limit) => {
+    const { result, github, session: stand, installs, calls } = await refused(usageOf(session, weekly))
+    expect(result).toEqual({
+      status: 'over-usage', window, percent: window === 'session' ? session : weekly, limit,
+      resetsAt: window === 'session' ? 'reset-s' : 'reset-w',
+    })
+    expect(stand.calls).toEqual([])
+    expect(installs).toEqual([])
+    expect(github.posted).toEqual([])
+    expect(calls).toHaveLength(1)
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-31/AC-3: both windows over names session first', async () => {
+    const { result } = await refused(usageOf(95, 99))
+    expect(result).toMatchObject({ status: 'over-usage', window: 'session', percent: 95 })
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-31/AC-3: an unreadable usage is usage-unknown, with no install and no session', async () => {
+    const { result, github, session, installs } = await refused(async () => ({ ok: false, reason: 'no usage_report' }))
+    expect(result).toEqual({ status: 'usage-unknown', reason: 'no usage_report' })
+    expect(session.calls).toEqual([])
+    expect(installs).toEqual([])
+    expect(github.posted).toEqual([])
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-31/AC-3: one under the limit reviews as before, reading the usage once in the repository directory', async () => {
+    const repoDir = dirtyClone()
+    const { result, github, session, installs, calls } = await refused(usageOf(89, 89), { repoDir })
+    expect(result).toMatchObject({ status: 'recorded', verdict: 'pass' })
+    expect(session.calls).toHaveLength(1)
+    expect(installs).toHaveLength(1)
+    expect(github.posted).toHaveLength(1)
+    expect(calls).toEqual([{ cwd: repoDir }])
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-31/AC-3: a second session for a malformed verdict does not read the usage again', async () => {
+    const { done, session } = (() => {
+      const github = fakeGitHub({ branch: 'story/OQ-99-thing', states: [shas['story/OQ-99-thing']] })
+      const stand = standIn((i) => (i === 0 ? 'not a verdict' : verdictText(shas['story/OQ-99-thing'])))
+      let reads = 0
+      const done = reviewPullRequestWith({
+        number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, install: noInstall, sessionOptions: stand.sessionOptions,
+        usage: async () => { reads += 1; return UNDER_LIMITS },
+      }).then((result) => ({ result, reads }))
+      return { done, session: stand }
+    })()
+    const { result, reads } = await done
+    expect(result).toMatchObject({ status: 'recorded', sessions: 2 })
+    expect(session.calls).toHaveLength(2)
+    expect(reads).toBe(1)
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-31/AC-3: an already-reviewed head does not read the usage', async () => {
+    const head = shas['story/OQ-99-thing']
+    const calls = []
+    const github = fakeGitHub({
+      branch: 'story/OQ-99-thing',
+      states: [head],
+      comments: [{
+        id: 1, user: { login: 'owner' }, author_association: 'OWNER', created_at: '2026-09-24T00:00:00Z',
+        body: `Done.\n\n<!-- agent-review head=${head} verdict=pass -->`,
+      }],
+    })
+    const result = await reviewPullRequestWith({
+      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, install: noInstall,
+      usage: async (o) => { calls.push(o); return UNDER_LIMITS },
+    })
+    expect(result.status).toBe('already-reviewed')
+    expect(calls).toEqual([])
+  }, REVIEW_TEST_TIMEOUT)
 })
