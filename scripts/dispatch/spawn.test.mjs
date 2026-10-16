@@ -69,6 +69,8 @@ const CODER_OPTIONS = {
   cwd: repoRoot,
   baseEnv: { PATH: '/usr/bin' },
   emptyGhConfigDir: '/tmp/empty-gh',
+  model: 'sonnet',
+  effort: 'medium',
 }
 
 describe('OQ-65/AC-1 the entry point joins invocation, run and classification', () => {

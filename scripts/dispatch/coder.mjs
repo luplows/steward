@@ -41,7 +41,7 @@
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
@@ -49,6 +49,7 @@ import { coderEnv } from './coder-env.mjs'
 import { buildGetPullRequestState, createContext, createPullRequest, parsePullRequestState, replacePullRequest } from './github.mjs'
 import { installDependencies } from './install.mjs'
 import { RETRY_SOURCES } from './invocation.mjs'
+import { coderChoice, readMachineSettings } from './machine-settings.mjs'
 import { buildStory, deriveStatus, dispatchable, isStoryFilename, orderStories, parseFrontmatter } from './queue.mjs'
 import { readSettings } from './settings.mjs'
 import { spawnSession } from './spawn.mjs'
@@ -321,23 +322,29 @@ async function cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded }) {
  *   usage          `({ cwd })`, resolving `readUsage`'s result; defaults to
  *                  `readUsage`. Called once, in `repoDir`, after the story is
  *                  chosen and before the branch is claimed (ST-31)
+ *   machineSettings  `()`, resolving the machine's settings; defaults to `readMachineSettings`
+ *                  on the real environment and home directory. Called once, before the
+ *                  usage check (ST-34)
  *
  * Resolves `{ status, ... }`. `opened` carries the pull request. Every other
  * status means none was opened, and `reason` says why. `nothing-ready` is not
  * a failure. `over-usage` (with `window`, `percent`, `limit` and `resetsAt`)
  * and `usage-unknown` carry the story's id and leave nothing behind; they are
  * failures, and the CLI exits 1 for them: a run that was asked for did not
- * happen (`NON_FAILURES` does not list them).
+ * happen (`NON_FAILURES` does not list them). So is `choice-unavailable` (ST-34/AC-4), with
+ * `storyId` and `choice`: the story's `model:` names no choice in `roles.coder.available`.
  */
 export async function dispatchCoder({
   ctx, repoDir = process.cwd(), storyId, promptTemplate, baseEnv = process.env, sessionOptions = {},
   install = installDependencies, usage = readUsage,
+  machineSettings = () => readMachineSettings({ env: process.env, homedir: homedir() }),
 }) {
   const template = promptTemplate ?? readFileSync(CODER_PROMPT, 'utf8')
 
   // The queue is read from the tip just fetched, and the worktree is made from
   // that same commit, so the story chosen is the story the coder is handed.
-  const { storyPrefix, usageLimits } = await readSettings(repoDir)
+  const { storyPrefix } = await readSettings(repoDir)
+  const machine = await machineSettings()
   await git(repoDir, ['fetch', REMOTE, BASE])
   const mainSha = (await git(repoDir, ['rev-parse', `${REMOTE}/${BASE}`])).trim()
   const queue = await loadQueueAt(repoDir, mainSha, storyPrefix)
@@ -374,9 +381,13 @@ export async function dispatchCoder({
     }
   }
 
+  // ST-34/AC-4: the story's choice, before the usage is read or anything is claimed.
+  const { choice, refusal } = await storyChoiceAt({ repoDir, ref: mainSha, filename, storyId: chosen.id, machine })
+  if (refusal) return refusal
+
   // ST-31/AC-4: before the branch is claimed, worktree-made or anything installed.
   const refused = await checkUsage({
-    read: usage, cwd: repoDir, limits: usageLimits.coder, extra: { storyId: chosen.id },
+    read: usage, cwd: repoDir, limits: machine.usageLimits.coder, extra: { storyId: chosen.id },
   })
   if (refused) return refused
 
@@ -437,6 +448,8 @@ export async function dispatchCoder({
       role: 'coder',
       promptTemplate: template,
       story,
+      model: choice.model,
+      effort: choice.effort,
       branch,
       baseEnv,
       emptyGhConfigDir: ghConfigDir,
@@ -518,6 +531,23 @@ async function readBlocked(cwd, branch, filename) {
   return { blocked: null, unreadable: `${filename} is on neither stories/ nor stories/done/ at the tip of ${branch}` }
 }
 
+/**
+ * The coder's choice for the story `filename` as it stands at `ref`, under stories/ or
+ * stories/done/ (ST-34/AC-4): the `choice-unavailable` result when its `model:` names no available
+ * choice, else `{ choice }`. Read from the object store, so nothing is made or installed first.
+ */
+async function storyChoiceAt({ repoDir, ref, filename, storyId, machine }) {
+  let model = null
+  for (const candidate of [`stories/${filename}`, `stories/done/${filename}`]) {
+    const source = await gitOrNull(repoDir, ['show', `${ref}:${candidate}`])
+    if (source === null) continue
+    model = parseFrontmatter(source, candidate).data.model ?? null
+    break
+  }
+  const choice = coderChoice(machine, model)
+  return choice === null ? { refusal: { status: 'choice-unavailable', storyId, choice: model } } : { choice }
+}
+
 /** Whether `filename` is a story file with id `storyId` under stories/ or stories/done/ at `ref`. */
 async function hasStoryFile(repoDir, ref, filename, storyId) {
   for (const candidate of [`stories/${filename}`, `stories/done/${filename}`]) {
@@ -539,7 +569,7 @@ async function hasStoryFile(repoDir, ref, filename, storyId) {
  * `pushBranch`, and the pull request's title and body are replaced with the
  * ones it emitted. It opens no pull request and leaves the draft state alone.
  *
- *   ctx, repoDir, promptTemplate, baseEnv, sessionOptions, install, usage
+ *   ctx, repoDir, promptTemplate, baseEnv, sessionOptions, install, usage, machineSettings
  *                    as for `dispatchCoder`; `usage` is called before the
  *                    worktree is made, so `over-usage` and `usage-unknown`
  *                    (ST-31) come before anything is installed
@@ -552,7 +582,7 @@ async function hasStoryFile(repoDir, ref, filename, storyId) {
  * Resolves `{ status, ... }`. Only `retried` (a commit was pushed and the body
  * replaced) and `body-replaced` (no commit and nothing uncommitted, body
  * replaced) mean the retry completed. Every other status means it did not:
- * `pr-not-open`, `wrong-branch` (the head is not `branchFor` of a story file
+ * `pr-not-open`, `choice-unavailable` (ST-34/AC-4), `wrong-branch` (the head is not `branchFor` of a story file
  * with this id at its tip on `origin`), `branch-missing`, `local-branch-exists`
  * (refusals, before anything is spawned), `install-failed`, `session-failed`,
  * `nothing-committed`, `uncommitted-changes` (with `paths`), `push-failed`,
@@ -563,9 +593,10 @@ async function hasStoryFile(repoDir, ref, filename, storyId) {
 export async function retryStory({
   ctx, repoDir = process.cwd(), storyId, prNumber, findings, source, round, roundsRemaining,
   promptTemplate, baseEnv = process.env, sessionOptions = {}, install = installDependencies,
-  usage = readUsage,
+  usage = readUsage, machineSettings = () => readMachineSettings({ env: process.env, homedir: homedir() }),
 }) {
-  const { storyPrefix, usageLimits } = await readSettings(repoDir)
+  const { storyPrefix } = await readSettings(repoDir)
+  const machine = await machineSettings()
   if (!new RegExp(`^${storyPrefix}-\\d+$`).test(storyId ?? '')) {
     throw new Error(`retryStory requires a story id of the form ${storyPrefix}-<n>, got ${JSON.stringify(storyId)}`)
   }
@@ -599,9 +630,13 @@ export async function retryStory({
     return { status: 'wrong-branch', storyId, branch, prNumber, reason: `${branch} has no ${filename} with id ${storyId} in stories/ or stories/done/ at its tip on ${REMOTE}, so it is not the branch ${storyId} is worked on` }
   }
 
+  // ST-34/AC-4: the story's choice, before the usage is read or anything is made.
+  const { choice, refusal } = await storyChoiceAt({ repoDir, ref: baseSha, filename, storyId, machine })
+  if (refusal) return refusal
+
   // ST-31/AC-4: before the worktree is made and dependencies are installed.
   const refused = await checkUsage({
-    read: usage, cwd: repoDir, limits: usageLimits.coder, extra: { storyId },
+    read: usage, cwd: repoDir, limits: machine.usageLimits.coder, extra: { storyId },
   })
   if (refused) return refused
 
@@ -634,6 +669,8 @@ export async function retryStory({
       role: 'coder',
       promptTemplate: template,
       story,
+      model: choice.model,
+      effort: choice.effort,
       branch,
       baseEnv,
       emptyGhConfigDir: ghConfigDir,

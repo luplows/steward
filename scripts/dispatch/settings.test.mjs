@@ -80,10 +80,6 @@ describe('readSettings', () => {
       land: true,
       unitLinks: ['file'],
       rulesFile: 'REVIEW.md',
-      usageLimits: {
-        coder: { session: 70, weekly: 75 },
-        reviewer: { session: 90, weekly: 90 },
-      },
     })
   })
 
@@ -263,62 +259,13 @@ describe('ST-18: the review side settings keys', () => {
   })
 })
 
-describe('ST-31/AC-2: usageLimits', () => {
-  const limits = (over = {}) => ({
-    coder: { session: 70, weekly: 75, ...over.coder },
-    reviewer: { session: 90, weekly: 90, ...over.reviewer },
+describe('ST-34/AC-3: usageLimits left the project settings', () => {
+  it('ST-34/AC-3: refuses usageLimits as an unknown key', async () => {
+    const usageLimits = { coder: { session: 70, weekly: 75 }, reviewer: { session: 90, weekly: 90 } }
+    await expectRejected(fixtureSettings({ usageLimits }), "unrecognised key 'usageLimits'")
   })
 
-  it('ST-31/AC-2: accepts the limits and returns them', async () => {
-    await withTempProject(async (dir) => {
-      writeConfig(dir, JSON.stringify(fixtureSettings({ usageLimits: limits() })))
-      expect((await readSettings(dir)).usageLimits).toEqual(limits())
-    })
-  })
-
-  it('ST-31/AC-2: accepts 1 and 100', async () => {
-    await withTempProject(async (dir) => {
-      const edge = limits({ coder: { session: 1, weekly: 100 } })
-      writeConfig(dir, JSON.stringify(fixtureSettings({ usageLimits: edge })))
-      expect((await readSettings(dir)).usageLimits).toEqual(edge)
-    })
-  })
-
-  it('ST-31/AC-2: rejects a missing usageLimits', async () => {
-    await expectRejected(withoutKey('usageLimits'), "missing required key 'usageLimits'")
-  })
-
-  it('ST-31/AC-2: rejects a usageLimits that is not an object, and an extra key in it', async () => {
-    await expectRejected(fixtureSettings({ usageLimits: [] }), "'usageLimits' must be an object")
-    await expectRejected(fixtureSettings({ usageLimits: { ...limits(), other: {} } }), "unrecognised key 'usageLimits.other'")
-  })
-
-  it.each(['coder', 'reviewer'])('ST-31/AC-2: rejects a missing %s, and one that is not an object', async (role) => {
-    const missing = limits()
-    delete missing[role]
-    await expectRejected(fixtureSettings({ usageLimits: missing }), `missing required key 'usageLimits.${role}'`)
-    await expectRejected(fixtureSettings({ usageLimits: { ...limits(), [role]: 70 } }), `'usageLimits.${role}' must be an object`)
-  })
-
-  it.each([
-    ['coder', 'session'], ['coder', 'weekly'], ['reviewer', 'session'], ['reviewer', 'weekly'],
-  ])('ST-31/AC-2: rejects a missing key, an extra key, 0, 101 and 70.5 for usageLimits.%s.%s', async (role, window) => {
-    const without = limits()
-    delete without[role][window]
-    await expectRejected(fixtureSettings({ usageLimits: without }), `missing required key 'usageLimits.${role}.${window}'`)
-    await expectRejected(
-      fixtureSettings({ usageLimits: limits({ [role]: { extra: 1 } }) }),
-      `unrecognised key 'usageLimits.${role}.extra'`,
-    )
-    for (const bad of [0, 101, 70.5, '70', null]) {
-      await expectRejected(
-        fixtureSettings({ usageLimits: limits({ [role]: { [window]: bad } }) }),
-        `'usageLimits.${role}.${window}' must be an integer from 1 to 100`,
-      )
-    }
-  })
-
-  it("ST-31/AC-2: this repository's steward.config.json carries the limits of the decision", async () => {
-    expect((await readSettings(REPO_ROOT)).usageLimits).toEqual(limits())
+  it("ST-34/AC-3: this repository's steward.config.json has no usageLimits", async () => {
+    expect(await readSettings(REPO_ROOT)).not.toHaveProperty('usageLimits')
   })
 })

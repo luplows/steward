@@ -113,8 +113,8 @@ Where a file defines the thing, the entry names it, and the file is the authorit
   its keys listed in `docs/settings.md`.
 - **machine settings** — the settings of the computer steward runs on, kept outside any checkout:
   `~/.steward/settings.json`, or the file `STEWARD_SETTINGS` names. They hold the usage limits,
-  and for each role a default choice of tool, model and effort, and the choices available
-  (planned: ST-34).
+  and for each role a default choice of tool, model and effort, and the choices available. Read by
+  `scripts/dispatch/machine-settings.mjs`, with its keys listed in `docs/machine-settings.md`.
 
 ## Stopping
 

@@ -9,6 +9,7 @@ import {
   buildArgs,
   buildInvocation,
   REVIEWER_DISALLOWED_TOOLS,
+  ROLE_DEFAULTS,
   renderBounded,
   retrySection,
   reviewerAllowedTools,
@@ -50,6 +51,8 @@ const coderOptions = {
   branch: BRANCH,
   baseEnv: { PATH: '/bin', GH_TOKEN: 'a', GITHUB_TOKEN: 'b', GH_ENTERPRISE_TOKEN: 'c', GH_CONFIG_DIR: '/home/x/.config/gh' },
   emptyGhConfigDir: '/tmp/empty-gh',
+  model: 'sonnet',
+  effort: 'medium',
 }
 const reviewerOptions = {
   role: 'reviewer',
@@ -59,6 +62,8 @@ const reviewerOptions = {
   pr: { number: 129, headSha: SHA, body: HOSTILE },
   rules: HOSTILE,
   baseEnv: { PATH: '/bin' },
+  model: 'opus',
+  effort: 'high',
 }
 
 const valueAfter = (args, flag) => args[args.indexOf(flag) + 1]
@@ -99,11 +104,20 @@ describe('OQ-74/AC-1: the argument list', () => {
     })
   }
 
-  it('takes the coder model from the story and lets an option override any default', () => {
+  it("ST-34/AC-5: the model and the effort are the caller's, and the budget alone has a default", () => {
     expect(valueAfter(buildInvocation(coderOptions).args, '--model')).toBe('sonnet')
+    expect(valueAfter(buildInvocation(coderOptions).args, '--effort')).toBe('medium')
     expect(valueAfter(buildInvocation({ ...coderOptions, model: 'opus', effort: 'low', maxBudgetUsd: 2 }).args, '--model')).toBe('opus')
     expect(valueAfter(buildInvocation({ ...coderOptions, effort: 'low' }).args, '--effort')).toBe('low')
     expect(valueAfter(buildInvocation({ ...coderOptions, maxBudgetUsd: 2 }).args, '--max-budget-usd')).toBe('2')
+    expect(valueAfter(buildInvocation(coderOptions).args, '--max-budget-usd')).toBe(String(ROLE_DEFAULTS.coder.maxBudgetUsd))
+    expect(valueAfter(buildInvocation(reviewerOptions).args, '--max-budget-usd')).toBe(String(ROLE_DEFAULTS.reviewer.maxBudgetUsd))
+    expect(ROLE_DEFAULTS).toEqual({ coder: { maxBudgetUsd: 6 }, reviewer: { maxBudgetUsd: 3 } })
+  })
+
+  it("ST-34/AC-5: refuses an invocation with no model or no effort, rather than defaulting one", () => {
+    expect(() => buildInvocation({ ...coderOptions, model: undefined })).toThrow(/requires a model/)
+    expect(() => buildInvocation({ ...reviewerOptions, effort: undefined })).toThrow(/requires an effort/)
   })
 
   it('refuses an unknown role and a missing or non-positive budget', () => {
@@ -111,10 +125,6 @@ describe('OQ-74/AC-1: the argument list', () => {
     expect(() => buildArgs({ ...ok, role: 'janitor' })).toThrow(/unknown role/)
     expect(() => buildArgs({ ...ok, maxBudgetUsd: 0 })).toThrow(/maxBudgetUsd/)
     expect(() => buildArgs({ ...ok, maxBudgetUsd: undefined })).toThrow(/maxBudgetUsd/)
-  })
-
-  it('uses a different --model per role by default: the reviewer is opus, not the coder\'s', () => {
-    expect(valueAfter(buildInvocation(reviewerOptions).args, '--model')).toBe('opus')
   })
 })
 

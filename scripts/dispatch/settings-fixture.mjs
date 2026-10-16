@@ -12,12 +12,40 @@ export const FIXTURE_SETTINGS = {
   land: true,
   unitLinks: ['file'],
   rulesFile: 'REVIEW.md',
-  usageLimits: {
-    coder: { session: 70, weekly: 75 },
-    reviewer: { session: 90, weekly: 90 },
-  },
 }
 
 export function fixtureSettings(overrides = {}) {
   return { ...FIXTURE_SETTINGS, ...overrides }
+}
+
+/**
+ * Test support: a complete machine-settings body (`machine-settings.mjs`). The choices are named
+ * for their models, so a story's `model: sonnet` names one. The coder's default is `sonnet` and the
+ * reviewer's is `opus`; each role has the other as its second choice.
+ */
+export const FIXTURE_MACHINE_SETTINGS = {
+  usageLimits: {
+    coder: { session: 70, weekly: 75 },
+    reviewer: { session: 90, weekly: 90 },
+  },
+  roles: {
+    coder: {
+      default: 'sonnet',
+      available: {
+        sonnet: { tool: 'claude', model: 'sonnet', effort: 'medium' },
+        opus: { tool: 'claude', model: 'opus', effort: 'high' },
+      },
+    },
+    reviewer: {
+      default: 'opus',
+      available: {
+        opus: { tool: 'claude', model: 'opus', effort: 'high' },
+        sonnet: { tool: 'claude', model: 'sonnet', effort: 'high' },
+      },
+    },
+  },
+}
+
+export function fixtureMachineSettings(overrides = {}) {
+  return { ...structuredClone(FIXTURE_MACHINE_SETTINGS), ...overrides }
 }

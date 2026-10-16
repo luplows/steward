@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { fixtureSettings } from './settings-fixture.mjs'
+import { fixtureMachineSettings, fixtureSettings } from './settings-fixture.mjs'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { readdirSync } from 'node:fs'
@@ -9,10 +9,9 @@ import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { createContext, parseComments, parseMarkerComment } from './github.mjs'
-import { ROLE_DEFAULTS } from './invocation.mjs'
 import { parseRules } from './rules.mjs'
 import {
-  chooseReviewerModel, formatFindings, HONOURED_ASSOCIATIONS, parseReviewerVerdict, unitModel,
+  chooseReviewer, formatFindings, HONOURED_ASSOCIATIONS, parseReviewerVerdict, unitCoderModel, unitModel,
   reviewPullRequest as reviewPullRequestWith,
 } from './review.mjs'
 
@@ -24,7 +23,11 @@ const REPO = 'luplows/tower-workshop-paths'
 // ST-31: `reviewPullRequest` reads the plan's usage before it starts. No test starts a real
 // `claude`, so every call is given a usage well under the limits unless the test passes its own.
 const UNDER_LIMITS = { ok: true, session: { percent: 10, resetsAt: 't1' }, weekly: { percent: 10, resetsAt: 't2' } }
-const reviewPullRequest = (args) => reviewPullRequestWith({ usage: async () => UNDER_LIMITS, ...args })
+// ST-34: and the machine's settings are injected, so no test reads a real file.
+const machineOf = (settings = fixtureMachineSettings()) => async () => settings
+const reviewPullRequest = (args) => reviewPullRequestWith({
+  usage: async () => UNDER_LIMITS, machineSettings: machineOf(), ...args,
+})
 
 // The fixture repository's checklist, on its main (ST-21): three sections, one
 // with a condition, each numbering its own items.
@@ -118,6 +121,7 @@ beforeAll(() => {
   mkdirSync(path.join(seedDir, 'stories'))
   writeFileSync(path.join(seedDir, 'stories', 'OQ-99-thing.md'), STORY('sonnet'))
   writeFileSync(path.join(seedDir, 'stories', 'OQ-98-other.md'), STORY('opus').replace('OQ-99', 'OQ-98'))
+  writeFileSync(path.join(seedDir, 'stories', 'OQ-96-null.md'), STORY('null').replace('OQ-99', 'OQ-96'))
   git(seedDir, 'add', '.')
   git(seedDir, 'commit', '-q', '-m', 'base')
   git(seedDir, 'push', '-q', 'origin', 'main')
@@ -131,6 +135,11 @@ beforeAll(() => {
     'story/OQ-98-other',
     { 'stories/done/OQ-98-other.md': STORY('opus').replace('OQ-99', 'OQ-98') },
     [['stories/OQ-98-other.md', 'stories/done/OQ-98-other.md']],
+  )
+  commitBranch(
+    'story/OQ-96-null',
+    { 'stories/done/OQ-96-null.md': STORY('null').replace('OQ-99', 'OQ-96') },
+    [['stories/OQ-96-null.md', 'stories/done/OQ-96-null.md']],
   )
   commitBranch('chore/workflow-only', { 'docs/x.md': 'workflow' })
   writeFileSync(path.join(seedDir, 'stories', 'OQ-97-bad.md'), STORY('sonnet').replace('OQ-99', 'OQ-97'))
@@ -225,18 +234,19 @@ function standIn(reply) {
 // running anything else has pushed past the 5 s default. Passed to the tests that call review().
 const REVIEW_TEST_TIMEOUT = 30_000
 
-const review = (branch, { states, comments, body, reply, baseEnv = {}, repoDir, rereview, scratchRoot } = {}) => {
+const review = (branch, { states, comments, body, reply, baseEnv = {}, repoDir, rereview, scratchRoot, machineSettings } = {}) => {
   const github = fakeGitHub({ branch, states: states ?? [shas[branch]], comments, body })
   const session = standIn(reply ?? verdictText(shas[branch]))
   const done = reviewPullRequest({
     number: 7, ctx: github.ctx, repoDir: repoDir ?? dirtyClone(), baseEnv, rereview, scratchRoot,
-    sessionOptions: session.sessionOptions,
+    sessionOptions: session.sessionOptions, ...(machineSettings && { machineSettings: machineOf(machineSettings) }),
   })
   return { done, github, session }
 }
 
 const modelOf = (args) => args[args.indexOf('--model') + 1]
-const ROLE_DEFAULT_REVIEWER = ROLE_DEFAULTS.reviewer.model
+const effortOf = (args) => args[args.indexOf('--effort') + 1]
+const ROLE_DEFAULT_REVIEWER = fixtureMachineSettings().roles.reviewer.available.opus.model
 
 // ------------------------------------------------------------------- tests
 
@@ -559,14 +569,94 @@ describe('OQ-69/AC-7: the reviewer is never the coder\'s model', () => {
     for (const kind of ['none', 'missing', 'several']) expect(unitModel({ kind, links: [] }, null)).toBeNull()
   })
 
-  it('OQ-69/AC-7: chooseReviewerModel never returns the story\'s model, however it is spelled', () => {
-    for (const declared of ['sonnet', 'opus', 'haiku', 'claude-opus-5-5', 'claude-sonnet-5', 'OPUS', null]) {
-      const chosen = chooseReviewerModel(declared)
+  it("OQ-69/AC-7, ST-34/AC-5: chooseReviewer never returns a choice with the coder's model, however it is spelled", () => {
+    for (const declared of ['sonnet', 'opus', 'claude-opus-5-5', 'claude-sonnet-5', 'OPUS', null]) {
+      const chosen = chooseReviewer(fixtureMachineSettings(), declared)
       if (declared) {
-        expect(chosen.toLowerCase().includes(declared.toLowerCase()) || declared.toLowerCase().includes(chosen.toLowerCase())).toBe(false)
+        const [a, b] = [chosen.model.toLowerCase(), declared.toLowerCase()]
+        expect(a.includes(b) || b.includes(a)).toBe(false)
       }
     }
+    // A model that is neither choice's is not the coder's: the default stands.
+    expect(chooseReviewer(fixtureMachineSettings(), 'haiku').name).toBe('opus')
   })
+})
+
+describe("ST-34/AC-5, AC-6: the reviewer's choice comes from the machine's settings", () => {
+  const machine = (change) => {
+    const settings = fixtureMachineSettings()
+    change(settings)
+    return settings
+  }
+
+  it("ST-34/AC-5: runs its default's model and effort", async () => {
+    const settings = machine((s) => {
+      s.roles.reviewer.available.opus = { tool: 'claude', model: 'opus', effort: 'xhigh' }
+    })
+    const run = review('story/OQ-99-thing', { body: 'Unit: stories/OQ-99-thing.md', machineSettings: settings })
+    await run.done
+    expect(modelOf(run.session.calls[0].args)).toBe('opus')
+    expect(effortOf(run.session.calls[0].args)).toBe('xhigh')
+  }, REVIEW_TEST_TIMEOUT)
+
+  it("ST-34/AC-6: moves to the next differing choice, with its effort, when the story names a coder choice of the default's model", async () => {
+    const run = review('story/OQ-98-other', { body: 'Unit: stories/OQ-98-other.md' })
+    await run.done
+    expect(modelOf(run.session.calls[0].args)).toBe('sonnet')
+    expect(effortOf(run.session.calls[0].args)).toBe('high')
+  }, REVIEW_TEST_TIMEOUT)
+
+  it("ST-34/AC-6: for a model: null story, moves off the model of the coder's default when it is the reviewer default's", async () => {
+    const opusCoder = machine((s) => { s.roles.coder.default = 'opus' })
+    const moved = review('story/OQ-96-null', { body: 'Unit: stories/OQ-96-null.md', machineSettings: opusCoder })
+    await moved.done
+    expect(modelOf(moved.session.calls[0].args)).toBe('sonnet')
+
+    // Where the coder's default is another model, the reviewer keeps its own.
+    const kept = review('story/OQ-96-null', { body: 'Unit: stories/OQ-96-null.md' })
+    await kept.done
+    expect(modelOf(kept.session.calls[0].args)).toBe('opus')
+  }, REVIEW_TEST_TIMEOUT)
+
+  it("ST-34/AC-5: a story's coder choice is read through roles.coder.available", () => {
+    const settings = machine((s) => { s.roles.coder.available.deep = { tool: 'claude', model: 'opus', effort: 'max' } })
+    const file = { kind: 'link', type: 'file', target: 'stories/OQ-98-other.md' }
+    expect(unitCoderModel(settings, file, { read: true, text: STORY('deep') })).toBe('opus')
+    expect(unitCoderModel(settings, file, { read: true, text: STORY('claude-haiku-5-5') })).toBe('claude-haiku-5-5')
+    expect(unitCoderModel(settings, file, { read: true, text: STORY('null') })).toBe('sonnet')
+    expect(unitCoderModel(settings, file, { read: false, reason: 'missing' })).toBeNull()
+    expect(unitCoderModel(settings, { kind: 'none', links: [] }, null)).toBeNull()
+  })
+
+  it("ST-34/AC-5: takes the first other differing choice in the file's order", () => {
+    const settings = machine((s) => {
+      s.roles.reviewer.available = {
+        first: { tool: 'claude', model: 'opus', effort: 'high' },
+        second: { tool: 'claude', model: 'opus-fast', effort: 'low' },
+        third: { tool: 'claude', model: 'haiku', effort: 'low' },
+        fourth: { tool: 'claude', model: 'sonnet', effort: 'low' },
+      }
+      s.roles.reviewer.default = 'first'
+    })
+    expect(chooseReviewer(settings, 'opus').name).toBe('third')
+    expect(chooseReviewer(settings, 'haiku').name).toBe('first')
+  })
+
+  it('ST-34/AC-6: returns reviewer-unavailable when no choice differs, starting no session and posting nothing', async () => {
+    const settings = machine((s) => {
+      s.roles.reviewer.available = { opus: { tool: 'claude', model: 'opus', effort: 'high' } }
+    })
+    const github = fakeGitHub({ branch: 'story/OQ-98-other', states: [shas['story/OQ-98-other']], body: 'Unit: stories/OQ-98-other.md' })
+    const session = standIn(verdictText(shas['story/OQ-98-other']))
+    const result = await reviewPullRequest({
+      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, sessionOptions: session.sessionOptions,
+      machineSettings: machineOf(settings),
+    })
+    expect(result.status).toBe('reviewer-unavailable')
+    expect(result.reason).toContain('opus')
+    expect(session.calls).toEqual([])
+    expect(github.posted).toEqual([])
+  }, REVIEW_TEST_TIMEOUT)
 })
 
 describe('OQ-69/AC-8: a verdict already at the current head is not posted twice', () => {
@@ -1116,6 +1206,7 @@ describe('ST-31/AC-3: no reviewer session starts while the usage is over the rev
     const calls = []
     const result = await reviewPullRequestWith({
       number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, sessionOptions: session.sessionOptions,
+      machineSettings: machineOf(),
       usage: async (o) => { calls.push(o); return usage(o) },
       ...options,
     })
@@ -1133,6 +1224,18 @@ describe('ST-31/AC-3: no reviewer session starts while the usage is over the rev
     expect(stand.calls).toEqual([])
     expect(github.posted).toEqual([])
     expect(calls).toHaveLength(1)
+  }, REVIEW_TEST_TIMEOUT)
+
+  it("ST-34/AC-6: the limit is the reviewer's in the machine's settings, read once per call", async () => {
+    let reads = 0
+    const settings = fixtureMachineSettings()
+    settings.usageLimits.reviewer = { session: 50, weekly: 60 }
+    const { result, session } = await refused(usageOf(55, 10), {
+      machineSettings: async () => { reads += 1; return settings },
+    })
+    expect(result).toMatchObject({ status: 'over-usage', window: 'session', percent: 55, limit: 50 })
+    expect(session.calls).toEqual([])
+    expect(reads).toBe(1)
   }, REVIEW_TEST_TIMEOUT)
 
   it('ST-31/AC-3: both windows over names session first', async () => {
@@ -1163,7 +1266,7 @@ describe('ST-31/AC-3: no reviewer session starts while the usage is over the rev
       let reads = 0
       const done = reviewPullRequestWith({
         number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, sessionOptions: stand.sessionOptions,
-        usage: async () => { reads += 1; return UNDER_LIMITS },
+        usage: async () => { reads += 1; return UNDER_LIMITS }, machineSettings: machineOf(),
       }).then((result) => ({ result, reads }))
       return { done, session: stand }
     })()
@@ -1186,7 +1289,7 @@ describe('ST-31/AC-3: no reviewer session starts while the usage is over the rev
     })
     const result = await reviewPullRequestWith({
       number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {},
-      usage: async (o) => { calls.push(o); return UNDER_LIMITS },
+      usage: async (o) => { calls.push(o); return UNDER_LIMITS }, machineSettings: machineOf(),
     })
     expect(result.status).toBe('already-reviewed')
     expect(calls).toEqual([])

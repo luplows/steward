@@ -33,7 +33,7 @@ no GitHub credential: the unit, read from `main`, and the pull request's body,
 as evidence to judge, and the checklist from `main`, so that a pull request
 cannot loosen the rules it is judged by. It is not given the author's session,
 summary or reasoning. ATC starts it as a session of its own, on a different
-model from the one the unit names for the coder (`chooseReviewerModel`,
+model from the coder's, chosen from the machine's settings (`chooseReviewer`,
 `review.mjs`), and posts the verdict it returns.
 
 Read the whole prompt end to end, as a stranger would, after any change to it.

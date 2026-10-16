@@ -149,8 +149,8 @@ written in the crew's own sessions.
 | **Planning session** | The session the crew plans with (`docs/planning-session.md`) | The crew's choice | No |
 | **ATC** | Steward's dispatch scripts, `scripts/dispatch/` | **None: scripts** | No |
 | **Controller** | The session that runs ATC's scripts by hand (`docs/controller.md`) | The crew's choice | No |
-| **Coder** | A session ATC starts for one unit | The story's `model:` (`sonnet` in `stories/_TEMPLATE.md`) | Yes |
-| **Reviewer** | A session ATC starts for one head | `opus`, never the coder's model (`ROLE_DEFAULTS`, `chooseReviewerModel`) | **No** (handed no credential) |
+| **Coder** | A session ATC starts for one unit | The choice the story's `model:` names, or the machine's coder default when it is `null` | Yes |
+| **Reviewer** | A session ATC starts for one head | The machine's `roles.reviewer` default, never the coder's model (`chooseReviewer`) | **No** (handed no credential) |
 | **Release review** | The periodic walkthrough of what has landed | The crew's choice | No |
 
 ---
@@ -251,11 +251,11 @@ or not, with a reason for each not applied, so a section skipped wrongly is visi
 — noticing that a test named `AC-3` doesn't exercise AC-3 is adversarial reading. And author and
 reviewer sharing a model family means correlated blind spots: context isolation decorrelates
 *knowledge*, not *reasoning style*. Opus-reviews-Sonnet buys both at once. When a story's model is
-`opus`, the reviewer's is `sonnet` (`chooseReviewerModel`, `review.mjs`).
-**Planned (ST-34, ST-32):** the reviewer's tool, model and effort come from the machine's settings,
-a default and the choices available, rather than from the code, and the reviewer takes the next
-available choice whose model differs from the coder's (ST-34); a choice may run it through the
-Codex CLI, under `codex exec -s read-only` (ST-32).
+`opus`, the reviewer's is `sonnet`. The reviewer's tool, model and effort come from the machine's
+settings (`docs/machine-settings.md`): its default choice, or, when that choice's model is the
+coder's, the first other choice in the file's order whose model differs; with none that differs,
+there is no review (`reviewer-unavailable`; `chooseReviewer`, `review.mjs`).
+**Planned (ST-32):** a choice may run it through the Codex CLI, under `codex exec -s read-only`.
 
 ### Recording the verdict
 
@@ -660,15 +660,16 @@ identity — but "read the script and see it cannot fabricate" is a real improve
 orchestrating agent."
 
 ATC reads the plan's usage before it starts a coder or a reviewer session, and starts none when
-either window, the 5-hour one or the weekly one, is at or over the limit the settings give that
-role (`usageLimits`). When the usage cannot be read, it starts nothing. Claude Code reports the
-usage, with no model call, to `claude -p /usage --output-format stream-json --verbose`. The weekly
+either window, the 5-hour one or the weekly one, is at or over the limit the machine's settings
+give that role (`usageLimits`). When the usage cannot be read, it starts nothing. Claude Code
+reports the usage, with no model call, to `claude -p /usage --output-format stream-json --verbose`.
+The weekly
 window is read from its `weekly_all` row alone, and a row without a numeric percent counts as
 unreadable (`scripts/dispatch/usage.mjs`; "Trials and measurements", "Reading the plan's usage from
 a script"; Part 3, "Decided so far", 2026-10-15). `reviewPullRequest`, `dispatchCoder` and
 `retryStory` each make the check, and return `over-usage` or `usage-unknown` without starting a
-session.
-**Planned (ST-34):** the limits move from the project's settings to the machine's.
+session. The limits are the machine's settings' (`docs/machine-settings.md`), read once per call
+before the check.
 **Planned (ST-32):** a Codex reviewer's usage is read with no model call, through
 `codex app-server`'s `account/rateLimits/read`, against the same reviewer limits.
 
@@ -1271,7 +1272,7 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
   specific job, rather than fixed per project. **Decided 2026-10-15 by the owner:** a role's tool,
   model and effort are named in the machine's settings, as a default and the choices available,
   and a story's `model:` names one of those choices (Part 3, "Decided so far", "The machine
-  steward runs on has settings of its own"; **Planned (ST-34)**).
+  steward runs on has settings of its own"; built in ST-34).
 - **M5. Prompts.** One prompt per role with per-tool parts, or one per tool? **Decided 2026-10-08
   by the owner: one prompt per role**, holding the role's rules once, with a small section per tool
   for that tool's specifics, so the rules cannot drift between tools.
@@ -1442,7 +1443,7 @@ without a dispatcher session in between.
   retry, but reviews and landing carry on, so every pull request ends with a review posted. A
   story that would have been retried is paused, and resumes on a later run under the threshold.
   *(Revised 2026-10-15 by the owner: the plan's 5-hour and weekly windows are measured against the
-  settings' `usageLimits`, and reviews carry on only to their own, higher limit.
+  machine's settings' `usageLimits`, and reviews carry on only to their own, higher limit.
   The check is built: Part 1, "ATC is scripts".)*
 - Any pull request from an account with write access (OQ-81) that passes review may land
   unattended, including one that changes this document, `AGENTS.md`, `CLAUDE.md`, `.github/` or
@@ -1845,8 +1846,8 @@ shortened where it is long, so that it can be found there with its date.
     (`scripts/dispatch/review.mjs`). `REVIEW.md` is in that form: six sections, each numbering
     its own items.
   - The reviewer given the linked unit, read from `main`, and the note on what was found, as two
-    blocks, and verifying with narrower commands rather than the whole check
-    (`scripts/dispatch/review.mjs`, `.claude/prompts/reviewer.md`).
+    blocks, and verifying by reading, searching and diffing, with no check run and nothing
+    installed (`scripts/dispatch/review.mjs`, `.claude/prompts/reviewer.md`).
   - Landing in one look, without waiting, and a project able to turn steward's landing off
     (`scripts/dispatch/land.mjs`: `landPullRequest`'s `once` option, and `landing` on its context).
   - **Planned (ST-24):** landing when the checks `landWhen` names are green, in the lander and the
@@ -2148,9 +2149,9 @@ shortened where it is long, so that it can be found there with its date.
   request, is to be explored, to check by mutating the code that the tests test something useful
   (**Planned (ST-36)**, a spike).
 - **The machine steward runs on has settings of its own** (decided 2026-10-15 by the owner, with
-  the planning session; **Planned (ST-34, ST-35)**). Which tool, model and effort runs each role
-  is the computer's, not the project's, so that a project's settings make no assumption about the
-  models a machine uses. The machine's settings are a file outside any checkout,
+  the planning session; built in ST-34, except the crew's and ATC's tiers below, **Planned
+  (ST-35)**). Which tool, model and effort runs each role is the computer's, not the project's, so
+  that a project's settings make no assumption about the models a machine uses. The machine's settings are a file outside any checkout,
   `~/.steward/settings.json` in the user's profile, which an environment variable,
   `STEWARD_SETTINGS`, can point elsewhere. For each role they give a default choice of tool, model
   and effort, and the choices available besides it, since the coder especially should not be
@@ -2158,8 +2159,9 @@ shortened where it is long, so that it can be found there with its date.
   since they describe the crew member's plan; this revises the entry above that made them a
   project settings key. A Codex reviewer takes the same limits as a Claude one, for now, and limits
   per tool may come later. Three tiers choose among the available choices: the unit, as a story's
-  `model:` does for the coder today (ST-34); the crew, overriding the choice for a run it starts by
-  hand; and ATC, taking another choice when one is out of usage and another is not (both ST-35).
+  `model:` does for the coder (built in ST-34); the crew, overriding the choice for a run it starts
+  by hand; and ATC, taking another choice when one is out of usage and another is not (both
+  ST-35).
   As in the project's settings, nothing has a default in the code. Considered and not chosen: the
   project's `steward.config.json`; a gitignored file in each checkout, which the controller's
   reset to `origin/main` before every rotation makes fragile; and the environment variable alone.
@@ -2172,18 +2174,18 @@ shortened where it is long, so that it can be found there with its date.
   model and effort are the machine's settings (above). See "Trials and measurements", "Codex as
   reviewer".
 - **`model: null` means the coder's default, and ST-1 and ST-13 are retired** (decided 2026-10-16
-  by the owner, with the planning session, while #41 was open; **Planned (ST-34)**). A story whose
+  by the owner, with the planning session, while #41 was open; built in ST-34). A story whose
   `model:` is `null` runs the coder's default choice in the machine's settings, so that a story
   that made no deliberate choice can be told from one that did, and changing the default is one
   edit to the machine's file. For such a story, the reviewer's model differs from that of the
   coder's default (decided 2026-10-16 by the owner, from #41's review). The story lint already
   requires the field and accepts `null`. The planning session switches `stories/_TEMPLATE.md` to
-  `model: null` once ST-34 is built; today's coder needs a model. ST-1, which asked for this with
+  `model: null` now that ST-34 is built. ST-1, which asked for this with
   a committed file of models that the story lint would also read, is retired: the machine's
   settings replace the file, and CI cannot read them. ST-13, which would have let
   `review-tools.mjs` run a repository script to capture its exit code, is retired: its reason,
   confirming during a review that a check passed, goes with ST-33. Considered and not chosen:
-  rewriting ST-1 down to `model: null`, which ST-34 now covers.
+  rewriting ST-1 down to `model: null`, which ST-34 covers.
 - **A finding the author would fix is a block** (decided 2026-10-16 by the owner, with the
   planning session, from #41's review; **Planned (ST-4)**). #41's verdict found a contradiction
   that "Changes to stories", item 6, forbids, and filed it as an observation and passed. A finding
@@ -2262,10 +2264,11 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   may not push or run `gh` (OQ-63, OQ-67, OQ-84; OQ-73 still planned). The reviewer cannot write
   (OQ-62 still planned). Those rest on Claude Code's allowlists and permission modes. Another tool
   has to provide each guarantee again, and show it holds, rather than inherit it.
-- **The models are Claude model names.** The coder's is the story's `model:` field (`sonnet` in
-  `stories/_TEMPLATE.md`). The reviewer's is `opus` (`ROLE_DEFAULTS`, `invocation.mjs`), unless
-  that matches the story's model by name, in which case it is `sonnet` (`chooseReviewerModel`,
-  `review.mjs`). "Different" is decided by comparing those names.
+- **The models are Claude model names.** The coder's is the choice its story's `model:` field
+  names in the machine's settings, or the coder's default when it is `null`. The reviewer's is its
+  default choice there, unless that choice's model matches the coder's by name, in which case it is
+  the first other choice whose model differs (`chooseReviewer`, `review.mjs`). "Different" is
+  decided by comparing those names.
 - **The prompts are written for that CLI.** `.claude/prompts/coder.md` and `reviewer.md` name its
   tools and its allowlist behaviour.
 

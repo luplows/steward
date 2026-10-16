@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { fixtureSettings } from './settings-fixture.mjs'
+import { fixtureMachineSettings, fixtureSettings } from './settings-fixture.mjs'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -26,8 +26,10 @@ const REPO = 'luplows/tower-workshop-paths'
 // ST-31: `dispatchCoder` and `retryStory` read the plan's usage before they start. No test starts a
 // real `claude`, so every call is given a usage well under the limits unless the test passes its own.
 const UNDER_LIMITS = { ok: true, session: { percent: 10, resetsAt: 't1' }, weekly: { percent: 10, resetsAt: 't2' } }
-const dispatchCoder = (args) => dispatchCoderWith({ usage: async () => UNDER_LIMITS, ...args })
-const retryStory = (args) => retryStoryWith({ usage: async () => UNDER_LIMITS, ...args })
+// ST-34: and the machine's settings are injected, so no test reads a real file.
+const machineOf = (settings = fixtureMachineSettings()) => async () => settings
+const dispatchCoder = (args) => dispatchCoderWith({ usage: async () => UNDER_LIMITS, machineSettings: machineOf(), ...args })
+const retryStory = (args) => retryStoryWith({ usage: async () => UNDER_LIMITS, machineSettings: machineOf(), ...args })
 
 const story = (id, { deps = '', blocked = 'null' } = {}) => `---
 id: ${id}
@@ -1670,5 +1672,120 @@ describe('ST-31/AC-4: no coder session starts while the usage is over the coder\
     const world = makeRetryWorld()
     const { result } = await retry(world, ({ cwd }) => (commitWork(cwd), block()), { usage: usageOf(69, 74) })
     expect(result.status).toBe('retried')
+  })
+})
+
+// ------------------------------------------------ ST-34: the coder runs the choice its story names
+
+describe("ST-34/AC-4: the coder's model and effort come from the machine's settings", () => {
+  const valueAfter = (args, flag) => args[args.indexOf(flag) + 1]
+  const withChoices = () => {
+    const settings = fixtureMachineSettings()
+    settings.roles.coder.available.deep = { tool: 'claude', model: 'claude-opus-5-5', effort: 'max' }
+    return settings
+  }
+
+  /** Rewrites OQ-98's `model:` on the seed's current branch and pushes, wherever the file now is. */
+  function setModel(world, model, { done = false, branch = 'main' } = {}) {
+    const file = path.join(world.seed, 'stories', ...(done ? ['done'] : []), 'OQ-98-first.md')
+    writeFileSync(file, readFileSync(file, 'utf8').replace('model: sonnet', `model: ${model}`))
+    git(world.seed, 'commit', '-q', '-am', `model ${model}`)
+    git(world.seed, 'push', '-q', 'origin', branch)
+  }
+
+  it('ST-34/AC-4: dispatchCoder runs the choice the story names: its model and its effort', async () => {
+    const world = makeWorld()
+    setModel(world, 'deep')
+    const { result, fake } = await dispatch(world, ({ cwd }) => (finishStory(cwd), block()), { machineSettings: machineOf(withChoices()) })
+    expect(result.status).toBe('opened')
+    expect(valueAfter(fake.calls[0].args, '--model')).toBe('claude-opus-5-5')
+    expect(valueAfter(fake.calls[0].args, '--effort')).toBe('max')
+  })
+
+  it("ST-34/AC-4: dispatchCoder runs the coder's default when the story's model: is null", async () => {
+    const world = makeWorld()
+    setModel(world, 'null')
+    const settings = withChoices()
+    settings.roles.coder.default = 'deep'
+    const { result, fake } = await dispatch(world, ({ cwd }) => (finishStory(cwd), block()), { machineSettings: machineOf(settings) })
+    expect(result.status).toBe('opened')
+    expect(valueAfter(fake.calls[0].args, '--model')).toBe('claude-opus-5-5')
+    expect(valueAfter(fake.calls[0].args, '--effort')).toBe('max')
+  })
+
+  it('ST-34/AC-4: dispatchCoder returns choice-unavailable for a name not in available, claiming nothing', async () => {
+    const world = makeWorld()
+    setModel(world, 'haiku')
+    const installs = []
+    let usageReads = 0
+    const { result, fake, gh } = await dispatch(world, () => { throw new Error('must not spawn') }, {
+      install: async (o) => { installs.push(o) }, usage: async () => { usageReads += 1; return UNDER_LIMITS },
+    })
+    expect(result).toEqual({ status: 'choice-unavailable', storyId: 'OQ-98', choice: 'haiku' })
+    expect(fake.calls).toHaveLength(0)
+    expect(installs).toEqual([])
+    expect(usageReads).toBe(0)
+    expect(pulls(gh)).toEqual([])
+    expect(remoteBranch(world, 'story/OQ-98-first')).toBeNull()
+    expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/story/OQ-98-first')).toBeNull()
+    expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
+  })
+
+  it('ST-34/AC-4: retryStory runs the choice the story names, wherever the story file is', async () => {
+    const world = makeRetryWorld()
+    setModel(world, 'deep', { done: true, branch: RETRY_BRANCH })
+    const { result, fake } = await retry(world, ({ cwd }) => (commitWork(cwd), block()), { machineSettings: machineOf(withChoices()) })
+    expect(result.status).toBe('retried')
+    expect(valueAfter(fake.calls[0].args, '--model')).toBe('claude-opus-5-5')
+    expect(valueAfter(fake.calls[0].args, '--effort')).toBe('max')
+  })
+
+  it("ST-34/AC-4: retryStory runs the coder's default when the story's model: is null", async () => {
+    const world = makeRetryWorld()
+    setModel(world, 'null', { done: true, branch: RETRY_BRANCH })
+    const { result, fake } = await retry(world, ({ cwd }) => (commitWork(cwd), block()))
+    expect(result.status).toBe('retried')
+    expect(valueAfter(fake.calls[0].args, '--model')).toBe('sonnet')
+    expect(valueAfter(fake.calls[0].args, '--effort')).toBe('medium')
+  })
+
+  it('ST-34/AC-4: retryStory returns choice-unavailable for a name not in available, installing and making nothing', async () => {
+    const world = makeRetryWorld()
+    setModel(world, 'haiku', { done: true, branch: RETRY_BRANCH })
+    const installs = []
+    let usageReads = 0
+    const { result, fake, gh } = await retry(world, () => { throw new Error('must not spawn') }, {
+      install: async (o) => { installs.push(o) }, usage: async () => { usageReads += 1; return UNDER_LIMITS },
+    })
+    expect(result).toEqual({ status: 'choice-unavailable', storyId: 'OQ-98', choice: 'haiku' })
+    expect(fake.calls).toHaveLength(0)
+    expect(installs).toEqual([])
+    expect(usageReads).toBe(0)
+    expect(patches(gh)).toEqual([])
+    expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
+    expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', `refs/heads/${RETRY_BRANCH}`)).toBeNull()
+  })
+
+  it("ST-34/AC-6: the usage check reads the coder's limits from the machine's settings, once per call", async () => {
+    const world = makeWorld()
+    const settings = fixtureMachineSettings()
+    settings.usageLimits.coder = { session: 20, weekly: 30 }
+    let reads = 0
+    const { result, fake } = await dispatch(world, () => { throw new Error('must not spawn') }, {
+      machineSettings: async () => { reads += 1; return settings },
+      usage: async () => ({ ok: true, session: { percent: 25, resetsAt: 's' }, weekly: { percent: 1, resetsAt: 'w' } }),
+    })
+    expect(result).toMatchObject({ status: 'over-usage', window: 'session', percent: 25, limit: 20 })
+    expect(fake.calls).toHaveLength(0)
+    expect(reads).toBe(1)
+
+    const retryWorld = makeRetryWorld()
+    let retryReads = 0
+    const retried = await retry(retryWorld, () => { throw new Error('must not spawn') }, {
+      machineSettings: async () => { retryReads += 1; return settings },
+      usage: async () => ({ ok: true, session: { percent: 1, resetsAt: 's' }, weekly: { percent: 31, resetsAt: 'w' } }),
+    })
+    expect(retried.result).toMatchObject({ status: 'over-usage', window: 'weekly', percent: 31, limit: 30 })
+    expect(retryReads).toBe(1)
   })
 })

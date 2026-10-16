@@ -60,8 +60,9 @@ readability and must not drift from the files named.
    matters more on the second project: its account is on GitHub Free, so nothing on GitHub stops a
    push to `main` there (R6 in the design document).
 3. **Always bound the sessions it starts.** Each session has a spend ceiling (`--max-budget-usd`,
-   `ROLE_DEFAULTS` in `scripts/dispatch/invocation.mjs`), a timeout and a stall interval
-   (`DEFAULT_TIMEOUT_MS` and `DEFAULT_STALL_MS`, `scripts/dispatch/spawn.mjs`). The spend ceiling
+   `ROLE_DEFAULTS` in `scripts/dispatch/invocation.mjs`, which holds each role's budget), a
+   timeout and a stall interval (`DEFAULT_TIMEOUT_MS` and `DEFAULT_STALL_MS`,
+   `scripts/dispatch/spawn.mjs`). The spend ceiling
    is a Claude Code flag, so any other company's tool must supply its own bound before it runs a
    role (M1 and M3 in the design document).
 
@@ -279,7 +280,9 @@ design doc, "The outline's reasoning", under the same headings.
     commands that settle a particular claim**, such as one test file, a search or a diff of one
     path (owner, 2026-10-11, from the planning session's recommendation). CI, as the peer check,
     already shows whether the checks pass, and on a bigger project the whole command can take a long
-    time.
+    time. **Revised 2026-10-15 by the owner:** the reviewer runs no check at all, a single test file
+    included, and settles a claim by reading, searching or diffing (`agent-workflow-design.md`,
+    Part 3, "Decided so far", "The reviewer runs no checks").
   - **The coder runs the project's pre-flight check before its work is pushed**, which also makes
     the wait before the review matter less. **The coder session runs it, so that it can make changes
     when the check fails; steward's own script does not run it again before the push, since on a
