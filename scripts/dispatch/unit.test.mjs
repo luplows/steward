@@ -298,9 +298,11 @@ describe('ST-19/AC-3: readUnit', { timeout: GIT_TIMEOUT }, () => {
 describe('ST-19/AC-5: describeUnit', () => {
   const issue = { kind: 'link', type: 'issue', target: 12 }
 
-  it('ST-19/AC-5: a link it read, with what it read', () => {
+  // ST-22 revises ST-19/AC-5 here: the note names a link it read, and the unit's
+  // text is given to the reviewer as a block of its own (`{{UNIT}}`), not in the note.
+  it('ST-22/AC-2: a link it read is named as read, without its text', () => {
     expect(describeUnit(issue, { read: true, text: 'T\n\nB' })).toBe(
-      'Unit: the pull request body links its unit as issue #12. It is read as it stands on main, and follows:\n\nT\n\nB',
+      'Unit: the pull request body links its unit as issue #12. It is read as it stands on main, and is the unit below.',
     )
     expect(
       describeUnit(
@@ -308,7 +310,7 @@ describe('ST-19/AC-5: describeUnit', () => {
         { read: true, text: 'https://x/1' },
       ),
     ).toBe(
-      'Unit: the pull request body links its unit as other https://x/1, which is not read. Its text as given:\n\nhttps://x/1',
+      'Unit: the pull request body links its unit as other https://x/1, which is not read. Its text as given is the unit below.',
     )
   })
 

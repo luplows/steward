@@ -6,7 +6,8 @@
  *
  * `findUnitLink` is pure. `readUnit` reads a file with `git show` and an issue
  * through `github.mjs`, and never throws for an unreadable link. `describeUnit`
- * is pure. Its caller will be the review (ST-22).
+ * is pure. Their caller is the review (`review.mjs`), which gives the reviewer
+ * the note and the unit's text as two blocks.
  */
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -146,15 +147,17 @@ function name(link) {
 /**
  * The note the reviewer is given, one of four in fixed words (a link read, a link
  * not read, `Unit: none`, no `Unit:` line), or the one for several links, none read.
- * `read` is `readUnit`'s result for `found`'s link. Pure.
+ * `read` is `readUnit`'s result for `found`'s link. The note names a link it read
+ * but does not carry its text: the review gives the text as a block of its own
+ * (ST-22). Pure.
  */
 export function describeUnit(found, read) {
   switch (found.kind) {
     case 'link':
       if (read?.read === true) {
         return found.type === 'other'
-          ? `Unit: the pull request body links its unit as ${name(found)}, which is not read. Its text as given:\n\n${read.text}`
-          : `Unit: the pull request body links its unit as ${name(found)}. It is read as it stands on main, and follows:\n\n${read.text}`
+          ? `Unit: the pull request body links its unit as ${name(found)}, which is not read. Its text as given is the unit below.`
+          : `Unit: the pull request body links its unit as ${name(found)}. It is read as it stands on main, and is the unit below.`
       }
       return `Unit: the pull request body links its unit as ${name(found)}. It could not be read: ${read?.reason ?? 'it was not read'}.`
     case 'none':

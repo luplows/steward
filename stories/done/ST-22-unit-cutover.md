@@ -18,7 +18,7 @@ whole check, which CI already runs as a peer check.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `review.mjs` finds the unit with ST-19's `findUnitLink`, from the pull request's
+- [x] **AC-1** — `review.mjs` finds the unit with ST-19's `findUnitLink`, from the pull request's
       body and the settings' `unitLinks`, and reads it with `readUnit`. `resolveStory` leaves
       `review.mjs` for `scripts/dispatch/story-containment.mjs`, its one other user, with its
       tests, and story containment behaves as before. The results `review.mjs` returned for it
@@ -26,28 +26,28 @@ whole check, which CI already runs as a peer check.
       and `story.mjs` keep their own `story-unreadable`). A missing, unreadable, `Unit: none` or
       several-link case does not stop the review: it is reviewed, with ST-19's `describeUnit`
       note.
-- [ ] **AC-2** — `reviewer.md` replaces `{{STORY_ID}}`, `{{STORY_PATH}}` and `{{STORY}}` with
+- [x] **AC-2** — `reviewer.md` replaces `{{STORY_ID}}`, `{{STORY_PATH}}` and `{{STORY}}` with
       `{{UNIT_NOTE}}`, the note, and `{{UNIT}}`, the unit's text when one was read and otherwise
       a fixed line saying none was. Both are bounded as injected values are. The prompt tells the
       reviewer that whether a missing or unreadable unit fails the review is the rules' to say,
       and that a pull request with no readable unit is still reviewed against the rules.
-- [ ] **AC-3** — `reviewer.md`'s "Verify rather than accept" no longer tells the reviewer to
+- [x] **AC-3** — `reviewer.md`'s "Verify rather than accept" no longer tells the reviewer to
       rerun the whole suite (today: "If the PR says 240 tests pass, run `npm test`"). It tells it
       to run only the narrower commands that settle a particular claim, such as one test file, a
       search or a diff of one path, and that CI's checks are a peer check the reviewer neither
       reads nor reruns.
-- [ ] **AC-3a** — `REVIEW.md`'s "Every pull request" section gains an item, numbered after its
+- [x] **AC-3a** — `REVIEW.md`'s "Every pull request" section gains an item, numbered after its
       last: a change to code links the unit it implements, and `Unit: none` is accepted only where
       no unit could exist, such as a pull request that writes the unit itself. The reviewer is
       told the four cases by the note (AC-1); this item is how the rules judge them.
-- [ ] **AC-4** — The reviewer's model is `ROLE_DEFAULTS.reviewer.model` when the unit gives no
+- [x] **AC-4** — The reviewer's model is `ROLE_DEFAULTS.reviewer.model` when the unit gives no
       model. When the unit is a file with frontmatter naming a `model:`, `chooseReviewerModel`
       still picks a different one, as today.
-- [ ] **AC-5** — Tests in `review.test.mjs`: a pull request with each of ST-19's four cases is
+- [x] **AC-5** — Tests in `review.test.mjs`: a pull request with each of ST-19's four cases is
       reviewed, and the rendered prompt carries the matching note; a file unit is read from
       `main`, not the head (a file changed on the branch is given as it is on `main`); and the
       removed results are no longer returned.
-- [ ] **AC-6** — `docs/agent-workflow-design.md`'s "Reviewer" section, which says the reviewer
+- [x] **AC-6** — `docs/agent-workflow-design.md`'s "Reviewer" section, which says the reviewer
       receives the "story file", says it receives the unit the pull request links, read from
       `main`. The `**Planned (ST-22)**` marker loses `ST-22`, and the passage is corrected
       wherever what was built differs.

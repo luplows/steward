@@ -270,9 +270,8 @@ describe('OQ-51/AC-3: a colliding heading does not shadow the prompt\'s real sec
       PR_NUMBER: '999',
       HEAD_BRANCH: 'story/OQ-999-hostile',
       HEAD_SHA: 'a'.repeat(40),
-      STORY_ID: 'OQ-999',
-      STORY_PATH: 'stories/OQ-999-hostile.md',
-      STORY: wrapInjectedBlock('STORY', HOSTILE_STORY),
+      UNIT_NOTE: wrapInjectedBlock('UNIT_NOTE', 'Unit: the pull request body links its unit as file stories/OQ-999-hostile.md. It is read as it stands on main, and is the unit below.'),
+      UNIT: wrapInjectedBlock('UNIT', HOSTILE_STORY),
       PR_BODY: 'ordinary, well-behaved PR body',
       RULES: 'the checklist',
     })
@@ -294,9 +293,8 @@ describe('OQ-51/AC-3: a colliding heading does not shadow the prompt\'s real sec
       PR_NUMBER: '999',
       HEAD_BRANCH: 'story/OQ-999-hostile',
       HEAD_SHA: 'a'.repeat(40),
-      STORY_ID: 'OQ-999',
-      STORY_PATH: 'stories/OQ-999-hostile.md',
-      STORY: wrapInjectedBlock('STORY', 'ordinary story, no headings crafted to collide'),
+      UNIT_NOTE: wrapInjectedBlock('UNIT_NOTE', 'Unit: the pull request body links its unit as file stories/OQ-999-hostile.md. It is read as it stands on main, and is the unit below.'),
+      UNIT: wrapInjectedBlock('UNIT', 'ordinary story, no headings crafted to collide'),
       PR_BODY: wrapInjectedBlock('PR_BODY', HOSTILE_PR_BODY, 'hostilenonce'),
       RULES: 'the checklist',
     })
@@ -316,9 +314,8 @@ describe('OQ-51/AC-3: a colliding heading does not shadow the prompt\'s real sec
       PR_NUMBER: '999',
       HEAD_BRANCH: 'story/OQ-999-hostile',
       HEAD_SHA: 'a'.repeat(40),
-      STORY_ID: 'OQ-999',
-      STORY_PATH: 'stories/OQ-999-hostile.md',
-      STORY: wrapInjectedBlock('STORY', HOSTILE_STORY_SETEXT),
+      UNIT_NOTE: wrapInjectedBlock('UNIT_NOTE', 'Unit: the pull request body links its unit as file stories/OQ-999-hostile.md. It is read as it stands on main, and is the unit below.'),
+      UNIT: wrapInjectedBlock('UNIT', HOSTILE_STORY_SETEXT),
       PR_BODY: 'ordinary, well-behaved PR body',
       RULES: 'the checklist',
     })
@@ -338,9 +335,8 @@ describe('OQ-51/AC-3: a colliding heading does not shadow the prompt\'s real sec
       PR_NUMBER: '999',
       HEAD_BRANCH: 'story/OQ-999-hostile',
       HEAD_SHA: 'a'.repeat(40),
-      STORY_ID: 'OQ-999',
-      STORY_PATH: 'stories/OQ-999-hostile.md',
-      STORY: wrapInjectedBlock('STORY', 'ordinary story, no headings crafted to collide'),
+      UNIT_NOTE: wrapInjectedBlock('UNIT_NOTE', 'Unit: the pull request body links its unit as file stories/OQ-999-hostile.md. It is read as it stands on main, and is the unit below.'),
+      UNIT: wrapInjectedBlock('UNIT', 'ordinary story, no headings crafted to collide'),
       PR_BODY: wrapInjectedBlock('PR_BODY', HOSTILE_PR_BODY_SETEXT, 'hostilenonce'),
       RULES: 'the checklist',
     })
@@ -357,9 +353,8 @@ describe('OQ-51/AC-3: a colliding heading does not shadow the prompt\'s real sec
       PR_NUMBER: '999',
       HEAD_BRANCH: 'story/OQ-999-hostile',
       HEAD_SHA: 'a'.repeat(40),
-      STORY_ID: 'OQ-999',
-      STORY_PATH: 'stories/OQ-999-hostile.md',
-      STORY: wrapInjectedBlock('STORY', HOSTILE_STORY_CRLF),
+      UNIT_NOTE: wrapInjectedBlock('UNIT_NOTE', 'Unit: the pull request body links its unit as file stories/OQ-999-hostile.md. It is read as it stands on main, and is the unit below.'),
+      UNIT: wrapInjectedBlock('UNIT', HOSTILE_STORY_CRLF),
       PR_BODY: 'ordinary, well-behaved PR body',
       RULES: 'the checklist',
     })
@@ -376,9 +371,8 @@ describe('OQ-51/AC-3: a colliding heading does not shadow the prompt\'s real sec
       PR_NUMBER: '999',
       HEAD_BRANCH: 'story/OQ-999-hostile',
       HEAD_SHA: 'a'.repeat(40),
-      STORY_ID: 'OQ-999',
-      STORY_PATH: 'stories/OQ-999-hostile.md',
-      STORY: wrapInjectedBlock('STORY', 'ordinary story, no headings crafted to collide'),
+      UNIT_NOTE: wrapInjectedBlock('UNIT_NOTE', 'Unit: the pull request body links its unit as file stories/OQ-999-hostile.md. It is read as it stands on main, and is the unit below.'),
+      UNIT: wrapInjectedBlock('UNIT', 'ordinary story, no headings crafted to collide'),
       PR_BODY: wrapInjectedBlock('PR_BODY', HOSTILE_PR_BODY_CRLF, 'hostilenonce'),
       RULES: 'the checklist',
     })
@@ -395,9 +389,8 @@ describe('OQ-51/AC-3: a colliding heading does not shadow the prompt\'s real sec
       PR_NUMBER: '999',
       HEAD_BRANCH: 'story/OQ-999-hostile',
       HEAD_SHA: 'a'.repeat(40),
-      STORY_ID: 'OQ-999',
-      STORY_PATH: 'stories/OQ-999-hostile.md',
-      STORY: wrapInjectedBlock('STORY', HOSTILE_STORY_LONE_CR),
+      UNIT_NOTE: wrapInjectedBlock('UNIT_NOTE', 'Unit: the pull request body links its unit as file stories/OQ-999-hostile.md. It is read as it stands on main, and is the unit below.'),
+      UNIT: wrapInjectedBlock('UNIT', HOSTILE_STORY_LONE_CR),
       PR_BODY: 'ordinary, well-behaved PR body',
       RULES: 'the checklist',
     })
@@ -414,9 +407,8 @@ describe('OQ-51/AC-3: a colliding heading does not shadow the prompt\'s real sec
       PR_NUMBER: '999',
       HEAD_BRANCH: 'story/OQ-999-hostile',
       HEAD_SHA: 'a'.repeat(40),
-      STORY_ID: 'OQ-999',
-      STORY_PATH: 'stories/OQ-999-hostile.md',
-      STORY: wrapInjectedBlock('STORY', HOSTILE_STORY),
+      UNIT_NOTE: wrapInjectedBlock('UNIT_NOTE', 'Unit: the pull request body links its unit as file stories/OQ-999-hostile.md. It is read as it stands on main, and is the unit below.'),
+      UNIT: wrapInjectedBlock('UNIT', HOSTILE_STORY),
       PR_BODY: wrapInjectedBlock('PR_BODY', HOSTILE_PR_BODY),
       RULES: 'the checklist',
     })
@@ -512,9 +504,8 @@ describe('OQ-51/AC-5: assembling either prompt against a real story leaves no un
       PR_NUMBER: '63',
       HEAD_BRANCH: 'story/OQ-63-strip-coder-github-credential',
       HEAD_SHA: 'b'.repeat(40),
-      STORY_ID: 'OQ-51',
-      STORY_PATH: 'stories/done/OQ-51-story-injection-boundary.md',
-      STORY: wrapInjectedBlock('STORY', storySource),
+      UNIT_NOTE: wrapInjectedBlock('UNIT_NOTE', 'Unit: the pull request body links its unit as file stories/OQ-999-hostile.md. It is read as it stands on main, and is the unit below.'),
+      UNIT: wrapInjectedBlock('UNIT', storySource),
       PR_BODY: wrapInjectedBlock('PR_BODY', prBodyQuotingPlaceholders),
       RULES: 'the checklist',
     })
@@ -549,15 +540,14 @@ describe('OQ-51/AC-5: assembling either prompt against a real story leaves no un
       PR_NUMBER: '51',
       HEAD_BRANCH: 'story/OQ-51-story-injection-boundary',
       HEAD_SHA: 'c'.repeat(40),
-      STORY_ID: 'OQ-51',
-      STORY_PATH: 'stories/done/OQ-51-story-injection-boundary.md',
-      STORY: wrapInjectedBlock('STORY', storySource, 'storynonce'),
+      UNIT_NOTE: wrapInjectedBlock('UNIT_NOTE', 'Unit: the pull request body links its unit as file stories/OQ-999-hostile.md. It is read as it stands on main, and is the unit below.'),
+      UNIT: wrapInjectedBlock('UNIT', storySource, 'storynonce'),
       PR_BODY: wrapInjectedBlock('PR_BODY', 'ordinary PR body, no placeholder syntax', 'bodynonce'),
       RULES: 'the checklist',
     })
 
-    expect([...text.matchAll(/<!-- BEGIN STORY /g)]).toHaveLength(1)
-    expect([...text.matchAll(/<!-- END STORY /g)]).toHaveLength(1)
+    expect([...text.matchAll(/<!-- BEGIN UNIT /g)]).toHaveLength(1)
+    expect([...text.matchAll(/<!-- END UNIT /g)]).toHaveLength(1)
     expect([...text.matchAll(/<!-- BEGIN PR_BODY /g)]).toHaveLength(1)
     expect([...text.matchAll(/<!-- END PR_BODY /g)]).toHaveLength(1)
     // The story's own literal `{{PR_BODY}}` text survives unsubstituted --

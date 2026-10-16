@@ -12,8 +12,9 @@
  * `kind: spike` at the merge base, may also add stories directly under
  * `stories/` as drafts -- see `checkAddedDraft` for the conditions.
  *
- * `resolveStory` (review.mjs) decides whether a diff implements a story --
- * reused here rather than re-derived, per this story's Context.
+ * `resolveStory`, below, decides whether a diff implements a story. It lived
+ * in `review.mjs` until the review took its unit from the pull request's body
+ * (ST-22), and this file is its one user.
  *
  * Usage:
  *   node scripts/dispatch/story-containment.mjs <base-sha> <head-sha> [branch]
@@ -25,11 +26,50 @@
 import { execFile } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { buildStory, deriveStatus, isStoryFilename, parseFrontmatter } from './queue.mjs'
-import { resolveStory } from './review.mjs'
+import { buildStory, deriveStatus, isStoryFilename, parseFrontmatter, storyFilenameRe } from './queue.mjs'
 import { readSettings } from './settings.mjs'
 
 const execFileAsync = promisify(execFile)
+
+/**
+ * Decides which story a pull request implements from the name-status lines of
+ * its diff (`git diff --name-status --no-renames`) and its head branch name.
+ *
+ * The source is the story file the diff moves into `stories/done/` (`REVIEW.md`,
+ * "Conformance to the unit", item 4), which a conforming PR always has and
+ * which works for a PR the dispatcher did not open. With `--no-renames` a
+ * move is a deletion under `stories/` plus an addition under `stories/done/`
+ * of the same file name, so it does not depend on git's similarity guess.
+ *
+ * The branch name is only a fallback: a branch that names a story the diff
+ * does not move is a coder that forgot that move, reported as `branch-only`,
+ * so that its own story file is still recognised.
+ *
+ * `prefix` is the project's story-id prefix (OQ-126): nothing falls back to a
+ * default when it is missing.
+ *
+ * Returns `{ kind: 'moved', file, id }`, `{ kind: 'ambiguous', files }`,
+ * `{ kind: 'branch-only', id }` or `{ kind: 'none' }`.
+ */
+export function resolveStory({ nameStatus, branch, prefix }) {
+  const filenameRe = storyFilenameRe(prefix)
+  const deleted = new Set()
+  const added = []
+  for (const line of nameStatus.split(/\r?\n/)) {
+    const [status, file] = line.split('\t')
+    if (!file) continue
+    const open = file.match(/^stories\/([^/]+)$/)
+    const done = file.match(/^stories\/done\/([^/]+)$/)
+    if (status === 'D' && open && filenameRe.test(open[1])) deleted.add(open[1])
+    if (status === 'A' && done && filenameRe.test(done[1])) added.push(done[1])
+  }
+  const moved = added.filter((name) => deleted.has(name))
+  const idRe = new RegExp(`^(${prefix}-\\d+)-`)
+  if (moved.length === 1) return { kind: 'moved', file: moved[0], id: moved[0].match(idRe)[1] }
+  if (moved.length > 1) return { kind: 'ambiguous', files: moved }
+  const named = new RegExp(`^story/(${prefix}-\\d+)-`).exec(branch ?? '')
+  return named ? { kind: 'branch-only', id: named[1] } : { kind: 'none' }
+}
 
 async function git(cwd, args) {
   const { stdout } = await execFileAsync('git', ['-c', 'core.quotepath=off', ...args], {
@@ -130,8 +170,9 @@ function checkOtherFile(file, oldText, newText) {
 }
 
 // ST-30: the ids in use at the merge base -- every file in stories/,
-// stories/done/ and stories/retired/ -- taken from the filenames, which the
-// story lint holds equal to each file's frontmatter id.
+// stories/done/ and stories/retired/ -- taken from the filenames. The story
+// lint holds each filename's id equal to its frontmatter id in stories/ and
+// stories/done/; it does not read stories/retired/.
 async function idsAtBase(cwd, mergeBase, prefix) {
   const listing = await git(cwd, ['ls-tree', '-r', '--name-only', mergeBase, '--', 'stories/'])
   const idRe = new RegExp(`^(${prefix}-\\d+)-`)

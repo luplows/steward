@@ -53,7 +53,7 @@ const coderOptions = {
 const reviewerOptions = {
   role: 'reviewer',
   promptTemplate: REVIEWER_TEMPLATE,
-  story,
+  unit: { note: HOSTILE, text: HOSTILE },
   branch: BRANCH,
   pr: { number: 129, headSha: SHA, body: HOSTILE },
   rules: HOSTILE,
@@ -249,19 +249,27 @@ describe('OQ-74/AC-4: every untrusted value is bounded', () => {
     assertBounded(prompt, ['STORY'], baseline)
   })
 
-  it('reviewer: {{STORY}}, {{PR_BODY}} and ST-21/AC-2\'s {{RULES}} each carry one begin and one end marker', () => {
+  it('reviewer: ST-22/AC-2\'s {{UNIT_NOTE}} and {{UNIT}}, {{PR_BODY}} and ST-21/AC-2\'s {{RULES}} each carry one begin and one end marker', () => {
     const { prompt } = buildInvocation(reviewerOptions)
     const baseline = emptyRender(REVIEWER_TEMPLATE, {
-      PR_NUMBER: '129', HEAD_BRANCH: BRANCH, HEAD_SHA: SHA, STORY_ID: 'OQ-74', STORY_PATH: story.path, STORY: '', PR_BODY: '',
-      RULES: '',
+      PR_NUMBER: '129', HEAD_BRANCH: BRANCH, HEAD_SHA: SHA, UNIT_NOTE: '', UNIT: '', PR_BODY: '', RULES: '',
     })
-    assertBounded(prompt, ['STORY', 'PR_BODY', 'RULES'], baseline)
+    assertBounded(prompt, ['UNIT_NOTE', 'UNIT', 'PR_BODY', 'RULES'], baseline)
   })
 
   it('ST-21/AC-2: a reviewer invocation requires the rules, and a coder invocation takes none', () => {
     const { rules: _rules, ...withoutRules } = reviewerOptions
     expect(() => buildInvocation(withoutRules)).toThrow(/requires rules/)
     expect(() => buildInvocation({ ...coderOptions, rules: 'x' })).toThrow(/takes no rules/)
+  })
+
+  it('ST-22/AC-2: a reviewer invocation takes a unit and no story, and a coder invocation a story and no unit', () => {
+    const { unit: _unit, ...withoutUnit } = reviewerOptions
+    expect(() => buildInvocation(withoutUnit)).toThrow(/reviewer invocation requires a unit/)
+    expect(() => buildInvocation({ ...reviewerOptions, story })).toThrow(/reviewer invocation takes no story/)
+    const { story: _story, ...withoutStory } = coderOptions
+    expect(() => buildInvocation(withoutStory)).toThrow(/coder invocation requires a story/)
+    expect(() => buildInvocation({ ...coderOptions, unit: reviewerOptions.unit })).toThrow(/coder invocation takes no unit/)
   })
 
   it('a retry\'s findings block is bounded too, and the hostile text stays inert', () => {

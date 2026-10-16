@@ -204,7 +204,7 @@ passes. Everything else a pull request must meet is the reviewer's, by the check
 
 **The reviewer's job is drift detection, not quality assurance:**
 
-> Does this diff do what the story said, all of what it said, and nothing it didn't?
+> Does this diff do what the unit said, all of what it said, and nothing it didn't?
 
 Three sub-checks: **completeness** (every AC delivered), **fidelity** (the AC is genuinely
 satisfied, not merely named in a test), **containment** (nothing outside scope).
@@ -216,11 +216,20 @@ Tower-workshop-paths' first reviewer worked that way. *"A reviewer that knows wh
 meant to do cannot see that the diff does something else"* is true of **the author's account**. It
 is not true of **the authored unit**, which is the standard the diff must meet.
 
-So the reviewer receives **the unit, the pull request body and the checklist from `main`**, and
-reads the diff in its own checkout of the head (`reviewer.md`). Today `review.mjs` finds the unit
-as the story file the diff moves into `stories/done/` (`resolveStory`); ST-22 changes that to
-the unit the body links, read from `main` with `scripts/dispatch/unit.mjs` (Part 3, "Decided so
-far"). It does not receive the coder's session, summary or reasoning, or any commentary from ATC.
+So the reviewer receives **the unit the pull request links, read from `main`, the pull request
+body and the checklist from `main`**, and reads the diff in its own checkout of the head
+(`reviewer.md`). `review.mjs` finds the link in the body and reads the unit with
+`scripts/dispatch/unit.mjs`, and gives the reviewer two blocks: a note in fixed words on what it
+found (a link read, a link not read and why, `Unit: none`, no `Unit:` line, or several links),
+and the unit's text when one was read. A pull request whose unit is missing or unreadable is
+still reviewed, and the checklist says what that means (`REVIEW.md`, "Every pull request",
+item 4). It does not receive the coder's session, summary or reasoning, or any commentary from
+ATC.
+
+**It verifies with narrower commands.** The reviewer tests a claim with the narrowest command that
+settles it, such as one test file, a search or a diff of one path. It neither reruns the project's
+whole check nor reads CI's results: CI is a peer check on the same head (`outline.md`,
+"Defining steward", "Land").
 
 **The PR description is itself in scope.** After forming findings from the diff, check whether the
 description honestly describes the change. Prose that oversells a diff is real signal.
@@ -1462,7 +1471,7 @@ shortened where it is long, so that it can be found there with its date.
   considered: the project's settings name one of a few lookups steward provides, or the project
   supplies its own lookup.
 - **ATC finds the link deterministically.** Considered and not chosen: going on inferring the unit
-  from the diff, as `resolveStory` does today. It could be deterministic too, but it fits only one
+  from the diff, as `resolveStory` did. It could be deterministic too, but it fits only one
   project's story convention.
 - **A pull request whose link is missing is still reviewed, and the review does not pass.**
   Considered and not chosen: ATC posting `block` itself for any pull request with no readable
@@ -1807,7 +1816,7 @@ shortened where it is long, so that it can be found there with its date.
   - **Planned (ST-7):** the project's `setup` command, within its time limit, in place of
     `npm ci`.
   - Finding a pull request's unit from the link in its body, and reading it from `main`
-    (`scripts/dispatch/unit.mjs`). The review does not use it until ST-22.
+    (`scripts/dispatch/unit.mjs`).
   - Reading the rules file from `main`, in sections that each say when they apply and number
     their own items, and refusing a file that does not parse (`scripts/dispatch/rules.mjs`).
   - The reviewer judged by those rules, given in its prompt from `main`, naming every section
@@ -1815,8 +1824,9 @@ shortened where it is long, so that it can be found there with its date.
     `main`, or one that does not parse, ends the review as `rules-unreadable`
     (`scripts/dispatch/review.mjs`). `REVIEW.md` is in that form: six sections, each numbering
     its own items.
-  - **Planned (ST-22):** the reviewer given the linked unit and the note on what was found, and
-    verifying with narrower commands rather than the whole check.
+  - The reviewer given the linked unit, read from `main`, and the note on what was found, as two
+    blocks, and verifying with narrower commands rather than the whole check
+    (`scripts/dispatch/review.mjs`, `.claude/prompts/reviewer.md`).
   - **Planned (ST-23):** landing in one look, without waiting, and a project able to turn
     steward's landing off.
   - **Planned (ST-24):** landing when the checks `landWhen` names are green, in the lander and the
@@ -2086,6 +2096,18 @@ shortened where it is long, so that it can be found there with its date.
   read; and a window whose `percent` is not a number is a usage that cannot be read, so it starts
   nothing. Considered and not chosen: the highest `percent` among the weekly rows, as ST-31 first
   asked.
+- **The reviewer is given the unit's text apart from the note on it, and takes a model only from
+  a story** (decided 2026-10-15 by the owner, with the planning session, while ST-22 was built).
+  ST-19's note on what ATC found carried the unit's text when it read one, and ST-22's prompt gives
+  that text in a block of its own, so the note now names the unit as read and leaves the text out.
+  This revises ST-19's AC-5. Considered and not chosen: one block holding both, which would have
+  needed ST-22's AC-2 rewritten first; and the text in both blocks. A file unit names the model
+  the reviewer must differ from only when it parses as one of this repository's stories, since
+  only a story gives the coder its model; any other unit, a file without frontmatter included,
+  leaves the reviewer on the role default. The owner's reason: steward should be as portable as
+  possible, within reason. Considered and not chosen: reading `model:` from any frontmatter, which
+  would parse a project's units, and steward does not (`outline.md`, "Review"); and stopping the
+  review on a file that does not parse.
 
 ### The move, in order
 

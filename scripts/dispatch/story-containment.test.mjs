@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { checkStoryContainment } from './story-containment.mjs'
+import { checkStoryContainment, resolveStory } from './story-containment.mjs'
 
 const git = (cwd, ...args) => execFileSync(
   'git',
@@ -333,4 +333,44 @@ describe("ST-30/AC-3 and AC-4: nothing else a spike's pull request does changes"
     expect(result.ok).toBe(false)
     expect(result.violations).toContainEqual(expect.objectContaining({ file: 'stories/OQ-300-first.md' }))
   }, CONTAINMENT_TEST_TIMEOUT)
+})
+
+// Moved from review.test.mjs with resolveStory (ST-22/AC-1), unchanged.
+describe('OQ-69/AC-6: the story comes from the file the diff moves into stories/done/', () => {
+  it('OQ-69/AC-6: the move is the source even when the branch name names another story', () => {
+    const nameStatus = 'D\tstories/OQ-99-thing.md\nA\tstories/done/OQ-99-thing.md\nA\tsrc/x.mjs\n'
+    expect(resolveStory({ nameStatus, branch: 'story/OQ-12-unrelated', prefix: 'OQ' })).toEqual({
+      kind: 'moved', file: 'OQ-99-thing.md', id: 'OQ-99',
+    })
+    expect(resolveStory({ nameStatus, branch: 'whatever/a-pr-someone-else-opened', prefix: 'OQ' }).kind).toBe('moved')
+  })
+
+  it('OQ-69/AC-6: an added file under done/ that was never in stories/ is not a move', () => {
+    const nameStatus = 'A\tstories/done/OQ-99-thing.md\nM\tstories/OQ-98-other.md\n'
+    expect(resolveStory({ nameStatus, branch: 'chore/x', prefix: 'OQ' })).toEqual({ kind: 'none' })
+  })
+
+  it('OQ-69/AC-6: two moved stories are reported as ambiguous rather than picked between', async () => {
+    const nameStatus = 'D\tstories/OQ-1-a.md\nA\tstories/done/OQ-1-a.md\nD\tstories/OQ-2-b.md\nA\tstories/done/OQ-2-b.md\n'
+    expect(resolveStory({ nameStatus, branch: 'story/OQ-1-a', prefix: 'OQ' })).toEqual({ kind: 'ambiguous', files: ['OQ-1-a.md', 'OQ-2-b.md'] })
+  })
+})
+
+describe('OQ-126/AC-3: resolveStory takes the story-id prefix from settings, not a hardcoded OQ-', () => {
+  it('reads ST-3 from a moved stories/done/ST-3-thing.md, and finds no story when the moved file is OQ-3', () => {
+    const stNameStatus = 'D\tstories/ST-3-thing.md\nA\tstories/done/ST-3-thing.md\n'
+    expect(resolveStory({ nameStatus: stNameStatus, branch: 'chore/x', prefix: 'ST' })).toEqual({
+      kind: 'moved', file: 'ST-3-thing.md', id: 'ST-3',
+    })
+
+    const oqNameStatus = 'D\tstories/OQ-3-thing.md\nA\tstories/done/OQ-3-thing.md\n'
+    expect(resolveStory({ nameStatus: oqNameStatus, branch: 'chore/x', prefix: 'ST' })).toEqual({ kind: 'none' })
+  })
+
+  it('reads ST-3 from a branch story/ST-3-thing, and finds no story from a branch story/OQ-3-thing', () => {
+    expect(resolveStory({ nameStatus: '', branch: 'story/ST-3-thing', prefix: 'ST' })).toEqual({
+      kind: 'branch-only', id: 'ST-3',
+    })
+    expect(resolveStory({ nameStatus: '', branch: 'story/OQ-3-thing', prefix: 'ST' })).toEqual({ kind: 'none' })
+  })
 })

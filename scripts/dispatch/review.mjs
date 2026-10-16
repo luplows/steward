@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /**
  * Reviews one open pull request end to end and records the verdict (OQ-69):
- * resolve the head, read the project's checklist from `main` (ST-21), check
- * out that exact commit somewhere that is not the coder's tree, work out which
- * story the PR implements, spawn the reviewer, parse what it returns against
- * the checklist, and post the verdict as a marker comment.
+ * resolve the head, read the project's checklist from `main` (ST-21), find and
+ * read from `main` the unit the PR's body links (ST-22, `unit.mjs`), check out
+ * that exact commit somewhere that is not the coder's tree, spawn the
+ * reviewer, parse what it returns against the checklist, and post the verdict
+ * as a marker comment.
  *
  * It joins existing modules and reimplements none of them: `github.mjs` reads
  * the pull request, lists its comments, composes and posts the marker;
@@ -23,8 +24,11 @@
  * read (`usage-unknown`). A second session for a malformed verdict is not
  * checked again.
  *
- * A review that cannot be recorded is not an error: a `null` verdict, a
- * moved head, an unresolvable story all leave the PR pending, which
+ * A unit that is missing, unreadable, `Unit: none` or one of several links
+ * does not stop the review: the reviewer is told which, and the rules judge it.
+ *
+ * A review that cannot be recorded is not an error: a `null` verdict or a
+ * moved head leaves the PR pending, which
  * `docs/agent-workflow-design.md` ("What the gate enforces") says is the
  * right outcome. Each is a distinct `status` on the result.
  *
@@ -53,10 +57,11 @@ import {
 } from './github.mjs'
 import { installDependencies } from './install.mjs'
 import { ROLE_DEFAULTS } from './invocation.mjs'
-import { parseFrontmatter, storyFilenameRe } from './queue.mjs'
+import { parseFrontmatter } from './queue.mjs'
 import { readRules } from './rules.mjs'
 import { readSettings } from './settings.mjs'
 import { spawnSession } from './spawn.mjs'
+import { describeUnit, findUnitLink, readUnit } from './unit.mjs'
 import { checkUsage, readUsage } from './usage.mjs'
 
 const execFileAsync = promisify(execFile)
@@ -75,50 +80,26 @@ const REMOTE = 'origin'
 export const HONOURED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR']
 const SHA_RE = /^[0-9a-f]{40}$/
 
-// What {{STORY}} renders as for a pull request that implements no story
-// (reviewer.md, the placeholders).
-const NO_STORY_TEXT = '*(none — this PR implements no story; "Conformance to the unit" does not apply.)*'
+// What {{UNIT}} renders as when no unit was read (reviewer.md, the
+// placeholders). {{UNIT_NOTE}} says why.
+const NO_UNIT_TEXT = '*(none — no unit was read; the note above says why.)*'
 
-// ------------------------------------------------------------------- story
+// -------------------------------------------------------------------- unit
 
 /**
- * Decides which story a pull request implements from the name-status lines of
- * its diff (`git diff --name-status --no-renames`) and its head branch name.
- *
- * The source is the story file the diff moves into `stories/done/` (`REVIEW.md`,
- * "Conformance to the unit", item 4), which a conforming PR always has and
- * which works for a PR this dispatcher did not open. With `--no-renames` a
- * move is a deletion under `stories/` plus an addition under `stories/done/`
- * of the same file name, so it does not depend on git's similarity guess.
- *
- * The branch name is only a fallback for *diagnosis*: a branch that names a
- * story the diff does not move is a coder that forgot that move, reported as
- * `branch-only` rather than reviewed against a story the diff never touched.
- *
- * `prefix` is the project's story-id prefix (OQ-126): nothing falls back to a
- * default when it is missing.
- *
- * Returns `{ kind: 'moved', file, id }`, `{ kind: 'ambiguous', files }`,
- * `{ kind: 'branch-only', id }` or `{ kind: 'none' }`.
+ * The `model:` a unit names, for `chooseReviewerModel` (ST-22/AC-4): only a
+ * file unit that was read and parses as one of this repository's stories
+ * (`parseFrontmatter`, `queue.mjs`) names one, since only a story gives the
+ * coder its model. Any other unit, or a file that does not parse, names none.
  */
-export function resolveStory({ nameStatus, branch, prefix }) {
-  const filenameRe = storyFilenameRe(prefix)
-  const deleted = new Set()
-  const added = []
-  for (const line of nameStatus.split(/\r?\n/)) {
-    const [status, file] = line.split('\t')
-    if (!file) continue
-    const open = file.match(/^stories\/([^/]+)$/)
-    const done = file.match(/^stories\/done\/([^/]+)$/)
-    if (status === 'D' && open && filenameRe.test(open[1])) deleted.add(open[1])
-    if (status === 'A' && done && filenameRe.test(done[1])) added.push(done[1])
+export function unitModel(found, read) {
+  if (found?.kind !== 'link' || found.type !== 'file' || read?.read !== true) return null
+  try {
+    const { model } = parseFrontmatter(read.text, String(found.target)).data
+    return typeof model === 'string' && model !== '' ? model : null
+  } catch {
+    return null
   }
-  const moved = added.filter((name) => deleted.has(name))
-  const idRe = new RegExp(`^(${prefix}-\\d+)-`)
-  if (moved.length === 1) return { kind: 'moved', file: moved[0], id: moved[0].match(idRe)[1] }
-  if (moved.length > 1) return { kind: 'ambiguous', files: moved }
-  const named = new RegExp(`^story/(${prefix}-\\d+)-`).exec(branch ?? '')
-  return named ? { kind: 'branch-only', id: named[1] } : { kind: 'none' }
 }
 
 // ------------------------------------------------------------------- model
@@ -132,12 +113,12 @@ function sameModel(a, b) {
   return x.includes(y) || y.includes(x)
 }
 
-/** The reviewer's model: the role default unless that is the story's own. */
-export function chooseReviewerModel(storyModel) {
+/** The reviewer's model: the role default unless that is the unit's own (`unitModel`). */
+export function chooseReviewerModel(declared) {
   const preferred = ROLE_DEFAULTS.reviewer.model
-  if (typeof storyModel !== 'string' || storyModel === '') return preferred
-  const chosen = sameModel(preferred, storyModel) ? REVIEWER_MODEL_FALLBACK : preferred
-  if (sameModel(chosen, storyModel)) throw new Error(`no reviewer model differs from the story's ${storyModel}`)
+  if (typeof declared !== 'string' || declared === '') return preferred
+  const chosen = sameModel(preferred, declared) ? REVIEWER_MODEL_FALLBACK : preferred
+  if (sameModel(chosen, declared)) throw new Error(`no reviewer model differs from the unit's ${declared}`)
   return chosen
 }
 
@@ -309,7 +290,7 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
  * Every result returned after a session started carries `sessions`, the
  * number of reviewer sessions run (1 or 2, OQ-121). A verdict that does not
  * parse (`parseReviewerVerdict` rejects it) gets one re-run, in the same
- * worktree with the same prompt, story, pull request, environment and model;
+ * worktree with the same prompt, unit, pull request, environment and model;
  * a second malformed reply is `malformed-verdict` with both sessions' reasons.
  * The checkout is checked again before the re-run, and if the first session
  * left it changed, there is no second session and nothing is reset.
@@ -319,7 +300,7 @@ export async function reviewPullRequest({
   rereview = false, install = installDependencies, scratchRoot = tmpdir(), usage = readUsage,
 }) {
   const template = promptTemplate ?? readFileSync(REVIEWER_PROMPT, 'utf8')
-  const { storyPrefix, rulesFile, usageLimits } = await readSettings(repoDir)
+  const { unitLinks, rulesFile, usageLimits } = await readSettings(repoDir)
   const pr = await getPullRequestState(ctx, number)
   if (!SHA_RE.test(pr.headSha) || !pr.headRef || !pr.baseRef) {
     throw new Error(`pull request #${number} did not resolve a head SHA, head branch and base branch`)
@@ -368,38 +349,17 @@ export async function reviewPullRequest({
       return { status: 'rules-unreadable', problems: rules.problems, reason: rules.problems.join('; ') }
     }
 
+    // ST-22/AC-1: the unit the body links, read as it stands on the base
+    // branch, never the head. A missing, unreadable, `Unit: none` or
+    // several-link case is reviewed, with the note saying which.
+    const found = findUnitLink(pr.body, unitLinks)
+    const read = found.kind === 'link' ? await readUnit(found, { repoDir, base: pr.baseRef, ctx }) : null
+    const unit = { note: describeUnit(found, read), text: read?.read === true ? read.text : NO_UNIT_TEXT }
+    const model = chooseReviewerModel(unitModel(found, read))
+
     await git(repoDir, ['worktree', 'add', '--detach', tree, pr.headSha])
     worktreeAdded = true
     await assertReviewableCheckout(tree, pr.headSha, repoDir)
-
-    const nameStatus = await git(repoDir, [
-      'diff', '--name-status', '--no-renames', `${REMOTE}/${pr.baseRef}...${pr.headSha}`,
-    ])
-    const resolved = resolveStory({ nameStatus, branch: pr.headRef, prefix: storyPrefix })
-    if (resolved.kind === 'branch-only') {
-      return {
-        status: 'story-not-moved',
-        reason: `branch ${pr.headRef} names ${resolved.id}, but the diff moves no story file into stories/done/ ` +
-          '(REVIEW.md, "Conformance to the unit", item 4); not reviewing against a story the diff never touched',
-      }
-    }
-    if (resolved.kind === 'ambiguous') {
-      return { status: 'story-ambiguous', reason: `the diff moves more than one story: ${resolved.files.join(', ')}` }
-    }
-
-    let story
-    if (resolved.kind === 'moved') {
-      const storyPath = `stories/done/${resolved.file}`
-      const text = readFileSync(path.join(tree, storyPath), 'utf8')
-      try {
-        const { data } = parseFrontmatter(text, storyPath)
-        story = { id: resolved.id, path: storyPath, text, model: data.model ?? null }
-      } catch (error) {
-        return { status: 'story-unreadable', reason: error.message }
-      }
-    } else {
-      story = { id: 'n/a', path: 'n/a', text: NO_STORY_TEXT, model: null }
-    }
 
     // The session's environment carries no GitHub credential: the reviewer
     // posts nothing (reviewer.md). `coderEnv` is what strips them.
@@ -407,7 +367,7 @@ export async function reviewPullRequest({
     await mkdir(ghConfigDir)
     const sessionEnv = coderEnv(baseEnv, ghConfigDir)
 
-    // A reviewer that cannot run `npm test` silently reviews by reading
+    // A reviewer that cannot run a test silently reviews by reading
     // (docs/agent-workflow-design.md, "Invocation shape"), so a failed install
     // stops the dispatch.
     try {
@@ -420,12 +380,12 @@ export async function reviewPullRequest({
       ...sessionOptions,
       role: 'reviewer',
       promptTemplate: template,
-      story,
+      unit,
       branch: pr.headRef,
       pr: { number, headSha: pr.headSha, body: pr.body },
       rules: rules.text,
       baseEnv: sessionEnv,
-      model: chooseReviewerModel(story.model),
+      model,
       cwd: tree,
     })
 
