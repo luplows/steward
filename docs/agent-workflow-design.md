@@ -2077,7 +2077,12 @@ shortened where it is long, so that it can be found there with its date.
   and starting sessions when the usage is unknown. **Also decided the same day by the owner:**
   reading Codex's usage is left open while the owner is on a free ChatGPT plan (ST-32's open
   question 1); and a Codex coder waits until steward's coder stories are built, perhaps with the
-  same permissions as a Codex reviewer until a full sandbox is decided (ST-6).
+  same permissions as a Codex reviewer until a full sandbox is decided (ST-6). **Also decided the
+  same day by the owner, when the planning session checked ST-31's pull request (#36):** the weekly
+  window is the `weekly_all` row alone, for now, and the per-model `weekly_scoped` rows are not
+  read; and a window whose `percent` is not a number is a usage that cannot be read, so it starts
+  nothing. Considered and not chosen: the highest `percent` among the weekly rows, as ST-31 first
+  asked.
 
 ### The move, in order
 

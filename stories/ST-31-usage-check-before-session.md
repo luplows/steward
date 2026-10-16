@@ -24,13 +24,13 @@ by the plan's own limit. When the usage cannot be read, nothing starts.
       is given, and reads the `usage_report.rate_limits.limits` rows from the message that carries
       them. It returns `{ ok: true, session, weekly }`, each `{ percent, resetsAt }`:
       - `session` from the row whose `kind` is `session`;
-      - `weekly` from the row with the highest `percent` among those whose `group` is `weekly`
-        (such as `weekly_all` and `weekly_scoped`).
+      - `weekly` from the row whose `kind` is `weekly_all`. No other row is read for the weekly
+        window, the per-model `weekly_scoped` included.
 
       It returns `{ ok: false, reason }` when the command fails or times out, when no message
-      carries `usage_report`, when `rate_limits` is `null`, or when either window has no row. The
-      run is given a time limit of 30 seconds. The process runner is injectable, so tests start no
-      real session.
+      carries `usage_report`, when `rate_limits` is `null`, when either window has no row, or when
+      a window's `percent` is not a number. The run is given a time limit of 30 seconds. The
+      process runner is injectable, so tests start no real session.
 - [ ] **AC-2** — A new required settings key, `usageLimits`, read and validated by
       `readSettings` (`scripts/dispatch/settings.mjs`): an object with exactly the keys `coder` and
       `reviewer`, each an object with exactly the keys `session` and `weekly`, each an integer from
@@ -65,9 +65,11 @@ by the plan's own limit. When the usage cannot be read, nothing starts.
       a status other than `recorded` is that pull request's outcome, and the rotation goes on
       ("Reporting and stopping").
 - [ ] **AC-6** — Tests, named `ST-31/AC-<n>`, with the process runner and `readUsage` injected:
-      - `readUsage` parses a stream holding `session` 20 and `weekly_all` 21, and one holding two
-        `weekly` rows (taking the higher); and returns `ok: false` for a failed run, a timeout, no
-        `usage_report`, `rate_limits: null`, and a missing `session` row;
+      - `readUsage` parses a stream holding `session` 20 and `weekly_all` 21, and one holding
+        `weekly_all` 21 and `weekly_scoped` 40 (taking `weekly_all`'s 21); and returns `ok: false`
+        for a failed run, a timeout, no `usage_report`, `rate_limits: null`, a missing `session`
+        row, a stream whose only weekly row is `weekly_scoped`, and a `percent` that is not a
+        number;
       - `readSettings` accepts the value in AC-2, and rejects a missing `usageLimits`, a missing or
         extra key at each level, 0, 101 and 70.5;
       - `reviewPullRequest` returns `over-usage` at the limit exactly and one over it, for each
