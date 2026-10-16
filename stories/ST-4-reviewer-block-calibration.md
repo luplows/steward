@@ -32,7 +32,10 @@ evidence the reviewer was reluctant.
       there before it, lie outside it, are a suggestion, or follow a decision
       the unit or the owner already recorded. "Your verdict" and
       "Calibration" in `reviewer.md` say this, and neither describes it as a
-      doubt the reviewer chose not to block on.
+      doubt the reviewer chose not to block on. Every other place in
+      `reviewer.md` that sends a verdict to `pass-with-observations`, such as
+      a refused command that left a claim unverified, agrees with this
+      definition or names the claim it could not check instead.
 - [ ] **AC-4** — The language against overcorrection stays: *a reviewer that
       fails everything gets switched off*, and *do not manufacture findings to
       look thorough*. The goal is moving genuine defects out of the middle
@@ -40,7 +43,11 @@ evidence the reviewer was reluctant.
 - [ ] **AC-5** — The change is validated against steward's own verdicts rather
       than asserted. With the revised prompt, the reviewer is run once on each
       of four heads, as `buildInvocation` renders it, against `REVIEW.md` from
-      `main`, posting nothing:
+      `main`, posting nothing. Each reads its unit as it was on `main` when it
+      was reviewed, at its merge base: on `main` today, #34's unit,
+      `stories/ST-30-spike-adds-draft-stories.md`, is in `stories/done/`, and
+      `readUnit` (`scripts/dispatch/unit.mjs`) reads a unit from the base it is
+      given. The four:
       - #41 at `14366c1` returns `block`, with a finding for the gap in ST-34's
         AC-5 that its verdict recorded as an observation (`model: null`);
       - #34 at `da6e5c5` returns `block`, with a finding for the comment it
