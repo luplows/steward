@@ -230,6 +230,9 @@ ATC.
 settles it, such as one test file, a search or a diff of one path. It neither reruns the project's
 whole check nor reads CI's results: CI is a peer check on the same head (`outline.md`,
 "Defining steward", "Land").
+**Planned (ST-33):** it runs no test, lint or other check at all, a single test file included, and
+settles a claim by reading, searching or diffing; a claim only a run would settle is CI's. Nothing
+is installed in its checkout, and its allowlist grants no `npm` or `npx`.
 
 **The PR description is itself in scope.** After forming findings from the diff, check whether the
 description honestly describes the change. Prose that oversells a diff is real signal.
@@ -248,6 +251,10 @@ or not, with a reason for each not applied, so a section skipped wrongly is visi
 reviewer sharing a model family means correlated blind spots: context isolation decorrelates
 *knowledge*, not *reasoning style*. Opus-reviews-Sonnet buys both at once. When a story's model is
 `opus`, the reviewer's is `sonnet` (`chooseReviewerModel`, `review.mjs`).
+**Planned (ST-34, ST-32):** the reviewer's tool, model and effort come from the machine's settings,
+a default and the choices available, rather than from the code, and the reviewer takes the next
+available choice whose model differs from the coder's (ST-34); a choice may run it through the
+Codex CLI, under `codex exec -s read-only` (ST-32).
 
 ### Recording the verdict
 
@@ -660,6 +667,9 @@ unreadable (`scripts/dispatch/usage.mjs`; "Trials and measurements", "Reading th
 a script"; Part 3, "Decided so far", 2026-10-15). `reviewPullRequest`, `dispatchCoder` and
 `retryStory` each make the check, and return `over-usage` or `usage-unknown` without starting a
 session.
+**Planned (ST-34):** the limits move from the project's settings to the machine's.
+**Planned (ST-32):** a Codex reviewer's usage is read with no model call, through
+`codex app-server`'s `account/rateLimits/read`, against the same reviewer limits.
 
 ### The controller
 
@@ -809,6 +819,8 @@ therefore **not** structurally unable to write; it is unwilling, because its pro
 nothing. Claiming otherwise — an earlier draft of this section said "two independent reasons it
 cannot push" — overstates the guarantee, and overstating a security property is worse than not
 having it, because it stops people looking.
+**Planned (ST-33):** the list grants no `npm` or `npx`, and the reviewer runs no checks. `node`
+stays, for `review-tools.mjs` and `node -e`, so what this paragraph says still holds for it.
 
 The tension is real rather than an oversight: **verification requires execution, and execution
 defeats structural write-prevention.** Closing it needs the capability removed rather than the
@@ -849,6 +861,8 @@ attack. Removing the reviewer's need to post deletes that part of the prompt rat
 it. Genuinely removing the capability needs a reviewer with no SSH agent, no keyring and no
 push-capable credential, which no environment on the crew member's own account gives, so it is
 ST-6's question, a spike (Part 3, "Decided so far", 2026-10-15).
+**Planned (ST-33):** of `npm`, `npx` and `node`, its allowlist keeps `node` alone, and it runs no
+checks, so "so that it can verify the author's claims" stops being the reason.
 
 **The coder holds no GitHub credential, and does not push.** `coderEnv`
 (`scripts/dispatch/coder-env.mjs`) removes `GH_TOKEN`, `GITHUB_TOKEN` and `GH_ENTERPRISE_TOKEN` from
@@ -1255,7 +1269,10 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
 - **M4. How a story or role names its model.** Today a bare Claude model name. It needs the tool as
   well. OQ-54 (one declared default coder model) would be reworked or folded in. **Left open for
   the workflow's own repository** (owner, 2026-10-08): it works best as configurable for the
-  specific job, rather than fixed per project.
+  specific job, rather than fixed per project. **Decided 2026-10-15 by the owner:** a role's tool,
+  model and effort are named in the machine's settings, as a default and the choices available,
+  and a story's `model:` names one of those choices (Part 3, "Decided so far", "The machine
+  steward runs on has settings of its own"; **Planned (ST-34)**).
 - **M5. Prompts.** One prompt per role with per-tool parts, or one per tool? **Decided 2026-10-08
   by the owner: one prompt per role**, holding the role's rules once, with a small section per tool
   for that tool's specifics, so the rules cannot drift between tools.
@@ -1451,9 +1468,9 @@ the words they were written with.
 ## Portability: other projects, other companies' models
 
 Refined with the owner from 2026-10-07. The goals (Part 1, "Goals"), the move's shape and its
-order are decided; M4 (how a role names its model; Part 1, "Other companies' models (OQ-114)")
-and R7's issue queue are still open, and both wait for the workflow's own repository. Each answer
-is recorded here, dated, in the pull request that makes it.
+order are decided. M4 (how a role names its model; Part 1, "Other companies' models (OQ-114)")
+was decided on 2026-10-15 ("The machine steward runs on has settings of its own", below); R7's
+issue queue is still open. Each answer is recorded here, dated, in the pull request that makes it.
 
 ### The outline's reasoning
 
@@ -2093,8 +2110,9 @@ shortened where it is long, so that it can be found there with its date.
   own, higher limit. Considered and not chosen: one limit for both roles; the weekly window alone;
   and starting sessions when the usage is unknown. **Also decided the same day by the owner:**
   reading Codex's usage is left open while the owner is on a free ChatGPT plan (ST-32's open
-  question 1); and a Codex coder waits until steward's coder stories are built, perhaps with the
-  same permissions as a Codex reviewer until a full sandbox is decided (ST-6). **Also decided the
+  question 1, answered later the same day: "A Codex reviewer runs read-only", below); and a Codex
+  coder waits until steward's coder stories are built, perhaps with the same permissions as a
+  Codex reviewer until a full sandbox is decided (ST-6). **Also decided the
   same day by the owner, when the planning session checked ST-31's pull request (#36):** the weekly
   window is the `weekly_all` row alone, for now, and the per-model `weekly_scoped` rows are not
   read; and a window whose `percent` is not a number is a usage that cannot be read, so it starts
@@ -2115,6 +2133,45 @@ shortened where it is long, so that it can be found there with its date.
   possible, within reason. Considered and not chosen: reading `model:` from any frontmatter, which
   would parse a project's units, and steward does not (`outline.md`, "Review"); and stopping the
   review on a file that does not parse.
+- **The reviewer runs no checks** (decided 2026-10-15 by the owner, with the planning session,
+  while settling ST-32's open questions; **Planned (ST-33)**). The reviewer runs no test, lint or
+  other check, a single test file included, and settles a claim by reading, searching or diffing;
+  a claim only a run would settle is CI's, a peer check that still stops a pull request whose
+  tests fail. Nothing is installed in its checkout, and `npm` and `npx` go from its allowlist;
+  `node` stays, for `review-tools.mjs` and `node -e`. The owner's reasons: a Codex reviewer under
+  `codex exec -s read-only` cannot start a test run, and the two reviewers are to be kept as alike
+  as possible; and a test that fails still fails in CI, so nothing is lost. Considered and not
+  chosen: a Codex reviewer under `workspace-write`, which can run tests but can also write to
+  `%TEMP%`, where the review checkouts and the sessions' scratch directories are; one test file
+  for the Claude reviewer only; and taking `node` out as well, which loses `review-tools.mjs`.
+  ST-7's `setup` command now prepares the coder's checkout only. **Also decided the same day by
+  the owner:** with the tests out of the review, a periodic agent, not one run on every pull
+  request, is to be explored, to check by mutating the code that the tests test something useful
+  (**Planned (ST-36)**, a spike).
+- **The machine steward runs on has settings of its own** (decided 2026-10-15 by the owner, with
+  the planning session; **Planned (ST-34, ST-35)**). Which tool, model and effort runs each role
+  is the computer's, not the project's, so that a project's settings make no assumption about the
+  models a machine uses. The machine's settings are a file outside any checkout,
+  `~/.steward/settings.json` in the user's profile, which an environment variable,
+  `STEWARD_SETTINGS`, can point elsewhere. For each role they give a default choice of tool, model
+  and effort, and the choices available besides it, since the coder especially should not be
+  limited to one model or one effort. The usage limits move there from the project's settings,
+  since they describe the crew member's plan; this revises the entry above that made them a
+  project settings key. A Codex reviewer takes the same limits as a Claude one, for now, and limits
+  per tool may come later. Three tiers choose among the available choices: the unit, as a story's
+  `model:` does for the coder today (ST-34); the crew, overriding the choice for a run it starts by
+  hand; and ATC, taking another choice when one is out of usage and another is not (both ST-35).
+  As in the project's settings, nothing has a default in the code. Considered and not chosen: the
+  project's `steward.config.json`; a gitignored file in each checkout, which the controller's
+  reset to `origin/main` before every rotation makes fragile; and the environment variable alone.
+- **A Codex reviewer runs read-only** (decided 2026-10-15 by the owner, with the planning session,
+  from a second trial on the ChatGPT Plus plan; **Planned (ST-32)**). This answers ST-32's open
+  questions. Codex's usage is read through `codex app-server`'s `account/rateLimits/read`, with no
+  model call, as a 5-hour and a weekly window. The checkout stays under `os.tmpdir()`, which
+  `codex exec -s read-only` can read. The reviewer runs read-only and runs no tests (above).
+  Whether its sandbox can read Windows Credential Manager under `read-only` is left to ST-6. Tool,
+  model and effort are the machine's settings (above). See "Trials and measurements", "Codex as
+  reviewer".
 
 ### The move, in order
 
@@ -2835,7 +2892,8 @@ reference, TypeScript, read 2026-10-15).
 Codex's session logs (`~/.codex/sessions/**/rollout-*.jsonl`) record `rate_limits.primary`
 `used_percent`, which on the owner's free plan was a single 30-day window (`window_minutes`
 43200), 0% then 1%, with no secondary window. `codex exec --json` reported token counts, not the
-usage, and with `--ephemeral` no log was written.
+usage, and with `--ephemeral` no log was written. On the Plus plan, `codex app-server` reports a
+5-hour and a weekly window with no model call ("Codex as reviewer", the second trial).
 
 ### Codex as reviewer
 
@@ -2861,6 +2919,20 @@ fill` password, no network, and no new file creatable outside its working direct
 directory or the home directory. Outside the sandbox, `gh auth token` returned a token and SSH
 authenticated. It did not read Windows Credential Manager directly, as tower-workshop-paths' #209
 did (ST-32, open question 4).
+
+The second trial was run on 2026-10-15 by the planning session, with the owner's agreement, on the
+same codex-cli, after the owner moved to the ChatGPT Plus plan. It reviewed no pull request.
+
+| Probe | Result |
+|---|---|
+| `codex app-server --listen stdio://`: `initialize`, then `account/rateLimits/read` | `planType` `plus`: `primary` with `windowDurationMins` 300 and `secondary` with 10080, each with `usedPercent` (0) and `resetsAt`. About 0.76 s, with no thread started and no model call. `model/list`, asked the same way, listed seven models (ST-32's Context). |
+| `codex exec -s read-only -m gpt-6-luna` at low effort, asked to read a file, in a git repository under `os.tmpdir()` and in one under `%LOCALAPPDATA%\Temp\claude` | Both were read, in 11 s and 7.3 s, so the first trial's failure under `Temp\claude` did not recur. Outside a git repository, `codex exec` would not start ("Not inside a trusted directory"). |
+| The same, in a worktree made as `review.mjs` makes one, under `os.tmpdir()` | `git rev-parse HEAD`, `git log`, `git diff --stat` and `git status` all ran, and the worktree was unchanged. 12.4 s. |
+| `codex sandbox -c sandbox_mode="read-only"`: `npm.cmd --version`, and `npm --version` in PowerShell | Both printed 11.19.0, so the first trial's `npm.ps1` refusal came from `codex exec`'s shell, not the sandbox. |
+| The same: `npx vitest run` of one test file | Vitest could not start: `EPERM` making `node_modules\.vite-temp`. |
+| `codex sandbox -c sandbox_mode="workspace-write"`: the same | `render.test.mjs` (42 tests) and `unit.test.mjs` (29) passed, the second writing its temporary repositories to `%TEMP%`. |
+| A file written to a sibling worktree, to the home directory and to `%TEMP%` | Under `read-only`, none was written. Under `workspace-write`, only the one in `%TEMP%`. |
+| Windows Credential Manager, counted with `CredEnumerate` (no secret printed) | On the host, two `gh:github.com` entries with a secret. Under `workspace-write`, each read failed with error 1312, no logon session. Under `read-only` the probe could not start, since PowerShell compiles its helper in `%TEMP%`; it was not tried further (ST-32, Out of scope). |
 
 ### Costs
 

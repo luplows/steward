@@ -98,6 +98,9 @@ OQ-86, which are tower-workshop-paths' own, so they were dropped at the move
   and `review.mjs`. This story is the loop's part: pausing a retry, and
   resuming it. That answers what were this story's first two open questions,
   what is measured and over what window.
+- **Revised again the same day by the owner** (design doc, Part 3, "Decided
+  so far", "The machine steward runs on has settings of its own"): the limits
+  move from the project's settings to the machine's (ST-34).
 - Before that, on 2026-10-09: every coder and reviewer session's JSON output
   carries `total_cost_usd`, which `scripts/dispatch/coder.mjs` reads as
   `costUsd`, and `claude --help` (Claude Code 2.1.281) named no command that

@@ -71,6 +71,13 @@ tower-workshop-paths' own, so it was dropped at the move (built there).
   per-story override) and the invocation sketch's `--model "$STORY_MODEL"`.
 - OQ-74 — `invocation.mjs`, the future caller (split out of Phase 1 step 3's
   `spawn.mjs`).
+- **Overtaken in part on 2026-10-15** (owner; design doc, Part 3, "Decided so
+  far", "The machine steward runs on has settings of its own"): the default
+  coder model and the choices available are the machine's settings, not a
+  committed file, and a story with no `model:` runs the default (ST-34's
+  AC-4). AC-1, AC-3 and the Constraints' `models.mjs` contradict that as
+  written, since CI cannot read a machine's settings. Whether this story is
+  retired or rewritten to what is left is the crew's to decide.
 
 ## Open questions
 

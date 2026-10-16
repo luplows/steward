@@ -66,7 +66,10 @@ A first sketch, to be settled with the Open questions below.
   in the reviewer's checkout (`install.mjs`, `npm ci`, install scripts
   included), and the reviewer runs its tests. That checkout is on the crew
   member's machine, where an SSH key and a `gh` token are reachable
-  (`docs/agent-workflow-design.md`, "Credential minimalism"; ST-6).
+  (`docs/agent-workflow-design.md`, "Credential minimalism"; ST-6). ST-33
+  takes the install and the test runs out of the review (owner, 2026-10-15),
+  so once it is built a review no longer runs the pull request's code itself,
+  though the reviewer keeps `node`.
 - Decided 2026-10-14 by the owner, while writing `README.md`'s contributing
   notes: outside work is scheduled by a member of the crew, and this story
   makes that possible, so that an outside contributor keeps the attribution
