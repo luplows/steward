@@ -3,57 +3,74 @@ id: ST-4
 title: Make the reviewer block on defects rather than recording them as observations
 tier: fix
 kind: workflow
-depends_on: []
+depends_on: [ST-33]
 model: sonnet
-blocked: "Held until steward's coder works (decided 2026-10-10 by the owner; docs/agent-workflow-design.md, Portability, Decided so far)"
+blocked: "Built by hand: changes .claude/prompts/reviewer.md, which a spawned coder session cannot edit (docs/agent-workflow-design.md, A spawned session cannot edit .claude/prompts/)"
 ---
 
 ## Intent
 
 As the owner of the review gate, I need `pass-with-observations` to mean *"real,
-but not this diff's obligation"* rather than *"a defect I decided not to fail
-on"*, so that a verdict of `success` is evidence the diff is sound rather than
+but not this diff's to fix"* rather than *"a defect I decided not to fail on"*,
+so that a verdict of `success` is evidence the diff is sound rather than
 evidence the reviewer was reluctant.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `reviewer.md` names the conditions that **must** produce
-      `block`, rather than leaving it to "does an applicable item fail": the
-      diff introduces a defect, the diff states something false, an acceptance
-      criterion is not genuinely satisfied, or something in the story's **Out of
+- [ ] **AC-1** — `.claude/prompts/reviewer.md` names the conditions that
+      **must** produce `block`, whatever kind of text they are found in (code,
+      a test, a comment, a prompt, a story, a doc or the pull request body):
+      the diff introduces a defect, the diff states something false, an
+      acceptance criterion is not genuinely satisfied, the diff contradicts the
+      design of record or another story, or something in the unit's **Out of
       scope** is present.
-- [ ] **AC-2** — The prompt states a decidable test for the boundary. The
-      candidate is *a finding you would fix if you were the author is a block,
-      not an observation* — a question the reviewer can actually answer, unlike
-      "is this worth blocking?"
-- [ ] **AC-3** — `pass-with-observations` is defined by what it is **for** —
-      findings that are real but not this diff's responsibility: pre-existing,
-      adjacent, or a suggestion — rather than as the residual category for
-      anything short of certainty.
-- [ ] **AC-4** — `REVIEW.md`'s three-verdicts table says the same thing.
-      Round 2 of #109 was a fix applied to one prompt and not its mirror; this
-      story must not repeat it.
-- [ ] **AC-5** — The existing anti-overcorrection language survives: *a reviewer
-      that fails everything gets switched off*, and *do not manufacture findings
-      to look thorough*. The goal is moving genuine defects out of the middle
-      state, **not** raising the overall block rate.
-- [ ] **AC-6** — The change is validated against recorded history rather than
-      asserted. #109 carries five rounds of verdicts at known head SHAs
-      (`41372c17`, `503dbdb`, `c0ba530`, `ef09284`, `1aca6c8`), four of them
-      `pass-with-observations` whose findings the author then fixed. Re-running
-      the revised prompt against at least the round-3 and round-4 heads should
-      produce `block`, and the round-5 head should still produce `block` for the
-      reason it already did. A calibration change that cannot be shown to change
-      a known-wrong verdict is not evidence of anything.
+- [ ] **AC-2** — The prompt states a decidable test for the boundary: *a
+      finding you would fix in this pull request if you were its author is a
+      block, not an observation.*
+- [ ] **AC-3** — `pass-with-observations` is defined by what it is **for**:
+      findings that are real but not this diff's to fix, because they were
+      there before it, lie outside it, are a suggestion, or follow a decision
+      the unit or the owner already recorded. "Your verdict" and
+      "Calibration" in `reviewer.md` say this, and neither describes it as a
+      doubt the reviewer chose not to block on.
+- [ ] **AC-4** — The language against overcorrection stays: *a reviewer that
+      fails everything gets switched off*, and *do not manufacture findings to
+      look thorough*. The goal is moving genuine defects out of the middle
+      state, **not** raising the block rate on sound pull requests.
+- [ ] **AC-5** — The change is validated against steward's own verdicts rather
+      than asserted. With the revised prompt, the reviewer is run once on each
+      of four heads, as `buildInvocation` renders it, against `REVIEW.md` from
+      `main`, posting nothing:
+      - #41 at `14366c1` returns `block`, with a finding for the gap in ST-34's
+        AC-5 that its verdict recorded as an observation (`model: null`);
+      - #34 at `da6e5c5` returns `block`, with a finding for the comment it
+        added above `idsAtBase`, which says the story lint holds filenames
+        equal to frontmatter ids in `stories/retired/` too. Its verdict
+        recorded that as an observation, and #38 then corrected it;
+      - #39 at `3a7dcea` returns `pass-with-observations` or `pass`, since its
+        one observation was there before the diff;
+      - #37 at `c67ce61` returns `pass`, as it did.
+
+      Each run's verdict, findings and cost are recorded in
+      `docs/agent-workflow-design.md`, "Trials and measurements", including any
+      that does not come out as listed. A run that does not is not repeated
+      until it does: the prompt is changed and all four are run again.
+- [ ] **AC-6** — `docs/agent-workflow-design.md`: every `**Planned (ST-4)**`
+      marker loses `ST-4`, and each passage is corrected wherever what was
+      built differs.
 
 ## Out of scope
 
-- The reviewer's or coder's capability sets — OQ-62 and OQ-63. This story
-  changes judgment, not access.
-- The verdict-recording mechanism, the marker format, and the gate workflow.
-  `block` already maps to `failure` and that plumbing works.
-- Adding new checklist items to `REVIEW.md`. The items are not the problem; how
-  a finding against one is graded is.
+- Requiring the reviewer to say, for each observation, why it is not a block.
+  It is the strongest lever and the likeliest to overcorrect; file it
+  separately if the replay in AC-5 shows AC-1 to AC-3 are not enough.
+- The reviewer's or coder's tools and permissions. This story changes judgment,
+  not access.
+- The verdict-recording mechanism, the marker format and the gate workflow.
+  `block` already maps to `failure`.
+- Adding items to `REVIEW.md`. The items are not the problem; how a finding
+  against one is graded is.
+- Running checks during the review: ST-33.
 
 ## Constraints
 
@@ -61,82 +78,28 @@ evidence the reviewer was reluctant.
 
 ## Context
 
-Formerly tower-workshop-paths OQ-64.
+Formerly tower-workshop-paths OQ-64, raised after its #109, whose first four
+review rounds returned `pass-with-observations` on findings the author then
+fixed. Refined on 2026-10-16 by the owner, after #41's review.
 
-Raised after #109, which took five review rounds. The first four returned
-`pass-with-observations` across seven findings, and **the author fixed every one
-of them** — including a defect the diff itself introduced (the no-story render
-mode breaking) and a false security claim in the document that defines the gate.
-A finding the author turns around and fixes is, by its own evidence, a defect
-rather than an observation.
-
-The evidence is not one-sided, which is why this is filed rather than built. See
-**Open questions**.
-
-- `.claude/prompts/reviewer.md` — "Calibration" and "Your verdict"
-- `REVIEW.md` — "The three verdicts", which carries the same soft framing
-- [#109](https://github.com/luplows/tower-workshop-paths/pull/109) — the five
-  rounds, each recorded as a comment against a known head SHA
+- Steward's record, counted from the verdict markers on its pull requests #1
+  to #41 on 2026-10-16: 52 verdicts, of which 37 `pass-with-observations`,
+  7 `block` and 8 `pass`, with 64 observations.
+- #41's verdict found ST-34's AC-5 contradicting the design of record, which
+  "Changes to stories", item 6, forbids, and filed it under that item as an
+  observation. `reviewer.md`'s "Your verdict" says `block` when "at least one
+  applicable item fails". AC-5 was fixed in the pull request that refined this
+  story, before ST-34 was started.
+- #34's verdict recorded as an observation a false claim the diff made in a
+  code comment, above `idsAtBase` in
+  `scripts/dispatch/story-containment.mjs`; #38 corrected the comment.
+- `.claude/prompts/reviewer.md` — "Calibration" and "Your verdict".
+  `REVIEW.md` has no verdict table to keep in step.
+- `docs/agent-workflow-design.md` — "Verdict states", and Part 3, "Decided so
+  far", "A finding the author would fix is a block".
+- ST-33 changes `reviewer.md` first, so the replay in AC-5 runs the prompt as
+  ST-33 leaves it.
 
 ## Open questions
 
-- **The evidence now points at a narrower defect than this story assumes.**
-  Across #109, #112 and #115 the reviewer blocked correctly and unprompted on
-  *code* defects — a deny rule shadowing its own allow rule, three tests named
-  for an AC and exercising none — and twice returned a clean `pass` whose
-  summary carried prose defects it placed below the finding threshold: a
-  citation attributed to the wrong document, a count that understated the
-  story's own premise, a code block granting push to `main`. The author fixed
-  every one of those immediately, which is the tell. So the pattern is not
-  *"won't block"* — it is **under-weighting prose, citation and documentation
-  errors relative to code defects.** If that holds up, AC-1's trigger list is
-  the wrong shape: it should name *what kind of wrongness* counts, not only
-  *where the wrongness is*. Test this against the replay in AC-6 before writing
-  the fix.
-
-  **None of the attributions in this paragraph are checkable from the
-  repository**, which is the same caveat the spawn-cost table in
-  `docs/agent-workflow-design.md` carries and this paragraph did not. The #112
-  half is corroborable from `ac0d30c`; everything else — which verdicts blocked,
-  what each summary placed below the threshold, that the author fixed them
-  immediately — lives in PR review comments, which git does not hold. A reviewer
-  cannot verify any of it, and this paragraph makes harder factual assertions
-  than the cost table does. Recorded per #116's round-2 verdict.
-
-- **OQ-51 is a fourth data point, and it cuts against the premise above.**
-  PR #117 ran four rounds on `render.mjs` in a deliberately blind loop — the
-  runner had independently confirmed one defect before spawning and withheld it,
-  to test the gate against known ground truth. Round 1 found that defect plus
-  three the runner had missed. Across the four rounds the gate blocked on a
-  substitution bug, a test that named an AC and exercised none of it, **a false
-  claim in the PR body (item 7, a prose defect)**, a heading-form escape and a
-  line-ending escape, then surfaced two more prose findings in the passing
-  round — one of them a factual error in a code comment written specifically to
-  preserve a lesson. Nothing was caught twice and no finding was wrong on
-  checking.
-
-  So a reviewer blocking on prose is not hypothetical; it happened on the first
-  round of the first story with real logic in it. That is one PR against three,
-  and the earlier three were docs-shaped changes where a prose defect is the
-  *only* kind available — which may be the actual confound rather than
-  under-weighting. Weigh this before building AC-1's trigger list, and note it
-  moves the question from *"does it block on prose"* to *"does the mix of defect
-  types in the diff predict what it blocks on"*. Unlike the attributions above,
-  this one **is** checkable: the four verdicts are marker comments on #117 at
-  known head SHAs.
-- **Is the reviewer actually mis-calibrated, or was #109 an unrepresentative
-  PR?** Round 5 returned a `block` that was specific, correct and unprompted —
-  against a PR whose subject was the reviewer's own prompt. So the gate demonstrably
-  *can* block. It is possible the first four rounds reflect a genuinely
-  marginal series of findings on a docs-only change rather than a systematic
-  reluctance, and that changing the prompt would trade a real problem for a
-  noisier gate. One PR is a small sample, and it is the most self-referential
-  one this repository has produced.
-- **Which of the proposed changes are warranted?** AC-1 to AC-3 are cheap and
-  hard to argue against. A fourth option — requiring the reviewer to state, per
-  finding, why it chose `pass-with-observations` over `block` — is the strongest
-  lever and the most likely to overcorrect into blocking on nits. Whether to
-  include it should be decided against AC-6's replay, not in advance.
-- **Does this survive OQ-63?** If the coder stops holding a credential, the cost
-  of a wrong `pass` drops, because the gate is no longer the only thing between
-  a coder and `main`. That may lower this story's tier on its own.
+*(none)*
