@@ -254,8 +254,9 @@ reviewer sharing a model family means correlated blind spots: context isolation 
 model and effort come from the machine's settings (`docs/machine-settings.md`): its default
 choice, or, when that choice's model is the coder's, the first other choice in the file's order
 whose model differs; with none that differs, there is no review (`reviewer-unavailable`;
-`chooseReviewer`, `review.mjs`).
-**Planned (ST-32):** a choice may run it through the Codex CLI, under `codex exec -s read-only`.
+`chooseReviewer`, `review.mjs`). A choice whose `tool` is `"codex"` runs it through the Codex
+CLI, under `codex exec -s read-only` in the review's checkout, with the same prompt and its last
+message parsed as a Claude reviewer's is (`scripts/dispatch/codex.mjs`).
 
 ### Recording the verdict
 
@@ -669,9 +670,10 @@ unreadable (`scripts/dispatch/usage.mjs`; "Trials and measurements", "Reading th
 a script"; Part 3, "Decided so far", 2026-10-15). `reviewPullRequest`, `dispatchCoder` and
 `retryStory` each make the check, and return `over-usage` or `usage-unknown` without starting a
 session. The limits are the machine's settings' (`docs/machine-settings.md`), read once per call
-before the check.
-**Planned (ST-32):** a Codex reviewer's usage is read with no model call, through
-`codex app-server`'s `account/rateLimits/read`, against the same reviewer limits.
+before the check. A reviewer reads the usage of the tool its choice runs on, after its choice is
+made and before its checkout: a Codex reviewer's is read with no model call, through
+`codex app-server`'s `account/rateLimits/read` (`readCodexUsage`, `codex.mjs`), against the same
+reviewer limits.
 
 ### The controller
 
@@ -1251,9 +1253,10 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
   describes the Codex CLI's `codex exec` for this: the prompt as an argument, `--json` for JSON
   Lines output, and `--sandbox read-only | workspace-write | danger-full-access`. First run here on
   2026-10-15, as reviewer ("Trials and measurements", "Codex as reviewer"): its verdict parsed, but
-  it did not run `npm test`. **Planned (ST-32):**
-  the reviewer runs through Codex when the settings name it. Its restrictions are a sandbox
-  policy, not a per-command allowlist like Claude Code's, so M3 applies in full. **Decided
+  it did not run `npm test`. The reviewer runs through Codex when the machine's settings name
+  it (`codex.mjs`). Its restrictions are a sandbox policy, not a per-command allowlist like
+  Claude Code's, so M3 applies in full: `codex.test.mjs` and `review.test.mjs` show it starts
+  under `-s read-only` in the review's checkout, with no GitHub credential. **Decided
   2026-10-08 by the owner: the Codex CLI is the first adapter, for the reviewer (M2), after a
   spike** that runs it here and shows it can run `npm test` inside its read-only sandbox and
   return a verdict the gate can parse. **Revised 2026-10-16 by the owner:** the `npm test`
@@ -1604,10 +1607,10 @@ shortened where it is long, so that it can be found there with its date.
 - **The move comes first** (decided 2026-10-07 by the owner).
   The workflow has moved to a repository of its own, steward; tower-workshop-paths adopting it is
   that repository's own work (its OQ-115, OQ-132, OQ-133 and OQ-134).
-  **Planned (ST-15, ST-32):** once moved, coder and reviewer sessions run through an adapter per
-  agent tool, so that a role can be given another company's model: the coder in ST-15, the
-  reviewer through the Codex CLI in ST-32. OQ-114 is a draft, to be split before it is dispatched;
-  OQ-115 was split on 2026-10-08 (below).
+  **Planned (ST-15):** once moved, coder sessions run through an adapter per agent tool, so that
+  the coder can be given another company's model. The reviewer can already be: a choice in the
+  machine's settings runs it through the Codex CLI (`codex.mjs`). OQ-114 is a draft, to be split
+  before it is dispatched; OQ-115 was split on 2026-10-08 (below).
 - **Goal 3 is about AI model companies, not GitHub** (decided 2026-10-07 by the owner). The gate
   stays on GitHub. Moving the hosting would be a far larger migration, and would depend on the
   target platform's rules much more than switching models does.
@@ -2166,7 +2169,7 @@ shortened where it is long, so that it can be found there with its date.
   project's `steward.config.json`; a gitignored file in each checkout, which the controller's
   reset to `origin/main` before every rotation makes fragile; and the environment variable alone.
 - **A Codex reviewer runs read-only** (decided 2026-10-15 by the owner, with the planning session,
-  from a second trial on the ChatGPT Plus plan; **Planned (ST-32)**). This answers ST-32's open
+  from a second trial on the ChatGPT Plus plan). This answers ST-32's open
   questions. Codex's usage is read through `codex app-server`'s `account/rateLimits/read`, with no
   model call, as a 5-hour and a weekly window. The checkout stays under `os.tmpdir()`, which
   `codex exec -s read-only` can read. The reviewer runs read-only and runs no tests (above).
@@ -2961,6 +2964,22 @@ same codex-cli, after the owner moved to the ChatGPT Plus plan. It reviewed no p
 | `codex sandbox -c sandbox_mode="workspace-write"`: the same | `render.test.mjs` (42 tests) and `unit.test.mjs` (29) passed, the second writing its temporary repositories to `%TEMP%`. |
 | A file written to a sibling worktree, to the home directory and to `%TEMP%` | Under `read-only`, none was written. Under `workspace-write`, only the one in `%TEMP%`. |
 | Windows Credential Manager, counted with `CredEnumerate` (no secret printed) | On the host, two `gh:github.com` entries with a secret. Under `workspace-write`, each read failed with error 1312, no logon session. Under `read-only` the probe could not start, since PowerShell compiles its helper in `%TEMP%`; it was not tried further (ST-32, Out of scope). |
+
+The third trial, on 2026-10-16, ran the built reviewer (ST-32) once, on the same codex-cli and
+plan, as ST-32's AC-6 asks. `reviewPullRequest` reviewed ST-32's own pull request, #47, at its
+head `fb909d9`, as ATC would, from that branch's checkout, with two changes: the machine's
+settings were this machine's file with the reviewer's default switched to a Codex choice
+(`gpt-6.1-sol`, effort `high`), and the GitHub context sent every read and captured every write
+instead of sending it. Nothing was posted.
+
+| What | Result |
+|---|---|
+| Usage | Read from `codex app-server`, under the reviewer's limits; Claude Code's was not read. |
+| Session | One `codex exec -s read-only` session, in the review's checkout under `os.tmpdir()`, its last message written in the scratch directory. |
+| Verdict | `block`, accepted by `parseReviewerVerdict` with all six sections; its one write, the verdict comment, was captured and not sent. |
+| Findings | Four, each correct: the body was a placeholder; it gave no Docs check outcome, though `README.md` still said reviewers run in Claude Code; AC-6 was not delivered; and `tools.codex.executable` accepted a directory, since the check was `existsSync`. The last two were fixed after the trial. |
+| Commands | It confirmed the head with `git rev-parse HEAD`, diffed `origin/main...HEAD`, read the unit from `main`, and left the tests and lint to CI. |
+| Wall time | 131.7 s, for the whole of `reviewPullRequest`. |
 
 ### Costs
 

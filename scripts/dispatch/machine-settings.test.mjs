@@ -165,8 +165,8 @@ describe('ST-34/AC-2: the form of the file', () => {
     await expectRejected(changed((s) => { s.roles.coder.available.opus = 'opus' }), "'roles.coder.available.opus' must be an object")
   })
 
-  it('ST-34/AC-2: tool must be "claude", the only tool until ST-32', async () => {
-    for (const bad of ['codex', 'Claude', '', null]) {
+  it('ST-34/AC-2, ST-32/AC-1: tool must be "claude", or "codex" for a reviewer', async () => {
+    for (const bad of ['Codex', 'Claude', 'gemini', '', null]) {
       await expectRejected(
         changed((s) => { s.roles.reviewer.available.opus.tool = bad }),
         "'roles.reviewer.available.opus.tool' must be one of",
@@ -216,5 +216,90 @@ describe('ST-34/AC-4: coderChoice', () => {
     expect(coderChoice(machine, 'haiku')).toBeNull()
     expect(coderChoice(machine, 'toString')).toBeNull()
     expect(coderChoice(machine, 5)).toBeNull()
+  })
+})
+
+describe('ST-32/AC-1: a Codex choice for the reviewer', () => {
+  const CODEX = 'C:/Program Files/Codex/codex.exe'
+  const sol = { tool: 'codex', model: 'gpt-6.1-sol', effort: 'high' }
+
+  /** Reads `settings` from a temp home, with `exists` deciding which executables exist. */
+  async function readWith(settings, exists = (p) => p === CODEX) {
+    return withTempHome(async (home) => {
+      writeHomeFile(home, JSON.stringify(settings))
+      return readMachineSettings({ env: {}, homedir: home, exists })
+    })
+  }
+  const withSol = (more = () => {}) => changed((s) => {
+    s.roles.reviewer.available['sol-6.1'] = { ...sol }
+    s.roles.reviewer.default = 'sol-6.1'
+    s.tools = { codex: { executable: CODEX } }
+    more(s)
+  })
+
+  it('ST-32/AC-1: accepts a reviewer choice with tool codex, and keeps tools in what it returns', async () => {
+    const read = await readWith(withSol())
+    expect(read.roles.reviewer.available['sol-6.1']).toEqual(sol)
+    expect(read.roles.reviewer.default).toBe('sol-6.1')
+    expect(read.tools).toEqual({ codex: { executable: CODEX } })
+  })
+
+  it('ST-32/AC-1: a Codex choice takes low, medium, high, xhigh, max and ultra', async () => {
+    for (const effort of ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']) {
+      const read = await readWith(withSol((s) => { s.roles.reviewer.available['sol-6.1'].effort = effort }))
+      expect(read.roles.reviewer.available['sol-6.1'].effort).toBe(effort)
+    }
+    await expect(readWith(withSol((s) => { s.roles.reviewer.available['sol-6.1'].effort = 'extreme' })))
+      .rejects.toThrow("'roles.reviewer.available.sol-6.1.effort' must be one of")
+    // A Claude choice still has no ultra.
+    await expect(readWith(withSol((s) => { s.roles.reviewer.available.opus.effort = 'ultra' })))
+      .rejects.toThrow("'roles.reviewer.available.opus.effort' must be one of")
+  })
+
+  it('ST-32/AC-1: a coder choice with tool codex is refused, naming its key', async () => {
+    await expect(readWith(withSol((s) => { s.roles.coder.available.gpt = { ...sol } })))
+      .rejects.toThrow("'roles.coder.available.gpt.tool' must be one of [\"claude\"]")
+  })
+
+  it('ST-32/AC-1: a Codex choice needs tools.codex.executable, an absolute path to a file that exists', async () => {
+    await expect(readWith(withSol((s) => { delete s.tools })))
+      .rejects.toThrow("missing required key 'tools.codex.executable'")
+    await expect(readWith(withSol((s) => { s.tools = { codex: {} } })))
+      .rejects.toThrow("missing required key 'tools.codex.executable'")
+    for (const bad of ['codex.exe', 'bin/codex', '', 5, null]) {
+      await expect(readWith(withSol((s) => { s.tools.codex.executable = bad })))
+        .rejects.toThrow("'tools.codex.executable' must be an absolute path")
+    }
+    await expect(readWith(withSol(), () => false))
+      .rejects.toThrow("'tools.codex.executable' names no file that exists")
+  })
+
+  it('ST-32/AC-1: tools has no key but codex, and codex no key but executable', async () => {
+    await expect(readWith(withSol((s) => { s.tools.gemini = { executable: CODEX } })))
+      .rejects.toThrow("unrecognised key 'tools.gemini'")
+    await expect(readWith(withSol((s) => { s.tools.codex.args = [] })))
+      .rejects.toThrow("unrecognised key 'tools.codex.args'")
+    await expect(readWith(withSol((s) => { s.tools = [] })))
+      .rejects.toThrow("'tools' must be an object")
+  })
+
+  it('ST-32/AC-1: without a Codex choice, tools may be left out', async () => {
+    const read = await readWith(fixtureMachineSettings(), () => { throw new Error('no executable should be checked') })
+    expect(read).not.toHaveProperty('tools')
+  })
+
+  it('ST-32/AC-1: by default the executable must be a file: a directory, or nothing, is refused', async () => {
+    await withTempHome(async (home) => {
+      const file = path.join(home, 'codex.exe')
+      writeFileSync(file, '')
+      const settings = (executable) => withSol((s) => { s.tools.codex.executable = executable })
+      writeHomeFile(home, JSON.stringify(settings(file)))
+      await expect(readMachineSettings({ env: {}, homedir: home })).resolves.toMatchObject({ tools: { codex: { executable: file } } })
+      for (const bad of [home, path.join(home, 'no-such-codex.exe')]) {
+        writeHomeFile(home, JSON.stringify(settings(bad)))
+        await expect(readMachineSettings({ env: {}, homedir: home }))
+          .rejects.toThrow("'tools.codex.executable' names no file that exists")
+      }
+    })
   })
 })

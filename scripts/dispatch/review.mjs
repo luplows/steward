@@ -19,8 +19,9 @@
  * circular.
  *
  * It installs nothing in the checkout: the reviewer runs no checks (ST-33).
- * Before it starts a session it reads the plan's usage (`usage.mjs`, ST-31),
- * and starts none when either window is at or over the reviewer's limit in the
+ * Before it starts a session it reads the usage of the tool the reviewer's
+ * choice runs on (`usage.mjs`, ST-31; `codex.mjs` for Codex, ST-32), and
+ * starts none when either window is at or over the reviewer's limit in the
  * settings (`over-usage`), or when the usage cannot be read (`usage-unknown`).
  * A second session for a malformed verdict is not checked again.
  *
@@ -46,6 +47,7 @@ import { homedir, tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { readCodexUsage, spawnCodexReviewer } from './codex.mjs'
 import { coderEnv } from './coder-env.mjs'
 import {
   composeMarkerComment,
@@ -55,6 +57,7 @@ import {
   postComment,
   WRITABLE_VERDICTS,
 } from './github.mjs'
+import { renderReviewerPrompt } from './invocation.mjs'
 import { readMachineSettings } from './machine-settings.mjs'
 import { parseFrontmatter } from './queue.mjs'
 import { readRules } from './rules.mjs'
@@ -294,7 +297,12 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
  *   sessionOptions extra `spawnSession` options (executable, run, timeouts,
  *                  budget)
  *   usage          `({ cwd })`, resolving `readUsage`'s result; defaults to
- *                  `readUsage`. Called once, in `repoDir`
+ *                  `readUsage`. Called once, in `repoDir`, when the reviewer's
+ *                  choice runs on Claude Code
+ *   codexUsage     `({ executable, cwd })`, resolving `readCodexUsage`'s result,
+ *                  in its place when the choice runs on Codex (ST-32/AC-3)
+ *   codexSession   `spawnCodexReviewer`'s shape of call, for a Codex choice
+ *                  (ST-32/AC-2); defaults to `spawnCodexReviewer`
  *   machineSettings  `()`, resolving the machine's settings; defaults to `readMachineSettings`
  *                  on the real environment and home directory. Called once (ST-34)
  *
@@ -321,6 +329,7 @@ export async function reviewPullRequest({
   number, ctx, repoDir = process.cwd(), promptTemplate, baseEnv = process.env, sessionOptions = {},
   rereview = false, scratchRoot = tmpdir(), usage = readUsage,
   machineSettings = () => readMachineSettings({ env: process.env, homedir: homedir() }),
+  codexUsage = readCodexUsage, codexSession = spawnCodexReviewer,
 }) {
   const template = promptTemplate ?? readFileSync(REVIEWER_PROMPT, 'utf8')
   const { unitLinks, rulesFile } = await readSettings(repoDir)
@@ -344,11 +353,6 @@ export async function reviewPullRequest({
   } else if (existing) {
     return { status: 'already-reviewed', headSha: pr.headSha, existing }
   }
-
-  // ST-31/AC-3: once per call, after the decision to review and before any
-  // session. The malformed-verdict re-run below is not checked again.
-  const refused = await checkUsage({ read: usage, cwd: repoDir, limits: machine.usageLimits.reviewer })
-  if (refused) return refused
 
   const scratch = await mkdtemp(path.join(scratchRoot, 'tw-review-'))
   const tree = path.join(scratch, 'tree')
@@ -388,6 +392,17 @@ export async function reviewPullRequest({
       }
     }
 
+    // ST-31/AC-3, ST-32/AC-3: once per call, after the decision to review and
+    // the reviewer's choice, and before any checkout or session, reading the
+    // usage of the tool the choice runs on. The malformed-verdict re-run below
+    // is not checked again.
+    const codex = choice.tool === 'codex'
+    const readChosen = codex
+      ? ({ cwd }) => codexUsage({ executable: machine.tools.codex.executable, cwd })
+      : usage
+    const refused = await checkUsage({ read: readChosen, cwd: repoDir, limits: machine.usageLimits.reviewer })
+    if (refused) return refused
+
     await git(repoDir, ['worktree', 'add', '--detach', tree, pr.headSha])
     worktreeAdded = true
     await assertReviewableCheckout(tree, pr.headSha, repoDir)
@@ -398,19 +413,32 @@ export async function reviewPullRequest({
     await mkdir(ghConfigDir)
     const sessionEnv = coderEnv(baseEnv, ghConfigDir)
 
-    const runSession = () => spawnSession({
-      ...sessionOptions,
-      role: 'reviewer',
+    const reviewerInputs = {
       promptTemplate: template,
       unit,
       branch: pr.headRef,
       pr: { number, headSha: pr.headSha, body: pr.body },
       rules: rules.text,
-      baseEnv: sessionEnv,
-      model: choice.model,
-      effort: choice.effort,
-      cwd: tree,
-    })
+    }
+    let attempt = 0
+    const runSession = () => {
+      attempt += 1
+      if (!codex) {
+        return spawnSession({
+          ...sessionOptions, ...reviewerInputs, role: 'reviewer', baseEnv: sessionEnv,
+          model: choice.model, effort: choice.effort, cwd: tree,
+        })
+      }
+      // ST-32/AC-2: the same prompt, through `codex exec -s read-only`, its last
+      // message written in the scratch directory, outside the checkout.
+      const { timeoutMs, stallMs } = sessionOptions
+      return codexSession({
+        executable: machine.tools.codex.executable, cwd: tree, model: choice.model, effort: choice.effort,
+        prompt: renderReviewerPrompt(reviewerInputs), env: sessionEnv,
+        outputFile: path.join(scratch, `codex-last-message-${attempt}.txt`),
+        ...(timeoutMs !== undefined && { timeoutMs }), ...(stallMs !== undefined && { stallMs }),
+      })
+    }
 
     let sessions = 1
     let { classification, output } = await runSession()

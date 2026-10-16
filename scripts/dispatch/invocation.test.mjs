@@ -234,6 +234,32 @@ describe('OQ-74/AC-3: the reviewer allowlist', () => {
   })
 })
 
+describe('ST-32/AC-4: one prompt, with a short section for the Codex CLI', () => {
+  const { prompt } = splitPromptFile(REVIEWER_TEMPLATE)
+  const start = prompt.indexOf('## If you are running under the Codex CLI')
+  const section = prompt.slice(start, prompt.indexOf('\n## ', start + 1)).replace(/\s+/g, ' ')
+
+  it('ST-32/AC-4: the section says to confirm the head with git rev-parse HEAD, since there is no network', () => {
+    expect(start).toBeGreaterThan(-1)
+    expect(section).toContain('The head is already checked out, and there is no network')
+    expect(section).toContain('Confirm the head with `git rev-parse HEAD` instead')
+  })
+
+  it('ST-32/AC-4: the section says the base for the three-dot diff is the origin/main in the checkout', () => {
+    expect(section).toContain('The base for the three-dot diff is the `origin/main` already in the checkout')
+    expect(section).toContain('`git diff origin/main...HEAD`')
+  })
+
+  it('ST-32/AC-4: the section says commands run in PowerShell 5.1, where && does not parse, so one at a time', () => {
+    expect(section).toContain('Commands run in Windows PowerShell 5.1, where `&&` does not parse')
+    expect(section).toContain('run them one at a time')
+  })
+
+  it('ST-32/AC-4: it is the prompt\'s only part for one tool, so the rules stay in one place (M5)', () => {
+    expect(prompt.match(/^## If you are running under/gm)).toEqual(['## If you are running under'])
+  })
+})
+
 describe('ST-33/AC-1: the reviewer prompt runs no checks', () => {
   const { prompt } = splitPromptFile(REVIEWER_TEMPLATE)
 
@@ -390,7 +416,7 @@ describe('OQ-74/AC-7: the module starts nothing and reads nothing', () => {
   it('exports only pure builders and constants', () => {
     expect(Object.keys(invocationModule).sort()).toEqual([
       'RETRY_SOURCES', 'REVIEWER_DISALLOWED_TOOLS', 'ROLES', 'ROLE_DEFAULTS', 'SHELL_TIMEOUT_MS', 'buildArgs',
-      'buildInvocation', 'renderBounded', 'retrySection', 'reviewerAllowedTools',
+      'buildInvocation', 'renderBounded', 'renderReviewerPrompt', 'retrySection', 'reviewerAllowedTools',
     ])
   })
 

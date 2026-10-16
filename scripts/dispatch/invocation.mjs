@@ -258,6 +258,30 @@ export function retrySection({ round, roundsRemaining, findings, branch, source 
  * `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` removed so background commands stay
  * available (OQ-107).
  */
+/** The reviewer prompt's placeholder values; throws on a missing `pr` or `rules`. */
+function reviewerValues({ unit, branch, pr, rules }) {
+  if (!unit) throw new Error('a reviewer invocation requires a unit')
+  if (!pr) throw new Error('a reviewer invocation requires pr')
+  if (typeof rules !== 'string') throw new Error('a reviewer invocation requires rules')
+  return {
+    PR_NUMBER: String(pr.number),
+    HEAD_BRANCH: branch,
+    HEAD_SHA: pr.headSha,
+    UNIT_NOTE: unit.note,
+    UNIT: unit.text,
+    PR_BODY: pr.body,
+    RULES: rules,
+  }
+}
+
+/**
+ * The reviewer prompt, rendered exactly as `buildInvocation` renders it, for a reviewer that is
+ * not started with Claude Code's arguments: the Codex CLI's (`codex.mjs`, ST-32).
+ */
+export function renderReviewerPrompt({ promptTemplate, unit, branch, pr, rules }) {
+  return renderBounded(promptTemplate, reviewerValues({ unit, branch, pr, rules })).text
+}
+
 export function buildInvocation(options) {
   const { role, promptTemplate, story, unit, branch, pr, rules, retry, baseEnv, emptyGhConfigDir } = options
   if (!ROLES.includes(role)) throw new Error(`unknown role: ${JSON.stringify(role)}`)
@@ -292,17 +316,7 @@ export function buildInvocation(options) {
     delete env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS
   } else {
     if (retry) throw new Error('a reviewer invocation takes no retry')
-    if (!pr) throw new Error('a reviewer invocation requires pr')
-    if (typeof rules !== 'string') throw new Error('a reviewer invocation requires rules')
-    values = {
-      PR_NUMBER: String(pr.number),
-      HEAD_BRANCH: branch,
-      HEAD_SHA: pr.headSha,
-      UNIT_NOTE: unit.note,
-      UNIT: unit.text,
-      PR_BODY: pr.body,
-      RULES: rules,
-    }
+    values = reviewerValues({ unit, branch, pr, rules })
     env = { ...(baseEnv ?? {}) }
     env.BASH_DEFAULT_TIMEOUT_MS = SHELL_TIMEOUT_MS
     env.BASH_MAX_TIMEOUT_MS = SHELL_TIMEOUT_MS

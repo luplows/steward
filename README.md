@@ -23,8 +23,10 @@ To run the review side, you need:
 - **Node 22**, which is what CI runs, and **git**.
 - **The GitHub CLI, `gh`**, signed in with `gh auth login` as an account with write access to the
   repository. The scripts take its token from `gh auth token`.
-- **The Claude Code CLI, `claude`**, on your `PATH`, or its path in `CLAUDE_EXECUTABLE`. Reviewer
-  sessions run in it.
+- **The Claude Code CLI, `claude`**, on your `PATH`, or its path in `CLAUDE_EXECUTABLE`. Coder
+  sessions run in it, and reviewer sessions do unless the machine's settings choose the Codex CLI.
+- **The Codex CLI, `codex`**, signed in, only if the machine's settings give the reviewer a choice
+  whose tool is `"codex"`. Its path goes in `tools.codex.executable`.
 - **The machine's settings file**, `~/.steward/settings.json` (or the file `STEWARD_SETTINGS`
   names). Every machine that runs steward needs it: it holds the plan's usage limits and each
   role's default and available choices of tool, model and effort, and steward has no default for

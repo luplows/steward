@@ -8,6 +8,7 @@ import { readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { spawnCodexReviewer } from './codex.mjs'
 import { createContext, parseComments, parseMarkerComment } from './github.mjs'
 import { parseRules } from './rules.mjs'
 import {
@@ -1293,5 +1294,145 @@ describe('ST-31/AC-3: no reviewer session starts while the usage is over the rev
     })
     expect(result.status).toBe('already-reviewed')
     expect(calls).toEqual([])
+  }, REVIEW_TEST_TIMEOUT)
+})
+
+describe('ST-32/AC-2, AC-3, AC-5: a reviewer whose choice runs on Codex', () => {
+  const CODEX = 'C:/Program Files/Codex/codex.exe'
+  const codexMachine = () => {
+    const settings = fixtureMachineSettings()
+    settings.roles.reviewer.available = {
+      'sol-6.1': { tool: 'codex', model: 'gpt-6.1-sol', effort: 'high' },
+      ...settings.roles.reviewer.available,
+    }
+    settings.roles.reviewer.default = 'sol-6.1'
+    settings.tools = { codex: { executable: CODEX } }
+    return settings
+  }
+
+  /**
+   * A stand-in for `codex exec`, run through the real `spawnCodexReviewer`: it records what it was
+   * started with, looks at its checkout, and writes `reply` (or `reply(i)`) where `-o` says.
+   */
+  function codexStandIn(reply, { write } = {}) {
+    const calls = []
+    const run = async ({ role, executable, cwd, args, env, prompt }) => {
+      const outputFile = args[args.indexOf('-o') + 1]
+      calls.push({
+        role, executable, cwd, args, env, prompt, outputFile,
+        checkout: { head: git(cwd, 'rev-parse', 'HEAD'), status: git(cwd, 'status', '--porcelain') },
+      })
+      if (write) writeFileSync(path.join(cwd, write), 'x')
+      writeFileSync(outputFile, typeof reply === 'function' ? reply(calls.length - 1) : reply)
+      return { record: { role, exitCode: 0, signal: null, stdout: '{"type":"turn.completed"}\n', stoppedFor: null }, pid: 1 }
+    }
+    return { calls, codexSession: (options) => spawnCodexReviewer({ ...options, run }) }
+  }
+
+  const reviewWithCodex = (branch, { reply, write, baseEnv = {}, codexUsage, usage } = {}) => {
+    const github = fakeGitHub({ branch, states: [shas[branch]] })
+    const stand = codexStandIn(reply ?? verdictText(shas[branch]), { write })
+    const claude = standIn(verdictText(shas[branch]))
+    const usageCalls = []
+    const done = reviewPullRequestWith({
+      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv, machineSettings: machineOf(codexMachine()),
+      sessionOptions: claude.sessionOptions, codexSession: stand.codexSession,
+      usage: usage ?? (async () => { throw new Error("Claude Code's usage was read for a Codex choice") }),
+      codexUsage: codexUsage ?? (async (o) => { usageCalls.push(o); return UNDER_LIMITS }),
+    })
+    return { done, github, stand, claude, usageCalls }
+  }
+
+  it('ST-32/AC-2: runs codex exec read-only in the review checkout, with the prompt a Claude reviewer gets, and records its verdict', async () => {
+    const { done, github, stand, claude } = reviewWithCodex('story/OQ-99-thing')
+    const result = await done
+    expect(result).toMatchObject({ status: 'recorded', verdict: 'pass', sessions: 1 })
+    expect(github.posted).toHaveLength(1)
+    expect(claude.calls).toEqual([])
+    expect(stand.calls).toHaveLength(1)
+    const [call] = stand.calls
+    expect(call.executable).toBe(CODEX)
+    expect(call.args.slice(0, 5)).toEqual(['exec', '-s', 'read-only', '-C', call.cwd])
+    expect(call.args).toContain('gpt-6.1-sol')
+    expect(call.args).toContain('model_reasoning_effort="high"')
+    expect(call.args.at(-1)).toBe('-')
+    // The checkout at the head under review, clean, and the last message outside it.
+    expect(call.checkout.head).toBe(shas['story/OQ-99-thing'])
+    expect(call.checkout.status).toBe('')
+    expect(path.relative(call.cwd, call.outputFile).startsWith('..')).toBe(true)
+    expect(path.dirname(call.outputFile)).toBe(path.dirname(call.cwd))
+    // The same rendered prompt a Claude reviewer would have been given.
+    expect(call.prompt).toContain('#7')
+    expect(call.prompt).toContain(shas['story/OQ-99-thing'])
+    expect(call.prompt).not.toContain('{{')
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-32/AC-5: its environment holds no GitHub token, and its GH_CONFIG_DIR is the review\'s empty one', async () => {
+    const baseEnv = { GH_TOKEN: 'a', GITHUB_TOKEN: 'b', GH_ENTERPRISE_TOKEN: 'c', PATH: '/bin', GH_CONFIG_DIR: '/home/me/.config/gh' }
+    const { done, stand } = reviewWithCodex('story/OQ-99-thing', { baseEnv })
+    await done
+    const { env, cwd } = stand.calls[0]
+    expect(env).not.toHaveProperty('GH_TOKEN')
+    expect(env).not.toHaveProperty('GITHUB_TOKEN')
+    expect(env).not.toHaveProperty('GH_ENTERPRISE_TOKEN')
+    expect(env.GH_CONFIG_DIR).toBe(path.join(path.dirname(cwd), 'gh-config'))
+    expect(env.PATH).toBe('/bin')
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-32/AC-5: a malformed reply whose session changed the checkout gets no second session, as for Claude Code', async () => {
+    const { done, stand, github } = reviewWithCodex('story/OQ-99-thing', { reply: 'Looks good to me!', write: 'left-behind.txt' })
+    const result = await done
+    expect(result.status).toBe('malformed-verdict')
+    expect(result.sessions).toBe(1)
+    expect(result.reason).toContain('uncommitted changes')
+    expect(stand.calls).toHaveLength(1)
+    expect(github.posted).toEqual([])
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-32/AC-2: a malformed first reply gets one more session, writing its last message to a new file', async () => {
+    const head = shas['story/OQ-99-thing']
+    const { done, stand } = reviewWithCodex('story/OQ-99-thing', { reply: (i) => (i === 0 ? 'Looks good to me!' : verdictText(head)) })
+    const result = await done
+    expect(result).toMatchObject({ status: 'recorded', sessions: 2 })
+    expect(stand.calls).toHaveLength(2)
+    expect(stand.calls[1].outputFile).not.toBe(stand.calls[0].outputFile)
+    // The same prompt, but for the per-render nonce of each bounded block (render.mjs).
+    const unnonced = (prompt) => prompt.replace(/\b[0-9a-f]{12}\b/g, '<nonce>')
+    expect(unnonced(stand.calls[1].prompt)).toBe(unnonced(stand.calls[0].prompt))
+  }, REVIEW_TEST_TIMEOUT)
+
+  it("ST-32/AC-3: reads Codex's usage once, with the executable from the settings, and not Claude Code's", async () => {
+    const { done, usageCalls } = reviewWithCodex('story/OQ-99-thing')
+    await done
+    expect(usageCalls).toHaveLength(1)
+    expect(usageCalls[0].executable).toBe(CODEX)
+  }, REVIEW_TEST_TIMEOUT)
+
+  it("ST-32/AC-3: over the reviewer's limit on Codex's usage starts no session and posts nothing", async () => {
+    const over = { ok: true, session: { percent: 95, resetsAt: 1 }, weekly: { percent: 10, resetsAt: 2 } }
+    const { done, stand, github } = reviewWithCodex('story/OQ-99-thing', { codexUsage: async () => over })
+    const result = await done
+    expect(result).toEqual({ status: 'over-usage', window: 'session', percent: 95, limit: 90, resetsAt: 1 })
+    expect(stand.calls).toEqual([])
+    expect(github.posted).toEqual([])
+  }, REVIEW_TEST_TIMEOUT)
+
+  it("ST-32/AC-3: Codex's usage that cannot be read is usage-unknown, with no session", async () => {
+    const { done, stand } = reviewWithCodex('story/OQ-99-thing', { codexUsage: async () => ({ ok: false, reason: 'timed out' }) })
+    expect(await done).toEqual({ status: 'usage-unknown', reason: 'timed out' })
+    expect(stand.calls).toEqual([])
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-32/AC-2: a choice whose tool is claude is started as before, with no Codex session or usage read', async () => {
+    const github = fakeGitHub({ branch: 'story/OQ-99-thing', states: [shas['story/OQ-99-thing']] })
+    const claude = standIn(verdictText(shas['story/OQ-99-thing']))
+    const result = await reviewPullRequestWith({
+      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, machineSettings: machineOf(),
+      sessionOptions: claude.sessionOptions, usage: async () => UNDER_LIMITS,
+      codexSession: async () => { throw new Error('a Codex session was started for a Claude choice') },
+      codexUsage: async () => { throw new Error("Codex's usage was read for a Claude choice") },
+    })
+    expect(result.status).toBe('recorded')
+    expect(claude.calls).toHaveLength(1)
   }, REVIEW_TEST_TIMEOUT)
 })

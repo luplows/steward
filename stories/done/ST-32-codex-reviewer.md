@@ -18,14 +18,14 @@ by tests before it is used (M3).
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — The machine's settings (ST-34) accept `"codex"` as the `tool` of a choice in
+- [x] **AC-1** — The machine's settings (ST-34) accept `"codex"` as the `tool` of a choice in
       `roles.reviewer.available`, with `effort` one of `low`, `medium`, `high`, `xhigh`, `max`
       and `ultra`. A choice in `roles.coder.available` with `tool` `"codex"` is refused, naming
       its key. When any choice's tool is `"codex"`, the file must also have a key
       `tools.codex.executable`, the path of the `codex` executable, as an absolute path to a file
       that exists; it is refused otherwise, naming the key. Without a Codex choice, `tools` may be
       left out.
-- [ ] **AC-2** — When the reviewer's choice has `tool` `"codex"`, `reviewPullRequest` starts it,
+- [x] **AC-2** — When the reviewer's choice has `tool` `"codex"`, `reviewPullRequest` starts it,
       with no shell, as
       `<executable> exec -s read-only -C <checkout> -m <model> -c model_reasoning_effort="<effort>" --json -o <file> --ephemeral -`,
       with the rendered prompt on stdin, in `coderEnv`'s environment (no GitHub credential), and
@@ -33,7 +33,7 @@ by tests before it is used (M3).
       by `parseReviewerVerdict` exactly as a Claude reviewer's is, and a malformed one gets
       OQ-121's one re-run as today. A reviewer whose choice has `tool` `"claude"` is started as
       today.
-- [ ] **AC-3** — Before starting a Codex reviewer, ATC reads Codex's usage with no model call: it
+- [x] **AC-3** — Before starting a Codex reviewer, ATC reads Codex's usage with no model call: it
       starts `<executable> app-server --listen stdio://`, sends `initialize`, then
       `account/rateLimits/read`, and stops the process. The window whose `windowDurationMins` is
       300 is `session`, and the one whose `windowDurationMins` is 10080 is `weekly`; each one's
@@ -42,13 +42,13 @@ by tests before it is used (M3).
       seconds, either window missing, or a `usedPercent` that is not a number is `usage-unknown`.
       Of the answer, nothing is printed, logged or stored beyond each window's percent and reset
       time.
-- [ ] **AC-4** — `reviewer.md` keeps one set of rules, with a short section for a reviewer running
+- [x] **AC-4** — `reviewer.md` keeps one set of rules, with a short section for a reviewer running
       under the Codex CLI (M5), saying: the head is already checked out and there is no network,
       so confirm it with `git rev-parse HEAD` instead of `git fetch`; the base for the three-dot
       diff is the `origin/<base>` already in the checkout; and commands run in Windows PowerShell
       5.1, where `&&` does not parse, so run them one at a time. A test asserts the section's three
       points.
-- [ ] **AC-5** — Tests, named `ST-32/AC-<n>`, with the processes injected, showing the reviewer's
+- [x] **AC-5** — Tests, named `ST-32/AC-<n>`, with the processes injected, showing the reviewer's
       guarantees hold under Codex (M3):
       - the Codex invocation passes `-s read-only` and `-C` with the review's checkout, and none of
         `workspace-write`, `danger-full-access` or `--dangerously-bypass-approvals-and-sandbox`;
@@ -58,11 +58,11 @@ by tests before it is used (M3).
       - the usage read accepts a Plus-shaped answer (a 300-minute and a 10080-minute window), and
         gives `usage-unknown` for a free-plan one (one 43200-minute window) and for a timeout;
       - a coder choice with `tool` `"codex"` is refused.
-- [ ] **AC-6** — The pull request records, in `docs/agent-workflow-design.md`, "Trials and
+- [x] **AC-6** — The pull request records, in `docs/agent-workflow-design.md`, "Trials and
       measurements", "Codex as reviewer", one review of a steward pull request by the built Codex
       reviewer at the pull request's head, with nothing posted: the verdict it returned, whether
       `parseReviewerVerdict` accepted it, and its wall time.
-- [ ] **AC-7** — Every `**Planned (…)**` marker naming ST-32 in `docs/agent-workflow-design.md`
+- [x] **AC-7** — Every `**Planned (…)**` marker naming ST-32 in `docs/agent-workflow-design.md`
       loses `ST-32`, and each passage is corrected wherever what was built differs.
 
 ## Out of scope
