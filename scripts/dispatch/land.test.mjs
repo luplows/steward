@@ -64,7 +64,7 @@ function world({ pullAt, reviewAt = () => 'success' }) {
     if (url.includes('/commits/')) return ok(status(reviewAt(w.t)))
     return ok(pullAt(w.t, w.dispatches.length))
   }
-  const ctx = createLandContext({ repo: REPO, fetch, getToken: async () => 't' })
+  const ctx = createLandContext({ repo: REPO, landing: true, fetch, getToken: async () => 't' })
   w.run = (opts = {}) =>
     landPullRequest({
       number: 7,
@@ -276,7 +276,7 @@ describe('OQ-50/AC-4: land.mjs sends only the sweep dispatch', () => {
 
   it('refuses any other workflow, any other ref or inputs, and any other write, before the network', async () => {
     let calls = 0
-    const ctx = createLandContext({ repo: REPO, fetch: async () => { calls++; return { ok: true, status: 204 } }, getToken: async () => 't' })
+    const ctx = createLandContext({ repo: REPO, landing: true, fetch: async () => { calls++; return { ok: true, status: 204 } }, getToken: async () => 't' })
     const refused = [
       { method: 'POST', url: dispatchUrl('ci.yml'), body: { ref: 'main' } },
       { method: 'POST', url: dispatchUrl('review-gate.yml'), body: { ref: 'main' } },
@@ -307,7 +307,7 @@ describe('OQ-50/AC-4: land.mjs sends only the sweep dispatch', () => {
 
   it('permits the three requests it builds', async () => {
     let calls = 0
-    const ctx = createLandContext({ repo: REPO, fetch: async () => { calls++; return { ok: true, status: 204, json: async () => ({}) } }, getToken: async () => 't' })
+    const ctx = createLandContext({ repo: REPO, landing: true, fetch: async () => { calls++; return { ok: true, status: 204, json: async () => ({}) } }, getToken: async () => 't' })
     await ctx.send(buildGetPullRequest(REPO, 7))
     await ctx.send(buildGetCommitStatus(REPO, SHA))
     await ctx.send(buildDispatchSweep(REPO, 7))
@@ -398,5 +398,125 @@ describe('OQ-123: the project root is the working directory, not the engine root
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
+  })
+})
+
+describe('ST-23: land in one look, and not at all when landing is off', () => {
+  const merges = (afterTriggerMs) => (t, d, w) => d > 0 && t >= w.dispatchTimes[0] + afterTriggerMs
+
+  it('ST-23/AC-1: each state that is not landable yet returns not-landable at once, with its reason and no trigger', async () => {
+    const cases = [
+      ['review-pending', () => pull(), () => 'pending'],
+      ['review-pending', () => pull(), () => 'absent'],
+      ['gate-lag', () => pull(), () => 'failure', { passedAt: SHA }],
+      ['blocked', () => pull({ mergeable_state: 'blocked' })],
+      ['unknown', () => pull({ mergeable_state: 'unknown' })],
+    ]
+    for (const [reason, pullAt, reviewAt, extra] of cases) {
+      const w = world({ pullAt, reviewAt })
+      const result = await w.run({ once: true, ...extra })
+      expect(result).toMatchObject({ status: 'not-landable', reason, pr: 7, triggers: 0 })
+      expect(w.dispatches).toEqual([])
+      expect(w.t).toBe(0)
+      w.cleanup()
+    }
+  })
+
+  it('ST-23/AC-1: a terminal state is returned as without once, and a merged or closed pull request too', async () => {
+    const cases = [
+      ['draft', () => pull({ draft: true })],
+      ['review-blocked', () => pull({ labels: [{ name: 'review-blocked' }] })],
+      ['review-failed', () => pull(), () => 'failure'],
+      ['conflict', () => pull({ mergeable_state: 'dirty' })],
+      ['closed', () => pull({ state: 'closed' })],
+      ['merged', () => pull({ merged: true })],
+    ]
+    for (const [expected, pullAt, reviewAt] of cases) {
+      const w = world({ pullAt, reviewAt })
+      expect((await w.run({ once: true })).status).toBe(expected)
+      expect(w.dispatches).toEqual([])
+      expect(w.t).toBe(0)
+      w.cleanup()
+    }
+  })
+
+  it('ST-23/AC-1: a landable pull request is triggered once and returns merged when it merges within the bound', async () => {
+    const w = world({ pullAt: (t, d) => pull({ merged: merges(2 * POLL_INTERVAL_MS)(t, d, w) }) })
+    const result = await w.run({ once: true })
+    expect(result).toMatchObject({ status: 'merged', triggers: 1 })
+    expect(w.dispatches).toHaveLength(1)
+    expect(w.t).toBeLessThanOrEqual(SWEEP_RUN_BOUND_MS)
+    w.cleanup()
+  })
+
+  it('ST-23/AC-1: a landable pull request that has not merged by the bound returns sweep-pending, triggered once', async () => {
+    const w = world({ pullAt: () => pull() })
+    const result = await w.run({ once: true })
+    expect(result).toMatchObject({ status: 'sweep-pending', triggers: 1 })
+    expect(w.dispatches).toHaveLength(1)
+    expect(w.t).toBe(SWEEP_RUN_BOUND_MS)
+    w.cleanup()
+  })
+
+  it('ST-23/AC-1: a pull request closed or moved while the merge is awaited ends the call', async () => {
+    const closed = world({ pullAt: (t, d) => pull({ state: d > 0 ? 'closed' : 'open' }) })
+    expect((await closed.run({ once: true })).status).toBe('closed')
+    closed.cleanup()
+    const moved = world({ pullAt: (t, d) => pull({ head: { sha: d > 0 ? SHA2 : SHA } }) })
+    expect(await moved.run({ once: true })).toMatchObject({ status: 'head-moved', newHeadSha: SHA2, triggers: 1 })
+    expect(moved.dispatches).toHaveLength(1)
+    moved.cleanup()
+  })
+
+  it('ST-23/AC-2: without once, with landing true, it still waits and re-triggers as before', async () => {
+    const w = world({ pullAt: (t, d) => pull({ merged: d >= 2 }) })
+    const result = await w.run()
+    expect(result).toMatchObject({ status: 'merged', triggers: 2 })
+    w.cleanup()
+  })
+
+  it('ST-23/AC-3: createLandContext requires landing to be a boolean', () => {
+    expect(() => createLandContext({ repo: REPO })).toThrow(/landing must be true or false/)
+    expect(() => createLandContext({ repo: REPO, landing: 'yes' })).toThrow(/landing must be true or false/)
+    expect(createLandContext({ repo: REPO, landing: false }).landing).toBe(false)
+  })
+
+  it('ST-23/AC-3: with landing false, either mode returns landing-off and sends nothing', async () => {
+    for (const once of [false, true]) {
+      const w = world({ pullAt: () => pull() })
+      let sent = 0
+      const ctx = createLandContext({ repo: REPO, landing: false, fetch: async () => { sent++; return { ok: true, status: 200, json: async () => pull() } }, getToken: async () => { sent++; return 't' } })
+      const result = await w.run({ ctx, once })
+      expect(result).toMatchObject({ status: 'landing-off', pr: 7, triggers: 0 })
+      expect(sent).toBe(0)
+      expect(w.requests).toEqual([])
+      w.cleanup()
+    }
+  })
+
+  it('ST-23/AC-3: every place that creates a land context passes the settings value', async () => {
+    for (const file of ['land.mjs', 'loop.mjs', 'story.mjs']) {
+      const source = await readFile(path.join(here, file), 'utf8')
+      const calls = source.match(/createLandContext\(\{[^}]*\}\)/g) ?? []
+      expect(calls.length, file).toBeGreaterThan(0)
+      for (const call of calls) expect(call, file).toMatch(/\blanding\b/)
+      expect(source, file).toMatch(/land: landing\b[^\n]*readSettings\(process\.cwd\(\)\)/)
+    }
+  })
+
+  it('ST-23/AC-4: each once call appends its line to the latency log, whatever it returns', async () => {
+    const w = world({ pullAt: (t, d) => pull({ merged: d > 0 && t >= 2 * POLL_INTERVAL_MS, mergeable_state: 'clean' }) })
+    await w.run({ once: true })
+    const waiting = world({ pullAt: () => pull({ mergeable_state: 'blocked' }) })
+    await waiting.run({ once: true, latencyLog: w.log })
+    const pending = world({ pullAt: () => pull() })
+    await pending.run({ once: true, latencyLog: w.log })
+    const rows = await recentLandingLatencies(10, w.log)
+    expect(rows.map((r) => r.status)).toEqual(['merged', 'not-landable', 'sweep-pending'])
+    expect(rows[0].mergeSeconds).not.toBeNull()
+    expect(rows[1]).toMatchObject({ landableAt: null, triggeredAt: null })
+    expect(rows[2].triggeredAt).not.toBeNull()
+    expect(readFileSync(w.log, 'utf8').trim().split('\n')).toHaveLength(3)
+    w.cleanup(); waiting.cleanup(); pending.cleanup()
   })
 })

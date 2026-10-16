@@ -323,10 +323,13 @@ it:
 - **Started independently of the work**, so it depends on no session being alive. It runs when
   the crew starts it by hand, or when the pilot, `land.mjs`, requests landing for one pull request
   (**The controller**, below). The pilot waits until the pull request is landable, requests
-  landing, and requests again while it is still open; it never merges itself. ST-23 changes this
-  to one look without waiting, and ST-24 to landing on the checks `landWhen` names (Part 3,
-  "Decided so far"). The runway was a `*/15` schedule until 2026-09-18, which GitHub delivered at
-  roughly 5% of that rate (**Watchdog**, below).
+  landing, and requests again while it is still open; it never merges itself. Called with `once`
+  it looks once instead: a pull request not landable yet is returned as `not-landable`, and a
+  landable one has the runway requested once and is polled for its merge for at most
+  `SWEEP_RUN_BOUND_MS`, returning `merged` or `sweep-pending`. With the settings' `land` false it
+  sends nothing and returns `landing-off`. ST-24 changes it to landing on the checks `landWhen`
+  names (Part 3, "Decided so far"). The runway was a `*/15` schedule until 2026-09-18, which
+  GitHub delivered at roughly 5% of that rate (**Watchdog**, below).
 - **It lands only pull requests whose author the gate honours** (`HONOURED_ASSOCIATIONS`,
   `scripts/land/check-author.mjs`), because a landed story is work a coder will take (OQ-81).
   **Planned (ST-27):** it also lands one from outside the crew that a member of the crew has
@@ -1827,8 +1830,8 @@ shortened where it is long, so that it can be found there with its date.
   - The reviewer given the linked unit, read from `main`, and the note on what was found, as two
     blocks, and verifying with narrower commands rather than the whole check
     (`scripts/dispatch/review.mjs`, `.claude/prompts/reviewer.md`).
-  - **Planned (ST-23):** landing in one look, without waiting, and a project able to turn
-    steward's landing off.
+  - Landing in one look, without waiting, and a project able to turn steward's landing off
+    (`scripts/dispatch/land.mjs`: `landPullRequest`'s `once` option, and `landing` on its context).
   - **Planned (ST-24):** landing when the checks `landWhen` names are green, in the lander and the
     sweep, rather than on `mergeable_state` `clean`.
   - **Planned (ST-25):** the review-and-land pass, one command per pass, started by the dispatcher

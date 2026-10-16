@@ -15,6 +15,9 @@
  * it is waited through, and the sweep is re-triggered while the pull request is
  * still open after a triggered run (#123/#125, 2026-09-24).
  *
+ * Called with `once`, it looks once instead (ST-23): see `landPullRequest`. With the settings'
+ * `land` false it sends nothing at all.
+ *
  * Latency bound (AC-5): a pull request is polled every `POLL_INTERVAL_MS`, and
  * the first trigger is sent in the same iteration that first sees it landable.
  * So the time from becoming landable to the first trigger is
@@ -125,12 +128,18 @@ export function assertAllowedRequest(repo, request) {
 
 // --------------------------------------------------------------------- I/O
 
-/** `fetch` and `getToken` are injectable; the token is read once, on first use. */
-export function createLandContext({ repo, fetch = globalThis.fetch, getToken = ghAuthToken }) {
+/**
+ * `landing` is the settings' `land` value, required with no default: `false` makes
+ * `landPullRequest` return `landing-off` without sending any request (ST-23).
+ * `fetch` and `getToken` are injectable; the token is read once, on first use.
+ */
+export function createLandContext({ repo, landing, fetch = globalThis.fetch, getToken = ghAuthToken }) {
   repoPath(repo)
+  if (typeof landing !== 'boolean') throw new Error(`landing must be true or false, got: ${JSON.stringify(landing)}`)
   let token
   return {
     repo,
+    landing,
     async send(request) {
       assertAllowedRequest(repo, request)
       token ??= await getToken()
@@ -206,6 +215,14 @@ function assess(pr, review, gateLag) {
  * `passedAt`, a `review/agent` of `failure`/`error` is waited through for up to
  * `GATE_LAG_BOUND_MS` (returning `gate-lag` if it has not cleared by then)
  * instead of ending the call at once with `review-failed` (OQ-104).
+ *
+ * `once`, optional (ST-23): look once instead of waiting. A pull request that is not
+ * landable yet is returned at once as `not-landable`, with its `reason` (the wait that
+ * `assess` names), and nothing is triggered. A landable one has the sweep triggered once
+ * and is polled for its merge for at most `SWEEP_RUN_BOUND_MS`: `merged`, or
+ * `sweep-pending` if it has not merged by then. It is never triggered a second time.
+ *
+ * With `ctx.landing` false, either mode returns `landing-off` before any request is sent.
  */
 export async function landPullRequest({
   number,
@@ -214,6 +231,7 @@ export async function landPullRequest({
   now = Date.now,
   latencyLog = DEFAULT_LATENCY_LOG,
   passedAt,
+  once = false,
 }) {
   requirePrNumber(number)
   const startedAt = now()
@@ -228,6 +246,28 @@ export async function landPullRequest({
     await recordLatency(latencyLog, { ...result, ...toIso(times), startedAt: new Date(startedAt).toISOString(), endedAt: new Date(now()).toISOString() })
     return result
   }
+
+  // `once`: the one trigger, then the merge polled for at most one sweep run's bound.
+  const triggerOnce = async () => {
+    times.landableAt = now()
+    await ctx.send(buildDispatchSweep(ctx.repo, number))
+    triggers += 1
+    times.triggeredAt = now()
+    for (;;) {
+      if (now() - times.triggeredAt >= SWEEP_RUN_BOUND_MS) return finish('sweep-pending')
+      await sleep(POLL_INTERVAL_MS)
+      const pr = readPullRequest(await ctx.send(buildGetPullRequest(ctx.repo, number)))
+      if (pr.merged) {
+        times.mergedAt = now()
+        return finish('merged')
+      }
+      if (pr.state !== 'open') return finish('closed')
+      if (pr.headSha !== headSha) return finish('head-moved', { newHeadSha: pr.headSha })
+    }
+  }
+
+  // Anything but an explicit `true` is off, so a context built by hand fails closed.
+  if (ctx.landing !== true) return finish('landing-off')
 
   for (;;) {
     const pr = readPullRequest(await ctx.send(buildGetPullRequest(ctx.repo, number)))
@@ -246,6 +286,11 @@ export async function landPullRequest({
     const verdict = early?.final ? early : assess(pr, review, gateLag)
 
     if (verdict?.final) return finish(verdict.final)
+
+    if (once) {
+      if (verdict !== null) return finish('not-landable', { reason: verdict.wait })
+      return triggerOnce()
+    }
 
     if (verdict === null) {
       waiting = null
@@ -319,7 +364,8 @@ async function main(argv) {
   if (args.length !== 1 || !Number.isInteger(number) || number <= 0) {
     throw new Error('usage: node scripts/dispatch/land.mjs <pr-number> [--repo owner/name]')
   }
-  const result = await landPullRequest({ number, ctx: createLandContext({ repo }) })
+  const { land: landing } = await readSettings(process.cwd())
+  const result = await landPullRequest({ number, ctx: createLandContext({ repo, landing }) })
   console.log(JSON.stringify(result, null, 2))
   if (result.status !== 'merged') process.exitCode = 1
 }

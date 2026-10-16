@@ -17,7 +17,7 @@ that has turned steward's landing off never to have the runway started by stewar
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `landPullRequest` in `scripts/dispatch/land.mjs` takes an option `once`. With
+- [x] **AC-1** — `landPullRequest` in `scripts/dispatch/land.mjs` takes an option `once`. With
       `once: true` it reads the pull request and its `review/agent` status once:
       - a terminal state (`draft`, `review-blocked`, `review-failed`, `conflict`, `closed`,
         `merged`) is returned as today;
@@ -27,18 +27,18 @@ that has turned steward's landing off never to have the runway started by stewar
       - a landable pull request has the runway started once, and is then polled for its merge
         for at most `SWEEP_RUN_BOUND_MS`, returning `merged`, or `sweep-pending` if it has not
         merged by then. It is never triggered a second time in the same call.
-- [ ] **AC-2** — Without `once`, and with `landing: true`, `landPullRequest` behaves exactly as
+- [x] **AC-2** — Without `once`, and with `landing: true`, `landPullRequest` behaves exactly as
       today. Its existing tests pass, changed only to pass `landing`.
-- [ ] **AC-3** — `createLandContext` takes `landing`, the settings' `land` value. With `landing:
+- [x] **AC-3** — `createLandContext` takes `landing`, the settings' `land` value. With `landing:
       false`, `landPullRequest`, in either mode, returns `landing-off` without sending any request.
       Every place that creates a land context (`land.mjs`'s command line, `loop.mjs` and
       `story.mjs`) passes the settings' value.
-- [ ] **AC-4** — Each `once` call appends its line to the latency log as other calls do.
-- [ ] **AC-5** — Tests in `land.test.mjs`, named `ST-23/AC-<n>`, with the requests, `sleep` and
+- [x] **AC-4** — Each `once` call appends its line to the latency log as other calls do.
+- [x] **AC-5** — Tests in `land.test.mjs`, named `ST-23/AC-<n>`, with the requests, `sleep` and
       `now` injected: each not-landable state returns at once with no trigger; a landable pull
       request is triggered once and returns `merged` when it merges within the bound and
       `sweep-pending` when it does not; `landing: false` sends nothing.
-- [ ] **AC-6** — The `**Planned (ST-23)**` marker in `docs/agent-workflow-design.md` loses
+- [x] **AC-6** — The `**Planned (ST-23)**` marker in `docs/agent-workflow-design.md` loses
       `ST-23`, and the passage is corrected wherever what was built differs.
 
 ## Out of scope
