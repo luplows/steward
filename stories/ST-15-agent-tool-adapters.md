@@ -52,8 +52,9 @@ only meant "after the move").
   Part 3, "Portability".
 - `scripts/dispatch/spawn.mjs`, `invocation.mjs`, `outcome.mjs`,
   `coder-env.mjs`: the CLI-specific parts.
-- `scripts/dispatch/review.mjs`, `chooseReviewerModel`: how the reviewer's
-  model is kept different from the coder's today.
+- `scripts/dispatch/review.mjs`, `chooseReviewer`: how the reviewer's
+  choice is kept to a model other than the coder's, from the machine's
+  settings.
 - OQ-54: one declared default coder model. M4 may rework or absorb it.
 - OQ-62, OQ-73: the reviewer's and coder's guarantees still being built for
   the Claude Code CLI.

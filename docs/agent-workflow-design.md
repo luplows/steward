@@ -250,14 +250,13 @@ or not, with a reason for each not applied, so a section skipped wrongly is visi
 **Model:** Opus, high effort, and **deliberately not the coder's model.** Fidelity is the hard part
 — noticing that a test named `AC-3` doesn't exercise AC-3 is adversarial reading. And author and
 reviewer sharing a model family means correlated blind spots: context isolation decorrelates
-*knowledge*, not *reasoning style*. Opus-reviews-Sonnet buys both at once. When a story's model is
-`opus`, the reviewer's is `sonnet`. The reviewer's tool, model and effort come from the machine's
-settings (`docs/machine-settings.md`): its default choice, or, when that choice's model is the
-coder's, the first other choice in the file's order whose model differs; with none that differs,
-there is no review (`reviewer-unavailable`; `chooseReviewer`, `review.mjs`). A choice whose
-`tool` is `"codex"` runs it through the Codex CLI, under `codex exec -s read-only` in the review's
-checkout, with the same prompt and its last message parsed as a Claude reviewer's is
-(`scripts/dispatch/codex.mjs`).
+*knowledge*, not *reasoning style*. Opus-reviews-Sonnet buys both at once. The reviewer's tool,
+model and effort come from the machine's settings (`docs/machine-settings.md`): its default
+choice, or, when that choice's model is the coder's, the first other choice in the file's order
+whose model differs; with none that differs, there is no review (`reviewer-unavailable`;
+`chooseReviewer`, `review.mjs`). A choice whose `tool` is `"codex"` runs it through the Codex
+CLI, under `codex exec -s read-only` in the review's checkout, with the same prompt and its last
+message parsed as a Claude reviewer's is (`scripts/dispatch/codex.mjs`).
 
 ### Recording the verdict
 
@@ -2268,11 +2267,14 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   may not push or run `gh` (OQ-63, OQ-67, OQ-84; OQ-73 still planned). The reviewer cannot write
   (OQ-62 still planned). Those rest on Claude Code's allowlists and permission modes. Another tool
   has to provide each guarantee again, and show it holds, rather than inherit it.
-- **The models are Claude model names.** The coder's is the choice its story's `model:` field
-  names in the machine's settings, or the coder's default when it is `null`. The reviewer's is its
-  default choice there, unless that choice's model matches the coder's by name, in which case it is
-  the first other choice whose model differs (`chooseReviewer`, `review.mjs`). "Different" is
-  decided by comparing those names.
+- **The models are Claude model names.** The coder's is the story's `model:` field (`sonnet` in
+  `stories/_TEMPLATE.md`). The reviewer's is `opus` (`ROLE_DEFAULTS`, `invocation.mjs`), unless
+  that matches the story's model by name, in which case it is `sonnet` (`chooseReviewerModel`,
+  `review.mjs`). "Different" is decided by comparing those names. **Since 2026-10-16 (ST-34):**
+  both come from the machine's settings (`docs/machine-settings.md`). The coder runs the choice
+  its story's `model:` names, or the coder's default when it is `null`; the reviewer runs its
+  default unless that choice's model is the coder's, and then the first other choice whose model
+  differs (`chooseReviewer`, `review.mjs`), still compared by name.
 - **The prompts are written for that CLI.** `.claude/prompts/coder.md` and `reviewer.md` name its
   tools and its allowlist behaviour.
 
