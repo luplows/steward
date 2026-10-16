@@ -110,6 +110,10 @@ Where a file defines the thing, the entry names it, and the file is the authorit
   session starts. Today `npm ci` runs in its place (`scripts/dispatch/install.mjs`; planned: ST-7).
 - **settings** — a project's `steward.config.json`, read by `scripts/dispatch/settings.mjs`, with
   its keys listed in `docs/settings.md`.
+- **machine settings** — the settings of the computer steward runs on, kept outside any checkout:
+  `~/.steward/settings.json`, or the file `STEWARD_SETTINGS` names. They hold the usage limits,
+  and for each role a default choice of tool, model and effort, and the choices available
+  (planned: ST-34).
 
 ## Stopping
 

@@ -29,8 +29,8 @@ the real ones come from the answers to the open questions.
       coder's guarantees hold for it (`docs/agent-workflow-design.md`,
       "Open questions", "Other companies' models (OQ-114)", M3).
 - [ ] **AC-3** — Every `**Planned (…)**` marker in
-      `docs/agent-workflow-design.md` that names OQ-114 is resolved as that
-      document's "Reading this document" note says.
+      `docs/agent-workflow-design.md` that names ST-15 loses `ST-15`, as
+      that document's "Reading this document" note says.
 
 ## Out of scope
 
