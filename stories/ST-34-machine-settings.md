@@ -46,9 +46,10 @@ computer uses, and a role is not limited to one model or one effort.
       `{ status: 'choice-unavailable', storyId, choice }`, before anything is claimed, made or
       installed.
 - [ ] **AC-5** — The reviewer runs its `default` choice's `model` and `effort`, unless that model
-      is the one its unit names for the coder (`unitModel`, `review.mjs`, read through
-      `roles.coder.available` when it names a choice there), compared as `chooseReviewerModel`
-      compares models today. Then it runs the first other choice in `roles.reviewer.available`,
+      is the coder's, compared as `chooseReviewerModel` compares models today. The coder's model
+      is the one its unit names (`unitModel`, `review.mjs`, read through `roles.coder.available`
+      when it names a choice there), or, when the unit's `model:` is `null`, the model of
+      `roles.coder.default`. Then it runs the first other choice in `roles.reviewer.available`,
       in the file's order, whose model differs. When none differs, `reviewPullRequest` returns
       `{ status: 'reviewer-unavailable', reason }` and starts no session.
       `ROLE_DEFAULTS` in `scripts/dispatch/invocation.mjs` keeps each role's `maxBudgetUsd`, and
