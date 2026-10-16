@@ -19,30 +19,30 @@ request. Nothing is installed in the review's checkout, and the reviewer is gran
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `.claude/prompts/reviewer.md` tells the reviewer not to run the project's tests,
+- [x] **AC-1** — `.claude/prompts/reviewer.md` tells the reviewer not to run the project's tests,
       lint or any other check, a single test file included, and to settle a claim by reading the
       code, searching it (`Grep`, `git grep`) or diffing it. A claim that only a run would settle,
       such as a test passing or a count of tests, is CI's, and the reviewer says in `summary`
       that it left the claim to CI. No instruction or example in the prompt runs a test, a lint or
       `npm`, `npx` or `vitest`; its examples of an allowed pipeline use `git` or the read-only
       shell utilities instead.
-- [ ] **AC-2** — `reviewPullRequest` (`scripts/dispatch/review.mjs`) installs nothing in the
+- [x] **AC-2** — `reviewPullRequest` (`scripts/dispatch/review.mjs`) installs nothing in the
       review's checkout. Its `install` option, the call to `installDependencies` and its
       `install-failed` result go from `review.mjs`. `coder.mjs` keeps its install.
-- [ ] **AC-3** — `reviewerAllowedTools()` (`scripts/dispatch/invocation.mjs`) no longer grants
+- [x] **AC-3** — `reviewerAllowedTools()` (`scripts/dispatch/invocation.mjs`) no longer grants
       `Bash(npm:*)` or `Bash(npx:*)`, and still grants `Bash(node:*)`. The comments that give
       running the suite as the reason for `npm`, `npx` and `node` are corrected.
       `scripts/dispatch/review-tools.mjs`, which admits only the reviewer's own command prefixes,
       then admits no `npm` or `npx` command, and its handling of how Windows starts `npm` and
       `npx` goes with them.
-- [ ] **AC-4** — Tests, named `ST-33/AC-<n>`:
+- [x] **AC-4** — Tests, named `ST-33/AC-<n>`:
       - `reviewPullRequest` reviews and records a verdict in a checkout that has no
         `package.json`, with no install option given and none run;
       - `reviewerAllowedTools()` contains no `npm` or `npx` entry, and contains `Bash(node:*)`;
       - `review-tools.mjs` refuses `npm test` and `npx vitest run`, starting nothing;
       - the prompt below its `---` contains none of `npm`, `npx` or `vitest`, and says that a
         claim only a run would settle is CI's.
-- [ ] **AC-5** — `docs/agent-workflow-design.md`: every `**Planned (ST-33)**` marker loses
+- [x] **AC-5** — `docs/agent-workflow-design.md`: every `**Planned (ST-33)**` marker loses
       `ST-33`, and each passage is corrected wherever what was built differs. That includes
       "Invocation shape", which says the reviewer is granted `npm`, `npx` and `node` "because
       verifying the author's claims means running the suite", and "Credential minimalism", which

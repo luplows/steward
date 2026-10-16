@@ -14,6 +14,7 @@ import {
   reviewerAllowedTools,
 } from './invocation.mjs'
 import { coderAllowedTools, READ_ONLY_SHELL_UTILS } from './coder-env.mjs'
+import { splitPromptFile } from './render.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '..', '..')
@@ -206,6 +207,11 @@ describe('OQ-74/AC-3: the reviewer allowlist', () => {
     expect(source).toMatch(/const REVIEWER_GIT_OBJECT_WRITERS = \[\s*'Bash\(git merge-tree:\*\)',\s*\]/)
   })
 
+  it('ST-33/AC-4: grants no npm or npx, and still grants node', () => {
+    expect(list.filter((t) => /\bnpm\b|\bnpx\b/.test(t))).toEqual([])
+    expect(list).toContain('Bash(node:*)')
+  })
+
   it('the constructed reviewer args are the function\'s list, with the shell utilities in them', () => {
     const { args } = buildInvocation(reviewerOptions)
     expect(listAfter(args, '--allowedTools')).toEqual(list)
@@ -215,6 +221,22 @@ describe('OQ-74/AC-3: the reviewer allowlist', () => {
   it('sed and sort stay out of both lists: they can write', () => {
     const both = [...list, ...coderAllowedTools(BRANCH)]
     expect(both.filter((t) => /^Bash\((sed|sort)\b/.test(t))).toEqual([])
+  })
+})
+
+describe('ST-33/AC-1: the reviewer prompt runs no checks', () => {
+  const { prompt } = splitPromptFile(REVIEWER_TEMPLATE)
+
+  it('ST-33/AC-4: the prompt below its --- names no npm, npx or vitest', () => {
+    for (const word of ['npm', 'npx', 'vitest']) {
+      expect(prompt.toLowerCase(), word).not.toMatch(new RegExp(`\\b${word}\\b`))
+    }
+  })
+
+  it('ST-33/AC-4: the prompt says that a claim only a run would settle is CI\'s', () => {
+    const flat = prompt.replace(/\s+/g, ' ')
+    expect(flat).toContain('Do not run the project\'s tests, lint or any other check, not even a single test file')
+    expect(flat).toContain('A claim that only a run would settle, such as a test passing or a count of tests, is CI\'s')
   })
 })
 
