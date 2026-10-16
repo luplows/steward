@@ -252,6 +252,7 @@ describe('OQ-65/AC-7 no GitHub operation', () => {
     expect(Object.keys(spawnModule).sort()).toEqual([
       'DEFAULT_STALL_MS',
       'DEFAULT_TIMEOUT_MS',
+      'killTree',
       'resolveClaudeExecutable',
       'runSession',
       'spawnSession',

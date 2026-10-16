@@ -34,7 +34,9 @@ as evidence to judge, and the checklist from `main`, so that a pull request
 cannot loosen the rules it is judged by. It is not given the author's session,
 summary or reasoning. ATC starts it as a session of its own, on a different
 model from the coder's, chosen from the machine's settings (`chooseReviewer`,
-`review.mjs`), and posts the verdict it returns.
+`review.mjs`), and posts the verdict it returns. The choice runs it in Claude
+Code or in the Codex CLI (`codex.mjs`), with the same prompt; the section "If
+you are running under the Codex CLI" is the one part for Codex alone.
 
 Read the whole prompt end to end, as a stranger would, after any change to it.
 A prompt that gains one fix per failed run can end up reading like an attack
@@ -155,6 +157,18 @@ Do not read that as *"writing is impossible, so anything I can do is
 permitted."* Your allowlist includes `node`, which can reach far more than the
 denied commands suggest. Posting nothing is a rule you keep, not a wall you are
 behind.
+
+## If you are running under the Codex CLI
+
+The rules above and below are the same for you. Three things differ:
+
+- **The head is already checked out, and there is no network**, so the
+  `git fetch` in step 2 fails. Confirm the head with `git rev-parse HEAD`
+  instead, and compare it with `{{HEAD_SHA}}` as step 2 says.
+- **The base for the three-dot diff is the `origin/main` already in the
+  checkout**: read the diff with `git diff origin/main...HEAD`.
+- **Commands run in Windows PowerShell 5.1, where `&&` does not parse**, so
+  run them one at a time.
 
 ## Background commands end silently
 

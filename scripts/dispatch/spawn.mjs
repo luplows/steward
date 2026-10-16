@@ -88,7 +88,7 @@ const IS_WINDOWS = process.platform === 'win32'
  * signalled. Either way the child itself is also killed directly, as a
  * fallback if the tree kill found nothing to do or could not run.
  */
-function killTree(child, spawnFn) {
+export function killTree(child, spawnFn) {
   const killChild = () => { child.kill('SIGKILL') }
   if (!IS_WINDOWS) {
     try {
