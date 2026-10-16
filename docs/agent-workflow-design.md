@@ -240,7 +240,9 @@ description honestly describes the change. Prose that oversells a diff is real s
 **Verdict states:** `pass` / `pass-with-observations` / `block`. Binary pass/fail cannot express
 what reviewers here already produce — real problems rightly surfaced and arguably rightly not
 blocking. Without the third state the verdict record understates what review catches, and any
-measurement built on it is meaningless.
+measurement built on it is meaningless. **Planned (ST-4):** a finding the author would fix in the
+pull request is a `block`, and `pass-with-observations` is for findings that are real but not the
+diff's to fix (Part 3, "Decided so far", "A finding the author would fix is a block").
 
 **Findings cite the checklist** by section and item, and the comment lists every section, applied
 or not, with a reason for each not applied, so a section skipped wrongly is visible
@@ -1078,9 +1080,9 @@ should not be assumed. Stating it wider than the evidence is the failure this wh
 to record.
 
 The consequence is structural and easy to miss: **no coder can deliver a story that changes the
-prompts.** That is not rare: in steward, ST-21, ST-22, ST-32 and ST-33 change `reviewer.md`, so
-each is built by hand (for ST-21 and ST-22, Part 3, "Decided so far"; for ST-32 and ST-33, their own
-`blocked:`). A
+prompts.** That is not rare: in steward, ST-4, ST-21, ST-22, ST-32 and ST-33 change `reviewer.md`,
+so each is built by hand (for ST-21 and ST-22, Part 3, "Decided so far"; for ST-4, ST-32 and ST-33,
+their own `blocked:`). A
 story whose acceptance criteria require prompt edits will be blocked on delivery no matter how well
 the coder performs.
 
@@ -1255,12 +1257,15 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
   describes the Codex CLI's `codex exec` for this: the prompt as an argument, `--json` for JSON
   Lines output, and `--sandbox read-only | workspace-write | danger-full-access`. First run here on
   2026-10-15, as reviewer ("Trials and measurements", "Codex as reviewer"): its verdict parsed, but
-  it did not run `npm test`, so the spike's condition below is not yet met. **Planned (ST-32):**
+  it did not run `npm test`. **Planned (ST-32):**
   the reviewer runs through Codex when the settings name it. Its restrictions are a sandbox
   policy, not a per-command allowlist like Claude Code's, so M3 applies in full. **Decided
   2026-10-08 by the owner: the Codex CLI is the first adapter, for the reviewer (M2), after a
   spike** that runs it here and shows it can run `npm test` inside its read-only sandbox and
-  return a verdict the gate can parse.
+  return a verdict the gate can parse. **Revised 2026-10-16 by the owner:** the `npm test`
+  condition is dropped, because no reviewer runs checks (Part 3, "Decided so far", "The reviewer
+  runs no checks"), and the second trial showed Vitest cannot run in that sandbox. The spike's
+  other condition, a verdict the gate can parse, was met in the first trial.
 - **M2. Which role first.** **Decided 2026-10-08 by the owner: the reviewer.** Goal 2's value is
   largest there, and a reviewer that cannot write is a smaller guarantee to re-establish than a
   coder's.
@@ -2177,13 +2182,25 @@ shortened where it is long, so that it can be found there with its date.
   by the owner, with the planning session, while #41 was open; **Planned (ST-34)**). A story whose
   `model:` is `null` runs the coder's default choice in the machine's settings, so that a story
   that made no deliberate choice can be told from one that did, and changing the default is one
-  edit to the machine's file. The story lint already requires the field and accepts `null`. The
-  planning session switches `stories/_TEMPLATE.md` to `model: null` once ST-34 is built; today's
-  coder needs a model. ST-1, which asked for this with a committed file of models that the story
-  lint would also read, is retired: the machine's settings replace the file, and CI cannot read
-  them. ST-13, which would have let `review-tools.mjs` run a repository script to capture its
-  exit code, is retired: its reason, confirming during a review that a check passed, goes with
-  ST-33. Considered and not chosen: rewriting ST-1 down to `model: null`, which ST-34 now covers.
+  edit to the machine's file. For such a story, the reviewer's model differs from that of the
+  coder's default (decided 2026-10-16 by the owner, from #41's review). The story lint already
+  requires the field and accepts `null`. The planning session switches `stories/_TEMPLATE.md` to
+  `model: null` once ST-34 is built; today's coder needs a model. ST-1, which asked for this with
+  a committed file of models that the story lint would also read, is retired: the machine's
+  settings replace the file, and CI cannot read them. ST-13, which would have let
+  `review-tools.mjs` run a repository script to capture its exit code, is retired: its reason,
+  confirming during a review that a check passed, goes with ST-33. Considered and not chosen:
+  rewriting ST-1 down to `model: null`, which ST-34 now covers.
+- **A finding the author would fix is a block** (decided 2026-10-16 by the owner, with the
+  planning session, from #41's review; **Planned (ST-4)**). #41's verdict found a contradiction
+  that "Changes to stories", item 6, forbids, and filed it as an observation and passed. A finding
+  the reviewer would fix in the pull request if it were the author is a `block`, whatever kind of
+  text it is in. `pass-with-observations` is for findings that are real but not the diff's to
+  fix: there before it, outside it, a suggestion, or a decision already recorded. The change is
+  shown against steward's own verdicts, including #41's and #34's, before it is relied on. ST-4,
+  held since it came from tower-workshop-paths, is refined to build this by hand after ST-33.
+  Considered and not chosen: requiring each observation to say why it is not a block, which is
+  left until the replay shows it is needed.
 
 ### The move, in order
 
