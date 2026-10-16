@@ -36,7 +36,8 @@ node scripts/dispatch/cli.mjs land <pr-number>     # land it, once it has passed
 What the review side reads:
 
 - **`steward.config.json`**, the project's settings: its repository, its setup and check commands,
-  when to land, and which checklist to use. Each key is described in
+  when to land, which checklist to use, and how much of the plan's usage a coder or a reviewer
+  session may start under. Each key is described in
   [`docs/settings.md`](docs/settings.md).
 - **The checklist**, [`REVIEW.md`](REVIEW.md) here, read from `main`, so that a pull request cannot
   change the rules it is reviewed against.

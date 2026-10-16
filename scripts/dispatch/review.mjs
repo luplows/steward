@@ -17,6 +17,12 @@
  * the renderer, using the PR's copy to build the review prompt would be
  * circular.
  *
+ * Before it installs anything or starts a session it reads the plan's usage
+ * (`usage.mjs`, ST-31), and starts none when either window is at or over the
+ * reviewer's limit in the settings (`over-usage`), or when the usage cannot be
+ * read (`usage-unknown`). A second session for a malformed verdict is not
+ * checked again.
+ *
  * A review that cannot be recorded is not an error: a `null` verdict, a
  * moved head, an unresolvable story all leave the PR pending, which
  * `docs/agent-workflow-design.md` ("What the gate enforces") says is the
@@ -51,6 +57,7 @@ import { parseFrontmatter, storyFilenameRe } from './queue.mjs'
 import { readRules } from './rules.mjs'
 import { readSettings } from './settings.mjs'
 import { spawnSession } from './spawn.mjs'
+import { checkUsage, readUsage } from './usage.mjs'
 
 const execFileAsync = promisify(execFile)
 
@@ -287,10 +294,14 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
  *                  defaults to `os.tmpdir()`. Not exposed by the CLI
  *   sessionOptions extra `spawnSession` options (executable, run, timeouts,
  *                  budget)
+ *   usage          `({ cwd })`, resolving `readUsage`'s result; defaults to
+ *                  `readUsage`. Called once, in `repoDir`
  *
  * Resolves `{ status, ... }`. `recorded` carries the comment id; every other
  * status means nothing was posted, and `reason` says why. `no-verdict` and
- * `already-reviewed` are not failures; `install-failed`, `rereview-refused`
+ * `already-reviewed` are not failures; `over-usage` (with `window`, `percent`,
+ * `limit` and `resetsAt`) and `usage-unknown` (ST-31) start no session and
+ * are not failures either, and come before any install; `install-failed`, `rereview-refused`
  * and `rules-unreadable` are. `rules-unreadable` (ST-21/AC-1) is a checklist
  * (the settings' `rulesFile`) that is missing from the base branch or does
  * not parse: it carries `problems`, and comes before any install or session.
@@ -304,10 +315,10 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
  */
 export async function reviewPullRequest({
   number, ctx, repoDir = process.cwd(), promptTemplate, baseEnv = process.env, sessionOptions = {},
-  rereview = false, install = installDependencies, scratchRoot = tmpdir(),
+  rereview = false, install = installDependencies, scratchRoot = tmpdir(), usage = readUsage,
 }) {
   const template = promptTemplate ?? readFileSync(REVIEWER_PROMPT, 'utf8')
-  const { storyPrefix, rulesFile } = await readSettings(repoDir)
+  const { storyPrefix, rulesFile, usageLimits } = await readSettings(repoDir)
   const pr = await getPullRequestState(ctx, number)
   if (!SHA_RE.test(pr.headSha) || !pr.headRef || !pr.baseRef) {
     throw new Error(`pull request #${number} did not resolve a head SHA, head branch and base branch`)
@@ -327,6 +338,11 @@ export async function reviewPullRequest({
   } else if (existing) {
     return { status: 'already-reviewed', headSha: pr.headSha, existing }
   }
+
+  // ST-31/AC-3: once per call, after the decision to review and before any
+  // install or session. The malformed-verdict re-run below is not checked again.
+  const refused = await checkUsage({ read: usage, cwd: repoDir, limits: usageLimits.reviewer })
+  if (refused) return refused
 
   const scratch = await mkdtemp(path.join(scratchRoot, 'tw-review-'))
   const tree = path.join(scratch, 'tree')

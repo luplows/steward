@@ -8,10 +8,10 @@ decisions behind the keys are in [`outline.md`](outline.md), "Defining steward",
 
 - Every key is required. Steward's code holds no default for any of them.
 - A missing key, an unknown key, or a value of the wrong form is an error that names the file and
-  the key, with its parent for a key inside `setup` or `check` (for example
-  `setup.timeoutMinutes`).
+  the key with all its parents, for a key inside `setup`, `check` or `usageLimits` (for example
+  `setup.timeoutMinutes` or `usageLimits.coder.weekly`).
 - A key that becomes required breaks a project until it adds the key.
-- The file is flat apart from `setup` and `check`.
+- The file is flat apart from `setup`, `check` and `usageLimits`.
 
 ## Keys
 
@@ -25,6 +25,7 @@ decisions behind the keys are in [`outline.md`](outline.md), "Defining steward",
 | `land` | `true` or `false` | Whether steward lands pull requests. `false`: steward still reviews, and the project merges. | Not decided. |
 | `unitLinks` | An array, possibly empty, of distinct values from `"issue"`, `"file"` and `"other"` | The kinds of link steward reads from a pull request's body to find its unit. | Not decided. |
 | `rulesFile` | A relative path with forward slashes, neither absolute nor containing a `..` segment | The file of rules a pull request is reviewed against, read from `main`. | The path where `init` copies steward's example rules file; not decided. |
+| `usageLimits` | An object (below) | The share of the plan's usage at or over which steward starts no coder or reviewer session. | Not decided. |
 
 `init` is not built yet. "Not decided" means no decision is recorded for the value `init` will
 write; steward's own file (below) shows a value that works.
@@ -40,6 +41,15 @@ Each is `null`, or an object with exactly these keys:
 
 `null` is written explicitly. For `setup` it means the project needs nothing but the worktree. For
 `check` it means the project has no check, which suits only a project without a coder.
+
+## `usageLimits`
+
+An object with exactly the keys `coder` and `reviewer`, each an object with exactly the keys
+`session` and `weekly`. Each is an integer from 1 to 100: the percentage of the plan's 5-hour
+(`session`) or weekly window at or over which that role starts no session. Coders stop earlier than
+reviewers, so that work in flight still gets its review. When the usage cannot be read, nothing
+starts. `usage.mjs` reads the usage; `reviewPullRequest`, `dispatchCoder` and `retryStory` make the
+check.
 
 ## `unitLinks`
 
@@ -61,10 +71,14 @@ body and the rules.
   "landWhen": "all-checks",
   "land": true,
   "unitLinks": ["file"],
-  "rulesFile": "REVIEW.md"
+  "rulesFile": "REVIEW.md",
+  "usageLimits": {
+    "coder": { "session": 70, "weekly": 75 },
+    "reviewer": { "session": 90, "weekly": 90 }
+  }
 }
 ```
 
-Only `repo` and `storyPrefix` are used by steward's scripts today. The other keys are read and
-validated, and each is taken into use by the story that builds it (see
+Steward's scripts use `repo`, `storyPrefix`, `rulesFile` and `usageLimits` today. The other keys are
+read and validated, and each is taken into use by the story that builds it (see
 [`agent-workflow-design.md`](agent-workflow-design.md), the "Planned" markers).
