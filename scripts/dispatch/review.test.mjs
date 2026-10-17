@@ -12,8 +12,8 @@ import { spawnCodexReviewer } from './codex.mjs'
 import { createContext, parseComments, parseMarkerComment } from './github.mjs'
 import { parseRules } from './rules.mjs'
 import {
-  chooseReviewer, formatFindings, HONOURED_ASSOCIATIONS, parseReviewerVerdict, unitCoderModel, unitModel,
-  reviewPullRequest as reviewPullRequestWith,
+  assertReviewableCheckout, chooseReviewer, formatFindings, HONOURED_ASSOCIATIONS, parseReviewerVerdict,
+  unitCoderModel, unitModel, reviewPullRequest as reviewPullRequestWith,
 } from './review.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -409,12 +409,52 @@ describe('OQ-69/AC-5: the reviewer runs in a clean checkout that is not the code
     await done
     const { checkout } = session.calls[0]
     expect(checkout.real).not.toBe(realpathSync(repoDir))
-    expect(checkout.head).toBe(shas['story/OQ-99-thing'])
+    // ST-38/AC-2: a checkout of the base's tip, not of the head.
+    expect(checkout.head).toBe(git(originDir, 'rev-parse', 'main'))
     expect(checkout.status).toBe('')
     expect(checkout.hasScratch).toBe(false)
     // The caller's own tree is left as the coder left it.
     expect(readFileSync(path.join(repoDir, 'stories', 'OQ-99-thing.md'), 'utf8')).toBe('locally edited')
     expect(existsSync(path.join(repoDir, 'scratch.txt'))).toBe(true)
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-38/AC-2: the session starts at the base branch\'s tip, and the head is read through git', async () => {
+    const head = shas['story/OQ-99-thing']
+    const { done, session } = review('story/OQ-99-thing', {
+      reply: (i) => {
+        const { cwd } = session.calls[i]
+        // While the session runs: the head's files are absent from the tree but reachable by git.
+        session.calls[i].seen = {
+          movedInTree: existsSync(path.join(cwd, 'stories', 'done', 'OQ-99-thing.md')),
+          branchTip: git(cwd, 'rev-parse', 'origin/story/OQ-99-thing'),
+          headFile: git(cwd, 'show', `${head}:src.txt`),
+        }
+        return verdictText(head)
+      },
+    })
+    const result = await done
+    expect(result).toMatchObject({ status: 'recorded', headSha: head })
+    const [call] = session.calls
+    expect(call.checkout.head).toBe(git(originDir, 'rev-parse', 'main'))
+    expect(call.checkout.head).not.toBe(head)
+    expect(call.checkout.entries).not.toContain('src.txt')
+    expect(call.seen).toEqual({ movedInTree: false, branchTip: head, headFile: 'x' })
+    // The prompt still names the head under review.
+    expect(call.prompt).toContain(head)
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-38/AC-2: assertReviewableCheckout refuses a checkout at the head, or a changed one, given the base', async () => {
+    const repoDir = dirtyClone()
+    const base = git(repoDir, 'rev-parse', 'origin/main')
+    const head = git(repoDir, 'rev-parse', 'origin/story/OQ-99-thing')
+    const atBase = path.join(root, `st38-base-${cloneCount}`)
+    const atHead = path.join(root, `st38-head-${cloneCount}`)
+    git(repoDir, 'worktree', 'add', '-q', '--detach', atBase, base)
+    git(repoDir, 'worktree', 'add', '-q', '--detach', atHead, head)
+    await expect(assertReviewableCheckout(atBase, base, repoDir)).resolves.toBeUndefined()
+    await expect(assertReviewableCheckout(atHead, base, repoDir)).rejects.toThrow(`the review checkout is at ${head}, not ${base}`)
+    writeFileSync(path.join(atBase, 'REVIEW.md'), 'changed')
+    await expect(assertReviewableCheckout(atBase, base, repoDir)).rejects.toThrow('the review checkout has uncommitted changes')
   }, REVIEW_TEST_TIMEOUT)
 
   it('OQ-69/AC-5: the checkout is removed afterwards', async () => {
@@ -1356,8 +1396,8 @@ describe('ST-32/AC-2, AC-3, AC-5: a reviewer whose choice runs on Codex', () => 
     expect(call.args).toContain('gpt-6.1-sol')
     expect(call.args).toContain('model_reasoning_effort="high"')
     expect(call.args.at(-1)).toBe('-')
-    // The checkout at the head under review, clean, and the last message outside it.
-    expect(call.checkout.head).toBe(shas['story/OQ-99-thing'])
+    // The checkout at the base's tip (ST-38/AC-2), clean, and the last message outside it.
+    expect(call.checkout.head).toBe(git(originDir, 'rev-parse', 'main'))
     expect(call.checkout.status).toBe('')
     expect(path.relative(call.cwd, call.outputFile).startsWith('..')).toBe(true)
     expect(path.dirname(call.outputFile)).toBe(path.dirname(call.cwd))
