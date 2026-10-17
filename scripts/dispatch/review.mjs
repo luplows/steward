@@ -31,7 +31,10 @@
  * A review that cannot be recorded is not an error: a `null` verdict or a
  * moved head leaves the PR pending, which
  * `docs/agent-workflow-design.md` ("What the gate enforces") says is the
- * right outcome. Each is a distinct `status` on the result.
+ * right outcome. Each is a distinct `status` on the result. A `null` verdict
+ * is `no-verdict` only when the pull request's head has moved since the
+ * reviewer was handed it; on an unchanged head it is `cannot-review` (ST-37),
+ * a failure that stops the rotation (`docs/controller.md`).
  *
  * Usage:
  *   node scripts/dispatch/review.mjs <pr-number> [--repo owner/name] [--rereview]
@@ -307,8 +310,12 @@ async function assertReviewableCheckout(dir, sha, repoDir) {
  *                  on the real environment and home directory. Called once (ST-34)
  *
  * Resolves `{ status, ... }`. `recorded` carries the comment id; every other
- * status means nothing was posted, and `reason` says why. `no-verdict` and
- * `already-reviewed` are not failures; `rereview-refused`,
+ * status means nothing was posted, and `reason` says why. `no-verdict` (a
+ * `null` verdict on a head that has moved) and `already-reviewed` are not
+ * failures. `cannot-review` (ST-37) is a `null` verdict on a head that has not
+ * moved: the reviewer could not review, a fault in the machine or the prompt
+ * that someone has to fix. It carries `headSha`, the reviewer's `summary` and
+ * `sessions`, and is a failure for the CLI. `rereview-refused`,
  * `rules-unreadable`, `over-usage` (with `window`, `percent`, `limit` and
  * `resetsAt`) and `usage-unknown` (ST-31) are, and the CLI exits 1 for them: a
  * review that was asked for did not happen. The last two start no session.
@@ -473,8 +480,15 @@ export async function reviewPullRequest({
     }
     const { verdict } = parsed
 
-    // A `null` verdict is the reviewer declining to review; the PR stays pending.
-    if (verdict.verdict === null) return { status: 'no-verdict', headSha: verdict.head, summary: verdict.summary, sessions }
+    // A `null` verdict is the reviewer declining to review; nothing is posted and the PR stays
+    // pending. Only a head that moved is an ordinary reason (`reviewer.md`), so the head is read
+    // again: moved is `no-verdict`; unchanged is something about the machine or the prompt, and
+    // is `cannot-review`, a failure (ST-37/AC-1).
+    if (verdict.verdict === null) {
+      const now = await getPullRequestState(ctx, number)
+      const status = now.headSha === pr.headSha ? 'cannot-review' : 'no-verdict'
+      return { status, headSha: verdict.head, summary: verdict.summary, sessions }
+    }
 
     // The checkout it was handed was at `pr.headSha`; a verdict about another
     // commit was not made from what it read.
@@ -525,7 +539,7 @@ async function verdictAt(ctx, number, headSha) {
 
 // --------------------------------------------------------------------- CLI
 
-const NON_FAILURES = ['recorded', 'no-verdict', 'already-reviewed']
+export const NON_FAILURES =['recorded', 'no-verdict', 'already-reviewed']
 
 async function main(argv) {
   const args = [...argv]

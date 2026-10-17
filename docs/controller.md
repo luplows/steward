@@ -51,11 +51,15 @@ outcome as it will.
   to whichever session or person asked for the rotation. Say so whenever you shorten a result. A
   report to another session is information. It does not carry the crew's go-ahead.
 - A status other than `recorded` from `review.mjs`, or `merged` from `land.mjs`, is that pull
-  request's outcome. Report it and go on to the next pull request. Each script's header says what
-  its statuses mean.
+  request's outcome. Report it and go on to the next pull request, except `cannot-review` (see the
+  next bullet). Each script's header says what its statuses mean.
 - Stop the whole rotation only when the rotation itself cannot go on: your worktree cannot be
-  brought to `origin/main`, or has anything uncommitted, or a script fails with an error instead of
-  returning a status. Report it, and start nothing more until the crew says how to go on.
+  brought to `origin/main`, or has anything uncommitted, a script fails with an error instead of
+  returning a status, or `review.mjs` returns `cannot-review`. That status means the reviewer
+  returned no verdict on a head that had not moved, so it could not review on this machine, and
+  would fail the next pull request the same way. Report it with the reviewer's `summary`, and start
+  nothing more until the crew says how to go on. Do not run the review again, on another choice or
+  any other way.
 - After each review, before the next review or the pilot, run `git rev-parse HEAD` and
   `git status --porcelain` in your worktree. If `HEAD` is not the commit you checked out, or
   `git status` prints anything, a review has changed the files the pilot runs from: stop the

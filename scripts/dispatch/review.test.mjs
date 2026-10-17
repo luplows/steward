@@ -12,7 +12,7 @@ import { spawnCodexReviewer } from './codex.mjs'
 import { createContext, parseComments, parseMarkerComment } from './github.mjs'
 import { parseRules } from './rules.mjs'
 import {
-  chooseReviewer, formatFindings, HONOURED_ASSOCIATIONS, parseReviewerVerdict, unitCoderModel, unitModel,
+  chooseReviewer, formatFindings, HONOURED_ASSOCIATIONS, NON_FAILURES, parseReviewerVerdict, unitCoderModel, unitModel,
   reviewPullRequest as reviewPullRequestWith,
 } from './review.mjs'
 
@@ -393,6 +393,7 @@ describe('OQ-69/AC-3: the verdict is recorded against the SHA the reviewer revie
 describe('OQ-69/AC-4: a null verdict records nothing', () => {
   it('OQ-69/AC-4: posts no comment and is not a failure', async () => {
     const { done, github } = review('story/OQ-99-thing', {
+      states: [shas['story/OQ-99-thing'], 'f'.repeat(40)], // ST-37: the head moved, so it is no-verdict
       reply: verdictText(shas['story/OQ-99-thing'], { verdict: null, summary: 'The head moved under me.' }),
     })
     const result = await done
@@ -400,6 +401,39 @@ describe('OQ-69/AC-4: a null verdict records nothing', () => {
     expect(github.posted).toEqual([])
     expect(github.requests.filter((r) => r.startsWith('POST'))).toEqual([])
   }, REVIEW_TEST_TIMEOUT)
+})
+
+describe('ST-37: a null verdict on a head that has not moved is cannot-review', () => {
+  const nullReply = (summary) => verdictText(shas['story/OQ-99-thing'], { verdict: null, summary })
+
+  it('ST-37/AC-1: a null verdict with the head moved is no-verdict, and posts nothing', async () => {
+    const moved = 'f'.repeat(40)
+    const { done, github } = review('story/OQ-99-thing', {
+      states: [shas['story/OQ-99-thing'], moved], reply: nullReply('The head moved under me.'),
+    })
+    const result = await done
+    expect(result).toMatchObject({
+      status: 'no-verdict', headSha: shas['story/OQ-99-thing'], summary: 'The head moved under me.', sessions: 1,
+    })
+    expect(github.posted).toEqual([])
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-37/AC-1: a null verdict with the head unchanged is cannot-review, with the summary, and posts nothing', async () => {
+    const { done, github } = review('story/OQ-99-thing', {
+      states: [shas['story/OQ-99-thing']], reply: nullReply('git would not start.'),
+    })
+    const result = await done
+    expect(result).toEqual({
+      status: 'cannot-review', headSha: shas['story/OQ-99-thing'], summary: 'git would not start.', sessions: 1,
+    })
+    expect(github.posted).toEqual([])
+    expect(github.requests.filter((r) => r.startsWith('POST'))).toEqual([])
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-37/AC-2: cannot-review is a failure for the command line and no-verdict is not', () => {
+    expect(NON_FAILURES).toContain('no-verdict')
+    expect(NON_FAILURES).not.toContain('cannot-review')
+  })
 })
 
 describe('OQ-69/AC-5: the reviewer runs in a clean checkout that is not the coder\'s tree', () => {
@@ -892,6 +926,7 @@ describe('OQ-121: a malformed verdict is tried once more before the story stops'
 
   it('OQ-121/AC-3: a null verdict from the first reply runs no second session', async () => {
     const { done, session } = review('story/OQ-99-thing', {
+      states: [shas['story/OQ-99-thing'], 'f'.repeat(40)], // ST-37: the head moved, so it is no-verdict
       reply: verdictText(shas['story/OQ-99-thing'], { verdict: null, summary: 'declined' }),
     })
     const result = await done
