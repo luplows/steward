@@ -3074,12 +3074,12 @@ was the review's base and `origin/<branch>` its head, with `REVIEW.md` from `mai
 
 #39's one observation, under "Changes to stories", item 7, was that ST-15's AC-3 still asks for
 the **Planned** markers naming OQ-114 to be resolved, though no such marker exists at that head,
-where the adapter passage is marked **Planned (ST-15, ST-32)** instead; the reviewer judged the
+where the adapter passage's marker names ST-15 and ST-32 instead; the reviewer judged the
 mismatch to predate the pull request, and said that refining ST-15 should have it take ST-15 out
 of that marker and keep ST-32. It cites `docs/agent-workflow-design.md:1587`, which is the head's
-line; the base's has **Planned (ST-15)** on line 1586. No finding in either came from reading the
-base's file for the head's. Both summaries say the remote branches and the pull requests named
-could not be checked, with no network and no GitHub.
+line, whose marker names ST-15 and ST-32; the base's, on line 1586, names ST-15 alone. No finding
+in either came from reading the base's file for the head's. Both summaries say the remote branches
+and the pull requests named could not be checked, with no network and no GitHub.
 
 ### Costs
 
