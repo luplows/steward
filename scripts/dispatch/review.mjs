@@ -539,7 +539,7 @@ async function verdictAt(ctx, number, headSha) {
 
 // --------------------------------------------------------------------- CLI
 
-export const NON_FAILURES =['recorded', 'no-verdict', 'already-reviewed']
+export const NON_FAILURES = ['recorded', 'no-verdict', 'already-reviewed']
 
 async function main(argv) {
   const args = [...argv]
