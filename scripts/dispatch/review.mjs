@@ -484,8 +484,9 @@ export async function reviewPullRequest({
     // A `null` verdict is the reviewer declining to review; the PR stays pending.
     if (verdict.verdict === null) return { status: 'no-verdict', headSha: verdict.head, summary: verdict.summary, sessions }
 
-    // The checkout it was handed was at `pr.headSha`; a verdict about another
-    // commit was not made from what it read.
+    // The reviewer was handed `pr.headSha` to read through git, from a
+    // checkout of the base (ST-38/AC-2); a verdict about another commit was not
+    // made from what it was handed.
     if (verdict.head !== pr.headSha) {
       return { status: 'head-moved', reason: `the reviewer reported ${verdict.head}, having been handed ${pr.headSha}`, sessions }
     }
