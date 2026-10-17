@@ -2176,6 +2176,22 @@ shortened where it is long, so that it can be found there with its date.
   Whether its sandbox can read Windows Credential Manager under `read-only` is left to ST-6. Tool,
   model and effort are the machine's settings (above). See "Trials and measurements", "Codex as
   reviewer".
+- **The reviewer starts in a checkout of the base** (decided 2026-10-16 by the owner, with the
+  planning session, after the first rotation on the Codex reviewer; **Planned (ST-38)**). A
+  reviewer's tool loads its instructions, settings and hooks from the directory it starts in:
+  `CLAUDE.md`, the `AGENTS.md` it imports and `.claude/settings.json` for Claude Code, and
+  `AGENTS.md` for Codex. Started in a checkout of the head, as it was, the reviewer would take
+  them from the pull request it is judging, so a pull request could add instructions, permissions
+  or a hook. Started in a checkout of the base branch, it takes them from `main`, which only
+  reviewed changes reach, and the pull request's copies are only text it reads. The head is read
+  through git alone (`git show <sha>:<path>`, `git grep`, `git diff`), from the refs ATC has
+  fetched, so the reviewer needs no network to see it. The cost is that the working tree is the
+  wrong revision for the head: `reviewer.md` says so, and two replayed verdicts check that no
+  finding comes from reading the base's file for the head's. The design is tried first, posting
+  nothing, on both tools, against a head that adds instructions and a hook (ST-38). Considered
+  and not chosen: a flag limiting which settings Claude Code loads, which would leave Codex
+  without an answer and the head's other files in reach; and a second checkout, of the head,
+  beside the base's, which keeps the head's files on disk where a tool could load them.
 - **`model: null` means the coder's default, and ST-1 and ST-13 are retired** (decided 2026-10-16
   by the owner, with the planning session, while #41 was open; built in ST-34). A story whose
   `model:` is `null` runs the coder's default choice in the machine's settings, so that a story
