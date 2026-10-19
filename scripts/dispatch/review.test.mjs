@@ -13,7 +13,7 @@ import { createContext, parseComments, parseMarkerComment } from './github.mjs'
 import { parseRules } from './rules.mjs'
 import {
   assertReviewableCheckout, chooseReviewer, formatFindings, HONOURED_ASSOCIATIONS, NON_FAILURES,
-  parseReviewerVerdict, unitCoderModel, unitModel, reviewPullRequest as reviewPullRequestWith,
+  parseReviewerVerdict, reviewerCandidates, unitCoderModel, unitModel, reviewPullRequest as reviewPullRequestWith,
 } from './review.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -235,12 +235,13 @@ function standIn(reply) {
 // running anything else has pushed past the 5 s default. Passed to the tests that call review().
 const REVIEW_TEST_TIMEOUT = 30_000
 
-const review = (branch, { states, comments, body, reply, baseEnv = {}, repoDir, rereview, scratchRoot, machineSettings } = {}) => {
+const review = (branch, { states, comments, body, reply, baseEnv = {}, repoDir, rereview, scratchRoot, machineSettings, choice, extra } = {}) => {
   const github = fakeGitHub({ branch, states: states ?? [shas[branch]], comments, body })
   const session = standIn(reply ?? verdictText(shas[branch]))
   const done = reviewPullRequest({
     number: 7, ctx: github.ctx, repoDir: repoDir ?? dirtyClone(), baseEnv, rereview, scratchRoot,
     sessionOptions: session.sessionOptions, ...(machineSettings && { machineSettings: machineOf(machineSettings) }),
+    ...(choice !== undefined && { choice }), ...extra,
   })
   return { done, github, session }
 }
@@ -425,6 +426,7 @@ describe('ST-37: a null verdict on a head that has not moved is cannot-review', 
     const result = await done
     expect(result).toEqual({
       status: 'cannot-review', headSha: shas['story/OQ-99-thing'], summary: 'git would not start.', sessions: 1,
+      choice: { name: 'opus', tool: 'claude', model: 'opus', effort: 'high', why: 'default' },
     })
     expect(github.posted).toEqual([])
     expect(github.requests.filter((r) => r.startsWith('POST'))).toEqual([])
@@ -1296,6 +1298,9 @@ describe('ST-31/AC-3: no reviewer session starts while the usage is over the rev
     expect(result).toEqual({
       status: 'over-usage', window, percent: window === 'session' ? session : weekly, limit,
       resetsAt: window === 'session' ? 'reset-s' : 'reset-w',
+      skipped: ['opus', 'sonnet'].map((name) => ({
+        name, status: 'over-usage', window, percent: window === 'session' ? session : weekly, limit,
+      })),
     })
     expect(stand.calls).toEqual([])
     expect(github.posted).toEqual([])
@@ -1321,7 +1326,10 @@ describe('ST-31/AC-3: no reviewer session starts while the usage is over the rev
 
   it('ST-31/AC-3: an unreadable usage is usage-unknown, with no session', async () => {
     const { result, github, session } = await refused(async () => ({ ok: false, reason: 'no usage_report' }))
-    expect(result).toEqual({ status: 'usage-unknown', reason: 'no usage_report' })
+    expect(result).toEqual({
+      status: 'usage-unknown', reason: 'no usage_report',
+      skipped: ['opus', 'sonnet'].map((name) => ({ name, status: 'usage-unknown', reason: 'no usage_report' })),
+    })
     expect(session.calls).toEqual([])
     expect(github.posted).toEqual([])
   }, REVIEW_TEST_TIMEOUT)
@@ -1404,7 +1412,7 @@ describe('ST-32/AC-2, AC-3, AC-5: a reviewer whose choice runs on Codex', () => 
     return { calls, codexSession: (options) => spawnCodexReviewer({ ...options, run }) }
   }
 
-  const reviewWithCodex = (branch, { reply, write, baseEnv = {}, codexUsage, usage } = {}) => {
+  const reviewWithCodex = (branch, { reply, write, baseEnv = {}, codexUsage, usage, choice } = {}) => {
     const github = fakeGitHub({ branch, states: [shas[branch]] })
     const stand = codexStandIn(reply ?? verdictText(shas[branch]), { write })
     const claude = standIn(verdictText(shas[branch]))
@@ -1414,6 +1422,7 @@ describe('ST-32/AC-2, AC-3, AC-5: a reviewer whose choice runs on Codex', () => 
       sessionOptions: claude.sessionOptions, codexSession: stand.codexSession,
       usage: usage ?? (async () => { throw new Error("Claude Code's usage was read for a Codex choice") }),
       codexUsage: codexUsage ?? (async (o) => { usageCalls.push(o); return UNDER_LIMITS }),
+      ...(choice !== undefined && { choice }),
     })
     return { done, github, stand, claude, usageCalls }
   }
@@ -1485,17 +1494,96 @@ describe('ST-32/AC-2, AC-3, AC-5: a reviewer whose choice runs on Codex', () => 
 
   it("ST-32/AC-3: over the reviewer's limit on Codex's usage starts no session and posts nothing", async () => {
     const over = { ok: true, session: { percent: 95, resetsAt: 1 }, weekly: { percent: 10, resetsAt: 2 } }
-    const { done, stand, github } = reviewWithCodex('story/OQ-99-thing', { codexUsage: async () => over })
+    // Claude Code's usage is spent too, so ATC finds no other choice (ST-35/AC-2).
+    const { done, stand, github } = reviewWithCodex('story/OQ-99-thing', {
+      codexUsage: async () => over, usage: async () => over,
+    })
     const result = await done
-    expect(result).toEqual({ status: 'over-usage', window: 'session', percent: 95, limit: 90, resetsAt: 1 })
+    expect(result).toMatchObject({ status: 'over-usage', window: 'session', percent: 95, limit: 90, resetsAt: 1 })
+    expect(result.skipped.map((entry) => entry.name)).toEqual(['sol-6.1', 'opus', 'sonnet'])
     expect(stand.calls).toEqual([])
     expect(github.posted).toEqual([])
   }, REVIEW_TEST_TIMEOUT)
 
   it("ST-32/AC-3: Codex's usage that cannot be read is usage-unknown, with no session", async () => {
-    const { done, stand } = reviewWithCodex('story/OQ-99-thing', { codexUsage: async () => ({ ok: false, reason: 'timed out' }) })
-    expect(await done).toEqual({ status: 'usage-unknown', reason: 'timed out' })
+    const unreadable = async () => ({ ok: false, reason: 'timed out' })
+    const { done, stand } = reviewWithCodex('story/OQ-99-thing', { codexUsage: unreadable, usage: unreadable })
+    expect(await done).toMatchObject({ status: 'usage-unknown', reason: 'timed out' })
     expect(stand.calls).toEqual([])
+  }, REVIEW_TEST_TIMEOUT)
+
+  const OVER = { ok: true, session: { percent: 95, resetsAt: 1 }, weekly: { percent: 10, resetsAt: 2 } }
+
+  it('ST-35/AC-2, AC-3: a Codex default over its usage moves to a Claude choice, which is started and recorded with what was skipped', async () => {
+    const { done, stand, claude, github } = reviewWithCodex('story/OQ-99-thing', {
+      codexUsage: async () => OVER, usage: async () => UNDER_LIMITS,
+    })
+    const result = await done
+    expect(result).toMatchObject({ status: 'recorded', verdict: 'pass', sessions: 1 })
+    expect(stand.calls).toEqual([])
+    expect(claude.calls).toHaveLength(1)
+    expect(modelOf(claude.calls[0].args)).toBe('opus')
+    expect(github.posted).toHaveLength(1)
+    expect(result.choice).toEqual({ name: 'opus', tool: 'claude', model: 'opus', effort: 'high', why: 'usage' })
+    expect(result.skipped).toEqual([{ name: 'sol-6.1', status: 'over-usage', window: 'session', percent: 95, limit: 90 }])
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-35/AC-2, AC-3: a Codex default whose usage cannot be read moves to a Claude choice, with the reason skipped', async () => {
+    const { done, stand, claude } = reviewWithCodex('story/OQ-99-thing', {
+      codexUsage: async () => ({ ok: false, reason: 'timed out' }), usage: async () => UNDER_LIMITS,
+    })
+    const result = await done
+    expect(result.status).toBe('recorded')
+    expect(stand.calls).toEqual([])
+    expect(claude.calls).toHaveLength(1)
+    expect(result.choice.why).toBe('usage')
+    expect(result.skipped).toEqual([{ name: 'sol-6.1', status: 'usage-unknown', reason: 'timed out' }])
+  }, REVIEW_TEST_TIMEOUT)
+
+  it("ST-35/AC-2, AC-3: Claude Code's usage is read once for two Claude choices, and every tool spent returns the first choice's refusal with no session", async () => {
+    const claudeCalls = []
+    const { done, stand, claude, github } = reviewWithCodex('story/OQ-99-thing', {
+      codexUsage: async () => ({ ok: false, reason: 'codex gone' }),
+      usage: async (o) => { claudeCalls.push(o); return OVER },
+    })
+    const result = await done
+    expect(claudeCalls).toHaveLength(1)
+    expect(result).toEqual({
+      status: 'usage-unknown', reason: 'codex gone',
+      skipped: [
+        { name: 'sol-6.1', status: 'usage-unknown', reason: 'codex gone' },
+        { name: 'opus', status: 'over-usage', window: 'session', percent: 95, limit: 90 },
+        { name: 'sonnet', status: 'over-usage', window: 'session', percent: 95, limit: 90 },
+      ],
+    })
+    expect(stand.calls).toEqual([])
+    expect(claude.calls).toEqual([])
+    expect(github.posted).toEqual([])
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-35/AC-3: a default under its usage is why default, with nothing skipped', async () => {
+    const result = await reviewWithCodex('story/OQ-99-thing').done
+    expect(result.choice).toEqual({ name: 'sol-6.1', tool: 'codex', model: 'gpt-6.1-sol', effort: 'high', why: 'default' })
+    expect(result).not.toHaveProperty('skipped')
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-35/AC-1: a named Codex choice over its usage returns over-usage, with no session on another choice and no Claude usage read', async () => {
+    const { done, stand, claude, github } = reviewWithCodex('story/OQ-99-thing', {
+      choice: 'sol-6.1', codexUsage: async () => OVER,
+    })
+    expect(await done).toEqual({ status: 'over-usage', window: 'session', percent: 95, limit: 90, resetsAt: 1 })
+    expect(stand.calls).toEqual([])
+    expect(claude.calls).toEqual([])
+    expect(github.posted).toEqual([])
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-35/AC-1: a named choice whose usage cannot be read returns usage-unknown, taking no other choice', async () => {
+    const { done, stand, claude } = reviewWithCodex('story/OQ-99-thing', {
+      choice: 'opus', usage: async () => ({ ok: false, reason: 'no report' }),
+    })
+    expect(await done).toEqual({ status: 'usage-unknown', reason: 'no report' })
+    expect(stand.calls).toEqual([])
+    expect(claude.calls).toEqual([])
   }, REVIEW_TEST_TIMEOUT)
 
   it('ST-32/AC-2: a choice whose tool is claude is started as before, with no Codex session or usage read', async () => {
@@ -1510,4 +1598,125 @@ describe('ST-32/AC-2, AC-3, AC-5: a reviewer whose choice runs on Codex', () => 
     expect(result.status).toBe('recorded')
     expect(claude.calls).toHaveLength(1)
   }, REVIEW_TEST_TIMEOUT)
+})
+
+describe("ST-35/AC-1: --choice names the reviewer's choice for a run", () => {
+  it('ST-35/AC-1: a name that is no available choice is refused before the usage is read or anything is fetched', async () => {
+    let reads = 0
+    const run = review('story/OQ-99-thing', {
+      choice: 'haiku', extra: { usage: async () => { reads += 1; return UNDER_LIMITS } },
+    })
+    const result = await run.done
+    expect(result).toMatchObject({ status: 'choice-unavailable', choice: 'haiku' })
+    expect(result.reason).toContain('roles.reviewer.available')
+    expect(reads).toBe(0)
+    expect(run.session.calls).toEqual([])
+    expect(run.github.requests).toEqual([])
+    expect(run.github.posted).toEqual([])
+    expect((await review('story/OQ-99-thing', { choice: 'toString' }).done).status).toBe('choice-unavailable')
+  }, REVIEW_TEST_TIMEOUT)
+
+  it("ST-35/AC-1, AC-3: an available name runs in place of the default, reading that tool's usage once", async () => {
+    const reads = []
+    const run = review('story/OQ-99-thing', { choice: 'sonnet', extra: { usage: async (o) => { reads.push(o); return UNDER_LIMITS } } })
+    const result = await run.done
+    expect(result).toMatchObject({ status: 'recorded', sessions: 1 })
+    expect(modelOf(run.session.calls[0].args)).toBe('sonnet')
+    expect(result.choice).toEqual({ name: 'sonnet', tool: 'claude', model: 'sonnet', effort: 'high', why: 'crew' })
+    expect(result).not.toHaveProperty('skipped')
+    expect(reads).toHaveLength(1)
+  }, REVIEW_TEST_TIMEOUT)
+
+  it("ST-35/AC-1: a named choice runs even when its model is the coder's", async () => {
+    const run = review('story/OQ-98-other', { body: 'Unit: stories/OQ-98-other.md', choice: 'opus' })
+    const result = await run.done
+    expect(result.status).toBe('recorded')
+    expect(modelOf(run.session.calls[0].args)).toBe('opus')
+    expect(result.choice.why).toBe('crew')
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-35/AC-1: a named choice over its usage returns over-usage and starts no session on another choice', async () => {
+    const run = review('story/OQ-99-thing', {
+      choice: 'opus',
+      extra: { usage: async () => ({ ok: true, session: { percent: 99, resetsAt: 's' }, weekly: { percent: 1, resetsAt: 'w' } }) },
+    })
+    expect(await run.done).toEqual({ status: 'over-usage', window: 'session', percent: 99, limit: 90, resetsAt: 's' })
+    expect(run.session.calls).toEqual([])
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-35/AC-9: the usage line of the header lists --choice', () => {
+    expect(readFileSync(path.join(here, 'review.mjs'), 'utf8').split('*/')[0]).toContain('[--choice <name>]')
+  })
+})
+
+describe('ST-35/AC-3: the choice a review ran, and why', () => {
+  it("ST-35/AC-3: the default is why default; a default with the coder's model, moved off, is why coder-model", async () => {
+    const kept = await review('story/OQ-99-thing', { body: 'Unit: stories/OQ-99-thing.md' }).done
+    expect(kept.choice).toEqual({ name: 'opus', tool: 'claude', model: 'opus', effort: 'high', why: 'default' })
+    const moved = await review('story/OQ-98-other', { body: 'Unit: stories/OQ-98-other.md' }).done
+    expect(moved.choice).toEqual({ name: 'sonnet', tool: 'claude', model: 'sonnet', effort: 'high', why: 'coder-model' })
+    expect(moved).not.toHaveProperty('skipped')
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-35/AC-3: a result after a session carries the choice whatever its status', async () => {
+    const result = await review('story/OQ-99-thing', { reply: 'not a verdict' }).done
+    expect(result.status).toBe('malformed-verdict')
+    expect(result.choice.name).toBe('opus')
+  }, REVIEW_TEST_TIMEOUT)
+})
+
+describe('ST-35/AC-8: the reviewer differs from the models on the Coder: line', () => {
+  const withThird = () => {
+    const settings = fixtureMachineSettings()
+    settings.roles.reviewer.available.haiku = { tool: 'claude', model: 'haiku', effort: 'low' }
+    return settings
+  }
+  const bodyWith = (...lines) => ['Unit: stories/OQ-99-thing.md', '', ...lines].join('\n')
+
+  it("ST-35/AC-8: a Coder: line naming a choice the story's model: does not, and the reviewer avoids that choice's model", async () => {
+    const run = review('story/OQ-99-thing', { body: bodyWith('Coder: opus') })
+    const result = await run.done
+    expect(modelOf(run.session.calls[0].args)).toBe('sonnet')
+    expect(result.choice.why).toBe('coder-model')
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-35/AC-8: two names, both models avoided', async () => {
+    const run = review('story/OQ-99-thing', { body: bodyWith('Coder: sonnet, opus'), machineSettings: withThird() })
+    await run.done
+    expect(modelOf(run.session.calls[0].args)).toBe('haiku')
+    // With only those two reviewer choices, none differs from both.
+    const none = review('story/OQ-99-thing', { body: bodyWith('Coder: sonnet, opus') })
+    const result = await none.done
+    expect(result.status).toBe('reviewer-unavailable')
+    expect(result.reason).toContain('sonnet, opus')
+    expect(none.session.calls).toEqual([])
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-35/AC-8: a name that is not an available choice stands for its own model', async () => {
+    const run = review('story/OQ-99-thing', { body: bodyWith('Coder: claude-opus-5-5') })
+    await run.done
+    expect(modelOf(run.session.calls[0].args)).toBe('sonnet')
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-35/AC-8: the last line that starts Coder: is the one read', async () => {
+    const run = review('story/OQ-99-thing', { body: bodyWith('Coder: opus', 'Coder: sonnet') })
+    await run.done
+    expect(modelOf(run.session.calls[0].args)).toBe('opus')
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-35/AC-8: a body with no Coder: line is reviewed as before, from the unit', async () => {
+    const sonnet = review('story/OQ-99-thing', { body: 'Unit: stories/OQ-99-thing.md' })
+    await sonnet.done
+    expect(modelOf(sonnet.session.calls[0].args)).toBe('opus')
+    const opus = review('story/OQ-98-other', { body: 'Unit: stories/OQ-98-other.md' })
+    await opus.done
+    expect(modelOf(opus.session.calls[0].args)).toBe('sonnet')
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-35/AC-8: chooseReviewer takes the array of models the coder ran', () => {
+    const settings = withThird()
+    expect(chooseReviewer(settings, ['opus', 'sonnet']).name).toBe('haiku')
+    expect(chooseReviewer(settings, []).name).toBe('opus')
+    expect(reviewerCandidates(settings, ['opus']).map((c) => c.name)).toEqual(['sonnet', 'haiku'])
+  })
 })

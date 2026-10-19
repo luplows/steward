@@ -25,7 +25,10 @@
  * choice runs on (`usage.mjs`, ST-31; `codex.mjs` for Codex, ST-32), and
  * starts none when either window is at or over the reviewer's limit in the
  * settings (`over-usage`), or when the usage cannot be read (`usage-unknown`).
- * A second session for a malformed verdict is not checked again.
+ * Unless a choice was named by hand (`--choice`), it then tries the reviewer's other
+ * choices whose model the coder did not run, and starts the first whose tool's usage is
+ * readable and under the limit (ST-35, `choices.mjs`). A second session for a malformed
+ * verdict is not checked again.
  *
  * A unit that is missing, unreadable, `Unit: none` or one of several links
  * does not stop the review: the reviewer is told which, and the rules judge it.
@@ -39,11 +42,15 @@
  * a failure that stops the rotation (`docs/controller.md`).
  *
  * Usage:
- *   node scripts/dispatch/review.mjs <pr-number> [--repo owner/name] [--rereview]
+ *   node scripts/dispatch/review.mjs <pr-number> [--repo owner/name] [--rereview] [--choice <name>]
  *
  * `--rereview` permits reviewing a head whose governing verdict is a `block`
  * (`docs/agent-workflow-design.md`, "What the gate enforces", item 3). Over any
  * other verdict, or none, it stops.
+ *
+ * `--choice <name>` runs the reviewer on that key of `roles.reviewer.available` for this run
+ * (ST-35/AC-1). It is final: it runs whatever the coder's model, and when its tool's usage is over
+ * the limit or unreadable the run stops, with no other choice taken.
  */
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
@@ -52,6 +59,7 @@ import { homedir, tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { coderLineNames, firstWithUsage } from './choices.mjs'
 import { readCodexUsage, spawnCodexReviewer } from './codex.mjs'
 import { coderEnv } from './coder-env.mjs'
 import {
@@ -69,7 +77,7 @@ import { readRules } from './rules.mjs'
 import { readSettings } from './settings.mjs'
 import { spawnSession } from './spawn.mjs'
 import { describeUnit, findUnitLink, readUnit } from './unit.mjs'
-import { checkUsage, readUsage } from './usage.mjs'
+import { readUsage } from './usage.mjs'
 
 const execFileAsync = promisify(execFile)
 
@@ -129,6 +137,22 @@ export function unitCoderModel(machine, found, read) {
   return Object.hasOwn(available, named) ? available[named].model : named
 }
 
+/**
+ * The models the coder ran (ST-35/AC-8), which the reviewer's choice must differ from: for each
+ * name on the last `Coder:` line of the pull request's `body`, the `model` of that key of
+ * `roles.coder.available`, else the name as written; with no such line, the model the unit gives
+ * (`unitCoderModel`), or none when the unit names none.
+ */
+export function coderModelsRan(machine, body, found, read) {
+  const names = coderLineNames(body)
+  if (names !== null) {
+    const { available } = machine.roles.coder
+    return names.map((name) => (Object.hasOwn(available, name) ? available[name].model : name))
+  }
+  const model = unitCoderModel(machine, found, read)
+  return model === null ? [] : [model]
+}
+
 // ------------------------------------------------------------------- model
 
 function sameModel(a, b) {
@@ -141,14 +165,25 @@ function sameModel(a, b) {
  * decorrelates knowledge, not reasoning style, so a different model from the coder's): the
  * `default` of `roles.reviewer` unless its model is the coder's (`unitCoderModel`), else the first
  * other choice in `available`, in the file's order, whose model differs. `null` when none does.
- * With no coder model (`null`) it is the default.
+ * With no coder model (`null`) it is the default. `coderModel` is a model, or an array of the
+ * models the coder ran (ST-35/AC-8), every one of which the choice must differ from.
  */
 export function chooseReviewer(machine, coderModel) {
+  return reviewerCandidates(machine, coderModel)[0] ?? null
+}
+
+/**
+ * Every choice the reviewer may run, in the order ATC tries them (ST-35/AC-2): the one
+ * `chooseReviewer` picks, then each other choice in `roles.reviewer.available`, in the file's
+ * order, whose model differs from every model the coder ran.
+ */
+export function reviewerCandidates(machine, coderModel) {
   const { available, default: preferred } = machine.roles.reviewer
-  const differs = (choice) => typeof coderModel !== 'string' || !sameModel(choice.model, coderModel)
-  const name = [preferred, ...Object.keys(available).filter((key) => key !== preferred)]
-    .find((key) => differs(available[key]))
-  return name === undefined ? null : { name, ...available[name] }
+  const ran = [coderModel].flat().filter((model) => typeof model === 'string')
+  const differs = (choice) => ran.every((model) => !sameModel(choice.model, model))
+  return [preferred, ...Object.keys(available).filter((key) => key !== preferred)]
+    .filter((key) => differs(available[key]))
+    .map((name) => ({ name, ...available[name] }))
 }
 
 // ----------------------------------------------------------------- verdict
@@ -303,15 +338,28 @@ export async function assertReviewableCheckout(dir, sha, repoDir) {
  *                  defaults to `os.tmpdir()`. Not exposed by the CLI
  *   sessionOptions extra `spawnSession` options (executable, run, timeouts,
  *                  budget)
+ *   choice         the name of a key of `roles.reviewer.available` to run instead of
+ *                  the reviewer's own choice (ST-35/AC-1). Final: it runs even when its
+ *                  model is the coder's, and when its tool's usage is over the limit or
+ *                  unreadable the call returns that, with no other choice taken. A name that
+ *                  is no available choice is `choice-unavailable`, before the usage is read
  *   usage          `({ cwd })`, resolving `readUsage`'s result; defaults to
- *                  `readUsage`. Called once, in `repoDir`, when the reviewer's
- *                  choice runs on Claude Code
+ *                  `readUsage`. Called at most once, in `repoDir`, for the choices that run
+ *                  on Claude Code
  *   codexUsage     `({ executable, cwd })`, resolving `readCodexUsage`'s result,
  *                  in its place when the choice runs on Codex (ST-32/AC-3)
  *   codexSession   `spawnCodexReviewer`'s shape of call, for a Codex choice
  *                  (ST-32/AC-2); defaults to `spawnCodexReviewer`
  *   machineSettings  `()`, resolving the machine's settings; defaults to `readMachineSettings`
  *                  on the real environment and home directory. Called once (ST-34)
+ *
+ * Without `choice`, the choices are tried in the order `reviewerCandidates` gives (ST-35/AC-2),
+ * each tool's usage read at most once, and the first whose usage is readable and under the limit
+ * runs. Every result returned after a session started carries `choice` (`name`, `tool`, `model`,
+ * `effort` and `why`: `crew`, `default`, `coder-model` or `usage`) and, when ATC moved off the
+ * choice it would have run, `skipped`: one entry per choice not started, with its `name` and
+ * `status` (`over-usage` with `window`, `percent` and `limit`; `usage-unknown` with `reason`).
+ * A refusal after every choice was tried carries `skipped` too (ST-35/AC-3).
  *
  * Resolves `{ status, ... }`. `recorded` carries the comment id; every other
  * status means nothing was posted, and `reason` says why. `no-verdict` (a
@@ -327,7 +375,8 @@ export async function assertReviewableCheckout(dir, sha, repoDir) {
  * that is missing from the base branch or does not parse: it carries
  * `problems`, and comes before any session. `reviewer-unavailable`
  * (ST-34/AC-5) is a machine whose reviewer choices all have the coder's model:
- * no session is started, and it is a failure like the others.
+ * no session is started, and it is a failure like the others. So is `choice-unavailable`
+ * (ST-35/AC-1), with `choice`: the name given is no key of `roles.reviewer.available`.
  * Every result returned after a session started carries `sessions`, the
  * number of reviewer sessions run (1 or 2, OQ-121). A verdict that does not
  * parse (`parseReviewerVerdict` rejects it) gets one re-run, in the same
@@ -338,13 +387,21 @@ export async function assertReviewableCheckout(dir, sha, repoDir) {
  */
 export async function reviewPullRequest({
   number, ctx, repoDir = process.cwd(), promptTemplate, baseEnv = process.env, sessionOptions = {},
-  rereview = false, scratchRoot = tmpdir(), usage = readUsage,
+  rereview = false, scratchRoot = tmpdir(), usage = readUsage, choice: named,
   machineSettings = () => readMachineSettings({ env: process.env, homedir: homedir() }),
   codexUsage = readCodexUsage, codexSession = spawnCodexReviewer,
 }) {
   const template = promptTemplate ?? readFileSync(REVIEWER_PROMPT, 'utf8')
   const { unitLinks, rulesFile } = await readSettings(repoDir)
   const machine = await machineSettings()
+  // ST-35/AC-1: a name that is no available choice, before anything is read or started.
+  const { available: reviewerChoices } = machine.roles.reviewer
+  if (named !== undefined && !Object.hasOwn(reviewerChoices, named)) {
+    return {
+      status: 'choice-unavailable', choice: named,
+      reason: `${JSON.stringify(named)} is no key of roles.reviewer.available (${Object.keys(reviewerChoices).join(', ')})`,
+    }
+  }
   const pr = await getPullRequestState(ctx, number)
   if (!SHA_RE.test(pr.headSha) || !pr.headRef || !pr.baseRef) {
     throw new Error(`pull request #${number} did not resolve a head SHA, head branch and base branch`)
@@ -398,25 +455,44 @@ export async function reviewPullRequest({
     const found = findUnitLink(pr.body, unitLinks)
     const read = found.kind === 'link' ? await readUnit(found, { repoDir, base: pr.baseRef, ctx }) : null
     const unit = { note: describeUnit(found, read), text: read?.read === true ? read.text : NO_UNIT_TEXT }
-    // ST-34/AC-5: a choice whose model is not the coder's, or no session at all.
-    const choice = chooseReviewer(machine, unitCoderModel(machine, found, read))
-    if (choice === null) {
+    // ST-34/AC-5, ST-35/AC-2, AC-8: the choices whose model is not one the coder ran, or no
+    // session at all. A choice named by hand is final (ST-35/AC-1) and needs none of this.
+    const coderModels = coderModelsRan(machine, pr.body, found, read)
+    const candidates = named === undefined
+      ? reviewerCandidates(machine, coderModels)
+      : [{ name: named, ...reviewerChoices[named] }]
+    if (candidates.length === 0) {
       return {
         status: 'reviewer-unavailable',
-        reason: `no choice in roles.reviewer.available has a model that differs from the coder's, ${unitCoderModel(machine, found, read)}`,
+        reason: `no choice in roles.reviewer.available has a model that differs from the coder's, ${coderModels.join(', ')}`,
       }
     }
 
-    // ST-31/AC-3, ST-32/AC-3: once per call, after the decision to review and
-    // the reviewer's choice, and before any checkout or session, reading the
-    // usage of the tool the choice runs on. The malformed-verdict re-run below
-    // is not checked again.
+    // ST-31/AC-3, ST-32/AC-3, ST-35/AC-2: once per call, after the decision to review and the
+    // reviewer's choices, and before any checkout or session, reading the usage of the tools the
+    // choices run on, each at most once. The malformed-verdict re-run below is not checked again.
+    const readers = {
+      claude: usage,
+      codex: ({ cwd }) => codexUsage({ executable: machine.tools.codex.executable, cwd }),
+    }
+    const picked = await firstWithUsage({
+      candidates, readers, cwd: repoDir, limits: machine.usageLimits.reviewer,
+    })
+    if (picked.refusal) {
+      // A choice named by hand was the only one tried, so there is nothing to list as skipped.
+      const { skipped: _tried, ...refusal } = picked.refusal
+      return named === undefined ? picked.refusal : refusal
+    }
+    const { choice, skipped } = picked
     const codex = choice.tool === 'codex'
-    const readChosen = codex
-      ? ({ cwd }) => codexUsage({ executable: machine.tools.codex.executable, cwd })
-      : usage
-    const refused = await checkUsage({ read: readChosen, cwd: repoDir, limits: machine.usageLimits.reviewer })
-    if (refused) return refused
+    const why = named !== undefined ? 'crew'
+      : skipped.length > 0 ? 'usage'
+        : choice.name === machine.roles.reviewer.default ? 'default' : 'coder-model'
+    // What every result returned after a session started carries (ST-35/AC-3).
+    const chosen = {
+      choice: { name: choice.name, tool: choice.tool, model: choice.model, effort: choice.effort, why },
+      ...(skipped.length > 0 && { skipped }),
+    }
 
     await git(repoDir, ['worktree', 'add', '--detach', tree, baseSha])
     worktreeAdded = true
@@ -458,7 +534,7 @@ export async function reviewPullRequest({
     let sessions = 1
     let { classification, output } = await runSession()
     if (classification.outcome !== 'completed') {
-      return { status: 'session-failed', outcome: classification.outcome, reason: classification.reason, sessions }
+      return { status: 'session-failed', outcome: classification.outcome, reason: classification.reason, sessions, ...chosen }
     }
 
     let parsed = parseReviewerVerdict(output.result, rules)
@@ -473,17 +549,17 @@ export async function reviewPullRequest({
         return {
           status: 'malformed-verdict',
           reason: `first session: ${firstReason}; no second session: the checkout was changed (${error.message})`,
-          sessions,
+          sessions, ...chosen,
         }
       }
       sessions = 2
       ;({ classification, output } = await runSession())
       if (classification.outcome !== 'completed') {
-        return { status: 'session-failed', outcome: classification.outcome, reason: classification.reason, sessions }
+        return { status: 'session-failed', outcome: classification.outcome, reason: classification.reason, sessions, ...chosen }
       }
       parsed = parseReviewerVerdict(output.result, rules)
       if (!parsed.ok) {
-        return { status: 'malformed-verdict', reason: `first session: ${firstReason}; second session: ${parsed.reason}`, sessions }
+        return { status: 'malformed-verdict', reason: `first session: ${firstReason}; second session: ${parsed.reason}`, sessions, ...chosen }
       }
     }
     const { verdict } = parsed
@@ -495,38 +571,38 @@ export async function reviewPullRequest({
     if (verdict.verdict === null) {
       const now = await getPullRequestState(ctx, number)
       const status = now.headSha === pr.headSha ? 'cannot-review' : 'no-verdict'
-      return { status, headSha: verdict.head, summary: verdict.summary, sessions }
+      return { status, headSha: verdict.head, summary: verdict.summary, sessions, ...chosen }
     }
 
     // The reviewer was handed `pr.headSha` to read through git, from a
     // checkout of the base (ST-38/AC-2); a verdict about another commit was not
     // made from what it was handed.
     if (verdict.head !== pr.headSha) {
-      return { status: 'head-moved', reason: `the reviewer reported ${verdict.head}, having been handed ${pr.headSha}`, sessions }
+      return { status: 'head-moved', reason: `the reviewer reported ${verdict.head}, having been handed ${pr.headSha}`, sessions, ...chosen }
     }
     const current = await getPullRequestState(ctx, number)
     if (verdict.head !== current.headSha) {
       return {
         status: 'head-moved',
         reason: `the pull request moved to ${current.headSha} during the review of ${verdict.head}`,
-        sessions,
+        sessions, ...chosen,
       }
     }
     const raced = await verdictAt(ctx, number, verdict.head)
     // Under a re-review the block being overridden is expected to be there; a
     // different governing marker is one that arrived during the review.
     if (raced && !(rereview && raced.commentId === existing.commentId)) {
-      return { status: 'already-reviewed', headSha: verdict.head, existing: raced, sessions }
+      return { status: 'already-reviewed', headSha: verdict.head, existing: raced, sessions, ...chosen }
     }
 
     let body
     try {
       body = composeMarkerComment({ headSha: verdict.head, verdict: verdict.verdict, findings: formatFindings(verdict) })
     } catch (error) {
-      return { status: 'unrecordable', reason: error.message, sessions }
+      return { status: 'unrecordable', reason: error.message, sessions, ...chosen }
     }
     const { id } = await postComment(ctx, number, body)
-    return { status: 'recorded', headSha: verdict.head, verdict: verdict.verdict, commentId: id, sessions }
+    return { status: 'recorded', headSha: verdict.head, verdict: verdict.verdict, commentId: id, sessions, ...chosen }
   } finally {
     if (!keepCheckout) {
       if (worktreeAdded) await git(repoDir, ['worktree', 'remove', '--force', tree]).catch(() => {})
@@ -554,14 +630,16 @@ async function main(argv) {
   const args = [...argv]
   const repoAt = args.indexOf('--repo')
   const repo = repoAt === -1 ? (await readSettings(process.cwd())).repo : args.splice(repoAt, 2)[1]
+  const choiceAt = args.indexOf('--choice')
+  const choice = choiceAt === -1 ? undefined : args.splice(choiceAt, 2)[1]
   const rereviewAt = args.indexOf('--rereview')
   const rereview = rereviewAt !== -1
   if (rereview) args.splice(rereviewAt, 1)
   const number = Number(args[0])
-  if (args.length !== 1 || !Number.isInteger(number) || number <= 0) {
-    throw new Error('usage: node scripts/dispatch/review.mjs <pr-number> [--repo owner/name] [--rereview]')
+  if (args.length !== 1 || !Number.isInteger(number) || number <= 0 || choice === '' || (choiceAt !== -1 && choice === undefined)) {
+    throw new Error('usage: node scripts/dispatch/review.mjs <pr-number> [--repo owner/name] [--rereview] [--choice <name>]')
   }
-  const result = await reviewPullRequest({ number, ctx: createContext({ repo }), rereview })
+  const result = await reviewPullRequest({ number, ctx: createContext({ repo }), rereview, choice })
   console.log(JSON.stringify(result, null, 2))
   if (!NON_FAILURES.includes(result.status)) process.exitCode = 1
 }

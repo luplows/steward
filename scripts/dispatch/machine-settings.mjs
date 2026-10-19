@@ -25,6 +25,8 @@ const OPTIONAL_TOP_KEYS = ['tools']
 export const MACHINE_ROLES = ['coder', 'reviewer']
 const ROLE_KEYS = ['default', 'available']
 const CHOICE_KEYS = ['tool', 'model', 'effort']
+// A coder's choice also has a `strength` (ST-35/AC-5); a reviewer's has none.
+const CODER_CHOICE_KEYS = [...CHOICE_KEYS, 'strength']
 const CHOICE_NAME_RE = /^[a-z0-9][a-z0-9._-]*$/
 // The tools each role may run: the Codex CLI for the reviewer only (ST-32); a Codex coder is ST-15's.
 export const ROLE_TOOLS = { coder: ['claude'], reviewer: ['claude', 'codex'] }
@@ -57,13 +59,16 @@ function checkKeys(filePath, name, object, keys) {
   }
 }
 
-/** Validates one choice, `{ tool, model, effort }`, whose tool must be one of `tools`. */
-function validateChoice(filePath, name, value, tools) {
+/**
+ * Validates one choice, `{ tool, model, effort }`, whose tool must be one of `tools`; with
+ * `strengthed` (a coder's choice) it also has a `strength`, a positive integer (ST-35/AC-5).
+ */
+function validateChoice(filePath, name, value, tools, strengthed) {
   if (!isObject(value)) {
     throw new Error(`${filePath}: '${name}' must be an object with 'tool', 'model' and 'effort', got ${JSON.stringify(value)}`)
   }
-  checkKeys(filePath, name, value, CHOICE_KEYS)
-  const { tool, model, effort } = value
+  checkKeys(filePath, name, value, strengthed ? CODER_CHOICE_KEYS : CHOICE_KEYS)
+  const { tool, model, effort, strength } = value
   if (!tools.includes(tool)) {
     throw new Error(`${filePath}: '${name}.tool' must be one of ${JSON.stringify(tools)}, got ${JSON.stringify(tool)}`)
   }
@@ -73,11 +78,15 @@ function validateChoice(filePath, name, value, tools) {
   if (!TOOL_EFFORTS[tool].includes(effort)) {
     throw new Error(`${filePath}: '${name}.effort' must be one of ${JSON.stringify(TOOL_EFFORTS[tool])}, got ${JSON.stringify(effort)}`)
   }
-  return { tool, model, effort }
+  if (!strengthed) return { tool, model, effort }
+  if (!Number.isInteger(strength) || strength < 1) {
+    throw new Error(`${filePath}: '${name}.strength' must be a positive integer, got ${JSON.stringify(strength)}`)
+  }
+  return { tool, model, effort, strength }
 }
 
 /** Validates one role, `{ default, available }`, whose choices may run any of `tools`. */
-function validateRole(filePath, name, value, tools) {
+function validateRole(filePath, name, value, tools, strengthed) {
   if (!isObject(value)) {
     throw new Error(`${filePath}: '${name}' must be an object with 'default' and 'available', got ${JSON.stringify(value)}`)
   }
@@ -92,7 +101,7 @@ function validateRole(filePath, name, value, tools) {
     if (!CHOICE_NAME_RE.test(choice)) {
       throw new Error(`${filePath}: '${availableName}.${choice}' is not a choice name matching ${CHOICE_NAME_RE}`)
     }
-    available[choice] = validateChoice(filePath, `${availableName}.${choice}`, body, tools)
+    available[choice] = validateChoice(filePath, `${availableName}.${choice}`, body, tools, strengthed)
   }
   if (typeof chosen !== 'string' || !Object.hasOwn(available, chosen)) {
     throw new Error(
@@ -145,8 +154,8 @@ function validateTools(filePath, value, used, fileExists) {
 
 /**
  * Reads and validates the machine's settings: `{ usageLimits, roles }`, where `roles.<role>` is
- * `{ default, available }`, `available` keeping the file's order, and `tools` when the file has
- * it. Throws, naming the file and the key with all its parents, on a missing file, invalid JSON, a
+ * `{ default, available }`, `available` keeping the file's order (each coder choice also has its
+ * `strength`, ST-35/AC-5), and `tools` when the file has it. Throws, naming the file and the key with all its parents, on a missing file, invalid JSON, a
  * missing or unknown key, or a value of the wrong form. `exists` says whether a tool's executable
  * names a file, not a directory; injectable for tests.
  */
@@ -184,7 +193,7 @@ export async function readMachineSettings({ env, homedir, exists = isFile }) {
   checkKeys(filePath, 'roles', data.roles, MACHINE_ROLES)
   const roles = {}
   for (const role of MACHINE_ROLES) {
-    roles[role] = validateRole(filePath, `roles.${role}`, data.roles[role], ROLE_TOOLS[role])
+    roles[role] = validateRole(filePath, `roles.${role}`, data.roles[role], ROLE_TOOLS[role], role === 'coder')
   }
 
   const used = new Set(MACHINE_ROLES.flatMap((role) => Object.values(roles[role].available).map((c) => c.tool)))
@@ -195,7 +204,7 @@ export async function readMachineSettings({ env, homedir, exists = isFile }) {
 /**
  * The choice a coder runs for a story whose `model:` is `name` (ST-34/AC-4): that key of
  * `roles.coder.available`, or the coder's `default` when `name` is `null`. Resolves
- * `{ name, tool, model, effort }`, or `null` when `name` is not an available choice.
+ * `{ name, tool, model, effort, strength }`, or `null` when `name` is not an available choice.
  */
 export function coderChoice(machine, name) {
   const { available, default: fallback } = machine.roles.coder
