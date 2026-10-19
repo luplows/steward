@@ -238,11 +238,12 @@ allowlist grants no `npm` or `npx`.
 description honestly describes the change. Prose that oversells a diff is real signal.
 
 **Verdict states:** `pass` / `pass-with-observations` / `block`. Binary pass/fail cannot express
-what reviewers here already produce — real problems rightly surfaced and arguably rightly not
-blocking. Without the third state the verdict record understates what review catches, and any
-measurement built on it is meaningless. **Planned (ST-4):** a finding the author would fix in the
-pull request is a `block`, and `pass-with-observations` is for findings that are real but not the
-diff's to fix (Part 3, "Decided so far", "A finding the author would fix is a block").
+what reviewers here produce — real problems rightly surfaced that are not the diff's to fix.
+Without the third state the verdict record understates what review catches, and any measurement
+built on it is meaningless. A finding the author would fix in the pull request is a `block`, and
+`pass-with-observations` is for findings that are real but not the diff's to fix: there before
+it, outside it, a suggestion, or a decision already recorded (`reviewer.md`, "Calibration" and
+"Your verdict"; Part 3, "Decided so far", "A finding the author would fix is a block").
 
 **Findings cite the checklist** by section and item, and the comment lists every section, applied
 or not, with a reason for each not applied, so a section skipped wrongly is visible
@@ -2208,15 +2209,19 @@ shortened where it is long, so that it can be found there with its date.
   confirming during a review that a check passed, goes with ST-33. Considered and not chosen:
   rewriting ST-1 down to `model: null`, which ST-34 covers.
 - **A finding the author would fix is a block** (decided 2026-10-16 by the owner, with the
-  planning session, from #41's review; **Planned (ST-4)**). #41's verdict found a contradiction
+  planning session, from #41's review; built in ST-4). #41's verdict found a contradiction
   that "Changes to stories", item 6, forbids, and filed it as an observation and passed. A finding
   the reviewer would fix in the pull request if it were the author is a `block`, whatever kind of
   text it is in. `pass-with-observations` is for findings that are real but not the diff's to
-  fix: there before it, outside it, a suggestion, or a decision already recorded. The change is
-  shown against steward's own verdicts, including #41's and #34's, before it is relied on. ST-4,
-  held since it came from tower-workshop-paths, is refined to build this by hand after ST-33.
-  Considered and not chosen: requiring each observation to say why it is not a block, which is
-  left until the replay shows it is needed.
+  fix: there before it, outside it, a suggestion, or a decision already recorded. `reviewer.md`
+  lists what must be a `block` (a defect the diff introduces, something it states falsely, an
+  acceptance criterion not genuinely met, a contradiction of the design of record or another
+  story, or something the unit puts out of scope), and a command it could not run no longer sends
+  the verdict to `pass-with-observations`. The change was shown against four of steward's own
+  verdicts, #41's, #34's, #39's and #37's, before it was relied on ("Trials and measurements",
+  "Grading replayed: ST-4"). ST-4, held since it came from tower-workshop-paths, was built by hand
+  after ST-33. Considered and not chosen: requiring each observation to say why it is not a block,
+  which is left until a replay shows it is needed; none has yet.
 - **A choice named by hand is final, and ATC moves off a spent tool** (decided 2026-10-16 by the
   owner, with the planning session, answering ST-35's open questions; **Planned (ST-35)**). The
   goal, in the owner's words: "swapping between Codex and Claude (or other future models)". A
@@ -3080,6 +3085,42 @@ of that marker and keep ST-32. It cites `docs/agent-workflow-design.md:1587`, wh
 line, whose marker names ST-15 and ST-32; the base's, on line 1586, names ST-15 alone. No finding
 in either came from reading the base's file for the head's. Both summaries say the remote branches
 and the pull requests named could not be checked, with no network and no GitHub.
+
+### Grading replayed: ST-4
+
+Run on 2026-10-19 by the planning session, for ST-4's AC-5, posting nothing: one run on each of
+four heads, with `reviewer.md` as ST-4 changes it, on the reviewer's default, Codex
+(`gpt-6.1-sol`, effort `high`, codex-cli 0.163.0). Each was composed as `reviewPullRequest`
+composes it: a checkout of the review's merge base (ST-38), `REVIEW.md` from `main` as it is now
+(`13c457c`), not as each head was first reviewed against, and the unit as it stood on `main` at
+that merge base, read by `readUnit`. Each ran in a standalone local clone whose `origin/main` was
+that merge base, so that no ref another session uses moved. One run each, one round: no condition
+failed, so the prompt was not changed.
+
+| Pull request | Head | Merge base | Verdict then | Verdict now | Findings | Time |
+|---|---|---|---|---|---|---|
+| #41 | `14366c1` | `896e6b4` | `pass-with-observations` | `block` | 3 `block` | 162.4 s |
+| #34 | `da6e5c5` | `52f5838` | `pass-with-observations` | `block` | 1 `block` | 86.5 s |
+| #39 | `3a7dcea` | `65cf57f` | `pass-with-observations` | `block` | 1 `block` | 90.4 s |
+| #37 | `c67ce61` | `a85755b` | `pass` | `pass` | none | 69.5 s |
+
+Each finding, and what shows it true at its head:
+
+| Run | Finding (item) | Shown by |
+|---|---|---|
+| #41 | ST-34's AC-5 compares the reviewer's model with the one the unit names, through `unitModel`, which returns `null` for a `model: null` story, so the reviewer could run the coder's default model ("Changes to stories", 3) | `git show 14366c1:stories/ST-34-machine-settings.md`, AC-5; `git show 14366c1:scripts/dispatch/review.mjs`, `unitModel`, which returns `null` unless `model` is a non-empty string |
+| #41 | the pull request adds ST-33, whose AC-1 forbids the reviewer running tests or lint, and edits ST-6, which still requires that "the reviewer still runs the project's tests and lint" ("Changes to stories", 6) | `git diff --stat 896e6b4...14366c1 -- stories/` (ST-33 added, ST-6 changed); `git show 14366c1:stories/ST-6-coder-machine-credentials.md`, line 183. #54 has since corrected ST-6 |
+| #41 | ST-27's added claim that, after ST-33, a review "no longer runs the pull request's code itself" was false: the review's worktree was the head, and `reviewer.md` ran `node scripts/dispatch/review-tools.mjs` from it ("Changes to stories", 4) | `git diff 896e6b4...14366c1 -- stories/ST-27-land-scheduled-outside-prs.md` adds the line; `git show 14366c1:scripts/dispatch/review.mjs`, line 360, `worktree add … pr.headSha`; `git show 14366c1:.claude/prompts/reviewer.md`, line 221. ST-38 has since made the claim true |
+| #34 | the body says "every added line is 100 characters or fewer"; the diff adds lines of 147 and 166 characters ("Every pull request", 3) | `git diff 52f5838...da6e5c5 -- REVIEW.md scripts/dispatch/review.test.mjs`, its added lines measured |
+| #39 | the Verification section says `grep -rn "adapter per agent tool"` found two copies, ST-15's title and the design doc's marker; at that head it finds one, the design doc's copy being split across lines 1587–1588 ("Integrity", 1) | `git grep -n "adapter per agent tool" 3a7dcea` prints one line, `stories/ST-15-agent-tool-adapters.md:3` |
+
+Every finding is true at its head, each graded `block` is a false statement or a contradiction
+of another story (AC-1's list), none is of a kind `pass-with-observations` is for, and none was
+graded an observation; #41 and #34 blocked and #37 passed, so AC-5's conditions hold. Of the
+defects the earlier verdicts recorded as observations, #41's (the `model: null` gap) was found;
+#34's (its comment above `idsAtBase`, saying the story lint holds filenames equal to frontmatter
+ids in `stories/retired/` too, which #38 corrected) was missed. The #39 and #34 findings, and two
+of #41's, are defects the earlier verdicts did not record at all. Codex reported no cost.
 
 ### Costs
 
