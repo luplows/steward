@@ -254,7 +254,7 @@ describe('OQ-70/AC-1: next story to an open pull request', () => {
     expect(pulls(gh)).toEqual([{
       method: 'POST',
       url: `https://api.github.com/repos/${REPO}/pulls`,
-      body: { title: 'Ship OQ-98', body: '### What changed\n\nShipped.', head: 'story/OQ-98-first', base: 'main', draft: false },
+      body: { title: 'Ship OQ-98', body: '### What changed\n\nShipped.\n\nCoder: sonnet', head: 'story/OQ-98-first', base: 'main', draft: false },
     }])
   })
 
@@ -675,7 +675,7 @@ describe('OQ-70/AC-7b: a prompt diff is reported, not applied', () => {
 
     expect(result.status).toBe('opened')
     expect(result.promptChange).toEqual({ pending: true, files: ['.claude/prompts/coder.md'] })
-    expect(pulls(gh)[0].body.body).toBe(promptBody) // the coder's text, untouched
+    expect(pulls(gh)[0].body.body).toBe(`${promptBody}\n\nCoder: sonnet`) // the coder's text, untouched, then ATC's line
 
     // Nothing was written to the dispatcher's checkout, `.claude/` included.
     expect(git(world.repoDir, 'status', '--porcelain')).toBe(before)
@@ -1116,12 +1116,12 @@ function makeRetryWorld() {
 }
 
 /** A fake GitHub answering the pull-request read and the replace, recording everything. */
-function fakeRetryGitHub({ state = 'open', ref = RETRY_BRANCH, patchOk = true } = {}) {
+function fakeRetryGitHub({ state = 'open', ref = RETRY_BRANCH, patchOk = true, body = 'old' } = {}) {
   const requests = []
   const fetch = async (url, init) => {
     requests.push({ method: init.method, url, body: init.body ? JSON.parse(init.body) : undefined })
     if (init.method === 'PATCH' && !patchOk) return { ok: false, status: 500, text: async () => 'boom' }
-    return { ok: true, json: async () => ({ state, head: { sha: 'a'.repeat(40), ref }, base: { ref: 'main' }, body: 'old', draft: false }) }
+    return { ok: true, json: async () => ({ state, head: { sha: 'a'.repeat(40), ref }, base: { ref: 'main' }, body, draft: false }) }
   }
   return { requests, ctx: createContext({ repo: REPO, fetch, getToken: async () => 'tok' }) }
 }
@@ -1173,7 +1173,7 @@ describe('OQ-85/AC-1: retry a story\'s open pull request', () => {
     expect(patches(gh)).toEqual([{
       method: 'PATCH',
       url: `https://api.github.com/repos/${REPO}/pulls/7`,
-      body: { title: 'New title', body: '### What changed\n\nAll of it.' },
+      body: { title: 'New title', body: '### What changed\n\nAll of it.\n\nCoder: sonnet' },
     }])
     expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
   })
@@ -1592,6 +1592,8 @@ describe('ST-31/AC-4: no coder session starts while the usage is over the coder\
   })
   const expectedOver = (window, percent, limit) => ({
     status: 'over-usage', window, percent, limit, resetsAt: window === 'session' ? 'reset-s' : 'reset-w',
+    // ST-35/AC-6: the story's sonnet, then the as-strong opus on the same tool, whose usage is read once.
+    skipped: ['sonnet', 'opus'].map((name) => ({ name, status: 'over-usage', window, percent, limit })),
   })
 
   it.each([
@@ -1616,7 +1618,10 @@ describe('ST-31/AC-4: no coder session starts while the usage is over the coder\
     const { result, fake } = await dispatch(world, () => { throw new Error('must not spawn') }, {
       usage: async () => ({ ok: false, reason: 'no usage_report' }),
     })
-    expect(result).toEqual({ status: 'usage-unknown', storyId: 'OQ-98', reason: 'no usage_report' })
+    expect(result).toEqual({
+      status: 'usage-unknown', storyId: 'OQ-98', reason: 'no usage_report',
+      skipped: ['sonnet', 'opus'].map((name) => ({ name, status: 'usage-unknown', reason: 'no usage_report' })),
+    })
     expect(fake.calls).toHaveLength(0)
     expect(remoteBranch(world, 'story/OQ-98-first')).toBeNull()
   })
@@ -1663,7 +1668,10 @@ describe('ST-31/AC-4: no coder session starts while the usage is over the coder\
     const { result, fake } = await retry(world, () => { throw new Error('must not spawn') }, {
       usage: async () => ({ ok: false, reason: 'timed out' }), install: async (o) => { installs.push(o) },
     })
-    expect(result).toEqual({ status: 'usage-unknown', storyId: 'OQ-98', reason: 'timed out' })
+    expect(result).toEqual({
+      status: 'usage-unknown', storyId: 'OQ-98', reason: 'timed out',
+      skipped: ['sonnet', 'opus'].map((name) => ({ name, status: 'usage-unknown', reason: 'timed out' })),
+    })
     expect(fake.calls).toHaveLength(0)
     expect(installs).toEqual([])
   })
@@ -1681,7 +1689,7 @@ describe("ST-34/AC-4: the coder's model and effort come from the machine's setti
   const valueAfter = (args, flag) => args[args.indexOf(flag) + 1]
   const withChoices = () => {
     const settings = fixtureMachineSettings()
-    settings.roles.coder.available.deep = { tool: 'claude', model: 'claude-opus-5-5', effort: 'max' }
+    settings.roles.coder.available.deep = { tool: 'claude', model: 'claude-opus-5-5', effort: 'max', strength: 3 }
     return settings
   }
 
@@ -1787,5 +1795,300 @@ describe("ST-34/AC-4: the coder's model and effort come from the machine's setti
     })
     expect(retried.result).toMatchObject({ status: 'over-usage', window: 'weekly', percent: 31, limit: 30 })
     expect(retryReads).toBe(1)
+  })
+})
+
+// ------------------------------------ ST-35: the crew names a choice, and ATC moves off a spent one
+
+describe("ST-35: the coder's choice for a run", () => {
+  const valueAfter = (args, flag) => args[args.indexOf(flag) + 1]
+  const OVER = { ok: true, session: { percent: 99, resetsAt: 'reset-s' }, weekly: { percent: 1, resetsAt: 'reset-w' } }
+  const OVER_ENTRY = (name) => ({ name, status: 'over-usage', window: 'session', percent: 99, limit: 70 })
+
+  /** The fixture's sonnet (strength 1) and opus (strength 2), and a Codex choice of `strength`. */
+  const withCodex = (strength) => {
+    const settings = fixtureMachineSettings()
+    settings.roles.coder.available.gpt = { tool: 'codex', model: 'gpt-6.1', effort: 'high', strength }
+    settings.tools = { codex: { executable: '/x/codex' } }
+    return settings
+  }
+
+  /** Rewrites OQ-98's `model:` on the seed's current branch and pushes, wherever the file now is. */
+  function setModel(world, model, { done = false, branch = 'main' } = {}) {
+    const file = path.join(world.seed, 'stories', ...(done ? ['done'] : []), 'OQ-98-first.md')
+    writeFileSync(file, readFileSync(file, 'utf8').replace('model: sonnet', `model: ${model}`))
+    git(world.seed, 'commit', '-q', '-am', `model ${model}`)
+    git(world.seed, 'push', '-q', 'origin', branch)
+  }
+
+  const finish = ({ cwd }) => (finishStory(cwd), block())
+  const refuseToRun = () => { throw new Error('must not spawn') }
+  const nothingMade = (world, gh) => {
+    expect(pulls(gh)).toEqual([])
+    expect(remoteBranch(world, 'story/OQ-98-first')).toBeNull()
+    expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/story/OQ-98-first')).toBeNull()
+    expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
+  }
+
+  describe('ST-35/AC-1: --choice names the choice for a run', () => {
+    it('ST-35/AC-1: dispatchCoder refuses a name that is no available choice, before the usage is read or anything is claimed', async () => {
+      const world = makeWorld()
+      const installs = []
+      let reads = 0
+      const { result, fake, gh } = await dispatch(world, refuseToRun, {
+        choice: 'haiku', install: async (o) => { installs.push(o) }, usage: async () => { reads += 1; return UNDER_LIMITS },
+      })
+      expect(result).toEqual({ status: 'choice-unavailable', storyId: 'OQ-98', choice: 'haiku' })
+      expect(reads).toBe(0)
+      expect(fake.calls).toHaveLength(0)
+      expect(installs).toEqual([])
+      nothingMade(world, gh)
+    })
+
+    it("ST-35/AC-1: dispatchCoder runs a named choice in place of the story's choice, and in place of the default", async () => {
+      const world = makeWorld()
+      const named = await dispatch(world, finish, { choice: 'opus' })
+      expect(named.result.status).toBe('opened')
+      expect(valueAfter(named.fake.calls[0].args, '--model')).toBe('opus')
+      expect(valueAfter(named.fake.calls[0].args, '--effort')).toBe('high')
+      expect(named.result.choice).toEqual({ name: 'opus', tool: 'claude', model: 'opus', effort: 'high', why: 'crew' })
+      expect(named.result).not.toHaveProperty('skipped')
+
+      const nullWorld = makeWorld()
+      setModel(nullWorld, 'null')
+      const inDefault = await dispatch(nullWorld, finish, { choice: 'opus' })
+      expect(valueAfter(inDefault.fake.calls[0].args, '--model')).toBe('opus')
+      expect(inDefault.result.choice.why).toBe('crew')
+    })
+
+    it("ST-35/AC-1: a named choice is final: it runs whatever its strength, and not in the story's own name", async () => {
+      const world = makeWorld()
+      setModel(world, 'opus')
+      const { result, fake } = await dispatch(world, finish, { choice: 'sonnet' })
+      expect(result.status).toBe('opened')
+      expect(valueAfter(fake.calls[0].args, '--model')).toBe('sonnet')
+    })
+
+    it('ST-35/AC-1: dispatchCoder with a named choice over its usage returns over-usage, with no other choice taken', async () => {
+      const world = makeWorld()
+      const codexReads = []
+      const { result, fake, gh } = await dispatch(world, refuseToRun, {
+        choice: 'sonnet', machineSettings: machineOf(withCodex(1)), usage: async () => OVER,
+        codexUsage: async (o) => { codexReads.push(o); return UNDER_LIMITS },
+      })
+      expect(result).toEqual({
+        status: 'over-usage', storyId: 'OQ-98', window: 'session', percent: 99, limit: 70, resetsAt: 'reset-s',
+      })
+      expect(fake.calls).toHaveLength(0)
+      expect(codexReads).toEqual([])
+      nothingMade(world, gh)
+    })
+
+    it('ST-35/AC-1: dispatchCoder with a named choice whose usage cannot be read returns usage-unknown', async () => {
+      const world = makeWorld()
+      const { result, fake } = await dispatch(world, refuseToRun, {
+        choice: 'sonnet', usage: async () => ({ ok: false, reason: 'no report' }),
+      })
+      expect(result).toEqual({ status: 'usage-unknown', storyId: 'OQ-98', reason: 'no report' })
+      expect(fake.calls).toHaveLength(0)
+    })
+
+    it('ST-35/AC-1: retryStory refuses a name that is no available choice, before the usage is read or anything is made', async () => {
+      const world = makeRetryWorld()
+      const installs = []
+      let reads = 0
+      const { result, fake, gh } = await retry(world, refuseToRun, {
+        choice: 'haiku', install: async (o) => { installs.push(o) }, usage: async () => { reads += 1; return UNDER_LIMITS },
+      })
+      expect(result).toEqual({ status: 'choice-unavailable', storyId: 'OQ-98', choice: 'haiku' })
+      expect(reads).toBe(0)
+      expect(fake.calls).toHaveLength(0)
+      expect(installs).toEqual([])
+      expect(patches(gh)).toEqual([])
+      expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
+      expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', `refs/heads/${RETRY_BRANCH}`)).toBeNull()
+    })
+
+    it("ST-35/AC-1: retryStory runs a named choice in place of the story's choice, and in place of the default", async () => {
+      const world = makeRetryWorld()
+      const named = await retry(world, ({ cwd }) => (commitWork(cwd), block()), { choice: 'opus' })
+      expect(named.result.status).toBe('retried')
+      expect(valueAfter(named.fake.calls[0].args, '--model')).toBe('opus')
+      expect(named.result.choice).toEqual({ name: 'opus', tool: 'claude', model: 'opus', effort: 'high', why: 'crew' })
+
+      const nullWorld = makeRetryWorld()
+      setModel(nullWorld, 'null', { done: true, branch: RETRY_BRANCH })
+      const inDefault = await retry(nullWorld, ({ cwd }) => (commitWork(cwd), block()), { choice: 'opus' })
+      expect(valueAfter(inDefault.fake.calls[0].args, '--model')).toBe('opus')
+      expect(inDefault.result.choice.why).toBe('crew')
+    })
+
+    it('ST-35/AC-1: retryStory with a named choice over its usage returns over-usage, with no other choice taken', async () => {
+      const world = makeRetryWorld()
+      const codexReads = []
+      const { result, fake, gh } = await retry(world, refuseToRun, {
+        choice: 'sonnet', machineSettings: machineOf(withCodex(1)), usage: async () => OVER,
+        codexUsage: async (o) => { codexReads.push(o); return UNDER_LIMITS },
+      })
+      expect(result).toEqual({
+        status: 'over-usage', storyId: 'OQ-98', window: 'session', percent: 99, limit: 70, resetsAt: 'reset-s',
+      })
+      expect(fake.calls).toHaveLength(0)
+      expect(codexReads).toEqual([])
+      expect(patches(gh)).toEqual([])
+    })
+  })
+
+  describe('ST-35/AC-6: ATC moves to a choice at least as strong when the story\'s is spent', () => {
+    it("ST-35/AC-6, AC-3: a story whose choice is over its usage runs on an available choice of equal strength, reading each tool's usage once", async () => {
+      const world = makeWorld()
+      const claudeReads = []
+      const codexReads = []
+      const { result, fake } = await dispatch(world, finish, {
+        machineSettings: machineOf(withCodex(1)),
+        usage: async (o) => { claudeReads.push(o); return OVER },
+        codexUsage: async (o) => { codexReads.push(o); return UNDER_LIMITS },
+      })
+      expect(result.status).toBe('opened')
+      expect(valueAfter(fake.calls[0].args, '--model')).toBe('gpt-6.1')
+      expect(result.choice).toEqual({ name: 'gpt', tool: 'codex', model: 'gpt-6.1', effort: 'high', why: 'usage' })
+      // sonnet, then opus (as strong, same tool: not read again), then gpt.
+      expect(result.skipped).toEqual([OVER_ENTRY('sonnet'), OVER_ENTRY('opus')])
+      expect(claudeReads).toHaveLength(1)
+      expect(codexReads).toEqual([{ executable: '/x/codex', cwd: world.repoDir }])
+    })
+
+    it('ST-35/AC-6: usage that cannot be read counts as spent', async () => {
+      const world = makeWorld()
+      const { result } = await dispatch(world, finish, {
+        machineSettings: machineOf(withCodex(1)), usage: async () => ({ ok: false, reason: 'no report' }),
+        codexUsage: async () => UNDER_LIMITS,
+      })
+      expect(result.choice.name).toBe('gpt')
+      expect(result.skipped[0]).toEqual({ name: 'sonnet', status: 'usage-unknown', reason: 'no report' })
+    })
+
+    it("ST-35/AC-6: a story is not run on a weaker choice, though its tool is under its usage; the first choice's refusal comes back with skipped", async () => {
+      const world = makeWorld()
+      setModel(world, 'opus')
+      const codexReads = []
+      const { result, fake, gh } = await dispatch(world, refuseToRun, {
+        machineSettings: machineOf(withCodex(1)), usage: async () => OVER,
+        codexUsage: async (o) => { codexReads.push(o); return UNDER_LIMITS },
+      })
+      expect(result).toEqual({
+        status: 'over-usage', storyId: 'OQ-98', window: 'session', percent: 99, limit: 70, resetsAt: 'reset-s',
+        skipped: [OVER_ENTRY('opus')],
+      })
+      expect(fake.calls).toHaveLength(0)
+      expect(codexReads).toEqual([])
+      nothingMade(world, gh)
+    })
+
+    it("ST-35/AC-6: a model: null story takes the default's strength", async () => {
+      const spent = async () => OVER
+      const weaker = withCodex(1)
+      weaker.roles.coder.default = 'opus'
+      const world = makeWorld()
+      setModel(world, 'null')
+      const refused = await dispatch(world, refuseToRun, {
+        machineSettings: machineOf(weaker), usage: spent, codexUsage: async () => UNDER_LIMITS,
+      })
+      expect(refused.result.status).toBe('over-usage')
+      expect(refused.result.skipped.map((entry) => entry.name)).toEqual(['opus'])
+
+      const equal = withCodex(2)
+      equal.roles.coder.default = 'opus'
+      const equalWorld = makeWorld()
+      setModel(equalWorld, 'null')
+      const moved = await dispatch(equalWorld, finish, {
+        machineSettings: machineOf(equal), usage: spent, codexUsage: async () => UNDER_LIMITS,
+      })
+      expect(moved.result.status).toBe('opened')
+      expect(moved.result.choice).toMatchObject({ name: 'gpt', why: 'usage' })
+    })
+
+    it('ST-35/AC-6: a choice under its usage is why unit for a story that names it, and default for one that does not', async () => {
+      const world = makeWorld()
+      expect((await dispatch(world, finish)).result.choice).toMatchObject({ name: 'sonnet', why: 'unit' })
+      const nullWorld = makeWorld()
+      setModel(nullWorld, 'null')
+      expect((await dispatch(nullWorld, finish)).result.choice).toMatchObject({ name: 'sonnet', why: 'default' })
+    })
+
+    it("ST-35/AC-6: retryStory runs on an available choice of equal strength when the story's is spent", async () => {
+      const world = makeRetryWorld()
+      const { result, fake } = await retry(world, ({ cwd }) => (commitWork(cwd), block()), {
+        machineSettings: machineOf(withCodex(1)), usage: async () => OVER, codexUsage: async () => UNDER_LIMITS,
+      })
+      expect(result.status).toBe('retried')
+      expect(valueAfter(fake.calls[0].args, '--model')).toBe('gpt-6.1')
+      expect(result.choice.why).toBe('usage')
+      expect(result.skipped).toEqual([OVER_ENTRY('sonnet'), OVER_ENTRY('opus')])
+    })
+
+    it('ST-35/AC-6: retryStory is not run on a weaker choice either, and installs and makes nothing', async () => {
+      const world = makeRetryWorld()
+      setModel(world, 'opus', { done: true, branch: RETRY_BRANCH })
+      const installs = []
+      const { result, fake, gh } = await retry(world, refuseToRun, {
+        machineSettings: machineOf(withCodex(1)), usage: async () => OVER, codexUsage: async () => UNDER_LIMITS,
+        install: async (o) => { installs.push(o) },
+      })
+      expect(result).toMatchObject({ status: 'over-usage', storyId: 'OQ-98', skipped: [OVER_ENTRY('opus')] })
+      expect(fake.calls).toHaveLength(0)
+      expect(installs).toEqual([])
+      expect(patches(gh)).toEqual([])
+      expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
+    })
+  })
+
+  describe('ST-35/AC-7: the Coder: line is ATC\'s', () => {
+    const bodyOf = (gh) => pulls(gh)[0].body.body
+
+    it('ST-35/AC-7: dispatchCoder opens the pull request with a last line Coder: naming the choice that ran', async () => {
+      const world = makeWorld()
+      const { result, gh } = await dispatch(world, ({ cwd }) => (finishStory(cwd), block('T', 'ready', '### What changed\n\nIt did.')))
+      expect(result.status).toBe('opened')
+      expect(bodyOf(gh)).toBe('### What changed\n\nIt did.\n\nCoder: sonnet')
+
+      const named = await dispatch(makeWorld(), ({ cwd }) => (finishStory(cwd), block()), { choice: 'opus' })
+      expect(bodyOf(named.gh).split('\n').at(-1)).toBe('Coder: opus')
+    })
+
+    it("ST-35/AC-7: a Coder: line the coder wrote is removed, wherever it is", async () => {
+      const world = makeWorld()
+      const written = '### What changed\n\nIt did.\nCoder: haiku\n\nMore.\nCoder:'
+      const { gh } = await dispatch(world, ({ cwd }) => (finishStory(cwd), block('T', 'ready', written)))
+      expect(bodyOf(gh)).toBe('### What changed\n\nIt did.\n\nMore.\n\nCoder: sonnet')
+    })
+
+    it('ST-35/AC-7: retryStory on another choice names the choices on the current line, then the one that ran', async () => {
+      const world = makeRetryWorld()
+      const { gh } = await retry(world, ({ cwd }) => (commitWork(cwd), block('T', 'ready', 'New.\nCoder: haiku')), {
+        choice: 'opus', github: { body: 'Old.\n\nCoder: sonnet' },
+      })
+      expect(patches(gh)[0].body.body).toBe('New.\n\nCoder: sonnet, opus')
+    })
+
+    it('ST-35/AC-7: retryStory on the same choice names it once', async () => {
+      const world = makeRetryWorld()
+      const { gh } = await retry(world, ({ cwd }) => (commitWork(cwd), block('T', 'ready', 'New.')), {
+        github: { body: 'Old.\n\nCoder: sonnet' },
+      })
+      expect(patches(gh)[0].body.body).toBe('New.\n\nCoder: sonnet')
+    })
+
+    it('ST-35/AC-7: retryStory on a body with no Coder: line writes one naming the choice that ran', async () => {
+      const world = makeRetryWorld()
+      const { gh } = await retry(world, ({ cwd }) => (commitWork(cwd), block('T', 'ready', 'New.')))
+      expect(patches(gh)[0].body.body).toBe('New.\n\nCoder: sonnet')
+    })
+  })
+
+  it('ST-35/AC-9: the usage lines in the header list --choice, for a dispatch and for retry', () => {
+    const header = SOURCE.split('*/')[0]
+    expect(header).toMatch(/coder\.mjs \[OQ-<n>\] \[--repo owner\/name\] \[--choice <name>\]/)
+    expect(header).toMatch(/coder\.mjs retry OQ-<n> .*\[--choice <name>\]/)
   })
 })

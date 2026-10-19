@@ -29,8 +29,10 @@ To run the review side, you need:
   whose tool is `"codex"`. Its path goes in `tools.codex.executable`.
 - **The machine's settings file**, `~/.steward/settings.json` (or the file `STEWARD_SETTINGS`
   names). Every machine that runs steward needs it: it holds the plan's usage limits and each
-  role's default and available choices of tool, model and effort, and steward has no default for
-  any of them. Each key is described in [`docs/machine-settings.md`](docs/machine-settings.md).
+  role's default and available choices of tool, model and effort (and a strength, for a coder's
+  choice), and steward has no default for any of them. Each key is described in
+  [`docs/machine-settings.md`](docs/machine-settings.md). `review` and `coder` take `--choice <name>`
+  to run a role on another of its available choices for one run.
 
 Then, from a checkout of the repository:
 

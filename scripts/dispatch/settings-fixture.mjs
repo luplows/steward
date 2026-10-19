@@ -21,7 +21,8 @@ export function fixtureSettings(overrides = {}) {
 /**
  * Test support: a complete machine-settings body (`machine-settings.mjs`). The choices are named
  * for their models, so a story's `model: sonnet` names one. The coder's default is `sonnet` and the
- * reviewer's is `opus`; each role has the other as its second choice.
+ * reviewer's is `opus`; each role has the other as its second choice. The coder's choices have a
+ * `strength` (ST-35/AC-5): `opus` is the stronger.
  */
 export const FIXTURE_MACHINE_SETTINGS = {
   usageLimits: {
@@ -32,8 +33,8 @@ export const FIXTURE_MACHINE_SETTINGS = {
     coder: {
       default: 'sonnet',
       available: {
-        sonnet: { tool: 'claude', model: 'sonnet', effort: 'medium' },
-        opus: { tool: 'claude', model: 'opus', effort: 'high' },
+        sonnet: { tool: 'claude', model: 'sonnet', effort: 'medium', strength: 1 },
+        opus: { tool: 'claude', model: 'opus', effort: 'high', strength: 2 },
       },
     },
     reviewer: {

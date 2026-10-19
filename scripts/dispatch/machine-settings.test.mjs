@@ -208,11 +208,51 @@ describe('ST-34/AC-2: the form of the file', () => {
   })
 })
 
+describe('ST-35/AC-5: a coder choice has a strength', () => {
+  it('ST-35/AC-5: a valid file keeps the strength of each coder choice, and a reviewer choice has none', async () => {
+    await withTempHome(async (home) => {
+      writeHomeFile(home, JSON.stringify(fixtureMachineSettings()))
+      const read = await readMachineSettings({ env: {}, homedir: home })
+      expect(read.roles.coder.available.sonnet.strength).toBe(1)
+      expect(read.roles.coder.available.opus.strength).toBe(2)
+      expect(read.roles.reviewer.available.opus).not.toHaveProperty('strength')
+    })
+  })
+
+  it('ST-35/AC-5: a missing strength is an error naming the key with all its parents', async () => {
+    await expectRejected(
+      changed((s) => delete s.roles.coder.available.opus.strength),
+      "missing required key 'roles.coder.available.opus.strength'",
+    )
+  })
+
+  it.each([0, -1, 1.5, '2', null, true, [2]])('ST-35/AC-5: a strength of %j is refused', async (bad) => {
+    await expectRejected(
+      changed((s) => { s.roles.coder.available.opus.strength = bad }),
+      "'roles.coder.available.opus.strength' must be a positive integer",
+    )
+  })
+
+  it('ST-35/AC-5: equal strengths are valid', async () => {
+    await withTempHome(async (home) => {
+      writeHomeFile(home, JSON.stringify(changed((s) => { s.roles.coder.available.opus.strength = 1 })))
+      await expect(readMachineSettings({ env: {}, homedir: home })).resolves.toBeTruthy()
+    })
+  })
+
+  it('ST-35/AC-5: a reviewer choice with strength is an unrecognised key', async () => {
+    await expectRejected(
+      changed((s) => { s.roles.reviewer.available.opus.strength = 2 }),
+      "unrecognised key 'roles.reviewer.available.opus.strength'",
+    )
+  })
+})
+
 describe('ST-34/AC-4: coderChoice', () => {
   it('ST-34/AC-4: a name is that choice, null is the default, an unknown name is null', () => {
     const machine = fixtureMachineSettings()
-    expect(coderChoice(machine, 'opus')).toEqual({ name: 'opus', tool: 'claude', model: 'opus', effort: 'high' })
-    expect(coderChoice(machine, null)).toEqual({ name: 'sonnet', tool: 'claude', model: 'sonnet', effort: 'medium' })
+    expect(coderChoice(machine, 'opus')).toEqual({ name: 'opus', tool: 'claude', model: 'opus', effort: 'high', strength: 2 })
+    expect(coderChoice(machine, null)).toEqual({ name: 'sonnet', tool: 'claude', model: 'sonnet', effort: 'medium', strength: 1 })
     expect(coderChoice(machine, 'haiku')).toBeNull()
     expect(coderChoice(machine, 'toString')).toBeNull()
     expect(coderChoice(machine, 5)).toBeNull()
@@ -257,7 +297,7 @@ describe('ST-32/AC-1: a Codex choice for the reviewer', () => {
   })
 
   it('ST-32/AC-1: a coder choice with tool codex is refused, naming its key', async () => {
-    await expect(readWith(withSol((s) => { s.roles.coder.available.gpt = { ...sol } })))
+    await expect(readWith(withSol((s) => { s.roles.coder.available.gpt = { ...sol, strength: 3 } })))
       .rejects.toThrow("'roles.coder.available.gpt.tool' must be one of [\"claude\"]")
   })
 
