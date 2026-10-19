@@ -42,28 +42,32 @@ evidence the reviewer was reluctant.
       state, **not** raising the block rate on sound pull requests.
 - [ ] **AC-5** — The change is validated against steward's own verdicts rather
       than asserted. With the revised prompt, the reviewer is run once on each
-      of four heads, as `buildInvocation` renders it, against `REVIEW.md` from
-      `main`, posting nothing. Each reads its unit as it was on `main` when it
-      was reviewed, at its merge base: on `main` today, #34's unit,
-      `stories/ST-30-spike-adds-draft-stories.md`, is in `stories/done/`.
-      `readUnit` (`scripts/dispatch/unit.mjs`) reads a unit at
-      `origin/<base>:<path>`, so `<base>` is a branch name, not a SHA: each
-      replay names a branch on `origin`, or a local ref under
-      `refs/remotes/origin/`, that points at its merge base. The four:
-      - #41 at `14366c1` returns `block`, with a finding for the gap in ST-34's
-        AC-5 that its verdict recorded as an observation (`model: null`);
-      - #34 at `da6e5c5` returns `block`, with a finding for the comment it
-        added above `idsAtBase`, which says the story lint holds filenames
-        equal to frontmatter ids in `stories/retired/` too. Its verdict
-        recorded that as an observation, and #38 then corrected it;
-      - #39 at `3a7dcea` returns `pass-with-observations` or `pass`, since its
-        one observation was there before the diff;
-      - #37 at `c67ce61` returns `pass`, as it did.
+      of four heads, posting nothing, composed as `reviewPullRequest` composes
+      it: a checkout of the base, `REVIEW.md` from `main` as it is now, and
+      each unit as it stood on `main` at the review's merge base. On `main`
+      today, #34's unit, `stories/ST-30-spike-adds-draft-stories.md`, is in
+      `stories/done/`, and `readUnit` (`scripts/dispatch/unit.mjs`) reads a
+      unit at `origin/<base>:<path>`, so each replay gives `origin/main` its
+      merge base without moving a ref another session uses. The four: #41 at
+      `14366c1`, #34 at `da6e5c5`, #39 at `3a7dcea` and #37 at `c67ce61`.
+      Each run is judged by its findings, not by the verdict given before:
+      - every finding is true at its head;
+      - no finding of a kind AC-1 lists is graded as an observation, and no
+        finding graded `block` is of a kind AC-3 gives to
+        `pass-with-observations`;
+      - #41 and #34 return `block`, and #37 returns `pass`.
 
-      Each run's verdict, findings and cost are recorded in
-      `docs/agent-workflow-design.md`, "Trials and measurements", including any
-      that does not come out as listed. A run that does not is not repeated
-      until it does: the prompt is changed and all four are run again.
+      Whether a run found the defect its earlier verdict recorded as an
+      observation (#41: the `model: null` gap in ST-34's AC-5; #34: the
+      comment above `idsAtBase`, which said the story lint holds filenames
+      equal to frontmatter ids in `stories/retired/` too, and which #38
+      corrected) is recorded, found or missed, and is not a condition. For
+      each run, `docs/agent-workflow-design.md`, "Trials and measurements",
+      records the verdict, each finding with the command or reasoning that
+      shows it true, and the cost, and says it is one run against today's
+      checklist. A run that fails a condition above is not repeated until it
+      passes: the prompt is changed, all four are run again, and every round
+      is recorded.
 - [ ] **AC-6** — `docs/agent-workflow-design.md`: every `**Planned (ST-4)**`
       marker loses `ST-4`, and each passage is corrected wherever what was
       built differs.
@@ -103,6 +107,19 @@ fixed. Refined on 2026-10-16 by the owner, after #41's review.
   code comment, above `idsAtBase` in
   `scripts/dispatch/story-containment.mjs`; #38 corrected the comment.
 - `.claude/prompts/reviewer.md` — "Calibration" and "Your verdict".
+- **AC-5 revised on 2026-10-19 by the owner**, after a first replay of the
+  four heads on the revised prompt. #39 returned `block` on a false claim in
+  its Verification section, and #34 `block` on a false claim in its body,
+  not on the `idsAtBase` comment: both true defects that the earlier
+  verdicts missed. As first written, AC-5 counted both as failures, and its
+  repeat rule would have had the prompt weakened until #39 passed with a
+  false claim in its body. It now judges each run by whether its findings
+  are true and graded as AC-1 and AC-3 say, keeps `block` on #41 and #34 and
+  `pass` on #37 as floors against a reviewer that finds nothing and one
+  that blocks too much, and records the earlier defects as found or missed.
+  Considered and not chosen: requiring those defects to be found, which
+  tests what a reviewer notices on one run rather than how it grades it;
+  and leaving AC-5 unticked.
   `REVIEW.md` has no verdict table to keep in step.
 - `docs/agent-workflow-design.md` — "Verdict states", and Part 3, "Decided so
   far", "A finding the author would fix is a block".
