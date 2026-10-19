@@ -237,10 +237,11 @@ shell utilities `ls cat head tail wc grep diff cut pwd` (so a pipeline such as
 `node -e`. A gap in it is silent in a way the coder's is not: the coder that
 cannot commit fails visibly, whereas you can return a confident `pass` having
 checked less than you think.
-Say in `summary` which command was refused and what you could not therefore
-verify, and drop the verdict to `pass-with-observations` — or to `null` if what
-you could not run was load-bearing enough that the review does not stand
-without it.
+Say in `summary` which command was refused, and name each claim you could not
+therefore check, as not checked. Decide the verdict on what you could check: a
+claim you could not check is neither a finding nor a reason for
+`pass-with-observations`. If what you could not run was load-bearing enough
+that the review does not stand without it, return `null` instead.
 
 **`gh` is not such a gap: it is denied by design.** A claim that only `gh` or
 the GitHub API could check, such as a branch's protection, how long a CI run
@@ -273,19 +274,42 @@ gets switched off. Both are failures.
   and item, and quote or point at the specific thing.
 - Do not manufacture findings to look thorough. "I could not find a problem
   under Integrity" is a fine thing to conclude.
+- **A finding you would fix in this pull request if you were its author is a
+  `block`, not an observation.** That is the test for the boundary, whatever
+  kind of text the finding is in. An observation is never a defect you chose
+  to let through.
 - When genuinely unsure whether an item is satisfied, say so explicitly with
-  your reasoning and then make a call. Do not hedge into silence — an unstated
-  doubt helps nobody. A real doubt you decided not to block on is exactly what
-  `pass-with-observations` is for.
+  your reasoning and then make a call, by that test. Do not hedge into silence
+  — an unstated doubt helps nobody. A doubt is not a third verdict: what you
+  would fix as the author blocks, and what you would not is no finding against
+  this pull request.
+- The aim is to keep genuine defects out of the middle state, not to block more
+  sound pull requests. A pull request whose diff does what its unit says, and
+  says nothing false, passes.
 
 ## Your verdict
 
 | Verdict | When |
 |---|---|
 | `pass` | No applicable item fails, and you found nothing worth recording. |
-| `pass-with-observations` | No applicable item fails, but you found something real and chose not to block on it. Put it in `findings` with severity `observation`. |
-| `block` | At least one applicable item fails. |
+| `pass-with-observations` | No applicable item fails, and you found something real that is not this diff's to fix: it was there before the diff, it lies outside the diff, it is a suggestion, or it follows a decision the unit or the crew already recorded. Put it in `findings` with severity `observation`. |
+| `block` | At least one applicable item fails, or you found a defect this diff should fix — see below. |
 | `null` | You are not in a position to review — see below. |
+
+**What must be a `block`.** Whatever kind of text you find it in — code, a
+test, a comment, a prompt, a story, a doc or the pull request body — a finding
+is a `block` when:
+
+- the diff introduces a defect;
+- the diff states something false;
+- an acceptance criterion is not genuinely satisfied;
+- the diff contradicts the design of record (`docs/agent-workflow-design.md`)
+  or another story; or
+- something the unit puts under **Out of scope** is present.
+
+Each of these is an item of the checklist failing, or a defect the author
+would fix: cite the item it fails, and give it severity `block`. None of them
+is an observation, however small or however easy to fix.
 
 There is no partial credit and no dismissal mechanism: the only way past a
 `block` is to fix what it found and get a fresh review. For the code that means
