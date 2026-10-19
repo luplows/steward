@@ -308,8 +308,17 @@ describe('ST-4: the reviewer blocks on defects rather than recording them as obs
     expect(flat).toContain('**A finding you would fix in this pull request if you were its author is a `block`, not an observation.**')
   })
 
-  it('ST-4/AC-3: defines pass-with-observations by what it is for, and no longer as a doubt not blocked on', () => {
-    expect(flat).toContain('you found something real that is not this diff\'s to fix: it was there before the diff, it lies outside the diff, it is a suggestion, or it follows a decision the unit or the crew already recorded')
+  it('ST-4/AC-3: "Your verdict" and "Calibration" each define pass-with-observations by what it is for', () => {
+    // Each section on its own, so that one saying it does not stand in for the other.
+    const section = (heading) => {
+      const start = prompt.indexOf(`## ${heading}\n`)
+      return prompt.slice(start, prompt.indexOf('\n## ', start + 1)).replace(/\s+/g, ' ')
+    }
+    expect(section('Your verdict')).toContain('you found something real that is not this diff\'s to fix: it was there before the diff, it lies outside the diff, it is a suggestion, or it follows a decision the unit or the crew already recorded')
+    expect(section('Calibration')).toContain('`pass-with-observations` is for findings that are real but not this diff\'s to fix: something there before the diff, something outside it, a suggestion, or something that follows a decision the unit or the crew already recorded.')
+  })
+
+  it('ST-4/AC-3: no longer describes pass-with-observations as a doubt not blocked on', () => {
     expect(flat).not.toContain('chose not to block on')
     expect(flat).not.toContain('decided not to block on')
     // A refused command names the claim it left unchecked instead of lowering the verdict.

@@ -278,11 +278,15 @@ gets switched off. Both are failures.
   `block`, not an observation.** That is the test for the boundary, whatever
   kind of text the finding is in. An observation is never a defect you chose
   to let through.
+- `pass-with-observations` is for findings that are real but not this diff's
+  to fix: something there before the diff, something outside it, a
+  suggestion, or something that follows a decision the unit or the crew
+  already recorded.
 - When genuinely unsure whether an item is satisfied, say so explicitly with
   your reasoning and then make a call, by that test. Do not hedge into silence
   — an unstated doubt helps nobody. A doubt is not a third verdict: what you
-  would fix as the author blocks, and what you would not is no finding against
-  this pull request.
+  would fix as the author blocks, and what you would not is at most an
+  observation.
 - The aim is to keep genuine defects out of the middle state, not to block more
   sound pull requests. A pull request whose diff does what its unit says, and
   says nothing false, passes.
