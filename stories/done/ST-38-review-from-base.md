@@ -17,7 +17,7 @@ from the pull request it is judging.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — Before anything else is changed, a trial, posting nothing, shows the design
+- [x] **AC-1** — Before anything else is changed, a trial, posting nothing, shows the design
       works. A head on a throwaway branch adds a `CLAUDE.md` and an `AGENTS.md`, each telling the
       reviewer to put a marker word in its summary, and a `.claude/settings.json` with a
       `SessionStart` hook that writes a marker file outside the checkout. A reviewer session, as
@@ -29,13 +29,13 @@ from the pull request it is judging.
       marker word or the marker file, the story stops there: `blocked:` is set, saying what the
       trial found, and nothing below is built. The throwaway branch is deleted from `origin`
       afterwards, if it was pushed.
-- [ ] **AC-2** — `reviewPullRequest` makes the review's worktree, detached, at the base branch's
+- [x] **AC-2** — `reviewPullRequest` makes the review's worktree, detached, at the base branch's
       tip as fetched (`origin/<baseRef>`), not at `pr.headSha`. The fetch of the head and the
       `head-moved` checks stay as they are, and `{{HEAD_SHA}}` in the prompt is still the head's.
       No working tree of the head is made. `assertReviewableCheckout` is given the base's SHA,
       before the session and before a re-run. Tests: the worktree is added at the base's tip; a
       checkout found at the head's SHA, or changed, before the session is refused.
-- [ ] **AC-3** — `reviewer.md` says that the working tree is the base branch, not the pull
+- [x] **AC-3** — `reviewer.md` says that the working tree is the base branch, not the pull
       request: the Read, Grep and Glob tools and the shell utilities see the base's files, which
       are never evidence about the head. It says to read the head only through git, naming
       `git show {{HEAD_SHA}}:<path>`, `git grep <pattern> {{HEAD_SHA}}`, `git ls-tree
@@ -45,13 +45,13 @@ from the pull request it is judging.
       differ (the head checked out, and the fetch failing). Its sentence against reviewing
       against "`REVIEW.md` in your checkout, which is the pull request's copy" is corrected,
       since the checkout's copy is now the base's.
-- [ ] **AC-4** — With AC-2 and AC-3 in place, two of ST-4's AC-5 heads are replayed, posting
+- [x] **AC-4** — With AC-2 and AC-3 in place, two of ST-4's AC-5 heads are replayed, posting
       nothing, on the reviewer's default choice, through the composition ST-4's AC-5 describes:
       #37 at `c67ce61`, which returned `pass`, and #39 at `3a7dcea`, which returned
       `pass-with-observations`. Each verdict, its findings, and any finding that comes from
       reading the base's file for the head's, are recorded in "Trials and measurements". A
       finding that does is a failure of AC-3: the prompt is changed and both are run again.
-- [ ] **AC-5** — Every `**Planned (…)**` marker naming ST-38 in `docs/agent-workflow-design.md`
+- [x] **AC-5** — Every `**Planned (…)**` marker naming ST-38 in `docs/agent-workflow-design.md`
       loses `ST-38`, and each passage is corrected wherever what was built differs. Every other
       statement there, and in `review.mjs`'s comments, that the reviewer reads the diff in a
       checkout of the head is corrected, including "reads the diff in its own checkout of the

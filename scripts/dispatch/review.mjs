@@ -3,9 +3,11 @@
  * Reviews one open pull request end to end and records the verdict (OQ-69):
  * resolve the head, read the project's checklist from `main` (ST-21), find and
  * read from `main` the unit the PR's body links (ST-22, `unit.mjs`), check out
- * that exact commit somewhere that is not the coder's tree, spawn the
- * reviewer, parse what it returns against the checklist, and post the verdict
- * as a marker comment.
+ * the base branch's tip somewhere that is not the coder's tree (ST-38: the
+ * reviewer reads the head through git, so that its tool's instructions and
+ * settings come from the base, never from the PR), spawn the reviewer, parse
+ * what it returns against the checklist, and post the verdict as a marker
+ * comment.
  *
  * It joins existing modules and reimplements none of them: `github.mjs` reads
  * the pull request, lists its comments, composes and posts the marker;
@@ -265,10 +267,12 @@ async function git(cwd, args) {
 
 /**
  * Throws unless `dir` is a checkout of exactly `sha`, with nothing uncommitted,
- * that is not `repoDir` (AC-5). A reviewer reading a dirty tree reviews
- * something that is not what the PR contains.
+ * that is not `repoDir` (AC-5). `sha` is the base branch's tip (ST-38/AC-2):
+ * the session starts in a checkout of the base, whose instructions and settings
+ * are `main`'s, and reads the head through git. A dirty or wrong tree would
+ * give it someone else's.
  */
-async function assertReviewableCheckout(dir, sha, repoDir) {
+export async function assertReviewableCheckout(dir, sha, repoDir) {
   if (realpathSync(dir) === realpathSync(repoDir)) throw new Error('the review checkout is the dispatcher\'s own tree')
   const head = (await git(dir, ['rev-parse', 'HEAD'])).trim()
   if (head !== sha) throw new Error(`the review checkout is at ${head}, not ${sha}`)
@@ -368,6 +372,10 @@ export async function reviewPullRequest({
     if (fetchedTip !== pr.headSha) {
       return { status: 'head-moved', reason: `${pr.headRef} is at ${fetchedTip}, not the ${pr.headSha} the API reported` }
     }
+    // ST-38/AC-2: the session's checkout is the base's tip as fetched, never
+    // the head, so that the tool loads its instructions, settings and hooks
+    // from the base. The head is read through git, from the refs just fetched.
+    const baseSha = (await git(repoDir, ['rev-parse', `${REMOTE}/${pr.baseRef}`])).trim()
 
     // ST-21/AC-1: the checklist as it stands on the base branch, never the
     // pull request's own copy, read before a session is started,
@@ -403,9 +411,9 @@ export async function reviewPullRequest({
     const refused = await checkUsage({ read: readChosen, cwd: repoDir, limits: machine.usageLimits.reviewer })
     if (refused) return refused
 
-    await git(repoDir, ['worktree', 'add', '--detach', tree, pr.headSha])
+    await git(repoDir, ['worktree', 'add', '--detach', tree, baseSha])
     worktreeAdded = true
-    await assertReviewableCheckout(tree, pr.headSha, repoDir)
+    await assertReviewableCheckout(tree, baseSha, repoDir)
 
     // The session's environment carries no GitHub credential: the reviewer
     // posts nothing (reviewer.md). `coderEnv` is what strips them.
@@ -452,7 +460,7 @@ export async function reviewPullRequest({
       // in the same checkout, unless the first session left it changed.
       const firstReason = parsed.reason
       try {
-        await assertReviewableCheckout(tree, pr.headSha, repoDir)
+        await assertReviewableCheckout(tree, baseSha, repoDir)
       } catch (error) {
         keepCheckout = true
         return {
@@ -476,8 +484,9 @@ export async function reviewPullRequest({
     // A `null` verdict is the reviewer declining to review; the PR stays pending.
     if (verdict.verdict === null) return { status: 'no-verdict', headSha: verdict.head, summary: verdict.summary, sessions }
 
-    // The checkout it was handed was at `pr.headSha`; a verdict about another
-    // commit was not made from what it read.
+    // The reviewer was handed `pr.headSha` to read through git, from a
+    // checkout of the base (ST-38/AC-2); a verdict about another commit was not
+    // made from what it was handed.
     if (verdict.head !== pr.headSha) {
       return { status: 'head-moved', reason: `the reviewer reported ${verdict.head}, having been handed ${pr.headSha}`, sessions }
     }
