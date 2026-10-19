@@ -227,6 +227,11 @@ still reviewed, and the checklist says what that means (`REVIEW.md`, "Every pull
 item 4). It does not receive the coder's session, summary or reasoning, or any commentary from
 ATC.
 
+**Planned (ST-39):** before each review, ATC fetches every branch on `origin` and prunes those
+deleted there, so that the reviewer, which may have no network, reads `origin`'s branches from its
+remote-tracking refs (Part 3, "Decided so far", "The reviewer reads `origin`'s branches from a
+pruned fetch").
+
 **It verifies by reading, not by running.** The reviewer runs no test, lint or other check, a
 single test file included. It settles a claim by reading the code, searching it or diffing it,
 with the narrowest command that settles it, such as a search or a diff of one path. A claim only a
@@ -2265,6 +2270,25 @@ shortened where it is long, so that it can be found there with its date.
   fault. Considered and not chosen: a reason field in the reviewer's `null` verdict, which would
   change `reviewer.md` and rest on the reviewer classifying its own failure; going on to the next
   pull request; and moving to the next reviewer choice, as ST-35 does for usage.
+- **The reviewer reads `origin`'s branches from a pruned fetch** (decided 2026-10-19 by the owner,
+  with the planning session; **Planned (ST-39)**). `REVIEW.md`, "Changes to stories", has the
+  reviewer check a new story's number against every branch on `origin`, and whether a story is
+  already in flight, but a Codex reviewer has no network, so `git ls-remote` fails, and both Codex
+  verdicts replayed for ST-38 said the remote branches could not be checked ("Trials and
+  measurements", "The reviewer's checkout: head or base"). Before each review, ATC's fetch takes
+  every branch on `origin` and prunes those deleted there, in place of the head and base branches
+  alone, and `reviewer.md` has the reviewer read `origin`'s branches from the remote-tracking refs.
+  The fetch is made just before the review, so the list is as current as one ATC could pass.
+  Considered and not chosen: ATC passing the list in the prompt: the owner would rather not add to
+  what a review is given while that can be avoided. **Also decided the same day by the owner:** the
+  reviewer gets nothing more from GitHub than it does today, the pull request's body and, for an
+  issue unit, the issue, which ATC reads and puts in its prompt: no `gh`, no token, and nothing else
+  ATC fetches for it, to be revisited if needed. Claims only GitHub could settle, such as an earlier
+  pull request's body or a comment, stay named in the verdict as not checked ("A claim only `gh` can
+  check is named, not judged", above). Considered and not chosen: `gh` with the machine's token,
+  which can post a marker the gate honours; a read-only fine-grained token, a credential on the
+  machine of the kind ST-6 is to find how to keep from sessions, and of no use to a Codex reviewer,
+  which has no network; and ATC fetching the pull requests and comments a body cites.
 
 ### The move, in order
 
