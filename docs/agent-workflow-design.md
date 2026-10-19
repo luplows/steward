@@ -3089,39 +3089,49 @@ and the pull requests named could not be checked, with no network and no GitHub.
 
 ### Grading replayed: ST-4
 
-Run on 2026-10-19 by the planning session, for ST-4's AC-5, posting nothing: one run on each of
-four heads, with `reviewer.md` as ST-4 changes it, on the reviewer's default, Codex
-(`gpt-6.1-sol`, effort `high`, codex-cli 0.163.0). Each was composed as `reviewPullRequest`
-composes it: a checkout of the review's merge base (ST-38), `REVIEW.md` from `main` as it is now
-(`13c457c`), not as each head was first reviewed against, and the unit as it stood on `main` at
-that merge base, read by `readUnit`. Each ran in a standalone local clone whose `origin/main` was
-that merge base, so that no ref another session uses moved. One run each, one round: no condition
-failed, so the prompt was not changed.
+Run on 2026-10-19 by the planning session, for ST-4's AC-5, posting nothing, in two rounds of one
+run on each of four heads, on the reviewer's default, Codex (`gpt-6.1-sol`, effort `high`,
+codex-cli 0.163.0). Each run was composed as `reviewPullRequest` composes it: a checkout of the
+review's merge base (ST-38), `REVIEW.md` from `main` as it was that day (`13c457c`, then
+`d317513`; neither changed `REVIEW.md`), not as each head was first reviewed against, and the unit
+as it stood on `main` at that merge base, read by `readUnit`. Each ran in a standalone local
+clone whose `origin/main` was that merge base, so that no ref another session uses moved.
 
-| Pull request | Head | Merge base | Verdict then | Verdict now | Findings | Time |
-|---|---|---|---|---|---|---|
-| #41 | `14366c1` | `896e6b4` | `pass-with-observations` | `block` | 3 `block` | 162.4 s |
-| #34 | `da6e5c5` | `52f5838` | `pass-with-observations` | `block` | 1 `block` | 86.5 s |
-| #39 | `3a7dcea` | `65cf57f` | `pass-with-observations` | `block` | 1 `block` | 90.4 s |
-| #37 | `c67ce61` | `a85755b` | `pass` | `pass` | none | 69.5 s |
+- **Round 1**, with `reviewer.md` as ST-4 first changed it (`9a604c7`). No AC-5 condition failed.
+- **Round 2**, with `reviewer.md` as landed (`c21f57f`). The prompt changed between the rounds for
+  reasons other than AC-5: #55's first review found that "Calibration" did not itself say what
+  `pass-with-observations` is for, and the owner asked that every real finding that is not a
+  block be reported as an observation rather than left out (2026-10-19). Round 2 was run so that
+  the record is of the prompt that lands.
 
-Each finding, and what shows it true at its head:
+| Pull request | Head | Merge base | Verdict then | Round 1 | Round 2 |
+|---|---|---|---|---|---|
+| #41 | `14366c1` | `896e6b4` | `pass-with-observations` | `block`, 3 findings, 162.4 s | `block`, 3 findings, 161.8 s |
+| #34 | `da6e5c5` | `52f5838` | `pass-with-observations` | `block`, 1 finding, 86.5 s | `block`, 2 findings, 92.8 s |
+| #39 | `3a7dcea` | `65cf57f` | `pass-with-observations` | `block`, 1 finding, 90.4 s | `block`, 1 finding and 1 observation, 78.1 s |
+| #37 | `c67ce61` | `a85755b` | `pass` | `pass`, 69.5 s | `pass`, 63.0 s |
 
-| Run | Finding (item) | Shown by |
-|---|---|---|
-| #41 | ST-34's AC-5 compares the reviewer's model with the one the unit names, through `unitModel`, which returns `null` for a `model: null` story, so the reviewer could run the coder's default model ("Changes to stories", 3) | `git show 14366c1:stories/ST-34-machine-settings.md`, AC-5; `git show 14366c1:scripts/dispatch/review.mjs`, `unitModel`, which returns `null` unless `model` is a non-empty string |
-| #41 | the pull request adds ST-33, whose AC-1 forbids the reviewer running tests or lint, and edits ST-6, which still requires that "the reviewer still runs the project's tests and lint" ("Changes to stories", 6) | `git diff --stat 896e6b4...14366c1 -- stories/` (ST-33 added, ST-6 changed); `git show 14366c1:stories/ST-6-coder-machine-credentials.md`, line 183. #54 has since corrected ST-6 |
-| #41 | ST-27's added claim that, after ST-33, a review "no longer runs the pull request's code itself" was false: the review's worktree was the head, and `reviewer.md` ran `node scripts/dispatch/review-tools.mjs` from it ("Changes to stories", 4) | `git diff 896e6b4...14366c1 -- stories/ST-27-land-scheduled-outside-prs.md` adds the line; `git show 14366c1:scripts/dispatch/review.mjs`, line 360, `worktree add … pr.headSha`; `git show 14366c1:.claude/prompts/reviewer.md`, line 221. ST-38 has since made the claim true |
-| #34 | the body says "every added line is 100 characters or fewer"; the diff adds lines of 147 and 166 characters ("Every pull request", 3) | `git diff 52f5838...da6e5c5 -- REVIEW.md scripts/dispatch/review.test.mjs`, its added lines measured |
-| #39 | the Verification section says `grep -rn "adapter per agent tool"` found two copies, ST-15's title and the design doc's marker; at that head it finds one, the design doc's copy being split across lines 1587–1588 ("Integrity", 1) | `git grep -n "adapter per agent tool" 3a7dcea` prints one line, `stories/ST-15-agent-tool-adapters.md:3` |
+Each finding, the rounds it came in, and what shows it true at its head:
 
-Every finding is true at its head, each graded `block` is a false statement or a contradiction
-of another story (AC-1's list), none is of a kind `pass-with-observations` is for, and none was
-graded an observation; #41 and #34 blocked and #37 passed, so AC-5's conditions hold. Of the
-defects the earlier verdicts recorded as observations, #41's (the `model: null` gap) was found;
-#34's (its comment above `idsAtBase`, saying the story lint holds filenames equal to frontmatter
-ids in `stories/retired/` too, which #38 corrected) was missed. The #39 and #34 findings, and two
-of #41's, are defects the earlier verdicts did not record at all. Codex reported no cost.
+| Run | Finding (item, severity) | Rounds | Shown by |
+|---|---|---|---|
+| #41 | ST-34's AC-5 compares the reviewer's model with the one the unit names, through `unitModel`, which returns `null` for a `model: null` story, so the reviewer could run the coder's default model ("Changes to stories", 3; `block`) | 1, 2 | `git show 14366c1:stories/ST-34-machine-settings.md`, AC-5; `git show 14366c1:scripts/dispatch/review.mjs`, `unitModel`, which returns `null` unless `model` is a non-empty string |
+| #41 | the pull request adds ST-33, whose AC-1 forbids the reviewer running tests or lint, and edits ST-6, which still requires that "the reviewer still runs the project's tests and lint" ("Changes to stories", 6; `block`) | 1, 2 | `git diff --stat 896e6b4...14366c1 -- stories/` (ST-33 added, ST-6 changed); `git show 14366c1:stories/ST-6-coder-machine-credentials.md`, line 183. #54 has since corrected ST-6 |
+| #41 | ST-27's added claim that, after ST-33, a review "no longer runs the pull request's code itself" was false: the review's worktree was the head, and `reviewer.md` ran `node scripts/dispatch/review-tools.mjs` from it ("Changes to stories", 4; `block`) | 1 | `git diff 896e6b4...14366c1 -- stories/ST-27-land-scheduled-outside-prs.md` adds the line; `git show 14366c1:scripts/dispatch/review.mjs`, line 360, `worktree add … pr.headSha`; `git show 14366c1:.claude/prompts/reviewer.md`, line 221. ST-38 has since made the claim true |
+| #41 | the pull request rewrites ST-32 for a reviewer that runs no tests, while M1 in the design doc still makes adopting Codex depend on a spike showing it can run `npm test` in its read-only sandbox ("Changes to stories", 6; `block`) | 2 | `git show 14366c1:docs/agent-workflow-design.md`, lines 1255–1263; `git diff --stat 896e6b4...14366c1 -- stories/ST-32-codex-reviewer.md`. #42 later revised M1 |
+| #34 | the body says "every added line is 100 characters or fewer"; 21 added lines are longer, among them `REVIEW.md`'s at 147 characters and `review.test.mjs`'s at 166 ("Every pull request", 3; `block`) | 1, 2 | `git diff 52f5838...da6e5c5`, its added lines measured in characters |
+| #34 | the comment it adds above `idsAtBase` says the story lint holds filenames equal to frontmatter ids in `stories/retired/` too; `lintAll` lists only `stories/` and `stories/done/` ("Every pull request", 3; `block`) | 2 | `git show da6e5c5:scripts/dispatch/story-containment.mjs`, lines 130–133; `git show da6e5c5:scripts/lint-stories.mjs`, `lintAll`. #38 corrected the comment |
+| #39 | the Verification section says `grep -rn "adapter per agent tool"` found two copies, ST-15's title and the design doc's marker; at that head it finds one, the design doc's copy being split across lines 1587–1588 ("Integrity", 1; `block`) | 1, 2 | `git grep -n "adapter per agent tool" 3a7dcea` prints one line, `stories/ST-15-agent-tool-adapters.md:3` |
+| #39 | ST-15's AC-3 asks for the **Planned** markers naming OQ-114 to be resolved, but the passage's marker names ST-15; this predates the pull request ("Changes to stories", 7; `observation`) | 2 | `git show 3a7dcea:stories/ST-15-agent-tool-adapters.md`, AC-3; `git show 3a7dcea:docs/agent-workflow-design.md`, line 1587. ST-15's AC-3 has since been corrected |
+
+In both rounds every finding is true at its head; each graded `block` is a false statement or a
+contradiction of another story or the design of record (AC-1's list), none graded `block` is of
+a kind `pass-with-observations` is for, and the one observation, in round 2, predates its
+pull request; #41 and #34 blocked and #37 passed. So AC-5's conditions hold in both rounds. Of the
+defects the earlier verdicts recorded as observations, #41's (the `model: null` gap) was found in
+both rounds; #34's (the comment above `idsAtBase`) was missed in round 1 and found in round 2.
+Every other finding is a defect the earlier verdicts did not record at all. Codex reported no
+cost.
 
 ### Costs
 
