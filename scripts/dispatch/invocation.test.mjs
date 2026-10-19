@@ -318,6 +318,12 @@ describe('ST-4: the reviewer blocks on defects rather than recording them as obs
     expect(section('Calibration')).toContain('`pass-with-observations` is for findings that are real but not this diff\'s to fix: something there before the diff, something outside it, a suggestion, or something that follows a decision the unit or the crew already recorded.')
   })
 
+  it('ST-4/AC-3: asks for every real finding that is not a block to be reported as an observation, not left out', () => {
+    expect(flat).toContain('**Report every such finding**, with severity `observation`. One left out is invisible to the crew')
+    expect(flat).toContain('anything else real you found is an observation, reported as one.')
+    expect(flat).not.toContain('is at most an observation')
+  })
+
   it('ST-4/AC-3: no longer describes pass-with-observations as a doubt not blocked on', () => {
     expect(flat).not.toContain('chose not to block on')
     expect(flat).not.toContain('decided not to block on')

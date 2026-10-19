@@ -281,12 +281,15 @@ gets switched off. Both are failures.
 - `pass-with-observations` is for findings that are real but not this diff's
   to fix: something there before the diff, something outside it, a
   suggestion, or something that follows a decision the unit or the crew
-  already recorded.
+  already recorded. **Report every such finding**, with severity
+  `observation`. One left out is invisible to the crew, and is how a real
+  problem goes unseen; that you would not block on it is no reason to omit
+  it.
 - When genuinely unsure whether an item is satisfied, say so explicitly with
   your reasoning and then make a call, by that test. Do not hedge into silence
   — an unstated doubt helps nobody. A doubt is not a third verdict: what you
-  would fix as the author blocks, and what you would not is at most an
-  observation.
+  would fix as the author is a `block`, and anything else real you found is
+  an observation, reported as one.
 - The aim is to keep genuine defects out of the middle state, not to block more
   sound pull requests. A pull request whose diff does what its unit says, and
   says nothing false, passes.
