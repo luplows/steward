@@ -17,7 +17,7 @@ that reached no verdict.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — When a reviewer session returns a `null` verdict, `reviewPullRequest` reads the
+- [x] **AC-1** — When a reviewer session returns a `null` verdict, `reviewPullRequest` reads the
       pull request's state again (`getPullRequestState`). When its head differs from the head the
       reviewer was handed (`pr.headSha`), the result is `no-verdict`, with `headSha` and the
       reviewer's `summary`, as today. When the head is unchanged, the result is
@@ -25,18 +25,18 @@ that reached no verdict.
       Nothing is posted in either case. Tests: a `null` verdict with the head moved gives
       `no-verdict`; a `null` verdict with the head unchanged gives `cannot-review`, with the
       reviewer's summary, and posts no comment.
-- [ ] **AC-2** — `cannot-review` is a failure for `review.mjs`'s command line: it is not in
+- [x] **AC-2** — `cannot-review` is a failure for `review.mjs`'s command line: it is not in
       `NON_FAILURES`, so the command exits 1 for it. `no-verdict` stays a non-failure.
       `review.mjs` exports `NON_FAILURES`, and a test asserts that it holds `no-verdict` and not
       `cannot-review`.
-- [ ] **AC-3** — `review.mjs`'s header, and `reviewPullRequest`'s doc comment, say what
+- [x] **AC-3** — `review.mjs`'s header, and `reviewPullRequest`'s doc comment, say what
       `cannot-review` means, and that `no-verdict` is now only a `null` verdict on a head that
       moved.
-- [ ] **AC-4** — `docs/controller.md`, "Reporting and stopping", says that `cannot-review` from
+- [x] **AC-4** — `docs/controller.md`, "Reporting and stopping", says that `cannot-review` from
       `review.mjs` stops the whole rotation, as a script error does: the controller reports it,
       with the reviewer's summary, and starts nothing more until the crew says how to go on. It
       does not run the review again on another choice.
-- [ ] **AC-5** — Every `**Planned (…)**` marker naming ST-37 in `docs/agent-workflow-design.md`
+- [x] **AC-5** — Every `**Planned (…)**` marker naming ST-37 in `docs/agent-workflow-design.md`
       loses `ST-37`, and each passage is corrected wherever what was built differs.
 
 ## Out of scope

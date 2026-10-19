@@ -2246,7 +2246,7 @@ shortened where it is long, so that it can be found there with its date.
   finds no other choice in practice.
 - **A reviewer that returns no verdict on an unchanged head could not review** (decided 2026-10-16
   by the owner, with the planning session, after the first rotation on the Codex reviewer;
-  **Planned (ST-37, ST-25)**). On #48, Codex's command tool would not start, because a helper was
+  **Planned (ST-25)**). On #48, Codex's command tool would not start, because a helper was
   missing beside `codex.exe`, so the reviewer returned a `null` verdict, and ATC reported
   `no-verdict` with exit 0, as it does for a head that moved. Of the reasons `reviewer.md` gives
   for a `null` verdict, only a moved head is ordinary; the others are faults in the machine or the
