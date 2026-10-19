@@ -3127,11 +3127,14 @@ Each finding, the rounds it came in, and what shows it true at its head:
 In both rounds every finding is true at its head; each graded `block` is a false statement or a
 contradiction of another story or the design of record (AC-1's list), none graded `block` is of
 a kind `pass-with-observations` is for, and the one observation, in round 2, predates its
-pull request; #41 and #34 blocked and #37 passed. So AC-5's conditions hold in both rounds. Of the
-defects the earlier verdicts recorded as observations, #41's (the `model: null` gap) was found in
-both rounds; #34's (the comment above `idsAtBase`) was missed in round 1 and found in round 2.
-Every other finding is a defect the earlier verdicts did not record at all. Codex reported no
-cost.
+pull request; #41 and #34 blocked and #37 passed. So AC-5's conditions hold in both rounds.
+
+Four of the findings were recorded by the earlier verdicts, each as an observation: #41's
+`model: null` gap, found in both rounds; #41's M1 condition, found in round 2; #34's comment above
+`idsAtBase`, missed in round 1 and found in round 2; and #39's ST-15 mismatch, which predates its
+pull request and was an observation again in round 2. The other four, #41's ST-6 contradiction and
+ST-27 claim, #34's line lengths and #39's search result, the earlier verdicts did not record. Codex
+reported no cost.
 
 ### Costs
 
