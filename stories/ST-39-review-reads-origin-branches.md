@@ -33,9 +33,10 @@ flight, are made on every review rather than reported as not checked.
 
 ## Out of scope
 
-- Giving the reviewer anything from GitHub: `gh`, a token, or pull requests and comments fetched
-  by ATC. The crew decided on 2026-10-19 to leave the reviewer with the local repository alone,
-  to be revisited if needed (`docs/agent-workflow-design.md`, Part 3, "Decided so far").
+- Giving the reviewer more from GitHub than the pull request's body and, for an issue unit, the
+  issue, which ATC already puts in its prompt: `gh`, a token, or other pull requests and comments
+  fetched by ATC. The crew decided on 2026-10-19 to leave the reviewer's inputs as they are, to be
+  revisited if needed (`docs/agent-workflow-design.md`, Part 3, "Decided so far").
 - ATC passing the list of branches, or anything else new, in the reviewer's prompt.
 - The reviewer's allowlist (`reviewerAllowedTools()`, `scripts/dispatch/invocation.mjs`): its
   `git fetch` and `git ls-remote` stay.

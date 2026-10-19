@@ -2281,13 +2281,14 @@ shortened where it is long, so that it can be found there with its date.
   The fetch is made just before the review, so the list is as current as one ATC could pass.
   Considered and not chosen: ATC passing the list in the prompt: the owner would rather not add to
   what a review is given while that can be avoided. **Also decided the same day by the owner:** the
-  reviewer is given nothing from GitHub, as today: no `gh`, no token, and nothing ATC fetches for
-  it, to be revisited if needed. Claims only GitHub could settle, such as an earlier pull request's
-  body or a comment, stay named in the verdict as not checked ("A claim only `gh` can check is
-  named, not judged", above). Considered and not chosen: `gh` with the machine's token, which can
-  post a marker the gate honours; a read-only fine-grained token, a credential on the machine of the
-  kind ST-6 is to find how to keep from sessions, and of no use to a Codex reviewer, which has no
-  network; and ATC fetching the pull requests and comments a body cites.
+  reviewer gets nothing more from GitHub than it does today, the pull request's body and, for an
+  issue unit, the issue, which ATC reads and puts in its prompt: no `gh`, no token, and nothing else
+  ATC fetches for it, to be revisited if needed. Claims only GitHub could settle, such as an earlier
+  pull request's body or a comment, stay named in the verdict as not checked ("A claim only `gh` can
+  check is named, not judged", above). Considered and not chosen: `gh` with the machine's token,
+  which can post a marker the gate honours; a read-only fine-grained token, a credential on the
+  machine of the kind ST-6 is to find how to keep from sessions, and of no use to a Codex reviewer,
+  which has no network; and ATC fetching the pull requests and comments a body cites.
 
 ### The move, in order
 
