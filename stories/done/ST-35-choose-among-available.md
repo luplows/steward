@@ -17,7 +17,7 @@ not, so that work goes on while one company's allowance is spent.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `review.mjs` and both forms of `coder.mjs`'s command line (a dispatch, and
+- [x] **AC-1** — `review.mjs` and both forms of `coder.mjs`'s command line (a dispatch, and
       `retry`) take `--choice <name>`, passed to `reviewPullRequest`, `dispatchCoder` and
       `retryStory` as a `choice` option. The name must be a key of that role's `available` in the
       machine's settings; any other name returns `choice-unavailable`, with the name, before the
@@ -31,7 +31,7 @@ not, so that work goes on while one company's allowance is spent.
       and a named choice whose tool is over its usage returning `over-usage` with no session
       started on another choice. One reviewer test names a choice whose model is the coder's,
       and that choice runs.
-- [ ] **AC-2** — Without `--choice`, `reviewPullRequest` tries its choices in this order: the one
+- [x] **AC-2** — Without `--choice`, `reviewPullRequest` tries its choices in this order: the one
       `chooseReviewer` picks, then every other choice in `roles.reviewer.available`, in the file's
       order, whose model differs from every model the coder ran (AC-8). For each choice it reads
       the usage of the choice's tool (`readUsage` for `claude`, `readCodexUsage` for `codex`), at
@@ -42,7 +42,7 @@ not, so that work goes on while one company's allowance is spent.
       default whose usage cannot be read, with a Claude choice started; Claude's usage read once
       when two Claude choices are tried; and every tool over its usage, with the first choice's
       refusal returned and no session started.
-- [ ] **AC-3** — Every result of `reviewPullRequest`, `dispatchCoder` and `retryStory` returned
+- [x] **AC-3** — Every result of `reviewPullRequest`, `dispatchCoder` and `retryStory` returned
       after a session started carries `choice`: its `name`, `tool`, `model` and `effort`, and
       `why`, which is `crew` (AC-1), `unit` (a story's `model:` names it), `default`,
       `coder-model` (the reviewer's default has the coder's model, ST-34's AC-5) or `usage` (ATC
@@ -52,16 +52,16 @@ not, so that work goes on while one company's allowance is spent.
       (`over-usage`, with `window`, `percent` and `limit`; or `usage-unknown`, with `reason`). The
       CLIs print both, as part of the result's JSON. Tests assert `choice.why` for each of the
       five cases, and `skipped`'s entries for one move and one refusal.
-- [ ] **AC-4** — Every `**Planned (…)**` marker naming ST-35 in `docs/agent-workflow-design.md`
+- [x] **AC-4** — Every `**Planned (…)**` marker naming ST-35 in `docs/agent-workflow-design.md`
       loses `ST-35`, and each passage is corrected wherever what was built differs.
-- [ ] **AC-5** — `readMachineSettings` requires a key `strength` on every choice in
+- [x] **AC-5** — `readMachineSettings` requires a key `strength` on every choice in
       `roles.coder.available`: a positive integer, a larger number being a stronger choice, and
       equal numbers equally strong, whatever the tools. A missing `strength`, or one that is not a
       positive integer, is an error naming the key with all its parents (for example
       `roles.coder.available.opus.strength`). A choice in `roles.reviewer.available` has no
       `strength` key, and one there is refused as an unknown key, as today. Tests cover a valid
       file, a missing `strength`, `0`, `1.5`, `"2"`, and a reviewer choice with `strength`.
-- [ ] **AC-6** — Without `--choice`, `dispatchCoder` and `retryStory` try first the choice the
+- [x] **AC-6** — Without `--choice`, `dispatchCoder` and `retryStory` try first the choice the
       story's `model:` names (or `roles.coder.default` when it is `null`), then every other
       choice in `roles.coder.available`, in the file's order, whose `strength` is at least that
       first choice's. A story never runs on a weaker choice than its own: when none of these has
@@ -71,14 +71,14 @@ not, so that work goes on while one company's allowance is spent.
       available choice of equal strength; one not run on a weaker choice that is under its usage;
       and a `model: null` story taking the default's `strength`. The tests give a second tool's
       usage reader, since every coder choice runs on `claude` today.
-- [ ] **AC-7** — `dispatchCoder` opens the pull request with the coder's body, with every line
+- [x] **AC-7** — `dispatchCoder` opens the pull request with the coder's body, with every line
       that starts `Coder:` removed, followed by a last line `Coder: <name>`, naming the choice
       that ran. `retryStory` replaces the body the same way, its `Coder:` line naming the choices
       on the pull request's current `Coder:` line, then the one that ran, each once, in the order
       first run. Tests cover: an opened body ending in `Coder: opus`; a coder's own `Coder:` line
       removed; a retry on another choice giving `Coder: sonnet, opus`; and a retry on the same
       choice giving `Coder: sonnet`.
-- [ ] **AC-8** — The models the coder ran, which the reviewer's choice must differ from (ST-34's
+- [x] **AC-8** — The models the coder ran, which the reviewer's choice must differ from (ST-34's
       AC-5, AC-2), are those of the choices on the last line of the pull request's body that
       starts `Coder:`: for each name, the `model` of that key of `roles.coder.available`, or the
       name as written when it is not one. When the body has no such line, they are found from the
@@ -86,7 +86,7 @@ not, so that work goes on while one company's allowance is spent.
       cover: a `Coder:` line naming a choice the story's `model:` does not, and the reviewer
       avoiding that choice's model; two names, both models avoided; a name that is not an
       available choice; and a body with no `Coder:` line, reviewed as today.
-- [ ] **AC-9** — `docs/machine-settings.md` describes `strength` in the table of a choice's keys,
+- [x] **AC-9** — `docs/machine-settings.md` describes `strength` in the table of a choice's keys,
       with the coder's choices in its example given a `strength`; and, under "How the choices are
       used", `--choice` (AC-1), the order in which ATC tries choices for each role (AC-2, AC-6),
       and the `Coder:` line (AC-7, AC-8). The headers of `review.mjs` and `coder.mjs` list

@@ -2153,22 +2153,22 @@ shortened where it is long, so that it can be found there with its date.
   request, is to be explored, to check by mutating the code that the tests test something useful
   (**Planned (ST-36)**, a spike).
 - **The machine steward runs on has settings of its own** (decided 2026-10-15 by the owner, with the
-  planning session; built in ST-34, except the crew's and ATC's tiers below, **Planned (ST-35)**).
-  Which tool, model and effort runs each role is the computer's, not the project's, so that a
-  project's settings make no assumption about the models a machine uses. The machine's settings are
-  a file outside any checkout, `~/.steward/settings.json` in the user's profile, which an
-  environment variable, `STEWARD_SETTINGS`, can point elsewhere. For each role they give a default
-  choice of tool, model and effort, and the choices available besides it, since the coder especially
-  should not be limited to one model or one effort. The usage limits move there from the project's
-  settings, since they describe the crew member's plan; this revises the entry above that made them
-  a project settings key. A Codex reviewer takes the same limits as a Claude one, for now, and
-  limits per tool may come later. Three tiers choose among the available choices: the unit, as a
-  story's `model:` does for the coder (built in ST-34); the crew, overriding the choice for a run it
-  starts by hand; and ATC, taking another choice when one is out of usage and another is not (both
-  ST-35; how, in "A choice named by hand is final, and ATC moves off a spent tool", below). As in
-  the project's settings, nothing has a default in the code. Considered and not chosen: the
-  project's `steward.config.json`; a gitignored file in each checkout, which the controller's reset
-  to `origin/main` before every rotation makes fragile; and the environment variable alone.
+  planning session; built in ST-34 and ST-35). Which tool, model and effort runs each role is the
+  computer's, not the project's, so that a project's settings make no assumption about the models a
+  machine uses. The machine's settings are a file outside any checkout, `~/.steward/settings.json`
+  in the user's profile, which an environment variable, `STEWARD_SETTINGS`, can point elsewhere. For
+  each role they give a default choice of tool, model and effort, and the choices available besides
+  it, since the coder especially should not be limited to one model or one effort. The usage limits
+  move there from the project's settings, since they describe the crew member's plan; this revises
+  the entry above that made them a project settings key. A Codex reviewer takes the same limits as a
+  Claude one, for now, and limits per tool may come later. Three tiers choose among the available
+  choices: the unit, as a story's `model:` does for the coder (built in ST-34); the crew, overriding
+  the choice for a run it starts by hand; and ATC, taking another choice when one is out of usage
+  and another is not (how, in "A choice named by hand is final, and ATC moves off a spent tool",
+  below). As in the project's settings, nothing has a default in the code. Considered and not
+  chosen: the project's `steward.config.json`; a gitignored file in each checkout, which the
+  controller's reset to `origin/main` before every rotation makes fragile; and the environment
+  variable alone.
 - **A Codex reviewer runs read-only** (decided 2026-10-15 by the owner, with the planning session,
   from a second trial on the ChatGPT Plus plan). This answers ST-32's open
   questions. Codex's usage is read through `codex app-server`'s `account/rateLimits/read`, with no
@@ -2218,32 +2218,33 @@ shortened where it is long, so that it can be found there with its date.
   Considered and not chosen: requiring each observation to say why it is not a block, which is
   left until the replay shows it is needed.
 - **A choice named by hand is final, and ATC moves off a spent tool** (decided 2026-10-16 by the
-  owner, with the planning session, answering ST-35's open questions; **Planned (ST-35)**). The
-  goal, in the owner's words: "swapping between Codex and Claude (or other future models)". A
-  member of the crew may name a role's choice for one run it starts by hand (`--choice`), and that
-  choice is final: when its tool is over its usage, the run stops as today, and the crew chooses
-  again; and a reviewer choice named by hand runs even when its model is the coder's ("On the off
-  chance that this is necessary, I don't want the tooling to refuse progress"). Otherwise, when
-  the tool of the choice ATC would run is over the role's usage limit, or its usage cannot be
-  read, ATC moves to the next available choice for that role, in the file's order, whose tool's
-  usage is readable and under the limit; with none, nothing starts, as before. The reviewer may
-  move to any choice whose model differs from the coder's. The coder never moves to a weaker
-  choice: a story waits rather than run on one. Strength is ranked by a `strength` integer on each
-  coder choice in the machine's settings, equal numbers being equally strong whatever the tool, so
-  that a Claude and a Codex choice can stand in for each other both ways; a story whose `model:`
-  is `null` takes its default's strength. Usage stays per tool: Claude Code's per-model
+  owner, with the planning session, answering ST-35's open questions; built in ST-35). The goal, in
+  the owner's words: "swapping between Codex and Claude (or other future models)". A member of the
+  crew may name a role's choice for one run it starts by hand (`--choice`), and that choice is
+  final: when its tool is over its usage, the run stops as today, and the crew chooses again; and a
+  reviewer choice named by hand runs even when its model is the coder's ("On the off chance that
+  this is necessary, I don't want the tooling to refuse progress"). Otherwise, when the tool of the
+  choice ATC would run is over the role's usage limit, or its usage cannot be read, ATC tries the
+  role's other available choices, in the file's order, after the one it would have run, and starts
+  the first whose tool's usage is readable and under the limit, reading each tool's usage once; with
+  none, nothing starts, as before. A result says which choice ran and why, and which it passed over.
+  The reviewer may move to any choice whose model differs from the coder's. The coder never moves to
+  a weaker choice: a story waits rather than run on one. Strength is ranked by a `strength` integer
+  on each coder choice in the machine's settings, equal numbers being equally strong whatever the
+  tool, so that a Claude and a Codex choice can stand in for each other both ways; a story whose
+  `model:` is `null` takes its default's strength. Usage stays per tool: Claude Code's per-model
   `weekly_scoped` rows are still not read, since its 5-hour and `weekly_all` windows cover every
   Claude model, and the goal is moving between tools. So that the reviewer knows which models the
   coder ran, once the coder can run another choice than its story's, ATC ends each coder's pull
-  request body with a `Coder:` line naming every choice that has run on it, which the coder does
-  not write, and the reviewer differs from each of their models. Considered and not chosen: ATC
-  moving off a choice named by hand; ranking by the file's order of `available`, which already
-  means the order choices are tried and cannot make two choices equally strong; a
-  `stronger-than` key on each choice; a list of tiers per role; reading `weekly_scoped` to move
-  between Claude models; the reviewer avoiding the model of every choice the coder could have
-  moved to, instead of a record of what ran; and leaving the coder's side to ST-15, which builds a
-  Codex coder. Until ST-15 is built, every coder choice runs on Claude Code, so the coder's move
-  finds no other choice in practice.
+  request body with a `Coder:` line naming every choice that has run on it, which the coder does not
+  write, and the reviewer differs from each of their models. The reviewer reads the last line that
+  starts `Coder:`; a body with none is read from the unit, as before. Considered and not chosen: ATC
+  moving off a choice named by hand; ranking by the file's order of `available`, which already means
+  the order choices are tried and cannot make two choices equally strong; a `stronger-than` key on
+  each choice; a list of tiers per role; reading `weekly_scoped` to move between Claude models; the
+  reviewer avoiding the model of every choice the coder could have moved to, instead of a record of
+  what ran; and leaving the coder's side to ST-15, which builds a Codex coder. Until ST-15 is built,
+  every coder choice runs on Claude Code, so the coder's move finds no other choice in practice.
 - **A reviewer that returns no verdict on an unchanged head could not review** (decided 2026-10-16
   by the owner, with the planning session, after the first rotation on the Codex reviewer;
   **Planned (ST-25)**). On #48, Codex's command tool would not start, because a helper was

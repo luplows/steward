@@ -13,7 +13,9 @@
  * Each of `dispatchCoder` and `retryStory` reads the plan's usage before it
  * starts a session (`usage.mjs`, ST-31), and starts none when either window is
  * at or over the coder's limit in the settings (`over-usage`), or when the usage
- * cannot be read (`usage-unknown`). A coder session already running is never
+ * cannot be read (`usage-unknown`). Unless the crew named a choice (`--choice`), they then try the
+ * other choices at least as strong as the story's, and start the first whose tool's usage is
+ * readable and under the limit (ST-35, `choices.mjs`). A coder session already running is never
  * stopped.
  *
  * It sets no commit status and triggers no workflow: `review-gate.yml` sets
@@ -33,10 +35,16 @@
  * Every way this can stop short is a distinct `status` on the result, and each
  * leaves a state someone can see: a pushed branch with no pull request, a local
  * branch holding the coder's commits, or nothing at all. It never opens a pull request with a description the coder
- * did not write.
+ * did not write. The pull request's body ends with a `Coder:` line ATC writes, naming the choices
+ * that ran on it (ST-35/AC-7).
  *
  * Usage:
- *   node scripts/dispatch/coder.mjs [OQ-<n>] [--repo owner/name]
+ *   node scripts/dispatch/coder.mjs [OQ-<n>] [--repo owner/name] [--choice <name>]
+ *   node scripts/dispatch/coder.mjs retry OQ-<n> --pr <number> --findings-file <path> --source review|ci --round <n> --remaining <n> [--repo owner/name] [--choice <name>]
+ *
+ * `--choice <name>` runs the coder on that key of `roles.coder.available` for this run (ST-35/AC-1).
+ * It is final: it runs instead of the story's choice and the default, whatever its `strength`, and
+ * when its tool's usage is over the limit or unreadable the run stops, with no other choice taken.
  */
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
@@ -45,6 +53,8 @@ import { homedir, tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { coderLineNames, firstWithUsage, withCoderLine } from './choices.mjs'
+import { readCodexUsage } from './codex.mjs'
 import { coderEnv } from './coder-env.mjs'
 import { buildGetPullRequestState, createContext, createPullRequest, parsePullRequestState, replacePullRequest } from './github.mjs'
 import { installDependencies } from './install.mjs'
@@ -53,7 +63,7 @@ import { coderChoice, readMachineSettings } from './machine-settings.mjs'
 import { buildStory, deriveStatus, dispatchable, isStoryFilename, orderStories, parseFrontmatter } from './queue.mjs'
 import { readSettings } from './settings.mjs'
 import { spawnSession } from './spawn.mjs'
-import { checkUsage, readUsage } from './usage.mjs'
+import { readUsage } from './usage.mjs'
 
 const execFileAsync = promisify(execFile)
 
@@ -319,9 +329,14 @@ async function cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded }) {
  * (AC-2): `bad-machine-label` is refused before the branch is even created,
  * and `claim-failed` or `branch-exists` before the install or the session.
  *
+ *   choice         the name of a key of `roles.coder.available` to run instead of the story's
+ *                  choice (ST-35/AC-1); `choice-unavailable` when it is none, before the usage
+ *                  is read. Final: no other choice is taken, whatever its `strength`
  *   usage          `({ cwd })`, resolving `readUsage`'s result; defaults to
- *                  `readUsage`. Called once, in `repoDir`, after the story is
+ *                  `readUsage`. Called at most once, in `repoDir`, after the story is
  *                  chosen and before the branch is claimed (ST-31)
+ *   codexUsage     `({ executable, cwd })`, resolving `readCodexUsage`'s result, for a choice whose
+ *                  tool is `codex` (ST-35/AC-6; none can be configured until ST-15)
  *   machineSettings  `()`, resolving the machine's settings; defaults to `readMachineSettings`
  *                  on the real environment and home directory. Called once, before the
  *                  usage check (ST-34)
@@ -332,11 +347,21 @@ async function cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded }) {
  * and `usage-unknown` carry the story's id and leave nothing behind; they are
  * failures, and the CLI exits 1 for them: a run that was asked for did not
  * happen (`NON_FAILURES` does not list them). So is `choice-unavailable` (ST-34/AC-4), with
- * `storyId` and `choice`: the story's `model:` names no choice in `roles.coder.available`.
+ * `storyId` and `choice`: the story's `model:` names no choice in `roles.coder.available`, or the
+ * name given as `choice` is none.
+ *
+ * Without `choice`, the story's choice is tried first, then every other choice in
+ * `roles.coder.available`, in the file's order, whose `strength` is at least its own, each tool's
+ * usage read at most once (ST-35/AC-6). Every result returned after a session started carries
+ * `choice` (`name`, `tool`, `model`, `effort` and `why`: `crew`, `unit`, `default` or `usage`) and,
+ * when ATC moved off the story's choice, `skipped`: one entry per choice not started, with its
+ * `name` and `status` (`over-usage` with `window`, `percent` and `limit`; `usage-unknown` with
+ * `reason`). A refusal after every choice was tried carries `skipped` too (ST-35/AC-3). The pull
+ * request is opened with the `Coder:` line (ST-35/AC-7).
  */
 export async function dispatchCoder({
   ctx, repoDir = process.cwd(), storyId, promptTemplate, baseEnv = process.env, sessionOptions = {},
-  install = installDependencies, usage = readUsage,
+  install = installDependencies, usage = readUsage, choice: named, codexUsage = readCodexUsage,
   machineSettings = () => readMachineSettings({ env: process.env, homedir: homedir() }),
 }) {
   const template = promptTemplate ?? readFileSync(CODER_PROMPT, 'utf8')
@@ -382,14 +407,15 @@ export async function dispatchCoder({
   }
 
   // ST-34/AC-4: the story's choice, before the usage is read or anything is claimed.
-  const { choice, refusal } = await storyChoiceAt({ repoDir, ref: mainSha, filename, storyId: chosen.id, machine })
-  if (refusal) return refusal
+  const first = await storyChoiceAt({ repoDir, ref: mainSha, filename, storyId: chosen.id, machine, named })
+  if (first.refusal) return first.refusal
 
-  // ST-31/AC-4: before the branch is claimed, worktree-made or anything installed.
-  const refused = await checkUsage({
-    read: usage, cwd: repoDir, limits: machine.usageLimits.coder, extra: { storyId: chosen.id },
+  // ST-31/AC-4, ST-35/AC-6: before the branch is claimed, worktree-made or anything installed.
+  const picked = await pickCoderChoice({
+    machine, first, named, usage, codexUsage, cwd: repoDir, storyId: chosen.id,
   })
-  if (refused) return refused
+  if (picked.refusal) return picked.refusal
+  const { choice, ran } = picked
 
   const scratch = await mkdtemp(path.join(tmpdir(), 'tw-coder-'))
   const tree = path.join(scratch, 'tree')
@@ -457,7 +483,7 @@ export async function dispatchCoder({
     })
 
     const session = sessionSummary(classification, output)
-    const context = { storyId: chosen.id, branch, headSha: null, session }
+    const context = { storyId: chosen.id, branch, headSha: null, session, ...ran }
 
     if (classification.outcome !== 'completed') {
       // No push: a session that did not finish is not the dispatcher's to publish.
@@ -501,7 +527,10 @@ export async function dispatchCoder({
     // The coder's flag is honoured exactly, except that a `blocked:` story is
     // always a draft, which is what keeps the sweep off it (AC-8).
     const draft = isBlocked || block.draft
-    const pr = await createPullRequest(ctx, { title: block.title, body: block.body, head: branch, base: BASE, draft })
+    // ST-35/AC-7: the `Coder:` line is ATC's; the coder's own is dropped.
+    const pr = await createPullRequest(ctx, {
+      title: block.title, body: withCoderLine(block.body, [choice.name]), head: branch, base: BASE, draft,
+    })
 
     const result = { status: 'opened', ...context, pr, draft, blocked: isBlocked ? blocked : null }
     const promptChange = findPromptChange(block.body)
@@ -532,11 +561,18 @@ async function readBlocked(cwd, branch, filename) {
 }
 
 /**
- * The coder's choice for the story `filename` as it stands at `ref`, under stories/ or
+ * The coder's first choice for the story `filename` as it stands at `ref`, under stories/ or
  * stories/done/ (ST-34/AC-4): the `choice-unavailable` result when its `model:` names no available
- * choice, else `{ choice }`. Read from the object store, so nothing is made or installed first.
+ * choice, else `{ choice, why }`, `why` being `unit` (its `model:` names it) or `default` (it names
+ * none). Read from the object store, so nothing is made or installed first. A choice `named` by the
+ * crew (ST-35/AC-1) is the choice instead, `why` being `crew`, and the story's `model:` is not
+ * looked at; a name that is none is `choice-unavailable` too.
  */
-async function storyChoiceAt({ repoDir, ref, filename, storyId, machine }) {
+async function storyChoiceAt({ repoDir, ref, filename, storyId, machine, named }) {
+  if (named !== undefined) {
+    const choice = typeof named === 'string' ? coderChoice(machine, named) : null
+    return choice === null ? { refusal: { status: 'choice-unavailable', storyId, choice: named } } : { choice, why: 'crew' }
+  }
   let model = null
   for (const candidate of [`stories/${filename}`, `stories/done/${filename}`]) {
     const source = await gitOrNull(repoDir, ['show', `${ref}:${candidate}`])
@@ -545,7 +581,46 @@ async function storyChoiceAt({ repoDir, ref, filename, storyId, machine }) {
     break
   }
   const choice = coderChoice(machine, model)
-  return choice === null ? { refusal: { status: 'choice-unavailable', storyId, choice: model } } : { choice }
+  return choice === null
+    ? { refusal: { status: 'choice-unavailable', storyId, choice: model } }
+    : { choice, why: model === null ? 'default' : 'unit' }
+}
+
+/**
+ * Which choice the coder runs, once the story's `first` is known (ST-35/AC-6): the first of
+ * `first` and then every other choice in `roles.coder.available`, in the file's order, whose
+ * `strength` is at least `first`'s, whose tool's usage is readable and under the coder's limits. A
+ * story never runs on a weaker choice than its own. A choice `named` by the crew is the only one
+ * tried, and its refusal carries no `skipped`. Resolves `{ choice, ran }`, `ran` being what the
+ * call's results carry (`choice`, and `skipped` when ATC moved), or `{ refusal }`.
+ */
+async function pickCoderChoice({ machine, first, named, usage, codexUsage, cwd, storyId }) {
+  const { available } = machine.roles.coder
+  const candidates = named !== undefined
+    ? [first.choice]
+    : [first.choice, ...Object.entries(available)
+      .filter(([name, other]) => name !== first.choice.name && other.strength >= first.choice.strength)
+      .map(([name, other]) => ({ name, ...other }))]
+  const readers = {
+    claude: usage,
+    codex: ({ cwd: dir }) => codexUsage({ executable: machine.tools?.codex?.executable, cwd: dir }),
+  }
+  const picked = await firstWithUsage({
+    candidates, readers, cwd, limits: machine.usageLimits.coder, extra: { storyId },
+  })
+  if (picked.refusal) {
+    const { skipped: _tried, ...refusal } = picked.refusal
+    return { refusal: named !== undefined ? refusal : picked.refusal }
+  }
+  const { choice, skipped } = picked
+  const why = skipped.length > 0 ? 'usage' : first.why
+  return {
+    choice,
+    ran: {
+      choice: { name: choice.name, tool: choice.tool, model: choice.model, effort: choice.effort, why },
+      ...(skipped.length > 0 && { skipped }),
+    },
+  }
 }
 
 /** Whether `filename` is a story file with id `storyId` under stories/ or stories/done/ at `ref`. */
@@ -569,10 +644,13 @@ async function hasStoryFile(repoDir, ref, filename, storyId) {
  * `pushBranch`, and the pull request's title and body are replaced with the
  * ones it emitted. It opens no pull request and leaves the draft state alone.
  *
- *   ctx, repoDir, promptTemplate, baseEnv, sessionOptions, install, usage, machineSettings
+ *   ctx, repoDir, promptTemplate, baseEnv, sessionOptions, install, usage, codexUsage, choice,
+ *   machineSettings
  *                    as for `dispatchCoder`; `usage` is called before the
  *                    worktree is made, so `over-usage` and `usage-unknown`
- *                    (ST-31) come before anything is installed
+ *                    (ST-31) come before anything is installed. The body it replaces ends with
+ *                    the `Coder:` line (ST-35/AC-7): the names on the pull request's current one,
+ *                    then the choice that ran, each once
  *   storyId          the story
  *   prNumber         its open pull request, whose head must be the story's branch
  *   findings         the text to address (untrusted; injected as a bounded block)
@@ -593,7 +671,8 @@ async function hasStoryFile(repoDir, ref, filename, storyId) {
 export async function retryStory({
   ctx, repoDir = process.cwd(), storyId, prNumber, findings, source, round, roundsRemaining,
   promptTemplate, baseEnv = process.env, sessionOptions = {}, install = installDependencies,
-  usage = readUsage, machineSettings = () => readMachineSettings({ env: process.env, homedir: homedir() }),
+  usage = readUsage, choice: named, codexUsage = readCodexUsage,
+  machineSettings = () => readMachineSettings({ env: process.env, homedir: homedir() }),
 }) {
   const { storyPrefix } = await readSettings(repoDir)
   const machine = await machineSettings()
@@ -631,14 +710,13 @@ export async function retryStory({
   }
 
   // ST-34/AC-4: the story's choice, before the usage is read or anything is made.
-  const { choice, refusal } = await storyChoiceAt({ repoDir, ref: baseSha, filename, storyId, machine })
-  if (refusal) return refusal
+  const first = await storyChoiceAt({ repoDir, ref: baseSha, filename, storyId, machine, named })
+  if (first.refusal) return first.refusal
 
-  // ST-31/AC-4: before the worktree is made and dependencies are installed.
-  const refused = await checkUsage({
-    read: usage, cwd: repoDir, limits: machine.usageLimits.coder, extra: { storyId },
-  })
-  if (refused) return refused
+  // ST-31/AC-4, ST-35/AC-6: before the worktree is made and dependencies are installed.
+  const picked = await pickCoderChoice({ machine, first, named, usage, codexUsage, cwd: repoDir, storyId })
+  if (picked.refusal) return picked.refusal
+  const { choice, ran } = picked
 
   const scratch = await mkdtemp(path.join(tmpdir(), 'tw-coder-'))
   const tree = path.join(scratch, 'tree')
@@ -679,7 +757,7 @@ export async function retryStory({
     })
 
     const session = sessionSummary(classification, output)
-    const context = { storyId, branch, prNumber, headSha: null, session }
+    const context = { storyId, branch, prNumber, headSha: null, session, ...ran }
     if (classification.outcome !== 'completed') {
       return { status: 'session-failed', ...context, outcome: classification.outcome, reason: classification.reason, pushed: false }
     }
@@ -707,7 +785,11 @@ export async function retryStory({
     }
     if (decided.unreadable) return { status: 'story-unreadable', ...context, reason: decided.unreadable }
     try {
-      await replacePullRequest(ctx, prNumber, { title: block.title, body: block.body })
+      // ST-35/AC-7: the choices on the body's `Coder:` line before this run, then the one that ran.
+      const ranBefore = coderLineNames(pr.body) ?? []
+      await replacePullRequest(ctx, prNumber, {
+        title: block.title, body: withCoderLine(block.body, [...new Set([...ranBefore, choice.name])]),
+      })
     } catch (error) {
       return { status: 'replace-failed', ...context, reason: error.message }
     }
@@ -726,8 +808,15 @@ export async function retryStory({
 // `install-failed` is deliberately absent: it is a failure.
 const NON_FAILURES = ['opened', 'nothing-ready', 'retried', 'body-replaced']
 
-const usage = (prefix) => `usage: node scripts/dispatch/coder.mjs [${prefix}-<n>] [--repo owner/name]\n` +
-  `       node scripts/dispatch/coder.mjs retry ${prefix}-<n> --pr <number> --findings-file <path> --source review|ci --round <n> --remaining <n> [--repo owner/name]`
+const usage = (prefix) => `usage: node scripts/dispatch/coder.mjs [${prefix}-<n>] [--repo owner/name] [--choice <name>]\n` +
+  `       node scripts/dispatch/coder.mjs retry ${prefix}-<n> --pr <number> --findings-file <path> --source review|ci --round <n> --remaining <n> [--repo owner/name] [--choice <name>]`
+
+/** Removes `--choice <name>` from `args` and returns the name, or `undefined` when it is not there. */
+function takeChoice(args, storyPrefix) {
+  const name = takeOption(args, '--choice')
+  if (args.includes('--choice') || name === '') throw new Error(usage(storyPrefix))
+  return name
+}
 
 function takeOption(args, name) {
   const at = args.indexOf(name)
@@ -735,6 +824,7 @@ function takeOption(args, name) {
 }
 
 async function mainRetry(args, repo, storyPrefix) {
+  const choice = takeChoice(args, storyPrefix)
   const pr = takeOption(args, '--pr')
   const file = takeOption(args, '--findings-file')
   const source = takeOption(args, '--source')
@@ -754,6 +844,7 @@ async function mainRetry(args, repo, storyPrefix) {
     source,
     round: number(round),
     roundsRemaining: number(remaining),
+    choice,
   })
   console.log(JSON.stringify(result, null, 2))
   if (!NON_FAILURES.includes(result.status)) process.exitCode = 1
@@ -767,13 +858,14 @@ async function main(argv) {
     const repoAt = args.indexOf('--repo')
     return mainRetry(args, repoAt === -1 ? settingsRepo : args.splice(repoAt, 2)[1], storyPrefix)
   }
+  const choice = takeChoice(args, storyPrefix)
   const repoAt = args.indexOf('--repo')
   const repo = repoAt === -1 ? settingsRepo : args.splice(repoAt, 2)[1]
   const storyId = args.shift()
   if (args.length > 0 || (storyId !== undefined && !new RegExp(`^${storyPrefix}-\\d+$`).test(storyId))) {
     throw new Error(usage(storyPrefix))
   }
-  const result = await dispatchCoder({ ctx: createContext({ repo }), storyId })
+  const result = await dispatchCoder({ ctx: createContext({ repo }), storyId, choice })
   console.log(JSON.stringify(result, null, 2))
   if (result.promptChange) {
     const named = result.promptChange.files.length > 0 ? result.promptChange.files.join(', ') : 'files not named in the diff'
