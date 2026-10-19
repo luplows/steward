@@ -289,6 +289,56 @@ describe('ST-38/AC-3: the reviewer starts in a checkout of the base and reads th
   })
 })
 
+describe('ST-4: the reviewer blocks on defects rather than recording them as observations', () => {
+  const { prompt } = splitPromptFile(REVIEWER_TEMPLATE)
+  const flat = prompt.replace(/\s+/g, ' ')
+
+  it('ST-4/AC-1: names the conditions that must produce block, whatever kind of text they are in', () => {
+    expect(flat).toContain('**What must be a `block`.** Whatever kind of text you find it in — code, a test, a comment, a prompt, a story, a doc or the pull request body')
+    for (const condition of [
+      'the diff introduces a defect;',
+      'the diff states something false;',
+      'an acceptance criterion is not genuinely satisfied;',
+      'the diff contradicts the design of record (`docs/agent-workflow-design.md`) or another story; or',
+      'something the unit puts under **Out of scope** is present.',
+    ]) expect(flat, condition).toContain(condition)
+  })
+
+  it('ST-4/AC-2: states the test for the boundary', () => {
+    expect(flat).toContain('**A finding you would fix in this pull request if you were its author is a `block`, not an observation.**')
+  })
+
+  it('ST-4/AC-3: "Your verdict" and "Calibration" each define pass-with-observations by what it is for', () => {
+    // Each section on its own, so that one saying it does not stand in for the other.
+    const section = (heading) => {
+      const start = prompt.indexOf(`## ${heading}\n`)
+      return prompt.slice(start, prompt.indexOf('\n## ', start + 1)).replace(/\s+/g, ' ')
+    }
+    expect(section('Your verdict')).toContain('you found something real that is not this diff\'s to fix: it was there before the diff, it lies outside the diff, it is a suggestion, or it follows a decision the unit or the crew already recorded')
+    expect(section('Calibration')).toContain('`pass-with-observations` is for findings that are real but not this diff\'s to fix: something there before the diff, something outside it, a suggestion, or something that follows a decision the unit or the crew already recorded.')
+  })
+
+  it('ST-4/AC-3: asks for every real finding that is not a block to be reported as an observation, not left out', () => {
+    expect(flat).toContain('**Report every such finding**, with severity `observation`. One left out is invisible to the crew')
+    expect(flat).toContain('anything else real you found is an observation, reported as one.')
+    expect(flat).not.toContain('is at most an observation')
+  })
+
+  it('ST-4/AC-3: no longer describes pass-with-observations as a doubt not blocked on', () => {
+    expect(flat).not.toContain('chose not to block on')
+    expect(flat).not.toContain('decided not to block on')
+    // A refused command names the claim it left unchecked instead of lowering the verdict.
+    expect(flat).not.toContain('drop the verdict to `pass-with-observations`')
+    expect(flat).toContain('a claim you could not check is neither a finding nor a reason for `pass-with-observations`')
+  })
+
+  it('ST-4/AC-4: keeps the language against overcorrection', () => {
+    expect(flat).toContain('a reviewer that fails everything gets switched off')
+    expect(flat).toContain('Do not manufacture findings to look thorough.')
+    expect(flat).toContain('The aim is to keep genuine defects out of the middle state, not to block more sound pull requests.')
+  })
+})
+
 describe('ST-33/AC-1: the reviewer prompt runs no checks', () => {
   const { prompt } = splitPromptFile(REVIEWER_TEMPLATE)
 

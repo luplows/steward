@@ -17,17 +17,17 @@ evidence the reviewer was reluctant.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `.claude/prompts/reviewer.md` names the conditions that
+- [x] **AC-1** — `.claude/prompts/reviewer.md` names the conditions that
       **must** produce `block`, whatever kind of text they are found in (code,
       a test, a comment, a prompt, a story, a doc or the pull request body):
       the diff introduces a defect, the diff states something false, an
       acceptance criterion is not genuinely satisfied, the diff contradicts the
       design of record or another story, or something in the unit's **Out of
       scope** is present.
-- [ ] **AC-2** — The prompt states a decidable test for the boundary: *a
+- [x] **AC-2** — The prompt states a decidable test for the boundary: *a
       finding you would fix in this pull request if you were its author is a
       block, not an observation.*
-- [ ] **AC-3** — `pass-with-observations` is defined by what it is **for**:
+- [x] **AC-3** — `pass-with-observations` is defined by what it is **for**:
       findings that are real but not this diff's to fix, because they were
       there before it, lie outside it, are a suggestion, or follow a decision
       the unit or the owner already recorded. "Your verdict" and
@@ -36,11 +36,11 @@ evidence the reviewer was reluctant.
       `reviewer.md` that sends a verdict to `pass-with-observations`, such as
       a refused command that left a claim unverified, agrees with this
       definition or names the claim it could not check instead.
-- [ ] **AC-4** — The language against overcorrection stays: *a reviewer that
+- [x] **AC-4** — The language against overcorrection stays: *a reviewer that
       fails everything gets switched off*, and *do not manufacture findings to
       look thorough*. The goal is moving genuine defects out of the middle
       state, **not** raising the block rate on sound pull requests.
-- [ ] **AC-5** — The change is validated against steward's own verdicts rather
+- [x] **AC-5** — The change is validated against steward's own verdicts rather
       than asserted. With the revised prompt, the reviewer is run once on each
       of four heads, posting nothing, composed as `reviewPullRequest` composes
       it: a checkout of the base, `REVIEW.md` from `main` as it is now, and
@@ -68,7 +68,7 @@ evidence the reviewer was reluctant.
       checklist. A run that fails a condition above is not repeated until it
       passes: the prompt is changed, all four are run again, and every round
       is recorded.
-- [ ] **AC-6** — `docs/agent-workflow-design.md`: every `**Planned (ST-4)**`
+- [x] **AC-6** — `docs/agent-workflow-design.md`: every `**Planned (ST-4)**`
       marker loses `ST-4`, and each passage is corrected wherever what was
       built differs.
 
