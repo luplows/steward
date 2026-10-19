@@ -174,15 +174,16 @@ Formerly tower-workshop-paths OQ-73.
 - **The reviewer's guarantee checks**, from ST-3's AC-1 to AC-6:
   - In a session spawned as a reviewer, an attempted `git push` to `origin`
     fails for want of authorisation, not of tool permission, including from
-    `node -e` spawning git through `child_process`, and from `npm` or `npx`
-    running a script.
+    `node -e` spawning git through `child_process`. (The reviewer has no
+    `npm` or `npx` since ST-33.)
   - No GitHub token is reachable from that session: not in the environment,
     nor via `gh`, nor from any credential helper or keyring it can invoke.
     `GH_TOKEN=""` does not do this (design doc, "`GH_TOKEN=""` does not
     remove a credential"); deleting the variables does, as `coderEnv` does.
-  - The reviewer still runs the project's tests and lint, every read-only
-    `git` command in its allowlist, and `git fetch` of the branch under
-    review, and a review of a real pull request completes end to end.
+  - The reviewer still runs every read-only `git` command in its allowlist,
+    reading the head through git from a checkout of the base, and a review of
+    a real pull request completes end to end. It runs no tests or lint since
+    ST-33, and fetches nothing since ST-38.
   - The design doc's "Invocation shape" and "Credential minimalism" describe
     what is then true.
 - **Why it is owner-run:** the trials run `docker`, `wsl` and `runas`, none of
