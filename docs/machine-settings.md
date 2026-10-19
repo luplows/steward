@@ -179,4 +179,7 @@ To review through the Codex CLI instead, the reviewer's part and `tools` become:
 
 Every pull request is then reviewed on `gpt-6.1-sol`, since no coder choice has that model, and
 Codex's usage is checked before each review. `opus` is there for when Codex's usage is spent or
-cannot be read: ATC then reviews on `opus`, since no coder ran that model.
+cannot be read: ATC then reviews on `opus`, unless the coder ran `opus` on that pull request (its
+story's `model:` is `opus`, or its `Coder:` line names `opus`). Then no choice is left whose model
+differs from the coder's, and the review returns `over-usage` or `usage-unknown` and starts
+nothing.
