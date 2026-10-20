@@ -43,8 +43,8 @@ through the gate.
       before.
 - [ ] **AC-6** — `.claude/prompts/reviewer.md` names the pull request's base through a
       placeholder, `{{BASE_BRANCH}}`, wherever it now names `main` as the base of the diff or of
-      the checkout (line numbers at `ed6b3eb`): `git diff origin/main...{{HEAD_SHA}}`, which
-      becomes `git diff origin/{{BASE_BRANCH}}...{{HEAD_SHA}}` (lines 144, 179 and 215); "a
+      the checkout (line numbers at `566b6be`): `git diff origin/main...{{HEAD_SHA}}`, which
+      becomes `git diff origin/{{BASE_BRANCH}}...{{HEAD_SHA}}` (lines 144, 179 and 220); "a
       checkout of the base branch, `main`" (line 169); and the instruction files that "are
       `main`'s" (line 183). The lines that say the unit and the checklist are read from `main`
       (20, 22, 32 to 33, 66, 70, 94 and 135) keep `main`. In the header, line 42 says the
@@ -101,10 +101,10 @@ through the gate.
   workflow runs from, not the pull request's base.
 - `.github/workflows/ci.yml`: `pull_request: branches: [main]` and `push: branches: [main]`. Its
   story containment step passes `github.event.pull_request.base.sha`.
-- `scripts/dispatch/review.mjs`: `reviewPullRequest` fetches `pr.baseRef`, checks it out, and reads
-  the checklist and the unit from it (`readRules` and `readUnit`, each with `base: pr.baseRef`).
-- ST-39 makes that fetch take every branch, pruned, so that `main` is fresh for a review into a
-  release branch, and changes `reviewer.md` too. This story depends on it.
+- `scripts/dispatch/review.mjs`: `reviewPullRequest` fetches every branch on `origin`, pruned
+  (ST-39), checks out `pr.baseRef`, and reads the checklist and the unit from it (`readRules` and
+  `readUnit`, each with `base: pr.baseRef`). The fetch keeps `main` fresh for a review into a
+  release branch. This story depends on ST-39, which also changed `reviewer.md`.
 - ST-40 changes `reviewer.md` and `invocation.mjs` as well, and depends on this story.
 - ST-25, AC-3: the rotation lists the open pull requests against `main` or a release branch.
 - ST-42 moves `select-candidates.mjs`'s logic into a command, and depends on this story.
