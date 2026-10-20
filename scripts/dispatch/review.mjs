@@ -431,7 +431,11 @@ export async function reviewPullRequest({
   // itself worth seeing.
   let keepCheckout = false
   try {
-    await git(repoDir, ['fetch', REMOTE, pr.headRef, pr.baseRef])
+    // ST-39/AC-1: every branch, pruned, so that the reviewer, which may have no
+    // network, reads `origin`'s branches from the remote-tracking refs. The
+    // refspec is given here, not taken from the clone's `remote.origin.fetch`,
+    // so a clone that fetches fewer branches still fetches the head and base.
+    await git(repoDir, ['fetch', '--prune', REMOTE, `+refs/heads/*:refs/remotes/${REMOTE}/*`])
     const fetchedTip = (await git(repoDir, ['rev-parse', `${REMOTE}/${pr.headRef}`])).trim()
     if (fetchedTip !== pr.headSha) {
       return { status: 'head-moved', reason: `${pr.headRef} is at ${fetchedTip}, not the ${pr.headSha} the API reported` }

@@ -83,7 +83,7 @@ hold for any project, and the placeholders never reach the reviewer as rules.
   "Changes to code" (2), "Integrity" (4), "Conformance to the unit" (4) and "Changes to stories"
   (7). It holds no HTML comment (`grep -n "<!--" REVIEW.md`).
 - `scripts/dispatch/rules.mjs`: `parseRules`, and `readRules`, whose `text` `review.mjs` gives the
-  reviewer as `{{RULES}}` (`review.mjs`, line 512).
+  reviewer as `{{RULES}}` (`review.mjs`, line 516).
 - `.github/pull_request_template.md`: the `Unit:` line, then What changed, Verification and Docs
   check, each with an HTML comment.
 - `.claude/prompts/reviewer.md`, lines 111 to 112, calls the three sub-checks items 1 to 3 of the

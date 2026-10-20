@@ -3,7 +3,7 @@ id: ST-42
 title: Run the gate's logic as steward commands, and ship thin workflow files that start steward at a pinned tag
 tier: next
 kind: workflow
-depends_on: [ST-16, ST-17, ST-24]
+depends_on: [ST-16, ST-17, ST-24, ST-45]
 model: null
 blocked: null
 ---
@@ -94,7 +94,7 @@ nothing of its own to run the gate.
 - `.github/workflows/review-gate.yml`: the `pending` job posts `review/agent` pending with
   `gh api`; the `verdict` job checks out the repository, reads the marker in shell, with its own
   `OWNER|MEMBER|COLLABORATOR` `case`, posts the status, and runs
-  `node scripts/land/apply-review-blocked.mjs` (line 187). Line 3 names `Open-Questions.md`.
+  `node scripts/land/apply-review-blocked.mjs` (line 192). Line 3 names `Open-Questions.md`.
 - `.github/workflows/land-approved.yml`: one job that checks out the repository, runs the circuit
   breaker in shell (`-ge 5`, line 80), `node scripts/land/select-candidates.mjs` (line 89), and
   for each candidate `node scripts/land/check-author.mjs` (line 110), the label and
@@ -112,7 +112,8 @@ nothing of its own to run the gate.
   it moves into a command is ST-24's.
 - ST-16 (AC-4, AC-5) and ST-17 change `review-gate.yml` and `apply-review-blocked.mjs`, citing line
   numbers this story will move. This story depends on both, as on ST-24, so the logic it moves
-  includes their changes.
+  includes their changes. It also depends on ST-45, which changes `select-candidates.mjs` to take
+  pull requests into a release branch.
 
 ## Open questions
 

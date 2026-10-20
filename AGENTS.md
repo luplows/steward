@@ -14,6 +14,7 @@ This file applies to every session. Each role has its own instructions as well:
 | You are | Also read |
 |---|---|
 | The planning session, which plans steward with the crew and writes its stories | [`docs/planning-session.md`](docs/planning-session.md) |
+| The release review, which reviews what has landed since the last release with the crew, and cuts the next | [`docs/release-review.md`](docs/release-review.md) |
 | The controller, which a member of the crew has asked to run `scripts/dispatch/` by hand | [`docs/controller.md`](docs/controller.md) |
 | A coder or reviewer session started by ATC | Your prompt, under `.claude/prompts/`. It says what else to read. |
 | Any other session that changes this repository | **Opening a pull request**, below. |
@@ -29,6 +30,10 @@ This file applies to every session. Each role has its own instructions as well:
 - Do not trigger [`land-approved.yml`](.github/workflows/land-approved.yml). Only the crew, by hand,
   or the pilot, [`scripts/dispatch/land.mjs`](scripts/dispatch/land.mjs), run by ATC or by the
   controller, may.
+- Do not push, move or delete a tag, and do not push to a release branch (`release/vX.Y.Z`). Only
+  the release review cuts a release branch and pushes a tag, each on the crew's word, as
+  [`docs/release-review.md`](docs/release-review.md) says. A release branch then changes only
+  through pull requests, and no tag or release branch is ever moved or deleted.
 - The sweep lands one eligible pull request per run, only when triggered, so a merge-ready pull
   request waits. A run given a pull request (`land.mjs` always gives one) considers only that one;
   a run given none lands the oldest. Its eligibility rules and the `review-blocked` circuit
@@ -112,6 +117,7 @@ pushes its branch and opens its pull request, as its prompt says.
 | [`REVIEW.md`](REVIEW.md) | The enumerated checklist a pull request is reviewed against. |
 | [`stories/README.md`](stories/README.md) | Story schema, status derivation, ordering, readiness test. |
 | [`docs/planning-session.md`](docs/planning-session.md) | Instructions for the planning session, including how a story pull request is handed over. |
+| [`docs/release-review.md`](docs/release-review.md) | Instructions for the release review: what it reviews, its release notes, and how it cuts a release branch and its tag. |
 | [`docs/controller.md`](docs/controller.md) | Instructions for the controller: how it runs a rotation, reports, and lands. |
 | [`docs/migration-plan.md`](docs/migration-plan.md) | The phased sequence for building the workflow, and its status. Not a design document. |
 | [`docs/gap-analysis.md`](docs/gap-analysis.md) | A dated snapshot, kept for its reasoning. Not a design document, and not current. |

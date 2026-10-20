@@ -105,8 +105,8 @@ Applies when: the pull request adds or changes a file under `stories/` without i
    what another story says. Check each one (`AGENTS.md`, "Claims about this
    repository").
 5. **Stable ids** — a story that is already in flight (a `story/ST-<n>-*`
-   branch exists on `origin`; check with `git ls-remote`) does not have its
-   AC ids renumbered. A new AC goes in with a letter suffix.
+   branch exists on `origin`) does not have its AC ids renumbered. A new AC
+   goes in with a letter suffix.
 6. **Consistency** — the story does not contradict or duplicate another
    story's ACs. Where it takes over part of another story, that story is
    edited in the same PR, and every reference to the moved part is updated.

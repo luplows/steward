@@ -289,6 +289,25 @@ describe('ST-38/AC-3: the reviewer starts in a checkout of the base and reads th
   })
 })
 
+describe('ST-39/AC-2: the reviewer reads origin\'s branches from the refs ATC fetched, pruned', () => {
+  const { prompt } = splitPromptFile(REVIEWER_TEMPLATE)
+  const flat = prompt.replace(/\s+/g, ' ')
+  const codexStart = prompt.indexOf('## If you are running under the Codex CLI')
+  const codex = prompt.slice(codexStart, prompt.indexOf('\n## ', codexStart + 1))
+  const wording = 'ATC fetched every branch on `origin`, pruned, just before this review, so `git branch -r` lists the branches `origin` had then, and none it had deleted. Check whether a branch exists on `origin` there, not with `git ls-remote` or `git fetch`.'
+
+  it('ST-39/AC-2: the prompt says where the branches on origin are, and how not to check them', () => {
+    expect(flat).toContain('**The branches on `origin` are your remote-tracking refs.**')
+    expect(flat).toContain(wording)
+  })
+
+  it('ST-39/AC-2: it says so to every reviewer, outside the section for the Codex CLI alone', () => {
+    expect(codexStart).toBeGreaterThan(-1)
+    expect(codex).not.toContain('remote-tracking refs')
+    expect(prompt.indexOf('remote-tracking refs')).toBeLessThan(codexStart)
+  })
+})
+
 describe('ST-4: the reviewer blocks on defects rather than recording them as observations', () => {
   const { prompt } = splitPromptFile(REVIEWER_TEMPLATE)
   const flat = prompt.replace(/\s+/g, ' ')
