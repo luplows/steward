@@ -1229,7 +1229,9 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
   session's options (2026-10-11) were the template carrying it, which it now does; ATC always
   writing it on a pull request it opens; and a check on the pull request body, posted by steward's
   gate, failing without it, which would sit with "Steward enforces nothing about CI" ("Land").
-- **D5. The `unitLinks` value `init` writes** ("Review").
+- **D5. The `unitLinks` value `init` writes** ("Review"). **Decided 2026-10-19 by the owner:**
+  `init` asks, offering any combination of `file`, `issue` and `other`, or none, and defaults to
+  `["file", "issue"]` (Part 3, "Decided so far"; **Planned (ST-44)**).
 - **D6. A tool that compares a project's checklist with the example in the version it pins**
   ("Review"): a possibility, not decided (owner, 2026-10-09).
 - **D7. The checklist's parser as a command a project may run in its own CI** ("The checklist's
@@ -1238,7 +1240,10 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
 - **D8. What `init` explores in the repository to surface options** ("Land").
 - **D9. The two ways to set up** ("Land"): one declarative, which runs without AI, and one meant
   to be run with an AI helper (owner, 2026-10-11). Not yet refined: what each covers, and how the
-  second sits with `init` as a deterministic script.
+  second sits with `init` as a deterministic script. **Added 2026-10-19 by the owner:** `init`
+  takes a third shape, interactive, asking each question at the terminal, with a flag for
+  each and `--yes` for every default, and refusing with no terminal and no answer (Part 3,
+  "Decided so far"; **Planned (ST-44)**). D9's two shapes stay open.
 - **D10. Whether a project must have CI at all** ("Land"). The owner leans against making CI a
   prerequisite, but every project of the owner's will have CI, so requiring it is possible
   (owner, 2026-10-10).
@@ -1569,7 +1574,9 @@ shortened where it is long, so that it can be found there with its date.
   containment are its own convention ("Decided so far", 2026-10-10, below), so they keep the
   prefix in tooling of their own; `scripts/no-project-literals.test.mjs`, which keeps the prefix
   out of the code, changes with it; and how a coder finds ready units waits for the coder's
-  readiness setting.
+  readiness setting. **Planned (ST-41):** the prefix moves to `stories/stories.json`, which
+  steward's story tooling reads, and the engine's coder reads as a stopgap (decided 2026-10-19,
+  "Decided so far").
 - **`setup` and `check`: one command each, run through the platform's shell.** Not chosen: an
   argument list run without a shell. What follows for `check` (the planning session, 2026-10-11):
   its program must be one the coder's allowlist admits, which today means `npm`, `npx` or `node`.
@@ -2289,6 +2296,88 @@ shortened where it is long, so that it can be found there with its date.
   which can post a marker the gate honours; a read-only fine-grained token, a credential on the
   machine of the kind ST-6 is to find how to keep from sessions, and of no use to a Codex reviewer,
   which has no network; and ATC fetching the pull requests and comments a body cites.
+- **Steward installs in another project as a review gate, through `init`** (decided 2026-10-19 by
+  the owner, with the planning session; **Planned (ST-40, ST-41, ST-42, ST-43, ST-44)**). Steward
+  is installed in another project as a review gate only: first in pinpoint, a private Node
+  repository on GitHub Free, so with no branch protection, whose units are GitHub issues; then in
+  tower-workshop-paths, which is public and keeps file stories with the prefix `OQ`, by its own
+  OQ-115. The coding side is not part of it. Five stories build it, written in one pull request:
+  - **The prompts work as delivered, in any project** (ST-40). Both name the project's repository
+    through a `{{REPO}}` placeholder, filled from the settings' `repo`. The reviewer's prompt
+    loses every line particular to steward's repository: its rules about steward's own stories,
+    each of which `REVIEW.md` already holds; the path of `review-tools.mjs`, which becomes the
+    installed path, through a placeholder; `REVIEW.md` by name, which becomes the settings'
+    `rulesFile`; the design doc as "the design of record"; and examples that name steward's files
+    or a checklist item the example checklist does not have. The rest of `coder.md` is the coding
+    side's. The prompts' project section (R1) is not in it: tower-workshop-paths needs it only
+    once its coder runs.
+  - **The story prefix belongs to the story convention, which some projects will not have**
+    (ST-41). `storyPrefix` leaves steward's settings, as decided on 2026-10-11 ("The outline's
+    reasoning", "Settings", above), and a settings file holding it is refused as an unknown key.
+    Steward's story lint, story containment and queue are steward's own tooling, and read the
+    prefix from a file of the convention's own, `stories/stories.json` (`{ "prefix": "ST" }`); a
+    project with no story files has no such file. The engine's coder (`coder.mjs`, `story.mjs`,
+    and `loop.mjs` through the queue) reads the same file, a stopgap that the coder's stories own
+    and will rework. `scripts/no-project-literals.test.mjs` guards steward's own `ST-` and
+    `luplows/steward` in place of tower-workshop-paths'.
+  - **The gate's workflows run steward from the installed package** (ST-42). Their logic becomes
+    steward's commands, and the package carries the thin workflow files a project uses, which
+    install steward alone, at a pinned tag (`npx --yes --package=github:luplows/steward#v<version>
+    steward <command>`, or an equivalent), not the project's dependencies. Steward's own workflows
+    run the same commands from its checkout, so steward runs them on itself, and a test keeps
+    steward's own files and the thin files in step except for how steward is started. Considered and
+    not chosen: the thin files running the project's `npm ci`, and steward from its `node_modules`.
+    Steward alone was chosen for fewer Actions minutes on a private repository, and because it works
+    for a project that is not Node. A project's `package.json` does not pin steward: the crew runs
+    it locally with the same `npx` form, so the version is pinned only in the workflow files and the
+    commands the crew types. Whether that hurts adoption is to be revisited later (owner). A tag in
+    steward's repository is never moved once cut (owner), so a pinned tag names one version for
+    good. Considered and not chosen: pinning the commit the tag points at, which is safer against a
+    moved tag but harder to read.
+  - **A basic example checklist ships in the package**, applicable to any project running
+    steward, with obvious placeholders for a project's own additions (ST-43). It starts from
+    steward's `REVIEW.md`, less the claims item, the Docs check on named files, the rule against
+    coverage tooling, ticking acceptance criteria and moving story files, the sentences on story
+    containment, and all of "Changes to stories"; "Conformance to the unit" keeps its first three
+    items, in words with no story conventions. Steward's own `REVIEW.md` is unchanged. The
+    placeholders are HTML comments: the checklist's parser ignores them, and ATC gives the
+    reviewer the checklist with them removed, so the reviewer never sees them. Considered and not
+    chosen: telling the reviewer that comments are not rules, which relies on the model obeying,
+    and a separate setup guide. The cost, accepted: a comment can carry nothing to the reviewer.
+  - **`init`, `steward init`, run in a project's checkout, with no AI, and interactive** (ST-44). By
+    default it asks each question at the terminal; every question can also be answered by a
+    command-line flag, and `--yes` accepts every default; with no terminal and no answer given for a
+    question, it refuses rather than guess. This is a third way to set up, beside D9's two, which
+    stays open. It never overwrites a file already there, and reports one it left. It writes
+    `steward.config.json`, with `repo` from the git remote and a value for every key: `unitLinks`,
+    any combination of `file`, `issue` and `other` (which covers a tracker steward cannot read yet,
+    passed unread), or none, default `["file", "issue"]`, which settles D5; `rulesFile`, default
+    `REVIEW.md`; `land`, default `true`; ST-29's `inspectAfterHours`, asked; and `setup` and `check`
+    `null`, since only a coder uses them. It writes the thin workflow files, pinned to the tag of
+    the steward that ran it, read from its own `package.json`'s `version`, and offers inspection's
+    workflow, saying that its first run may raise the project's earlier merges as issues, which the
+    crew closes once (chosen over a first window starting at the install, and over a settings key
+    holding the install's date); the example checklist, at the `rulesFile` path; a pull request
+    template with nothing particular to steward, which the package carries, only when the project
+    has none, reporting an existing one without the `Unit:` line and editing nothing; every label
+    that applies today, `review-blocked`, `breaker-override` and `inspection`, a later story that
+    adds a label adding it to `init` too; and the machine's settings, only when that file is
+    missing, with Claude choices by default (the reviewer `opus`, the coder `sonnet` with strength 1
+    and `opus` with strength 2) and usage limits of 70 and 75 for the coder and 90 and 90 for the
+    reviewer, a Codex reviewer choice being offered only when `codex` is on the `PATH` or the crew
+    gives its path, and its model and effort then asked, with no default. It asks before it sets
+    branch protection, with a default of no that `--yes` keeps; on a yes, the protection requires
+    `review/agent`, with `enforce_admins` on, as steward's own `main` has it; the project's own CI
+    checks are the crew's to add. Where GitHub offers none, as on a private repository on GitHub
+    Free, or the account cannot set it, it says so plainly and goes on. It does not write the
+    after-sweep CI trigger, since a project's CI is its own ("Steward enforces nothing about CI");
+    it does not touch `package.json`; it neither reads nor writes the story prefix or anything about
+    story files; and it commits nothing: the crew commits what it wrote through the project's own
+    pull request. Exploring the repository (D8) stays open. ST-44 depends on ST-29, which builds
+    inspection.
+
+  The first release, `v0.1.0`, is cut by a release review session, whose instructions are a
+  separate pull request.
 
 ### The move, in order
 
@@ -2334,7 +2423,11 @@ Found 2026-10-08 while refining OQ-115. Each is built in steward, before OQ-115 
 - **A tag to pin**, and **the loop's worktree installing the pinned engine** after each update
   (OQ-123's Out of scope).
 - **`init` and the thin gate files** (R2), including OQ-124's after-sweep trigger.
+  **Planned (ST-42, ST-44)**, decided 2026-10-19 ("Decided so far"). Revised the same day: `init`
+  writes no after-sweep trigger, since a project's CI is its own (R2).
 - **The prompts' `{{REPO}}` slot and project section** (R1), so this project's lines come back.
+  **Planned (ST-40):** the slot. The project section is in no story yet: tower-workshop-paths
+  needs it only once its coder runs (owner, 2026-10-19).
 - **Delivering steward's rules and checklist to a project's sessions**, and **a project's own
   review items to the reviewer** (R3). Before OQ-133. Today `coder.md` reads `AGENTS.md` and
   `REVIEW.md` from the repository root, and `reviewer.md` reads `REVIEW.md` there.
@@ -2379,7 +2472,9 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   `.claude/prompts/`.
 - The gate is this repository's own workflows. `ci.yml` runs `scripts/dispatch/story-containment.mjs`.
   `land-approved.yml` runs `scripts/land/select-candidates.mjs`, `check-author.mjs` and
-  `delete-merged-heads.mjs`. `review-gate.yml` derives `review/agent`.
+  `delete-merged-heads.mjs`. `review-gate.yml` derives `review/agent`. **Planned (ST-42):** the
+  gate's and the runway's logic become steward's commands, which steward's own workflows run from
+  its checkout and a project's thin workflow files run from steward installed at a pinned tag.
 - The rules the gate enforces mix the general with this project's own: `REVIEW.md`, `AGENTS.md`,
   `stories/README.md`, `stories/_TEMPLATE.md` and this document.
 
@@ -2413,7 +2508,8 @@ is still open.
   The prompts' project-specific lines are few. In `coder.md`: the repository name, the testing
   frameworks and screenshot-baseline rules, and `mytower.app` being reachable. In `reviewer.md`:
   the repository name. They become a `{{REPO}}` slot and a project section the project supplies,
-  rendered by the same bounded injection as the story (`render.mjs`).
+  rendered by the same bounded injection as the story (`render.mjs`). **Planned (ST-40):** the
+  `{{REPO}}` slot, filled from the settings' `repo` (decided 2026-10-19, "Decided so far").
 
   **Decided 2026-10-08 by the owner: steward starts clean.** At the bootstrap, steward's copies
   of the prompts have this repository's lines stripped by hand: its name, Vitest and Playwright,
@@ -2500,8 +2596,12 @@ is still open.
   by the owner, as proposed, with the git-tag pin** (below):
   - **A Node package with a command-line entry point**, added as a development dependency of each
     project and pinned to a tagged version. To begin with it is installed straight from the
-    workflow's public repository by git tag, so no package registry account is needed; publishing
-    to npm can come later.
+    workflow's public repository by git tag, so no package registry account is needed; publishing to
+    npm can come later. **Revised 2026-10-19 by the owner:** a project's `package.json` does not pin
+    steward. The crew runs it with `npx --yes --package=github:luplows/steward#v<version> steward
+    <command>`, the form the thin workflow files use, so the version is pinned only in the workflow
+    files and the commands the crew types; whether that hurts adoption is to be revisited later
+    ("Decided so far").
   - **The loop runs from the project's own worktree, as now** (`loop.mjs --init`). Today every story
     runs the dispatch code as it is on `origin/main` (OQ-86). With a pinned dependency, that becomes
     the engine version `origin/main` pins, so a project takes a new workflow version only through
@@ -2513,7 +2613,11 @@ is still open.
     The files `init` writes include the after-sweep trigger and its skip condition (OQ-124's
     `workflow_run` on `Land approved PRs`; noted 2026-10-08 at the owner's decision, under
     "Decided so far"), so that a project's `main` is checked after each landing without spending
-    minutes on a sweep that landed nothing.
+    minutes on a sweep that landed nothing. **Planned (ST-42, ST-44):** each step installs steward
+    alone, at the tag `init` pins, and runs its command, not the project's `npm ci` (decided
+    2026-10-19, "Decided so far"). **Revised 2026-10-19 by the owner:** `init` does not write the
+    after-sweep trigger. A project's CI is its own ("Steward enforces nothing about CI",
+    `outline.md`, "Land").
   - The scripts stop finding the project relative to their own location (`DISPATCHER_ROOT`).
     They take the project from the working directory and its configuration (R3), and their
     prompts from the package. Built here by OQ-123 and OQ-130: `DISPATCHER_ROOT` is gone.
