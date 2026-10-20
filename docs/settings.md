@@ -20,17 +20,18 @@ decisions behind the keys are in [`outline.md`](outline.md), "Defining steward",
 
 | Key | Form | What it is for | What `init` will write |
 |---|---|---|---|
-| `repo` | `owner/name` | The project's GitHub repository. | Not decided. |
-| `storyPrefix` | 1 to 8 capital letters | The prefix of a story id, such as `ST` for `ST-18`. | Not decided. |
-| `setup` | `null`, or an object (below) | The command that prepares a worktree for a coder session. Nothing is run before a review. | `npm ci`, 5 minutes. |
-| `check` | `null`, or an object (below) | The command that checks a change, which the coder runs. | `npm run check`, 10 minutes. |
+| `repo` | `owner/name` | The project's GitHub repository. | The `origin` remote's repository. |
+| `storyPrefix` | 1 to 8 capital letters | The prefix of a story id, such as `ST` for `ST-18`. | Nothing: the key leaves the settings for `stories/stories.json` (ST-41). |
+| `setup` | `null`, or an object (below) | The command that prepares a worktree for a coder session. Nothing is run before a review. | `null`. |
+| `check` | `null`, or an object (below) | The command that checks a change, which the coder runs. | `null`. |
 | `landWhen` | `"all-checks"`, or a non-empty array of distinct, non-empty check names | Which checks must be green before steward lands a pull request. | `"all-checks"`. |
-| `land` | `true` or `false` | Whether steward lands pull requests. `false`: steward still reviews, and the project merges. | Not decided. |
-| `unitLinks` | An array, possibly empty, of distinct values from `"issue"`, `"file"` and `"other"` | The kinds of link steward reads from a pull request's body to find its unit. | Not decided. |
-| `rulesFile` | A relative path with forward slashes, neither absolute nor containing a `..` segment | The file of rules a pull request is reviewed against, read from `main`. | The path where `init` copies steward's example rules file; not decided. |
+| `land` | `true` or `false` | Whether steward lands pull requests. `false`: steward still reviews, and the project merges. | Asked; default `true`. |
+| `unitLinks` | An array, possibly empty, of distinct values from `"issue"`, `"file"` and `"other"` | The kinds of link steward reads from a pull request's body to find its unit. | Asked; default `["file", "issue"]`. |
+| `rulesFile` | A relative path with forward slashes, neither absolute nor containing a `..` segment | The file of rules a pull request is reviewed against, read from `main`. | Asked; default `REVIEW.md`. `init` copies steward's example checklist there. |
 
-`init` is not built yet. "Not decided" means no decision is recorded for the value `init` will
-write; steward's own file (below) shows a value that works.
+`init` is not built yet (**Planned (ST-44)**). The column says what it will write, as decided on
+2026-10-19 (`agent-workflow-design.md`, Part 3, "Decided so far"); steward's own file (below)
+shows values that work here.
 
 ## `setup` and `check`
 

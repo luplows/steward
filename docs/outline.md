@@ -344,7 +344,8 @@ settles it.
     command, its time limit is required, and missing is an error naming it (owner, 2026-10-11,
     from the planning session's proposal, after the owner noted that a required time limit beside a
     `null` command would be strange). What `init` writes, the planning session's suggestion
-    accepted by the owner: 5 minutes for `setup`, and 10 minutes for `check`.
+    accepted by the owner: 5 minutes for `setup`, and 10 minutes for `check`. **Revised
+    2026-10-19 by the owner:** `init` writes `null` for both, since only a coder uses them.
 - **`landWhen`: which checks must be green before steward lands a pull request**, either every
   check on the head (what `init` writes, as decided on 2026-10-10) or a list of check names.
   - **When GitHub reports a pull request `blocked` though the checks `landWhen` names are green,
