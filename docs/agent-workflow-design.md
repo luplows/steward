@@ -1201,7 +1201,7 @@ under the local execution model it no longer matters.
 
 | # | Question | Status |
 |---|---|---|
-| 4 | Release cut trigger | Open. Human call, roughly every ten merged PRs. |
+| 4 | Release cut trigger | Decided 2026-10-19 by the owner: the crew asks for a release review, with no schedule or count of merged pull requests (Part 3, "Decided so far", "The release review cuts a release through the gate, and a tag is never moved"). |
 | 5 | Fresh vs. resumed coder on retry | Open. Fresh matches the context principle; resumed may be cheaper. Untested. |
 | 10 | Second GitHub identity | Open. The only thing that fully closes self-marking. Cost: a machine account or App. |
 | 11 | Other companies' models | Open. Goals decided 2026-10-07, and comes after the move; questions M1–M6 under "Other companies' models (OQ-114)", below. ST-15 (the coder) and ST-32 (the reviewer). |
