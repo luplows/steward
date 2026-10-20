@@ -931,24 +931,40 @@ main
  ├─ story/ST-49-queue-json
  ├─ fix/ST-51-date-format
  │
- └─ tag v0.4.0  ← the release review accepted this batch
+ └─ release/v0.4.0  ← cut by the release review at the batch's end
+     ├─ release-notes/v0.4.0, a cherry-picked fix, a revert of a deferred item
+     └─ tag v0.4.0   ← the release review accepted this batch
 ```
 
-`main` is the integration trunk. Story branches cut from it and squash-merge back.
+`main` is the integration trunk. Story branches cut from it and squash-merge back. A release is
+cut on a branch of its own, and `main` itself is never released.
 
-### Release branches are optional and deferred
+### A release branch for each release
 
-Their purpose is to freeze a candidate while development continues. While work is not parallel,
-the simpler thing is to **pause the coders, review, tag, resume**. Cut `release/vX.Y` only when
-you need to stabilise while other work keeps landing — most likely once parallel work arrives.
+The release review cuts each release on a branch of its own, `release/vX.Y.Z`, from `main` at the
+batch's end, so that the batch is fixed while work on `main` goes on, and nothing needs pausing.
+The branch changes only through pull requests into it, reviewed and landed through the gate: the
+release notes with the version, a fix that landed on `main` first and is cherry-picked, and a
+revert of a capability deferred from the release. None of them changes anything under `stories/`,
+since stories are written and moved on `main`. Its last commit is tagged, and the branch is kept
+as the release's record; the next batch is everything on `main` since the branch was cut, with
+every capability the release deferred, which is still on `main`. A patch release repairs the
+newest release on a branch cut from its tag, and its batch is only the pull requests into that
+branch. `main`'s `package.json` keeps the version `0.0.0`, since `main` is never released directly
+(`release-review.md`; Part 3, "Decided so far", "The release review cuts each release on a
+release branch, and a tag is never moved"). **Planned (ST-45):** CI, the reviewer, the pilot and
+the runway handle a pull request into a release branch as one into `main`; the reviewer starts in
+a checkout of the pull request's base and diffs against it, and is given the unit and the
+checklist from `main`.
 
 ### Mechanics
 
 - `story/ST-49-slug` and `fix/ST-51-slug` — parseable both ways, so any component can find the
   story from the branch and vice versa. The planning session's branches are `write-story/<slug>`
   (`docs/planning-session.md`).
-- **Squash-merge.** One story = one commit on main, which makes `git log <tag>..HEAD` a direct list
-  of completed stories — the release review's input assembles itself.
+- **Squash-merge.** One story = one commit on main, which makes `git log <base>..main`, from where
+  the previous release branch was cut, a direct list of completed stories — the release review's
+  input assembles itself.
 - Branch protection: `test` + `review/agent` required, `enforce_admins: true`, no force-push, no
   deletions (checked 2026-10-14).
 - Not built: the coder rebasing before it commits, and a cap on branch age, rather than merging
@@ -960,7 +976,8 @@ Everything above prevents bad changes landing. This covers one landing anyway.
 
 - **Caught by the release review** → a `fix` story, built as any other, ahead of the queue.
 - **Caught after a tag** → a revert pull request through the gate, then a `fix` story to redo it
-  properly. Revert first, diagnose second.
+  properly, and a patch release on a new release branch cut from the tag, when it is the newest
+  release; otherwise the next release carries the fix. Revert first, diagnose second.
 - The release review asks both questions: *is this good to ship*, and **what did we ship that we
   shouldn't have.**
 
@@ -968,18 +985,20 @@ Everything above prevents bad changes landing. This covers one landing anyway.
 
 ## The release review
 
-Runs when a batch worth reviewing has accumulated (currently: human call, roughly every ten merged
-PRs). Not yet run, and no steward story plans it: OQ-46, tower-workshop-paths' walkthrough story,
-stayed there (Part 3, "Decided so far"). It is the only thing standing between the crew and a
-silently degrading mental model of their own app — every other guard is a *regression* detector that
-passes when a change is self-consistent.
+Runs when the crew asks, and its instructions are [`release-review.md`](release-review.md). Not yet
+run, and no steward story plans it: OQ-46, tower-workshop-paths' walkthrough story, stayed there
+(Part 3, "Decided so far"). It is the only thing standing between the crew and a silently degrading
+mental model of their own app — every other guard is a *regression* detector that passes when a
+change is self-consistent.
 
 ### Input assembly (mechanical)
 
-- `git log <last-tag>..HEAD` → merged PRs → their stories in `stories/done/`
+- `git log <base>..main`, from where the previous release branch was cut → merged PRs → their
+  stories in `stories/done/`
 - **Reviewer findings recorded as `pass-with-observations`** — highest-yield items, because a
   machine already suspected something and chose not to stop the line
-- Anything `blocked:` or deferred during the batch
+- Anything `blocked:` or deferred during the batch, and every capability the previous release
+  deferred, which its notes list
 - **For a project with screenshot baselines, those that moved** across the batch — before and after
 
 ### The walkthrough
@@ -990,16 +1009,28 @@ capability. Doing that grouping is the release review's first real piece of work
 Per capability: what it does now that it didn't before, in user language — then **put it on
 screen**, driving a deployment or a local dev server. That is the difference between reviewing work
 and reviewing a summary of work. Then: contributing stories, what the reviewer flagged but let
-through, and known gaps.
+through, and known gaps. For steward, putting it on screen means running what a project runs: `init`
+on a new scratch repository, then a review and a landing of a test pull request there.
+**Planned (ST-44):** `init --ref` pins that repository's workflow files to the release branch's
+last commit, since its tag does not exist yet, and each repeat of the walkthrough uses another
+new scratch repository.
 
 ### Output
 
 ```
-releases/v0.4.0-rc.md    ← capabilities, with a verdict on each
+releases/v0.4.0.md    ← on the release branch: capabilities, with a verdict on each
 ```
 
 `accepted` / `accepted-with-followup` / `blocks-release`. Blockers become `fix` stories that jump
-the queue. Acceptance of the whole batch → tag.
+the queue: a fix lands on `main` and is cherry-picked into the release branch, or the crew defers
+the capability, which a revert on the release branch alone takes out. Acceptance of the whole batch
+→ tag. The notes and the new version go in one pull request into the release branch, and the
+release review tags the branch's last commit, on the crew's word. A tag is never moved or deleted.
+The notes' **For projects** section lists every change a project must act on when it moves to the
+tag. Versions are semantic, `0.x.y` for now: a new minor version when anything a project uses
+changes, otherwise a new patch version ("A release branch for each release", above; Part 3,
+"Decided so far", "The release review cuts each release on a release branch, and a tag is never
+moved").
 
 **Explicitly not a gate on merging.** It does not stop the rotations or the coders — a review that
 halts all progress while waiting for a human stops being run.
@@ -1194,7 +1225,7 @@ under the local execution model it no longer matters.
 
 | # | Question | Status |
 |---|---|---|
-| 4 | Release cut trigger | Open. Human call, roughly every ten merged PRs. |
+| 4 | Release cut trigger | Decided 2026-10-19 by the owner: the crew asks for a release review, with no schedule or count of merged pull requests (Part 3, "Decided so far", "The release review cuts each release on a release branch, and a tag is never moved"). |
 | 5 | Fresh vs. resumed coder on retry | Open. Fresh matches the context principle; resumed may be cheaper. Untested. |
 | 10 | Second GitHub identity | Open. The only thing that fully closes self-marking. Cost: a machine account or App. |
 | 11 | Other companies' models | Open. Goals decided 2026-10-07, and comes after the move; questions M1–M6 under "Other companies' models (OQ-114)", below. ST-15 (the coder) and ST-32 (the reviewer). |
@@ -2377,6 +2408,64 @@ shortened where it is long, so that it can be found there with its date.
 
   The first release, `v0.1.0`, is cut by a release review session, whose instructions are a
   separate pull request.
+- **The release review cuts each release on a release branch, and a tag is never moved** (decided
+  2026-10-19 by the owner, with the planning session, while planning how steward installs in another
+  project; **Planned (ST-45, ST-44)**). A project pins steward by a tag, so the first tag, `v0.1.0`,
+  needs a way to be cut. A release review session cuts it, as the release review was always meant to
+  end in a tag, with its instructions in `release-review.md`: the crew starts it when it wants a
+  release, not on a schedule or a count of merged pull requests. It cuts the release on a branch of
+  its own, `release/vX.Y.Z`, from `main` at the batch's end, on the crew's word, and gives it
+  `main`'s branch protection. The branch changes only through pull requests into it, reviewed and
+  landed through the gate: the release notes, `releases/vX.Y.Z.md`, with the version in
+  `package.json`; a fix, which lands on `main` first and is cherry-picked; and the revert of a
+  capability the crew defers from the release, which stays on `main`. Once the crew accepts the
+  batch, the release review tags the branch's last commit, on the crew's word, and keeps the branch
+  as the release's record; the next batch is everything on `main` since the branch was cut. `main`'s
+  `package.json` keeps `0.0.0`, since `main` is never released directly. **A tag in steward's
+  repository is never moved or deleted once pushed** (owner): a project pins steward by its tag, so
+  a tag must name one version for good, and a release found wrong is fixed by a new patch release,
+  on a new release branch cut from its tag, or by the next release. Versions are semantic, `0.x.y`
+  for now: the release review proposes the next and the crew decides it, a new minor version when
+  anything a project uses changes (a setting, a command, the example checklist or the workflow
+  files), otherwise a new patch version. The notes carry a **For projects** section listing every
+  change a project must act on when it moves to the tag, which is where the update notes on the
+  example checklist (`outline.md`, "Review") go. For steward, the walkthrough runs what a project
+  runs, from the release branch: `init` on a scratch repository the crew provides, then a review and
+  a landing of a test pull request there; until `init` exists, it reads steward's own rotations
+  during the batch. `AGENTS.md` says that no other session pushes, moves or deletes a tag, or pushes
+  to a release branch. CI, the reviewer, the pilot and the runway are to handle a pull request into
+  a release branch as one into `main` (ST-45). **After #58's third review, on 2026-10-20** (owner,
+  with the planning session): a capability deferred from a release stays on `main`, so the next
+  release review's batch takes every capability the previous release's notes list as deferred, with
+  a verdict of its own; a patch release repairs only the newest release, on `release/vX.Y.(Z+1)` cut
+  from its tag, when no newer release branch exists, and its batch is only the pull requests into
+  that branch, while a release from `main` keeps measuring its batch from the newest release
+  branch's merge base with `main`, which a patch release's branch shares with the release it
+  repairs; no pull request into a release branch changes anything under `stories/`, and ATC reads
+  the unit, such as a cherry-picked fix's, and the checklist from `main` whatever the base; and the
+  reviewer diffs against the pull request's base, through a `{{BASE_BRANCH}}` placeholder, so ST-45
+  is built by hand. Considered and not chosen then: reverting a deferred capability on `main` as
+  well, to come back through a new pull request; reading the checklist from the base, the rules the
+  release was cut with; patching any release, not only the newest, which needs a rule for versions
+  that collide with a release from `main`; measuring a release from `main` from the newest
+  `release/vX.Y.0`, which a patch version cut from `main` breaks; a cherry-pick with `Unit: none`;
+  and a story of its own for the prompt's change. **After its fourth review, on 2026-10-20**
+  (owner): the walkthrough runs `init --ref <commit>` (ST-44), pinning the scratch repository's
+  workflow files to the release branch's last commit, since the tag is cut only after acceptance,
+  and runs again whenever a fix or revert lands into the branch (ST-44 builds `--ref`). Considered
+  and not chosen then: a release-candidate tag, `vX.Y.Z-rc.N`, which needs a pull request setting
+  that version for each candidate; and walking through after tagging, which tags before acceptance.
+  **After its fifth review, on 2026-10-20** (owner): each walkthrough, the first and every repeat,
+  runs on a new scratch repository, since `init` leaves a file that already exists as it is; not
+  chosen: a way for `init` to repin existing workflow files. This replaces "pause the coders,
+  review, tag, resume", which "Release branches are optional and deferred" had recommended while
+  work is not parallel; the release branch was then deferred. The owner's reasons: work on `main`
+  need not wait for a release, and the branch gives a place to defer items from. Considered and not
+  chosen: tagging the commit that lands the notes on `main`, which takes in whatever landed during
+  the review unreviewed, or needs landings held while the notes land; tagging the batch's last
+  commit on `main`, which would not hold its own notes or version; holding every landing for the
+  whole review; the planning session pushing `v0.1.0` on the crew's word; and the crew tagging by
+  hand.
 
 ### The move, in order
 
