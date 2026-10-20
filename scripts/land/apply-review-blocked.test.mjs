@@ -62,7 +62,7 @@ describe('OQ-80/AC-1: counting the round bound', () => {
   })
 })
 
-describe('OQ-80/AC-2: applied once, never removed or reapplied', () => {
+describe('OQ-80/AC-2: never removed, and not reapplied to a pull request that carries it', () => {
   it('a pull request already carrying the label is left alone, even past the bound', () => {
     const comments = [comment('block'), comment('block'), comment('block'), comment('block')]
     expect(decideReviewBlocked({ comments, labels: [REVIEW_BLOCKED_LABEL] })).toEqual({
@@ -162,5 +162,92 @@ describe('OQ-80: permissions widened and stated in the workflow', () => {
     expect(permsBlock).toMatch(/pull-requests:\s*write/)
     expect(permsBlock).not.toMatch(/pull-requests:\s*read/)
     expect(permsBlock).toMatch(/Widened from `read` to `write`/)
+  })
+})
+
+describe('ST-16/AC-2: only blocks recorded since the latest removal count', () => {
+  const at = (minute) => `2026-10-08T10:${String(minute).padStart(2, '0')}:00Z`
+  const block = (minute) => ({ ...comment('block'), createdAt: at(minute) })
+  const removal = (minute) => ({ createdAt: at(minute) })
+  const decide = (comments, events, labels = []) => decideReviewBlocked({ comments, labels, events })
+
+  it('ST-16/AC-2: no removal and three honoured blocks: applied', () => {
+    expect(decide([block(1), block(2), block(3)], [])).toEqual({ apply: true, reason: 'bound-reached', count: 3 })
+  })
+
+  it('ST-16/AC-2: removed after three blocks, then two more: not applied', () => {
+    const comments = [block(1), block(2), block(3), block(5), block(6)]
+    expect(decide(comments, [removal(4)])).toEqual({ apply: false, reason: 'below-bound', count: 2 })
+  })
+
+  it('ST-16/AC-2: removed after three blocks, then three more: applied', () => {
+    const comments = [block(1), block(2), block(3), block(5), block(6), block(7)]
+    expect(decide(comments, [removal(4)])).toEqual({ apply: true, reason: 'bound-reached', count: 3 })
+  })
+
+  it('ST-16/AC-2: removed twice: only blocks after the second removal count', () => {
+    const comments = [block(1), block(2), block(3), block(5), block(6), block(7), block(9), block(10)]
+    expect(decide(comments, [removal(4), removal(8)])).toEqual({ apply: false, reason: 'below-bound', count: 2 })
+    expect(decide(comments, [removal(8), removal(4)]).count).toBe(2)
+  })
+
+  it("ST-16/AC-2: a block whose created_at equals the removal's does not count", () => {
+    const comments = [block(4), block(5), block(6)]
+    expect(decide(comments, [removal(4)])).toEqual({ apply: false, reason: 'below-bound', count: 2 })
+  })
+
+  it('ST-16/AC-2: a label already present is left as it is', () => {
+    const comments = [block(1), block(2), block(3)]
+    expect(decide(comments, [], [REVIEW_BLOCKED_LABEL])).toEqual({ apply: false, reason: 'already-applied', count: null })
+  })
+})
+
+describe('ST-16/AC-1 and AC-3: applyReviewBlocked reads the events and never removes a label', () => {
+  const run = (comments, events) => {
+    const calls = []
+    const api = (args) => {
+      calls.push(args)
+      if (args[0].endsWith('/comments')) return comments.map((c) => JSON.stringify(c)).join('\n')
+      if (args[0].endsWith('/events')) return events.map((e) => JSON.stringify(e)).join('\n')
+      if (args[0].endsWith('/labels')) return '[]'
+      return ''
+    }
+    return { calls, decision: applyReviewBlocked('luplows/steward', 7, api) }
+  }
+  const block = (t) => ({ ...comment('block'), createdAt: t })
+
+  it("ST-16/AC-3: it requests the pull request's issue events, all pages, and never calls the labels-removal endpoint", () => {
+    const { calls } = run([block('2026-10-08T10:01:00Z')], [])
+    const events = calls.find((c) => c[0] === 'repos/luplows/steward/issues/7/events')
+    expect(events).toBeDefined()
+    expect(events).toContain('--paginate')
+    expect(events.join(' ')).toContain('unlabeled')
+    expect(events.join(' ')).toContain(REVIEW_BLOCKED_LABEL)
+    expect(calls.some((c) => c.includes('DELETE') || c.some((a) => /labels\/[^/]+$/.test(a)))).toBe(false)
+  })
+
+  it("ST-16/AC-1: the comments request reads each comment's created_at", () => {
+    const { calls } = run([], [])
+    expect(calls.find((c) => c[0].endsWith('/comments')).join(' ')).toContain('created_at')
+  })
+
+  it('ST-16/AC-1: blocks before the latest removal event are not counted', () => {
+    const comments = ['01', '02', '03', '05', '06'].map((m) => block(`2026-10-08T10:${m}:00Z`))
+    const { decision, calls } = run(comments, [{ createdAt: '2026-10-08T10:04:00Z' }])
+    expect(decision).toEqual({ apply: false, reason: 'below-bound', count: 2 })
+    expect(calls.some((c) => c[0] === '-X')).toBe(false)
+  })
+
+  it('ST-16/AC-1: with no removal event every comment counts', () => {
+    const comments = ['01', '02', '03'].map((m) => block(`2026-10-08T10:${m}:00Z`))
+    expect(run(comments, []).decision).toEqual({ apply: true, reason: 'bound-reached', count: 3 })
+  })
+})
+
+describe('ST-16/AC-4: review-gate.yml reads issue events', () => {
+  it('permissions add issues: read, with a comment naming the events request', () => {
+    const permsBlock = GATE.slice(GATE.indexOf('permissions:'), GATE.indexOf('jobs:'))
+    expect(permsBlock).toMatch(/issues:\s*read/)
+    expect(permsBlock).toMatch(/issue events \(ST-16's AC-1\)/)
   })
 })
