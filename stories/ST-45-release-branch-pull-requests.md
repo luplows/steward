@@ -47,9 +47,9 @@ through the gate.
       becomes `git diff origin/{{BASE_BRANCH}}...{{HEAD_SHA}}` (lines 144, 179 and 215); "a
       checkout of the base branch, `main`" (line 169); and the instruction files that "are
       `main`'s" (line 183). The lines that say the unit and the checklist are read from `main`
-      (20, 22, 32 to 33, 66, 70, 94 and 135) keep `main`. In the header, line 42 says the instructions,
-      settings and hooks come from the base, and the placeholder table gains a `{{BASE_BRANCH}}`
-      row saying what it is substituted with.
+      (20, 22, 32 to 33, 66, 70, 94 and 135) keep `main`. In the header, line 42 says the
+      instructions, settings and hooks come from the base, and the placeholder table gains a
+      `{{BASE_BRANCH}}` row saying what it is substituted with.
 - [ ] **AC-7** — `buildInvocation` and `renderReviewerPrompt` (`scripts/dispatch/invocation.mjs`)
       substitute `{{BASE_BRANCH}}` with the pull request's base, `pr.baseRef`, which
       `reviewPullRequest` passes for a Claude and a Codex reviewer alike. `BASE_BRANCH` is a

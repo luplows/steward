@@ -48,6 +48,14 @@ afternoon of copying files from steward's repository. It runs no model.
       `.github/workflows/`, with the tag placeholder filled with `v` and the `version` in the
       `package.json` of the steward that ran it. A test runs it from a steward whose `version` is
       `9.8.7` and finds `v9.8.7` in each file it wrote, and no placeholder left.
+- [ ] **AC-5a** — **A commit in place of the tag.** `--ref <commit>`, which no question asks and
+      `--yes` leaves unset, fills the tag placeholder (ST-42) with that commit's full SHA in
+      place of the tag, in every workflow file it writes, so that the release review's
+      walkthrough can install a release branch's commit before its tag exists
+      (`docs/release-review.md`). Anything other than 40 hexadecimal characters is refused before
+      anything is written. Tests: a run with `--ref` and a SHA finds that SHA in each file it
+      wrote and no `v<version>`; a run with `--ref v0.1.0`, or with a short SHA, is refused and
+      writes nothing.
 - [ ] **AC-6** — **Inspection.** It asks whether to add inspection's workflow (ST-29), default yes,
       and on a yes writes it in the thin form ST-42 gives the gate's files, pinned as they are, and
       says that inspection's first run may raise, as issues, earlier merges and commits on `main`
