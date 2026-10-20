@@ -2379,18 +2379,23 @@ shortened where it is long, so that it can be found there with its date.
 
   The first release, `v0.1.0`, is cut by a release review session, whose instructions are a
   separate pull request.
-- **The runway reads the head's check runs, with `checks: read`** (decided 2026-10-20 by the
-  owner, with the planning session; **Planned (ST-24)**). ST-24 has the runway decide whether the
-  checks `landWhen` names are green from the head's check runs and commit statuses, but its coder
-  found that `land-approved.yml`'s `permissions:` (`contents: write`, `pull-requests: write`,
-  `statuses: read`) grant no `checks` scope, and a scope they do not list is none. CI's `test` is
-  a check run, not a status, so the runway cannot see it without reading check runs. The runway
-  gains `checks: read` alone, which reads and writes nothing else; it still gains no token or
-  secret. This revises ST-24's constraint that the runway takes no new permission, which carried
-  forward the decision of 2026-10-08 for the after-sweep CI run ("GitHub mechanics").
-  Considered and not chosen: keeping no new permission, deciding from commit statuses and
-  `mergeable_state` alone, which cannot see a check run: `"all-checks"` would then pass with CI's
-  `test` failing, and a list naming `test` could never be met.
+- **The runway reads the head's check runs, with `checks: read`** (decided 2026-10-20 by the owner,
+  with the planning session; **Planned (ST-24)**). ST-24 has the runway decide whether the checks
+  `landWhen` names are green from the head's check runs and commit statuses, and CI's `test` is a
+  check run, not a status. Its coder found that `land-approved.yml`'s `permissions:` (`contents:
+  write`, `pull-requests: write`, `statuses: read`) grant no `checks` scope. On this repository that
+  does not matter: a probe run (Actions run 39445482115, 2026-10-20) read a commit's check runs with
+  the workflow token both without `checks` and with `checks: read`. The repository is public, and
+  GitHub says some endpoints read public resources without their permission. GitHub's "Permissions
+  required for GitHub Apps" lists the endpoint under "Checks" read (read 2026-10-20), so a private
+  project, such as pinpoint, needs the scope, and ST-42's thin workflow files carry the runway's
+  permissions to every project. The runway gains `checks: read` alone, which reads and writes
+  nothing else; it still gains no token or secret. This revises ST-24's constraint that the runway
+  takes no new permission, which carried forward the decision of 2026-10-08 for the after-sweep CI
+  run ("GitHub mechanics"). Considered and not chosen: keeping no new permission, which works on a
+  public repository only; and deciding from commit statuses and `mergeable_state` alone, which
+  cannot see a check run: `"all-checks"` would then pass with CI's `test` failing, and a list naming
+  `test` could never be met.
 
 ### The move, in order
 

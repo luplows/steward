@@ -66,11 +66,13 @@ with no branch protection, where GitHub's `mergeable_state` says nothing about r
 
 ## Context
 
-- **Decided on 2026-10-20 by the owner**, with the planning session, after this story's coder
-  found that the runway's `permissions:` grant no `checks` scope (design doc, Part 3, "Decided so
-  far", "The runway reads the head's check runs, with `checks: read`"). A scope its
-  `permissions:` do not list is none, and the runway's script runs under `set -euo pipefail`
-  (`land-approved.yml`, line 60), so a refused read there would end the run.
+- **Decided on 2026-10-20 by the owner**, with the planning session, after this story's coder found
+  that the runway's `permissions:` grant no `checks` scope (design doc, Part 3, "Decided so far",
+  "The runway reads the head's check runs, with `checks: read`"). A probe run on this repository
+  (Actions run 39445482115, 2026-10-20) read a commit's check runs with the workflow token both
+  without `checks` and with `checks: read`; the repository is public. GitHub lists the endpoint
+  under "Checks" read, so a private project needs the scope, and ST-42's workflow files take the
+  runway's permissions to every project.
 - `docs/outline.md`, "Defining steward", "Land" (a project says which checks must pass;
   the default is every check on the head green) and "Settings" (`landWhen`).
 - `scripts/dispatch/land.mjs`'s `assess`: `clean` lands, `blocked` and `unknown` wait, `dirty` is
