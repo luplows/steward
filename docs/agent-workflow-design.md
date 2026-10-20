@@ -2365,15 +2365,16 @@ shortened where it is long, so that it can be found there with its date.
     missing, with Claude choices by default (the reviewer `opus`, the coder `sonnet` with strength 1
     and `opus` with strength 2) and usage limits of 70 and 75 for the coder and 90 and 90 for the
     reviewer, a Codex reviewer choice being offered only when `codex` is on the `PATH` or the crew
-    gives its path. It asks before it sets branch protection, with a default of no that `--yes`
-    keeps; on a yes, the protection requires `review/agent`, with `enforce_admins` on, as steward's
-    own `main` has it; the project's own CI checks are the crew's to add. Where GitHub offers none,
-    as on a private repository on GitHub Free, or the account cannot set it, it says so plainly and
-    goes on. It does not write the after-sweep CI trigger, since a project's CI is its own ("Steward
-    enforces nothing about CI"); it does not touch `package.json`; it neither reads nor writes the
-    story prefix or anything about story files; and it commits nothing: the crew commits what it
-    wrote through the project's own pull request. Exploring the repository (D8) stays open. ST-44
-    depends on ST-29, which builds inspection.
+    gives its path, and its model and effort then asked, with no default. It asks before it sets
+    branch protection, with a default of no that `--yes` keeps; on a yes, the protection requires
+    `review/agent`, with `enforce_admins` on, as steward's own `main` has it; the project's own CI
+    checks are the crew's to add. Where GitHub offers none, as on a private repository on GitHub
+    Free, or the account cannot set it, it says so plainly and goes on. It does not write the
+    after-sweep CI trigger, since a project's CI is its own ("Steward enforces nothing about CI");
+    it does not touch `package.json`; it neither reads nor writes the story prefix or anything about
+    story files; and it commits nothing: the crew commits what it wrote through the project's own
+    pull request. Exploring the repository (D8) stays open. ST-44 depends on ST-29, which builds
+    inspection.
 
   The first release, `v0.1.0`, is cut by a release review session, whose instructions are a
   separate pull request.

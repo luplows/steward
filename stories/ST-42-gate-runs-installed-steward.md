@@ -3,7 +3,7 @@ id: ST-42
 title: Run the gate's logic as steward commands, and ship thin workflow files that start steward at a pinned tag
 tier: next
 kind: workflow
-depends_on: [ST-24]
+depends_on: [ST-16, ST-17, ST-24]
 model: null
 blocked: null
 ---
@@ -110,9 +110,9 @@ nothing of its own to run the gate.
 - ST-24 replaces the runway's and the pilot's `mergeable_state` `clean` rule with the checks
   `landWhen` names, in `land-approved.yml` and `land.mjs`. This story depends on it, so the rule
   it moves into a command is ST-24's.
-- ST-16 (AC-4, AC-5) and ST-17 change `review-gate.yml` and `apply-review-blocked.mjs`, citing
-  line numbers this story will move. Whichever lands second carries the other's change into
-  where the logic then lives.
+- ST-16 (AC-4, AC-5) and ST-17 change `review-gate.yml` and `apply-review-blocked.mjs`, citing line
+  numbers this story will move. This story depends on both, as on ST-24, so the logic it moves
+  includes their changes.
 
 ## Open questions
 

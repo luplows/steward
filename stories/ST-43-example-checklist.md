@@ -44,9 +44,11 @@ hold for any project, and the placeholders never reach the reviewer as rules.
       shows exactly the sections of AC-3, with their item counts, and that none of `README.md`,
       `coverage`, `stories/`, `ST-`, `AGENTS.md` and `story-containment` is in it.
 - [ ] **AC-5** — The example's placeholders for a project's own additions are HTML comments, at
-      least one in the preamble saying where a project adds its own sections and one in a section
-      saying where it adds its own items. A test shows the example's text as `readRules` returns
-      it holds none of them.
+      least one in the preamble saying where a project adds its own sections, one in a section
+      saying where it adds its own items, and one in "Reading the pull request body" saying that a
+      project whose pull request template differs from the one `init` writes names its own template
+      and sections there. A test shows the example's text as `readRules` returns it holds none of
+      them.
 - [ ] **AC-6** — The example holds rules only: nothing on the verdict marker, the three verdicts,
       a review with no verdict, what the gate's workflow enforces, or how the coder's pull request
       is opened (`docs/outline.md`, "The checklist's shape", "The file holds rules only").

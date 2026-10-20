@@ -77,7 +77,9 @@ afternoon of copying files from steward's repository. It runs no model.
       choices: for the reviewer, `opus`; for the coder, `sonnet` with strength 1 and `opus` with
       strength 2; usage limits for the coder of 70 (`session`) and 75 (`weekly`), and for the
       reviewer of 90 and 90. A Codex reviewer choice is offered only when `codex` is found on the
-      `PATH` or the crew gives its path, which is then written as `tools.codex.executable`.
+      `PATH` or the crew gives its path, which is then written as `tools.codex.executable`. When the
+      crew takes it, `init` asks for its model and its effort, with no default for either, so that
+      with no terminal a Codex choice needs both flags.
 - [ ] **AC-10** — **Branch protection.** It asks before it sets branch protection on `main`, with a
       default of no that `--yes` keeps, so that only a yes at the terminal or its flag sets it, and
       on a yes requires the `review/agent` check, with `enforce_admins` on, as steward's own `main`
