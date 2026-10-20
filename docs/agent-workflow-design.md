@@ -969,11 +969,11 @@ Everything above prevents bad changes landing. This covers one landing anyway.
 
 ## The release review
 
-Runs when a batch worth reviewing has accumulated (currently: human call, roughly every ten merged
-PRs). Not yet run, and no steward story plans it: OQ-46, tower-workshop-paths' walkthrough story,
-stayed there (Part 3, "Decided so far"). It is the only thing standing between the crew and a
-silently degrading mental model of their own app — every other guard is a *regression* detector that
-passes when a change is self-consistent.
+Runs when the crew asks, and its instructions are [`release-review.md`](release-review.md). Not yet
+run, and no steward story plans it: OQ-46, tower-workshop-paths' walkthrough story, stayed there
+(Part 3, "Decided so far"). It is the only thing standing between the crew and a silently degrading
+mental model of their own app — every other guard is a *regression* detector that passes when a
+change is self-consistent.
 
 ### Input assembly (mechanical)
 
@@ -991,7 +991,8 @@ capability. Doing that grouping is the release review's first real piece of work
 Per capability: what it does now that it didn't before, in user language — then **put it on
 screen**, driving a deployment or a local dev server. That is the difference between reviewing work
 and reviewing a summary of work. Then: contributing stories, what the reviewer flagged but let
-through, and known gaps.
+through, and known gaps. For steward, putting it on screen means running what a project runs: `init`
+on a scratch repository, then a review and a landing of a test pull request there.
 
 ### Output
 
@@ -1000,7 +1001,12 @@ releases/v0.4.0-rc.md    ← capabilities, with a verdict on each
 ```
 
 `accepted` / `accepted-with-followup` / `blocks-release`. Blockers become `fix` stories that jump
-the queue. Acceptance of the whole batch → tag.
+the queue. Acceptance of the whole batch → tag. The notes and the new version go in one pull request
+through the gate, and the release review tags the commit the runway made for it, on the crew's
+word. A tag is never moved or deleted. The notes' **For projects** section lists every change a
+project must act on when it moves to the tag. Versions are semantic, `0.x.y` for now: a new minor
+version when anything a project uses changes, otherwise a new patch version (Part 3, "Decided so
+far", "The release review cuts a release through the gate, and a tag is never moved").
 
 **Explicitly not a gate on merging.** It does not stop the rotations or the coders — a review that
 halts all progress while waiting for a human stops being run.
@@ -2289,6 +2295,28 @@ shortened where it is long, so that it can be found there with its date.
   which can post a marker the gate honours; a read-only fine-grained token, a credential on the
   machine of the kind ST-6 is to find how to keep from sessions, and of no use to a Codex reviewer,
   which has no network; and ATC fetching the pull requests and comments a body cites.
+- **The release review cuts a release through the gate, and a tag is never moved** (decided
+  2026-10-19 by the owner, with the planning session, while planning how steward installs in
+  another project). A project pins steward by a tag, so the first tag, `v0.1.0`, needs a way to be
+  cut. A release review session cuts it, as the release review was always meant to end in a tag,
+  with its instructions in `release-review.md`: the crew starts it when it wants a release, not on
+  a schedule or a count of merged pull requests. Its release notes, `releases/vX.Y.Z-rc.md`, and
+  the new version in `package.json` go in one pull request, reviewed and landed through the gate
+  like any other, since `main` is protected. Once it lands, the release review tags the commit the
+  runway made, on the crew's word. **A tag in steward's repository is never moved or deleted once
+  pushed** (owner): a project pins steward by its tag, so a tag must name one version for good, and
+  a release found wrong is fixed by a new patch release. Versions are semantic, `0.x.y` for now:
+  the release review proposes the next and the crew decides it, a new minor version when anything a
+  project uses changes (a setting, a command, the example checklist or the workflow files),
+  otherwise a new patch version. The notes carry a **For projects** section listing every change a
+  project must act on when it moves to the tag, which is where the update notes on the example
+  checklist (`outline.md`, "Review") go. For steward, the walkthrough runs what a project runs:
+  `init` on a scratch repository the crew provides, then a review and a landing of a test pull
+  request there; until `init` exists, it reads steward's own rotations during the batch.
+  `AGENTS.md` says that no other session pushes, moves or deletes a tag. Considered and not
+  chosen: the planning session pushing `v0.1.0` on the crew's word, and the crew tagging by hand,
+  either of which leaves the first release unreviewed; and tagging `main` without a pull request
+  for the notes and the version, which `main`'s protection rules out.
 
 ### The move, in order
 
