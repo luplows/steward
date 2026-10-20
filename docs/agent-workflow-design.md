@@ -946,12 +946,17 @@ The release review cuts each release on a branch of its own, `release/vX.Y.Z`, f
 batch's end, so that the batch is fixed while work on `main` goes on, and nothing needs pausing.
 The branch changes only through pull requests into it, reviewed and landed through the gate: the
 release notes with the version, a fix that landed on `main` first and is cherry-picked, and a
-revert of a capability deferred from the release. Its last commit is tagged, and the branch is
-kept as the release's record; the next batch is everything on `main` since the branch was cut.
-`main`'s `package.json` keeps the version `0.0.0`, since `main` is never released directly
+revert of a capability deferred from the release. None of them changes anything under `stories/`,
+since stories are written and moved on `main`. Its last commit is tagged, and the branch is kept
+as the release's record; the next batch is everything on `main` since the branch was cut, with
+every capability the release deferred, which is still on `main`. A patch release repairs the
+newest release on a branch cut from its tag, and its batch is only the pull requests into that
+branch. `main`'s `package.json` keeps the version `0.0.0`, since `main` is never released directly
 (`release-review.md`; Part 3, "Decided so far", "The release review cuts each release on a
 release branch, and a tag is never moved"). **Planned (ST-45):** CI, the reviewer, the pilot and
-the runway handle a pull request into a release branch as one into `main`.
+the runway handle a pull request into a release branch as one into `main`; the reviewer starts in
+a checkout of the pull request's base and diffs against it, and is given the unit and the
+checklist from `main`.
 
 ### Mechanics
 
@@ -972,8 +977,8 @@ Everything above prevents bad changes landing. This covers one landing anyway.
 
 - **Caught by the release review** → a `fix` story, built as any other, ahead of the queue.
 - **Caught after a tag** → a revert pull request through the gate, then a `fix` story to redo it
-  properly, and a patch release on a new release branch cut from the tag. Revert first, diagnose
-  second.
+  properly, and a patch release on a new release branch cut from the tag, when it is the newest
+  release; otherwise the next release carries the fix. Revert first, diagnose second.
 - The release review asks both questions: *is this good to ship*, and **what did we ship that we
   shouldn't have.**
 
@@ -993,7 +998,8 @@ change is self-consistent.
   stories in `stories/done/`
 - **Reviewer findings recorded as `pass-with-observations`** — highest-yield items, because a
   machine already suspected something and chose not to stop the line
-- Anything `blocked:` or deferred during the batch
+- Anything `blocked:` or deferred during the batch, and every capability the previous release
+  deferred, which its notes list
 - **For a project with screenshot baselines, those that moved** across the batch — before and after
 
 ### The walkthrough
@@ -2401,40 +2407,54 @@ shortened where it is long, so that it can be found there with its date.
   The first release, `v0.1.0`, is cut by a release review session, whose instructions are a
   separate pull request.
 - **The release review cuts each release on a release branch, and a tag is never moved** (decided
-  2026-10-19 by the owner, with the planning session, while planning how steward installs in
-  another project; **Planned (ST-45)**). A project pins steward by a tag, so the first tag,
-  `v0.1.0`, needs a way to be cut. A release review session cuts it, as the release review was
-  always meant to end in a tag, with its instructions in `release-review.md`: the crew starts it
-  when it wants a release, not on a schedule or a count of merged pull requests. It cuts the
-  release on a branch of its own, `release/vX.Y.Z`, from `main` at the batch's end, on the crew's
-  word, and gives it `main`'s branch protection. The branch changes only through pull requests
-  into it, reviewed and landed through the gate: the release notes, `releases/vX.Y.Z.md`, with the
-  version in `package.json`; a fix, which lands on `main` first and is cherry-picked; and the
-  revert of a capability the crew defers from the release, which stays on `main`. Once the crew
-  accepts the batch, the release review tags the branch's last commit, on the crew's word, and
-  keeps the branch as the release's record; the next batch is everything on `main` since the
-  branch was cut. `main`'s `package.json` keeps `0.0.0`, since `main` is never released
-  directly. **A tag in steward's repository is never moved or deleted once pushed** (owner): a
-  project pins steward by its tag, so a tag must name one version for good, and a release found
-  wrong is fixed by a new patch release, on a new release branch cut from its tag. Versions are
-  semantic, `0.x.y` for now: the release review proposes the next and the crew decides it, a new
-  minor version when anything a project uses changes (a setting, a command, the example checklist
-  or the workflow files), otherwise a new patch version. The notes carry a **For projects** section
-  listing every change a project must act on when it moves to the tag, which is where the update
-  notes on the example checklist (`outline.md`, "Review") go. For steward, the walkthrough runs
-  what a project runs, from the release branch: `init` on a scratch repository the crew provides,
-  then a review and a landing of a test pull request there; until `init` exists, it reads
-  steward's own rotations during the batch. `AGENTS.md` says that no other session pushes, moves
-  or deletes a tag, or pushes to a release branch. CI, the reviewer, the pilot and the runway are
-  to handle a pull request into a release branch as one into `main` (ST-45). This replaces "pause
-  the coders, review, tag, resume", which "Release branches are optional and deferred" had
-  recommended while work is not parallel; the release branch was then deferred. The owner's
-  reasons: work on `main` need not wait for a release, and the branch gives a place to defer
-  items from. Considered and not chosen: tagging the commit that lands the notes on `main`, which
-  takes in whatever landed during the review unreviewed, or needs landings held while the notes
-  land; tagging the batch's last commit on `main`, which would not hold its own notes or version;
-  holding every landing for the whole review; the planning session pushing `v0.1.0` on the crew's
-  word; and the crew tagging by hand.
+  2026-10-19 by the owner, with the planning session, while planning how steward installs in another
+  project; **Planned (ST-45)**). A project pins steward by a tag, so the first tag, `v0.1.0`, needs
+  a way to be cut. A release review session cuts it, as the release review was always meant to end
+  in a tag, with its instructions in `release-review.md`: the crew starts it when it wants a
+  release, not on a schedule or a count of merged pull requests. It cuts the release on a branch of
+  its own, `release/vX.Y.Z`, from `main` at the batch's end, on the crew's word, and gives it
+  `main`'s branch protection. The branch changes only through pull requests into it, reviewed and
+  landed through the gate: the release notes, `releases/vX.Y.Z.md`, with the version in
+  `package.json`; a fix, which lands on `main` first and is cherry-picked; and the revert of a
+  capability the crew defers from the release, which stays on `main`. Once the crew accepts the
+  batch, the release review tags the branch's last commit, on the crew's word, and keeps the branch
+  as the release's record; the next batch is everything on `main` since the branch was cut. `main`'s
+  `package.json` keeps `0.0.0`, since `main` is never released directly. **A tag in steward's
+  repository is never moved or deleted once pushed** (owner): a project pins steward by its tag, so
+  a tag must name one version for good, and a release found wrong is fixed by a new patch release,
+  on a new release branch cut from its tag, or by the next release. Versions are semantic, `0.x.y`
+  for now: the release review proposes the next and the crew decides it, a new minor version when
+  anything a project uses changes (a setting, a command, the example checklist or the workflow
+  files), otherwise a new patch version. The notes carry a **For projects** section listing every
+  change a project must act on when it moves to the tag, which is where the update notes on the
+  example checklist (`outline.md`, "Review") go. For steward, the walkthrough runs what a project
+  runs, from the release branch: `init` on a scratch repository the crew provides, then a review and
+  a landing of a test pull request there; until `init` exists, it reads steward's own rotations
+  during the batch. `AGENTS.md` says that no other session pushes, moves or deletes a tag, or pushes
+  to a release branch. CI, the reviewer, the pilot and the runway are to handle a pull request into
+  a release branch as one into `main` (ST-45). **After #58's third review, on 2026-10-20** (owner,
+  with the planning session): a capability deferred from a release stays on `main`, so the next
+  release review's batch takes every capability the previous release's notes list as deferred, with
+  a verdict of its own; a patch release repairs only the newest release, on `release/vX.Y.(Z+1)` cut
+  from its tag, when no newer release branch exists, and its batch is only the pull requests into
+  that branch, while a release from `main` keeps measuring its batch from the newest release
+  branch's merge base with `main`, which a patch release's branch shares with the release it
+  repairs; no pull request into a release branch changes anything under `stories/`, and ATC reads
+  the unit, such as a cherry-picked fix's, and the checklist from `main` whatever the base; and the
+  reviewer diffs against the pull request's base, through a `{{BASE_BRANCH}}` placeholder, so ST-45
+  is built by hand. Considered and not chosen then: reverting a deferred capability on `main` as
+  well, to come back through a new pull request; reading the checklist from the base, the rules the
+  release was cut with; patching any release, not only the newest, which needs a rule for versions
+  that collide with a release from `main`; measuring a release from `main` from the newest
+  `release/vX.Y.0`, which a patch version cut from `main` breaks; a cherry-pick with `Unit: none`;
+  and a story of its own for the prompt's change. This replaces "pause the coders, review, tag,
+  resume", which "Release branches are optional and deferred" had recommended while work is not
+  parallel; the release branch was then deferred. The owner's reasons: work on `main` need not wait
+  for a release, and the branch gives a place to defer items from. Considered and not chosen:
+  tagging the commit that lands the notes on `main`, which takes in whatever landed during the
+  review unreviewed, or needs landings held while the notes land; tagging the batch's last commit on
+  `main`, which would not hold its own notes or version; holding every landing for the whole review;
+  the planning session pushing `v0.1.0` on the crew's word; and the crew tagging by hand.
 
 ### The move, in order
 
