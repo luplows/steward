@@ -129,7 +129,8 @@ Where a file defines the thing, the entry names it, and the file is the authorit
 - **stuck** — a story whose branch is on `origin` with no open flight and no recent claim. It is
   raised as a `loop-stuck` issue, and two open issues stop the loop (`STUCK_ISSUE_LIMIT`,
   `scripts/dispatch/loop.mjs`).
-- **`review-blocked`** — the label the gate puts on a flight after three `block` verdicts.
+- **`review-blocked`** — the label the gate puts on a flight after three `block` verdicts. Once the
+  label has been removed by hand, only verdicts recorded since the latest removal count.
 - **`mergeable_state` `blocked`** — GitHub's word for a pull request whose required checks are not
   all green. Not the same as a grounded story or a `block` verdict.
 

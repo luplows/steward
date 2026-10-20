@@ -16,19 +16,19 @@ flight, are made on every review rather than reported as not checked.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `reviewPullRequest` (`scripts/dispatch/review.mjs`) makes its fetch before a
+- [x] **AC-1** — `reviewPullRequest` (`scripts/dispatch/review.mjs`) makes its fetch before a
       review as `git fetch --prune origin +refs/heads/*:refs/remotes/origin/*` (with `REMOTE` for
       `origin`), in place of fetching the head and base branches alone. A test with a local
       `origin` shows that, once the review's session is started, a branch created on `origin`
       since an earlier fetch has its ref under `refs/remotes/origin/`, and a branch deleted on
       `origin` since then has none.
-- [ ] **AC-2** — `.claude/prompts/reviewer.md` tells every reviewer, whatever its tool, that the
+- [x] **AC-2** — `.claude/prompts/reviewer.md` tells every reviewer, whatever its tool, that the
       branches on `origin` are the remote-tracking refs ATC fetched, pruned, just before the
       review, which `git branch -r` lists, and to check a branch on `origin` there, not with
       `git ls-remote` or `git fetch`. A test in `invocation.test.mjs` pins the new wording.
-- [ ] **AC-3** — `REVIEW.md`, "Changes to stories", item 5 no longer names `git ls-remote` as the
+- [x] **AC-3** — `REVIEW.md`, "Changes to stories", item 5 no longer names `git ls-remote` as the
       way to check that a story's branch exists on `origin`.
-- [ ] **AC-4** — Every **Planned** marker naming ST-39 in `docs/agent-workflow-design.md` is
+- [x] **AC-4** — Every **Planned** marker naming ST-39 in `docs/agent-workflow-design.md` is
       resolved, as its "Reading this document" note says.
 
 ## Out of scope

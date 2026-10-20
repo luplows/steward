@@ -227,10 +227,9 @@ still reviewed, and the checklist says what that means (`REVIEW.md`, "Every pull
 item 4). It does not receive the coder's session, summary or reasoning, or any commentary from
 ATC.
 
-**Planned (ST-39):** before each review, ATC fetches every branch on `origin` and prunes those
-deleted there, so that the reviewer, which may have no network, reads `origin`'s branches from its
-remote-tracking refs (Part 3, "Decided so far", "The reviewer reads `origin`'s branches from a
-pruned fetch").
+Before each review, ATC fetches every branch on `origin` and prunes those deleted there, so that
+the reviewer, which may have no network, reads `origin`'s branches from its remote-tracking refs
+(Part 3, "Decided so far", "The reviewer reads `origin`'s branches from a pruned fetch").
 
 **It verifies by reading, not by running.** The reviewer runs no test, lint or other check, a
 single test file included. It settles a claim by reading the code, searching it or diffing it,
@@ -373,9 +372,9 @@ it:
 
 `review-blocked` is applied automatically when a pull request reaches the round bound, by
 `review-gate.yml`, with the bound derived from the PR's own `block` verdicts rather than
-remembered (OQ-80). **Planned (ST-16):** removing the label by hand means "I have seen the cost,
-proceed", so after a removal only blocks recorded since the latest removal count towards applying
-it again, read from the pull request's `unlabeled` events (decided 2026-10-08 by the owner).
+remembered (OQ-80). Removing the label by hand means "I have seen the cost, proceed", so after a
+removal only blocks recorded since the latest removal count towards applying it again, read from
+the pull request's `unlabeled` events (decided 2026-10-08 by the owner).
 
 ### Merge queue
 
@@ -2309,7 +2308,7 @@ shortened where it is long, so that it can be found there with its date.
   change `reviewer.md` and rest on the reviewer classifying its own failure; going on to the next
   pull request; and moving to the next reviewer choice, as ST-35 does for usage.
 - **The reviewer reads `origin`'s branches from a pruned fetch** (decided 2026-10-19 by the owner,
-  with the planning session; **Planned (ST-39)**). `REVIEW.md`, "Changes to stories", has the
+  with the planning session; built in ST-39). `REVIEW.md`, "Changes to stories", has the
   reviewer check a new story's number against every branch on `origin`, and whether a story is
   already in flight, but a Codex reviewer has no network, so `git ls-remote` fails, and both Codex
   verdicts replayed for ST-38 said the remote branches could not be checked ("Trials and
