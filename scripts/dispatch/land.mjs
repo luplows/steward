@@ -5,9 +5,12 @@
  * only thing that merges; this module never does. Its one write is a
  * `workflow_dispatch` of that workflow on `main`, whose one input names this pull request.
  *
- * Landable means: not a draft, no `review-blocked` label, `mergeable_state`
- * `clean`, and `review/agent` = `success` on the head SHA. The sweep re-checks
- * every one of those itself; this only decides when to ask it to.
+ * Landable means: not a draft, no `review-blocked` label, `review/agent` = `success` on the head
+ * SHA, the checks the settings' `landWhen` names green on the head (read with `checksGreen`,
+ * `scripts/land/checks-green.mjs`), and a `mergeable_state` GitHub would merge in
+ * (`MERGEABLE_STATES` there). A `dirty` one is a conflict; a `blocked` one with those checks
+ * green is `github-blocked`, and `unknown` (or any state not named) is waited for. The sweep
+ * re-checks the same itself with the same function; this only decides when to ask it to.
  *
  * Every reason a pull request cannot become landable is a distinct `status` on
  * the result rather than an indefinite wait. `unknown` is the exception: GitHub
@@ -44,8 +47,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { ghAuthToken } from './github.mjs'
 import { readSettings } from './settings.mjs'
+import { assertLandWhen, checksGreen, mergeableOutcome } from '../land/checks-green.mjs'
 
 const API = 'https://api.github.com'
+const CHECK_RUNS_PAGE = 100
 const WORKFLOW = 'land-approved.yml'
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 export const DEFAULT_LATENCY_LOG = path.join(HERE, '..', '..', 'logs', 'land-latency.jsonl')
@@ -57,9 +62,12 @@ export const POLL_INTERVAL_MS = 15_000
 export const SWEEP_RUN_BOUND_MS = 3 * 60_000
 // `review/agent` still pending after this long: the review is not coming.
 export const REVIEW_PENDING_BOUND_MS = 30 * 60_000
-// `mergeable_state` `blocked` (a required check not green) with review passed.
+// `mergeable_state` `blocked` with review passed and the checks `landWhen` names green: GitHub
+// requires something `landWhen` does not name (ST-24). A later call may find it cleared.
 export const BLOCKED_BOUND_MS = 10 * 60_000
-// `mergeable_state` `unknown` (or any state that is not `clean`, `blocked` or `dirty`).
+// A check `landWhen` names still unfinished, or absent, with review passed (ST-24).
+export const CHECKS_PENDING_BOUND_MS = 30 * 60_000
+// `mergeable_state` `unknown` (or any state that is not one `mergeableOutcome` names).
 export const UNKNOWN_BOUND_MS = 5 * 60_000
 // `review/agent` reads `failure`/`error` on the same head the caller holds a passing verdict for
 // (`passedAt`): the gate has not yet turned the fresh pass into a `success` status (OQ-104).
@@ -87,6 +95,15 @@ export function buildGetPullRequest(repo, number) {
   return { method: 'GET', url: `${repoPath(repo)}/pulls/${requirePrNumber(number)}` }
 }
 
+/**
+ * The head's check runs (ST-24), the allowlist's one added read. One request for up to 100; a head
+ * with more is refused by `readChecks`, since the rest could hold a failure.
+ */
+export function buildGetCheckRuns(repo, sha) {
+  if (!/^[0-9a-f]{40}$/.test(sha ?? '')) throw new Error(`sha must be a full 40-character SHA, got: ${sha}`)
+  return { method: 'GET', url: `${repoPath(repo)}/commits/${sha}/check-runs?per_page=${CHECK_RUNS_PAGE}` }
+}
+
 export function buildGetCommitStatus(repo, sha) {
   if (!/^[0-9a-f]{40}$/.test(sha ?? '')) throw new Error(`sha must be a full 40-character SHA, got: ${sha}`)
   return { method: 'GET', url: `${repoPath(repo)}/commits/${sha}/status` }
@@ -104,10 +121,11 @@ export function buildDispatchSweep(repo, number) {
 const ALLOWED = [
   ['GET', /^\/pulls\/[1-9][0-9]*$/],
   ['GET', /^\/commits\/[0-9a-f]{40}\/status$/],
+  ['GET', new RegExp(`^/commits/[0-9a-f]{40}/check-runs\\?per_page=${CHECK_RUNS_PAGE}$`)],
   ['POST', new RegExp(`^/actions/workflows/${WORKFLOW.replace('.', '\\.')}/dispatches$`)],
 ]
 
-/** Throws unless `request` is one of the three this module builds. Runs before any network call. */
+/** Throws unless `request` is one of the four this module builds. Runs before any network call. */
 export function assertAllowedRequest(repo, request) {
   const prefix = repoPath(repo)
   const url = typeof request?.url === 'string' ? request.url : ''
@@ -130,16 +148,19 @@ export function assertAllowedRequest(repo, request) {
 
 /**
  * `landing` is the settings' `land` value, required with no default: `false` makes
- * `landPullRequest` return `landing-off` without sending any request (ST-23).
+ * `landPullRequest` return `landing-off` without sending any request (ST-23). `landWhen` is the
+ * settings' value of that name, likewise required (ST-24).
  * `fetch` and `getToken` are injectable; the token is read once, on first use.
  */
-export function createLandContext({ repo, landing, fetch = globalThis.fetch, getToken = ghAuthToken }) {
+export function createLandContext({ repo, landing, landWhen, fetch = globalThis.fetch, getToken = ghAuthToken }) {
   repoPath(repo)
   if (typeof landing !== 'boolean') throw new Error(`landing must be true or false, got: ${JSON.stringify(landing)}`)
+  assertLandWhen(landWhen)
   let token
   return {
     repo,
     landing,
+    landWhen,
     async send(request) {
       assertAllowedRequest(repo, request)
       token ??= await getToken()
@@ -180,6 +201,23 @@ function reviewState(json) {
 }
 
 /**
+ * The checks `landWhen` names, read from the head's commit statuses and check runs (ST-24). A
+ * response with fewer statuses or check runs than it counts is refused rather than read as green:
+ * the rest could hold a failure, which the sweep, reading every page, would see.
+ */
+function readChecks(statusJson, checkRunsJson, landWhen) {
+  const statuses = statusJson.statuses ?? []
+  if (statusJson.total_count > statuses.length) {
+    throw new Error(`the head has ${statusJson.total_count} statuses and only ${statuses.length} were returned`)
+  }
+  const checkRuns = checkRunsJson.check_runs ?? []
+  if (checkRunsJson.total_count > checkRuns.length) {
+    throw new Error(`the head has ${checkRunsJson.total_count} check runs and only ${checkRuns.length} were returned`)
+  }
+  return checksGreen({ checkRuns, statuses, landWhen })
+}
+
+/**
  * Why the pull request cannot be landed yet, or `null` if it can. `wait` is
  * `{ reason, bound }` for a condition that may clear; `final` is a terminal status.
  *
@@ -196,10 +234,23 @@ function assess(pr, review, gateLag) {
     return { final: 'review-failed' }
   }
   if (review !== 'success') return { wait: 'review-pending', bound: REVIEW_PENDING_BOUND_MS }
-  if (pr.mergeableState === 'dirty') return { final: 'conflict' }
-  if (pr.mergeableState === 'clean') return null
-  if (pr.mergeableState === 'blocked') return { wait: 'blocked', bound: BLOCKED_BOUND_MS }
-  // `unknown`, and anything else GitHub reports that is not yet `clean`.
+  if (mergeableOutcome(pr.mergeableState) === 'conflict') return { final: 'conflict' }
+  return null
+}
+
+/**
+ * The second half of `assess`, once the review and a conflict are settled and the head's checks
+ * have been read: the named checks, then what GitHub says of the merge (ST-24).
+ */
+function assessChecks(pr, checks) {
+  if (!checks.green) {
+    if (checks.failing.length > 0) return { final: 'checks-failed', failing: checks.failing }
+    return { wait: 'checks-pending', bound: CHECKS_PENDING_BOUND_MS, waiting: checks.waiting }
+  }
+  const outcome = mergeableOutcome(pr.mergeableState)
+  if (outcome === 'landable') return null
+  if (outcome === 'github-blocked') return { wait: 'github-blocked', bound: BLOCKED_BOUND_MS }
+  // `unknown`, and anything else GitHub reports that is not one it would merge.
   return { wait: 'unknown', bound: UNKNOWN_BOUND_MS }
 }
 
@@ -218,9 +269,10 @@ function assess(pr, review, gateLag) {
  *
  * `once`, optional (ST-23): look once instead of waiting. A pull request that is not
  * landable yet is returned at once as `not-landable`, with its `reason` (the wait that
- * `assess` names), and nothing is triggered. A landable one has the sweep triggered once
- * and is polled for its merge for at most `SWEEP_RUN_BOUND_MS`: `merged`, or
- * `sweep-pending` if it has not merged by then. It is never triggered a second time.
+ * `assess` names), and nothing is triggered; one GitHub reports `blocked` though the checks
+ * `landWhen` names are green is returned as `github-blocked` instead (ST-24). A landable one has
+ * the sweep triggered once and is polled for its merge for at most `SWEEP_RUN_BOUND_MS`:
+ * `merged`, or `sweep-pending` if it has not merged by then. It is never triggered a second time.
  *
  * With `ctx.landing` false, either mode returns `landing-off` before any request is sent.
  */
@@ -281,14 +333,21 @@ export async function landPullRequest({
 
     // Not asked for at all when the pull request is a draft or blocked: the answer changes nothing.
     const early = assess(pr, 'success', false)
-    const review = early?.final ? 'success' : reviewState(await ctx.send(buildGetCommitStatus(ctx.repo, headSha)))
+    const statusJson = early?.final ? null : await ctx.send(buildGetCommitStatus(ctx.repo, headSha))
+    const review = statusJson === null ? 'success' : reviewState(statusJson)
     const gateLag = passedAt != null && headSha === passedAt
-    const verdict = early?.final ? early : assess(pr, review, gateLag)
+    let verdict = early?.final ? early : assess(pr, review, gateLag)
+    // The head's checks are read only once the review and a conflict are settled.
+    if (verdict === null) {
+      verdict = assessChecks(pr, readChecks(statusJson, await ctx.send(buildGetCheckRuns(ctx.repo, headSha)), ctx.landWhen))
+    }
 
-    if (verdict?.final) return finish(verdict.final)
+    if (verdict?.final) return finish(verdict.final, verdict.failing ? { failing: verdict.failing } : {})
 
     if (once) {
-      if (verdict !== null) return finish('not-landable', { reason: verdict.wait })
+      // `github-blocked` is its own result rather than a wait that may clear: see `assessChecks`.
+      if (verdict?.wait === 'github-blocked') return finish('github-blocked')
+      if (verdict !== null) return finish('not-landable', { reason: verdict.wait, ...(verdict.waiting ? { waiting: verdict.waiting } : {}) })
       return triggerOnce()
     }
 
@@ -364,8 +423,8 @@ async function main(argv) {
   if (args.length !== 1 || !Number.isInteger(number) || number <= 0) {
     throw new Error('usage: node scripts/dispatch/land.mjs <pr-number> [--repo owner/name]')
   }
-  const { land: landing } = await readSettings(process.cwd())
-  const result = await landPullRequest({ number, ctx: createLandContext({ repo, landing }) })
+  const { land: landing, landWhen } = await readSettings(process.cwd())
+  const result = await landPullRequest({ number, ctx: createLandContext({ repo, landing, landWhen }) })
   console.log(JSON.stringify(result, null, 2))
   if (result.status !== 'merged') process.exitCode = 1
 }

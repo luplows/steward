@@ -529,8 +529,8 @@ async function main(argv) {
   const { repo, maxStories } = await parseArgs(argv)
   await requireOwnWorktree(process.cwd())
 
-  const { land: landing } = await readSettings(process.cwd())
-  const result = await runLoop({ repo, maxStories, ctx: createContext({ repo }), landCtx: createLandContext({ repo, landing }) })
+  const { land: landing, landWhen } = await readSettings(process.cwd())
+  const result = await runLoop({ repo, maxStories, ctx: createContext({ repo }), landCtx: createLandContext({ repo, landing, landWhen }) })
   console.log(JSON.stringify(result, null, 2))
   if (result.status !== 'nothing-ready' && result.status !== 'max-stories') process.exitCode = 1
 }

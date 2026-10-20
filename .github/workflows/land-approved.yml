@@ -37,6 +37,8 @@ permissions:
   contents: write
   pull-requests: write
   statuses: read
+  # For reading the head's check runs (scripts/land/checks-green.mjs, ST-24); nothing else.
+  checks: read
 
 # Never two sweeps at once: both would read the same pre-merge state.
 concurrency:
@@ -135,20 +137,30 @@ jobs:
               fi
             fi
 
-            # `clean` means mergeable, no conflict, and every *required* check
-            # passing. `unknown` means GitHub has not finished computing it --
-            # not a failure, just not an answer yet, so leave it for next run.
-            # Expect it straight after a merge, while GitHub recomputes other
-            # open PRs: a run triggered soon after the last merge can land
-            # nothing (2026-09-24: #125 skipped this way, landed on the
-            # next run). See agent-workflow-design.md, "GitHub mechanics".
-            if [ "${mergeable_state}" != "clean" ]; then
-              echo "PR #${pr}: mergeable_state=${mergeable_state}, skipping"
+            # Whether the checks the project's `landWhen` names are green on the head is
+            # scripts/land/checks-green.mjs's decision (ST-24), the same function the pilot,
+            # scripts/dispatch/land.mjs, uses. `mergeable_state` says nothing about which checks are
+            # required on a repository without branch protection, so it is not the test. The script
+            # still skips a conflict (`dirty`), a `blocked` one (GitHub requires something
+            # `landWhen` does not name, and would refuse the merge) and an `unknown` one: GitHub has
+            # not finished computing it, so leave it for next run. Expect `unknown` straight after a
+            # merge, while GitHub recomputes other open PRs: a run triggered soon after the last
+            # merge can land nothing (2026-09-24: #125 skipped this way, landed on the next run).
+            # See agent-workflow-design.md, "GitHub mechanics". Anything the script cannot read
+            # skips too.
+            check_runs="$(gh api "repos/${REPO}/commits/${sha}/check-runs?per_page=100" --paginate --jq '.check_runs[]' | jq -s '.')"
+            statuses="$(gh api "repos/${REPO}/commits/${sha}/status?per_page=100" --paginate --jq '.statuses[]' | jq -s '.')"
+            land_when="$(jq -c '.landWhen' steward.config.json)"
+            if ! reason="$(jq -n --argjson checkRuns "${check_runs}" --argjson statuses "${statuses}" \
+              --argjson landWhen "${land_when}" --arg mergeableState "${mergeable_state}" \
+              '{checkRuns: $checkRuns, statuses: $statuses, landWhen: $landWhen, mergeableState: $mergeableState}' \
+              | node scripts/land/checks-green.mjs)"; then
+              echo "PR #${pr}: not landable on ${sha}: ${reason}, skipping"
               continue
             fi
 
-            # Belt and braces. `clean` already implies this while `review/agent`
-            # is a required status check -- but that setting silently went
+            # Belt and braces. A `mergeable_state` of `clean` implied this while `review/agent` is a
+            # required status check -- but that setting silently went
             # missing once between being set and being checked the next
             # morning, and a sweep that lands unreviewed PRs whenever branch
             # protection lapses is worse than no sweep. Check it directly.

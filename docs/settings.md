@@ -69,5 +69,7 @@ body and the rules.
 }
 ```
 
-Steward's scripts use `repo`, `storyPrefix`, `rulesFile`, `unitLinks` and `land` today. The other
-keys are read and validated, and each is taken into use by the story that builds it (see [`agent-workflow-design.md`](agent-workflow-design.md), the "Planned" markers).
+Steward's scripts use `repo`, `storyPrefix`, `rulesFile`, `unitLinks`, `land` and `landWhen`
+today: the pilot and the runway land on the checks `landWhen` names. The other keys are read and
+validated, and each is taken into use by the story that builds it (see
+[`agent-workflow-design.md`](agent-workflow-design.md), the "Planned" markers).

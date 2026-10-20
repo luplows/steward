@@ -74,8 +74,8 @@ Where a file defines the thing, the entry names it, and the file is the authorit
   are still running. A later rotation tries again.
 - **go-around** — a flight sent back by a `block`, for a coder to fix.
 - **landable** — what the pilot waits for before requesting landing: not a draft, no
-  `review-blocked`, `review/agent` `success` on the head, and `mergeable_state` `clean`
-  (`land.mjs`'s header).
+  `review-blocked`, `review/agent` `success` on the head, and the checks the project's `landWhen`
+  names green on the head, and a `mergeable_state` GitHub would merge in (`land.mjs`'s header).
 - **turnaround** — tidying up after landings and rotations: merged heads, leftover worktrees and
   scratch checkouts.
 - **release branch** — `release/vX.Y.Z`, cut by the release review for one release, from `main`

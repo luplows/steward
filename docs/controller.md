@@ -38,8 +38,8 @@ outcome as it will.
   no honoured verdict at its current head, up to five reviews in one rotation (ST-25's default).
 - Then, one at a time, run the pilot for each that is cleared: an honoured `pass` or
   `pass-with-observations` verdict at its head, and green CI, including one that passed in an
-  earlier rotation. The pilot checks both again through `review/agent` and `mergeable_state`;
-  `land.mjs`'s header defines landable. No other go-ahead is needed.
+  earlier rotation. The pilot checks both again through `review/agent` and the checks `landWhen`
+  names; `land.mjs`'s header defines landable. No other go-ahead is needed.
 - A draft is not ready for you. The runway never lands one
   ([`scripts/land/select-candidates.mjs`](../scripts/land/select-candidates.mjs)). Marking a pull
   request ready is its author's hand-over, and for the planning session's pull requests it is the
