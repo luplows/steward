@@ -84,8 +84,9 @@ hold for any project, and the placeholders never reach the reviewer as rules.
   reviewer as `{{RULES}}` (`review.mjs`, line 512).
 - `.github/pull_request_template.md`: the `Unit:` line, then What changed, Verification and Docs
   check, each with an HTML comment.
-- The reviewer's prompt cites "Conformance to the unit", items 1 to 3, as the example's (ST-40,
-  AC-5).
+- `.claude/prompts/reviewer.md`, lines 111 to 112, calls the three sub-checks items 1 to 3 of the
+  checklist's "Conformance to the unit". ST-40's AC-5 changes that to say they are the example
+  checklist's, so this story's example keeps them as items 1 to 3 of that section.
 
 ## Open questions
 
