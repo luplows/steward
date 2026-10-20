@@ -78,6 +78,9 @@ Where a file defines the thing, the entry names it, and the file is the authorit
   (`land.mjs`'s header).
 - **turnaround** — tidying up after landings and rotations: merged heads, leftover worktrees and
   scratch checkouts.
+- **release branch** — `release/vX.Y.Z`, cut from `main` by the release review for one release, and
+  changed only through pull requests. Its last commit is tagged, and it is kept
+  (`docs/release-review.md`).
 
 ## Reviews
 

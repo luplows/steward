@@ -64,10 +64,10 @@ around the gate.
       labelled `inspection`; creating an issue; and creating the `inspection` label. A test shows
       that any other request is refused with nothing sent.
 - [ ] **AC-7** — A new required settings key, `inspectAfterHours`, a positive integer: how long a
-      pull request may stay pending or holding before inspection raises it. `readSettings` refuses
-      a file without it, or with a value that is not a positive integer, as it refuses any other
-      key, and its tests say so. `docs/settings.md` gains its row, with `init`'s value "Not
-      decided". `steward.config.json`, the page's copy of it, and `FIXTURE_SETTINGS`
+      pull request may stay pending or holding before inspection raises it. `readSettings` refuses a
+      file without it, or with a value that is not a positive integer, as it refuses any other key,
+      and its tests say so. `docs/settings.md` gains its row, with `init`'s value "Asked; default
+      24" (ST-44). `steward.config.json`, the page's copy of it, and `FIXTURE_SETTINGS`
       (`scripts/dispatch/settings-fixture.mjs`) gain `"inspectAfterHours": 24`.
 - [ ] **AC-8** — A new workflow, `.github/workflows/inspection.yml` ("Inspection"), runs
       `node scripts/dispatch/cli.mjs inspect`, after checking out the repository so that it can
