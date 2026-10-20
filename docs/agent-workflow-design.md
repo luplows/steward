@@ -1011,8 +1011,10 @@ Per capability: what it does now that it didn't before, in user language — the
 screen**, driving a deployment or a local dev server. That is the difference between reviewing work
 and reviewing a summary of work. Then: contributing stories, what the reviewer flagged but let
 through, and known gaps. For steward, putting it on screen means running what a project runs: `init`
-on a scratch repository, pinned to the release branch's last commit since its tag does not exist
-yet (`init --ref`, ST-44), then a review and a landing of a test pull request there.
+on a new scratch repository, then a review and a landing of a test pull request there.
+**Planned (ST-44):** `init --ref` pins that repository's workflow files to the release branch's
+last commit, since its tag does not exist yet, and each repeat of the walkthrough uses another
+new scratch repository.
 
 ### Output
 
@@ -2409,9 +2411,9 @@ shortened where it is long, so that it can be found there with its date.
   separate pull request.
 - **The release review cuts each release on a release branch, and a tag is never moved** (decided
   2026-10-19 by the owner, with the planning session, while planning how steward installs in another
-  project; **Planned (ST-45)**). A project pins steward by a tag, so the first tag, `v0.1.0`, needs
-  a way to be cut. A release review session cuts it, as the release review was always meant to end
-  in a tag, with its instructions in `release-review.md`: the crew starts it when it wants a
+  project; **Planned (ST-45, ST-44)**). A project pins steward by a tag, so the first tag, `v0.1.0`,
+  needs a way to be cut. A release review session cuts it, as the release review was always meant to
+  end in a tag, with its instructions in `release-review.md`: the crew starts it when it wants a
   release, not on a schedule or a count of merged pull requests. It cuts the release on a branch of
   its own, `release/vX.Y.Z`, from `main` at the batch's end, on the crew's word, and gives it
   `main`'s branch protection. The branch changes only through pull requests into it, reviewed and
@@ -2451,17 +2453,20 @@ shortened where it is long, so that it can be found there with its date.
   and a story of its own for the prompt's change. **After its fourth review, on 2026-10-20**
   (owner): the walkthrough runs `init --ref <commit>` (ST-44), pinning the scratch repository's
   workflow files to the release branch's last commit, since the tag is cut only after acceptance,
-  and runs again whenever a fix or revert lands into the branch. Considered and not chosen then: a
-  release-candidate tag, `vX.Y.Z-rc.N`, which needs a pull request setting that version for each
-  candidate; and walking through after tagging, which tags before acceptance. This replaces "pause
-  the coders, review, tag, resume", which "Release branches are optional and deferred" had
-  recommended while work is not parallel; the release branch was then deferred. The owner's reasons:
-  work on `main` need not wait for a release, and the branch gives a place to defer items from.
-  Considered and not chosen: tagging the commit that lands the notes on `main`, which takes in
-  whatever landed during the review unreviewed, or needs landings held while the notes land; tagging
-  the batch's last commit on `main`, which would not hold its own notes or version; holding every
-  landing for the whole review; the planning session pushing `v0.1.0` on the crew's word; and the
-  crew tagging by hand.
+  and runs again whenever a fix or revert lands into the branch (ST-44 builds `--ref`). Considered
+  and not chosen then: a release-candidate tag, `vX.Y.Z-rc.N`, which needs a pull request setting
+  that version for each candidate; and walking through after tagging, which tags before acceptance.
+  **After its fifth review, on 2026-10-20** (owner): each walkthrough, the first and every repeat,
+  runs on a new scratch repository, since `init` leaves a file that already exists as it is; not
+  chosen: a way for `init` to repin existing workflow files. This replaces "pause the coders,
+  review, tag, resume", which "Release branches are optional and deferred" had recommended while
+  work is not parallel; the release branch was then deferred. The owner's reasons: work on `main`
+  need not wait for a release, and the branch gives a place to defer items from. Considered and not
+  chosen: tagging the commit that lands the notes on `main`, which takes in whatever landed during
+  the review unreviewed, or needs landings held while the notes land; tagging the batch's last
+  commit on `main`, which would not hold its own notes or version; holding every landing for the
+  whole review; the planning session pushing `v0.1.0` on the crew's word; and the crew tagging by
+  hand.
 
 ### The move, in order
 

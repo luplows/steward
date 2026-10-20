@@ -62,15 +62,16 @@ A release is cut from `main`, or, as a patch release, from the newest release's 
 - Group the batch by **capability**, as a project using steward meets it, not by pull request or
   story. For each capability: what it does now that it did not before, in plain words, and the
   pull requests that built it.
-- **Run it as a project would**, from the release branch. On a scratch repository the crew
-  provides: run `init --ref <commit>`, where `<commit>` is the release branch's last commit
-  (`git rev-parse origin/release/vX.Y.Z` once fetched), so that the workflow files it writes
-  install steward at that commit, since the tag does not exist yet (ST-44). Then open a test pull
-  request there, and have it reviewed and landed with the commands the release documents. Report
-  each command and its result. Run it again at the new last commit whenever a fix or a revert
-  lands into the release branch. The tag's commit differs from the last one walked through only
-  by the notes and the version. Until `init` exists, the walkthrough is steward's own rotations
-  during the batch, read from their verdicts and landings.
+- **Run it as a project would**, from the release branch. On a new, empty scratch repository the
+  crew provides: run `init --ref <commit>`, where `<commit>` is the release branch's last commit
+  (`git rev-parse origin/release/vX.Y.Z` once fetched), so that the workflow files it writes install
+  steward at that commit, since the tag does not exist yet (ST-44). Then open a test pull request
+  there, and have it reviewed and landed with the commands the release documents. Report each
+  command and its result. Run it again at the new last commit whenever a fix or a revert lands into
+  the release branch, on another new scratch repository: `init` leaves a file that already exists as
+  it is, so it would not repin the first one's workflows (ST-44). The tag's commit differs from the
+  last one walked through only by the notes and the version. Until `init` exists, the walkthrough is
+  steward's own rotations during the batch, read from their verdicts and landings.
 - Give each capability one verdict: `accepted`, `accepted-with-followup` or `blocks-release`.
 - **A blocker is fixed or deferred.** A fix lands on `main` first, as any `fix` story, written with
   the crew as `planning-session.md` says, and then comes to the release branch as a pull request
