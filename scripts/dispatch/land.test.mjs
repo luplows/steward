@@ -17,7 +17,9 @@ import {
   SWEEP_RUN_BOUND_MS,
   UNKNOWN_BOUND_MS,
   assertAllowedRequest,
+  CHECKS_PENDING_BOUND_MS,
   buildDispatchSweep,
+  buildGetCheckRuns,
   buildGetCommitStatus,
   buildGetPullRequest,
   createLandContext,
@@ -40,14 +42,22 @@ const pull = (over = {}) => ({
   mergeable_state: 'clean',
   ...over,
 })
-const status = (state) => ({ statuses: state === 'absent' ? [] : [{ context: 'review/agent', state }] })
+const status = (state, others = []) => ({
+  statuses: [...(state === 'absent' ? [] : [{ id: 1, context: 'review/agent', state }]), ...others],
+})
+const run = (name, conclusion, id = 1) => ({
+  id,
+  name,
+  status: conclusion === null ? 'in_progress' : 'completed',
+  conclusion,
+})
 
 /**
  * A fake GitHub and clock. `pullAt(t, dispatches)` returns the pull request as
  * of `t` ms after the start and the number of dispatches so far; `reviewAt`
  * likewise the `review/agent` state.
  */
-function world({ pullAt, reviewAt = () => 'success' }) {
+function world({ pullAt, reviewAt = () => 'success', checksAt = () => [], statusesAt = () => [], landWhen = 'all-checks' }) {
   const w = { t: 0, requests: [], dispatches: [], dispatchTimes: [] }
   const dir = mkdtempSync(path.join(tmpdir(), 'land-test-'))
   w.log = path.join(dir, 'latency.jsonl')
@@ -61,10 +71,14 @@ function world({ pullAt, reviewAt = () => 'success' }) {
       w.dispatchTimes.push(w.t)
       return ok(null, 204)
     }
-    if (url.includes('/commits/')) return ok(status(reviewAt(w.t)))
+    if (url.includes('/check-runs')) {
+      const check_runs = checksAt(w.t)
+      return ok({ total_count: check_runs.length, check_runs })
+    }
+    if (url.includes('/commits/')) return ok(status(reviewAt(w.t), statusesAt(w.t)))
     return ok(pullAt(w.t, w.dispatches.length))
   }
-  const ctx = createLandContext({ repo: REPO, landing: true, fetch, getToken: async () => 't' })
+  const ctx = createLandContext({ repo: REPO, landing: true, landWhen, fetch, getToken: async () => 't' })
   w.run = (opts = {}) =>
     landPullRequest({
       number: 7,
@@ -104,7 +118,7 @@ describe('OQ-50/AC-1: land.mjs waits for landable, triggers the sweep, waits for
   })
 
   it('never builds a merge request: no exported builder produces one and the allowlist refuses one', () => {
-    const built = [buildGetPullRequest(REPO, 7), buildGetCommitStatus(REPO, SHA), buildDispatchSweep(REPO, 7)]
+    const built = [buildGetPullRequest(REPO, 7), buildGetCommitStatus(REPO, SHA), buildGetCheckRuns(REPO, SHA), buildDispatchSweep(REPO, 7)]
     for (const request of built) {
       expect(request.method).not.toBe('PUT')
       expect(request.url).not.toMatch(/\/merge(\?|$)/)
@@ -143,9 +157,9 @@ describe('OQ-50/AC-2: each reason a pull request cannot land is its own status',
     expect(w.dispatches).toEqual([])
     w.cleanup()
   })
-  it('mergeable_state blocked past its bound', async () => {
+  it('mergeable_state blocked past its bound, with the checks landWhen names green', async () => {
     const w = world({ pullAt: () => pull({ mergeable_state: 'blocked' }) })
-    expect((await w.run()).status).toBe('blocked')
+    expect((await w.run()).status).toBe('github-blocked')
     expect(w.t).toBeGreaterThanOrEqual(BLOCKED_BOUND_MS)
     expect(w.dispatches).toEqual([])
     w.cleanup()
@@ -276,7 +290,7 @@ describe('OQ-50/AC-4: land.mjs sends only the sweep dispatch', () => {
 
   it('refuses any other workflow, any other ref or inputs, and any other write, before the network', async () => {
     let calls = 0
-    const ctx = createLandContext({ repo: REPO, landing: true, fetch: async () => { calls++; return { ok: true, status: 204 } }, getToken: async () => 't' })
+    const ctx = createLandContext({ repo: REPO, landing: true, landWhen: 'all-checks', fetch: async () => { calls++; return { ok: true, status: 204 } }, getToken: async () => 't' })
     const refused = [
       { method: 'POST', url: dispatchUrl('ci.yml'), body: { ref: 'main' } },
       { method: 'POST', url: dispatchUrl('review-gate.yml'), body: { ref: 'main' } },
@@ -305,13 +319,14 @@ describe('OQ-50/AC-4: land.mjs sends only the sweep dispatch', () => {
     expect(calls).toBe(0)
   })
 
-  it('permits the three requests it builds', async () => {
+  it('permits the four requests it builds', async () => {
     let calls = 0
-    const ctx = createLandContext({ repo: REPO, landing: true, fetch: async () => { calls++; return { ok: true, status: 204, json: async () => ({}) } }, getToken: async () => 't' })
+    const ctx = createLandContext({ repo: REPO, landing: true, landWhen: 'all-checks', fetch: async () => { calls++; return { ok: true, status: 204, json: async () => ({}) } }, getToken: async () => 't' })
     await ctx.send(buildGetPullRequest(REPO, 7))
     await ctx.send(buildGetCommitStatus(REPO, SHA))
+    await ctx.send(buildGetCheckRuns(REPO, SHA))
     await ctx.send(buildDispatchSweep(REPO, 7))
-    expect(calls).toBe(3)
+    expect(calls).toBe(4)
   })
 
   it('github.mjs is unchanged in what it refuses: it still refuses the sweep dispatch', async () => {
@@ -409,7 +424,6 @@ describe('ST-23: land in one look, and not at all when landing is off', () => {
       ['review-pending', () => pull(), () => 'pending'],
       ['review-pending', () => pull(), () => 'absent'],
       ['gate-lag', () => pull(), () => 'failure', { passedAt: SHA }],
-      ['blocked', () => pull({ mergeable_state: 'blocked' })],
       ['unknown', () => pull({ mergeable_state: 'unknown' })],
     ]
     for (const [reason, pullAt, reviewAt, extra] of cases) {
@@ -478,14 +492,14 @@ describe('ST-23: land in one look, and not at all when landing is off', () => {
   it('ST-23/AC-3: createLandContext requires landing to be a boolean', () => {
     expect(() => createLandContext({ repo: REPO })).toThrow(/landing must be true or false/)
     expect(() => createLandContext({ repo: REPO, landing: 'yes' })).toThrow(/landing must be true or false/)
-    expect(createLandContext({ repo: REPO, landing: false }).landing).toBe(false)
+    expect(createLandContext({ repo: REPO, landing: false, landWhen: 'all-checks' }).landing).toBe(false)
   })
 
   it('ST-23/AC-3: with landing false, either mode returns landing-off and sends nothing', async () => {
     for (const once of [false, true]) {
       const w = world({ pullAt: () => pull() })
       let sent = 0
-      const ctx = createLandContext({ repo: REPO, landing: false, fetch: async () => { sent++; return { ok: true, status: 200, json: async () => pull() } }, getToken: async () => { sent++; return 't' } })
+      const ctx = createLandContext({ repo: REPO, landing: false, landWhen: 'all-checks', fetch: async () => { sent++; return { ok: true, status: 200, json: async () => pull() } }, getToken: async () => { sent++; return 't' } })
       const result = await w.run({ ctx, once })
       expect(result).toMatchObject({ status: 'landing-off', pr: 7, triggers: 0 })
       expect(sent).toBe(0)
@@ -507,7 +521,7 @@ describe('ST-23: land in one look, and not at all when landing is off', () => {
   it('ST-23/AC-4: each once call appends its line to the latency log, whatever it returns', async () => {
     const w = world({ pullAt: (t, d) => pull({ merged: d > 0 && t >= 2 * POLL_INTERVAL_MS, mergeable_state: 'clean' }) })
     await w.run({ once: true })
-    const waiting = world({ pullAt: () => pull({ mergeable_state: 'blocked' }) })
+    const waiting = world({ pullAt: () => pull(), reviewAt: () => 'pending' })
     await waiting.run({ once: true, latencyLog: w.log })
     const pending = world({ pullAt: () => pull() })
     await pending.run({ once: true, latencyLog: w.log })
@@ -518,5 +532,148 @@ describe('ST-23: land in one look, and not at all when landing is off', () => {
     expect(rows[2].triggeredAt).not.toBeNull()
     expect(readFileSync(w.log, 'utf8').trim().split('\n')).toHaveLength(3)
     w.cleanup(); waiting.cleanup(); pending.cleanup()
+  })
+})
+
+describe('ST-24: land when the checks landWhen names are green', () => {
+  const CASES = ['clean', 'unstable', 'has_hooks', 'blocked', 'dirty', 'unknown', 'behind']
+
+  it('ST-24/AC-2: the head check runs are one more read, on the allowlist and nothing else', () => {
+    expect(buildGetCheckRuns(REPO, SHA)).toEqual({ method: 'GET', url: `${BASE}/commits/${SHA}/check-runs?per_page=100` })
+    expect(() => assertAllowedRequest(REPO, buildGetCheckRuns(REPO, SHA))).not.toThrow()
+    for (const url of [
+      `${BASE}/commits/${SHA}/check-runs`,
+      `${BASE}/commits/${SHA}/check-runs?per_page=100&page=2`,
+      `${BASE}/commits/${SHA}/check-suites?per_page=100`,
+      `${BASE}/check-runs/12`,
+    ]) {
+      expect(() => assertAllowedRequest(REPO, { method: 'GET', url })).toThrow(/refusing/)
+    }
+    expect(() => assertAllowedRequest(REPO, { method: 'POST', url: buildGetCheckRuns(REPO, SHA).url })).toThrow(/refusing/)
+  })
+
+  it('ST-24/AC-2: createLandContext requires landWhen', () => {
+    expect(() => createLandContext({ repo: REPO, landing: true })).toThrow(/landWhen must be/)
+    expect(() => createLandContext({ repo: REPO, landing: true, landWhen: [] })).toThrow(/landWhen must be/)
+    expect(createLandContext({ repo: REPO, landing: true, landWhen: ['test'] }).landWhen).toEqual(['test'])
+  })
+
+  it('ST-24/AC-4: with the checks green, each mergeable_state lands, is a conflict, is github-blocked, or is waited for', async () => {
+    const expected = {
+      clean: 'merged', unstable: 'merged', has_hooks: 'merged', blocked: 'github-blocked', dirty: 'conflict', unknown: 'unknown', behind: 'unknown',
+    }
+    for (const state of CASES) {
+      const w = world({
+        pullAt: (t, d) => pull({ mergeable_state: state, merged: d > 0 }),
+        checksAt: () => [run('test', 'success')],
+      })
+      const result = await w.run()
+      expect(result.status, state).toBe(expected[state])
+      expect(w.dispatches.length > 0, state).toBe(expected[state] === 'merged')
+      w.cleanup()
+    }
+  })
+
+  it('ST-24/AC-4: with once, each mergeable_state with the checks green lands, is a conflict, or is github-blocked rather than not-landable', async () => {
+    const expected = {
+      clean: 'merged', unstable: 'merged', has_hooks: 'merged', blocked: 'github-blocked', dirty: 'conflict', unknown: 'not-landable', behind: 'not-landable',
+    }
+    for (const state of CASES) {
+      const w = world({
+        pullAt: (t, d) => pull({ mergeable_state: state, merged: d > 0 }),
+        checksAt: () => [run('test', 'success')],
+      })
+      const result = await w.run({ once: true })
+      expect(result.status, state).toBe(expected[state])
+      if (state === 'unknown') expect(result.reason).toBe('unknown')
+      expect(w.dispatches.length > 0, state).toBe(expected[state] === 'merged')
+      w.cleanup()
+    }
+  })
+
+  it('ST-24/AC-2: github-blocked starts no runway, and a later call may try again', async () => {
+    const w = world({ pullAt: () => pull({ mergeable_state: 'blocked' }), checksAt: () => [run('test', 'success')] })
+    expect(await w.run({ once: true })).toMatchObject({ status: 'github-blocked', triggers: 0 })
+    expect(w.dispatches).toEqual([])
+    const later = world({
+      pullAt: (t, d) => pull({ mergeable_state: t < 60_000 ? 'blocked' : 'clean', merged: d > 0 }),
+      checksAt: () => [run('test', 'success')],
+    })
+    expect(await later.run()).toMatchObject({ status: 'merged', triggers: 1 })
+    w.cleanup()
+    later.cleanup()
+  })
+
+  it('ST-24/AC-2: mergeable_state clean no longer lands a head whose named checks are not green', async () => {
+    const failing = world({ pullAt: () => pull({ mergeable_state: 'clean' }), checksAt: () => [run('test', 'failure')] })
+    expect(await failing.run()).toMatchObject({ status: 'checks-failed', failing: ['test'], triggers: 0 })
+    const pending = world({ pullAt: () => pull({ mergeable_state: 'clean' }), checksAt: () => [run('test', null)] })
+    expect((await pending.run()).status).toBe('checks-pending')
+    expect(pending.t).toBeGreaterThanOrEqual(CHECKS_PENDING_BOUND_MS)
+    const once = world({ pullAt: () => pull({ mergeable_state: 'clean' }), checksAt: () => [run('test', null)] })
+    expect(await once.run({ once: true })).toMatchObject({ status: 'not-landable', reason: 'checks-pending', waiting: ['test'] })
+    for (const w of [failing, pending, once]) {
+      expect(w.dispatches).toEqual([])
+      w.cleanup()
+    }
+  })
+
+  it('ST-24/AC-2: a pending check that finishes inside its bound is waited through', async () => {
+    const w = world({
+      pullAt: (t, d) => pull({ merged: d > 0 }),
+      checksAt: (t) => [run('test', t < 60_000 ? null : 'success')],
+    })
+    expect(await w.run()).toMatchObject({ status: 'merged', triggers: 1 })
+    w.cleanup()
+  })
+
+  it('ST-24/AC-2: with a landWhen list, only the named checks count', async () => {
+    const w = world({
+      landWhen: ['test'],
+      pullAt: (t, d) => pull({ mergeable_state: 'unstable', merged: d > 0 }),
+      checksAt: () => [run('test', 'success'), run('lint', 'failure')],
+    })
+    expect(await w.run()).toMatchObject({ status: 'merged', triggers: 1 })
+    w.cleanup()
+  })
+
+  it('ST-24/AC-2: review/agent, the label and a draft are still required, and the checks are not read before them', async () => {
+    const cases = [
+      ['review-failed', () => pull(), () => 'failure'],
+      ['draft', () => pull({ draft: true })],
+      ['review-blocked', () => pull({ labels: [{ name: 'review-blocked' }] })],
+      ['conflict', () => pull({ mergeable_state: 'dirty' })],
+    ]
+    for (const [expected, pullAt, reviewAt] of cases) {
+      const w = world({ pullAt, reviewAt, checksAt: () => [run('test', 'success')] })
+      expect((await w.run()).status).toBe(expected)
+      expect(w.requests.some((r) => r.url.includes('/check-runs'))).toBe(false)
+      expect(w.dispatches).toEqual([])
+      w.cleanup()
+    }
+    const pending = world({ pullAt: () => pull(), reviewAt: () => 'pending', checksAt: () => [run('test', 'success')] })
+    expect((await pending.run({ once: true })).reason).toBe('review-pending')
+    expect(pending.requests.some((r) => r.url.includes('/check-runs'))).toBe(false)
+    pending.cleanup()
+  })
+
+  it('ST-24/AC-2: a head whose check runs do not all fit in one page is not read as green', async () => {
+    const w = world({ pullAt: () => pull() })
+    const ctx = createLandContext({
+      repo: REPO,
+      landing: true,
+      landWhen: 'all-checks',
+      getToken: async () => 't',
+      fetch: async (url) => ({
+        ok: true,
+        status: 200,
+        json: async () => {
+          if (url.includes('/check-runs')) return { total_count: 150, check_runs: [run('a', 'success')] }
+          return url.includes('/commits/') ? status('success') : pull()
+        },
+      }),
+    })
+    await expect(w.run({ ctx })).rejects.toThrow(/150 check runs/)
+    w.cleanup()
   })
 })

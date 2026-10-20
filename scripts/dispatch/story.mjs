@@ -422,7 +422,7 @@ async function main(argv) {
     const at = args.indexOf(name)
     return at === -1 ? undefined : args.splice(at, 2)[1]
   }
-  const { repo: settingsRepo, storyPrefix, land: landing } = await readSettings(process.cwd())
+  const { repo: settingsRepo, storyPrefix, land: landing, landWhen } = await readSettings(process.cwd())
   const repoFlag = take('--repo')
   const repo = repoFlag ?? settingsRepo
   const pr = take('--pr')
@@ -436,7 +436,7 @@ async function main(argv) {
     prNumber: pr === undefined ? undefined : Number(pr),
     ctx: createContext({ repo }),
     ciCtx: createCiContext({ repo }),
-    landCtx: createLandContext({ repo, landing }),
+    landCtx: createLandContext({ repo, landing, landWhen }),
   })
   console.log(JSON.stringify(result, null, 2))
   if (result.status !== 'merged') process.exitCode = 1

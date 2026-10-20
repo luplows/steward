@@ -343,9 +343,25 @@ it:
   it looks once instead: a pull request not landable yet is returned as `not-landable`, and a
   landable one has the runway requested once and is polled for its merge for at most
   `SWEEP_RUN_BOUND_MS`, returning `merged` or `sweep-pending`. With the settings' `land` false it
-  sends nothing and returns `landing-off`. ST-24 changes it to landing on the checks `landWhen`
-  names (Part 3, "Decided so far"). The runway was a `*/15` schedule until 2026-09-18, which
+  sends nothing and returns `landing-off`. The runway was a `*/15` schedule until 2026-09-18, which
   GitHub delivered at roughly 5% of that rate (**Watchdog**, below).
+- **It lands when the checks the settings' `landWhen` names are green on the head**, as well as
+  `review/agent`, in the pilot and in the runway alike, rather than on `mergeable_state` `clean`,
+  which on a repository without branch protection says nothing about which checks are required
+  (Part 3, "Decided so far"). Both decide with `checksGreen`
+  (`scripts/land/checks-green.mjs`), which reads the latest check run of each name and the latest
+  status of each context. It reads a check run as green when its conclusion is `success`,
+  `neutral` or `skipped`, and a status when its state is `success`. It reads anything unfinished
+  as waiting and anything else as failing, and it never reads `review/agent`, which each side
+  checks itself. With `"all-checks"` every other check on the head must be green; with a list,
+  each named check must be present and green, and one absent is waiting. A `mergeable_state` of
+  `dirty` is a conflict. One of `blocked` with the named checks green means GitHub requires
+  something `landWhen` does not name: the pilot does not request the runway and returns
+  `github-blocked` (also with `once`, in place of `not-landable`), which a later call may try again,
+  and the runway skips it. `clean`, `unstable` and `has_hooks` are the states GitHub would merge;
+  any other state, `unknown` and `behind` among them, is waited through by the pilot and skipped
+  by the runway. A failing check is `checks-failed`, and one still unfinished past
+  `CHECKS_PENDING_BOUND_MS` is `checks-pending`.
 - **It lands only pull requests whose author the gate honours** (`HONOURED_ASSOCIATIONS`,
   `scripts/land/check-author.mjs`), because a landed story is work a coder will take (OQ-81).
   **Planned (ST-27):** it also lands one from outside the crew that a member of the crew has
@@ -364,8 +380,8 @@ it:
   landed a different one would spend the pilot's requests and land pull requests nobody asked it
   to (decided 2026-09-28). The candidate choice is made in `scripts/land/select-candidates.mjs`,
   which is tested without running the workflow.
-- **Re-checks `review/agent` directly** rather than trusting `clean`, because a required check
-  vanished from protection once. Prevention, not detection.
+- **Re-checks `review/agent` directly** rather than trusting branch protection to require it,
+  because a required check vanished from protection once. Prevention, not detection.
 - **`--match-head-commit`**, which refuses the merge if anything was pushed between the check and
   the call.
 - Circuit breaker at five `review-blocked` PRs, with exemptions for `breaker-override` and
@@ -711,7 +727,8 @@ session", and `docs/controller.md` state the rule; this section is its rationale
 Why this is safe enough:
 
 - **The pilot decides nothing a script would not.** It requests landing only once `review/agent`
-  is `success` and `mergeable_state` is `clean` on the head, and the runway checks both again. The
+  is `success` and the checks `landWhen` names are green on the head, and the runway checks both
+  again. The
   controller can choose *when* to land, never *whether* a head passed: the verdict is the
   reviewer's, and `review/agent` is posted by `review-gate.yml`.
 - **It is a rule, not a mechanism.** The controller holds the credential of whoever runs it, as
@@ -1142,7 +1159,10 @@ in a headless session".
 
 - **`mergeable_state`**: `clean` (all *required* checks green), `blocked` (required check
   failing/pending), `unstable` (only non-required), `dirty`, `behind`, `unknown`. The
-  `blocked`/`unstable` split is the only way to tell from outside whether a check is required.
+  `blocked`/`unstable` split is the only way to tell from outside whether a check is required,
+  and on a repository without branch protection nothing is required, so `clean` says nothing
+  about any check. Steward's own rule for the checks is `landWhen` ("Merging", above); it uses
+  `mergeable_state` only for a conflict, for `blocked` and for `unknown`.
 - **Computed asynchronously** — never merge twice in one pass.
 - **Recomputed after a merge, so other open PRs can read `unknown` for a while.** Observed in
   tower-workshop-paths on 2026-09-24: #123 merged at 02:13:42Z, and a sweep run at 02:17:14Z
@@ -1362,7 +1382,7 @@ use, as the review side took the engine's reviewer, that part is described in Pa
 5. Dispatcher spawns the reviewer, which returns a structured verdict.
 6. Dispatcher posts the verdict as a marker comment, and `review-gate.yml` derives
    `review/agent` = `success` on the head SHA from it.
-7. The landing sweep merges it (squash) once `mergeable_state` is `clean`. The crew
+7. The landing sweep merges it (squash) once the checks `landWhen` names are green. The crew
    runs the runway by hand, or the crew or the controller (**The controller**, Part 1) runs the
    pilot, `scripts/dispatch/land.mjs` (OQ-50), which waits until the PR is landable, requests
    landing and waits for the merge. `story.mjs` calls `land.mjs`.
@@ -1867,8 +1887,9 @@ shortened where it is long, so that it can be found there with its date.
     installed (`scripts/dispatch/review.mjs`, `.claude/prompts/reviewer.md`).
   - Landing in one look, without waiting, and a project able to turn steward's landing off
     (`scripts/dispatch/land.mjs`: `landPullRequest`'s `once` option, and `landing` on its context).
-  - **Planned (ST-24):** landing when the checks `landWhen` names are green, in the lander and the
-    sweep, rather than on `mergeable_state` `clean`.
+  - Landing when the checks `landWhen` names are green, in the pilot and the runway, rather than
+    on `mergeable_state` `clean` (`scripts/land/checks-green.mjs`, `scripts/dispatch/land.mjs`,
+    `.github/workflows/land-approved.yml`).
   - **Planned (ST-25):** the review-and-land pass, one command per pass, started by the dispatcher
     session for now.
   - A `Unit:` line in steward's pull request template (`.github/pull_request_template.md`), a path,

@@ -17,7 +17,7 @@ with no branch protection, where GitHub's `mergeable_state` says nothing about r
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — A new module, `scripts/land/checks-green.mjs`, exports a pure function that
+- [x] **AC-1** — A new module, `scripts/land/checks-green.mjs`, exports a pure function that
       takes the head's check runs, its commit statuses and the `landWhen` setting, and returns
       `{ green: true }` or `{ green: false, waiting, failing }`, naming each check that is not
       yet finished and each that failed. It reads:
@@ -27,7 +27,7 @@ with no branch protection, where GitHub's `mergeable_state` says nothing about r
       - `review/agent` never, in either direction: the pilot and the runway check it themselves.
       With `"all-checks"`, every other check on the head must be green; with a list, each named
       check must be present and green, and one absent is waiting.
-- [ ] **AC-2** — `land.mjs` decides landability with AC-1's function, for the settings'
+- [x] **AC-2** — `land.mjs` decides landability with AC-1's function, for the settings'
       `landWhen`, in place of requiring `mergeable_state` to be `clean`. It still requires
       `review/agent` to be `success`, no `review-blocked` label, and not a draft. A
       `mergeable_state` of `dirty` is a conflict, as today. A `mergeable_state` of `blocked` with
@@ -36,16 +36,16 @@ with no branch protection, where GitHub's `mergeable_state` says nothing about r
       `github-blocked`, which a later call may try again. With ST-23's `once: true`, that case
       returns `github-blocked` rather than `not-landable`. Its request allowlist gains one read,
       the head's check runs (`GET /repos/<repo>/commits/<sha>/check-runs`), and nothing else.
-- [ ] **AC-3** — `land-approved.yml` decides the same way: it reads the head's check runs and
+- [x] **AC-3** — `land-approved.yml` decides the same way: it reads the head's check runs and
       statuses with `gh api`, and `landWhen` from `steward.config.json` in its checkout of `main`,
       and runs AC-1's function through a script under `scripts/land/` instead of its
       `mergeable_state != clean` test. Its "Belt and braces" check of `review/agent`, and every
       other check it makes, are unchanged.
-- [ ] **AC-4** — Tests, named `ST-24/AC-<n>`: AC-1's function for each case (all green; one
+- [x] **AC-4** — Tests, named `ST-24/AC-<n>`: AC-1's function for each case (all green; one
       waiting; one failing; a rerun whose latest run is green after a failed one; a named check
       absent; `review/agent` failing while everything else is green, which is green here); and
       `land.mjs`'s landability for each `mergeable_state` with the checks green.
-- [ ] **AC-5** — The `**Planned (ST-24)**` marker in `docs/agent-workflow-design.md` loses
+- [x] **AC-5** — The `**Planned (ST-24)**` marker in `docs/agent-workflow-design.md` loses
       `ST-24`, and "Merging" and "GitHub mechanics" are corrected wherever what was built
       differs.
 
