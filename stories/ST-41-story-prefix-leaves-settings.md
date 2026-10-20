@@ -42,9 +42,9 @@ belongs to the story convention, so it lives in a file of that convention's own.
       comment.
 - [ ] **AC-6** — `steward.config.json` and `FIXTURE_SETTINGS`
       (`scripts/dispatch/settings-fixture.mjs`) lose `storyPrefix`, and no test writes it into a
-      settings file; a test that needs another prefix writes a `stories/stories.json`.
-      `docs/settings.md` loses its `storyPrefix` row, and its copy of this repository's file and
-      its sentence on which keys steward's scripts use no longer name it.
+      settings file except AC-1's, which shows it refused; a test that needs another prefix writes a
+      `stories/stories.json`. `docs/settings.md` loses its `storyPrefix` row, and its copy of this
+      repository's file and its sentence on which keys steward's scripts use no longer name it.
 - [ ] **AC-7** — `stories/README.md` says the prefix is `stories/stories.json`'s `prefix`, and
       that a project with no story files has no such file.
 - [ ] **AC-8** — Every **Planned** marker naming ST-41 in `docs/agent-workflow-design.md` is

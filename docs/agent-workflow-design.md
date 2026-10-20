@@ -2322,14 +2322,14 @@ shortened where it is long, so that it can be found there with its date.
     `luplows/steward` in place of tower-workshop-paths'.
   - **The gate's workflows run steward from the installed package** (ST-42). Their logic becomes
     steward's commands, and the package carries the thin workflow files a project uses, which
-    install steward alone, at a pinned tag (`npx --yes github:luplows/steward#v<version> steward
-    <command>`, or an equivalent), not the project's dependencies. Steward's own workflows run the
-    same commands from its checkout, so steward runs them on itself, and a test keeps steward's own
-    files and the thin files in step except for how steward is started. Considered and not chosen:
-    the thin files running the project's `npm ci`, and steward from its `node_modules`. Steward
-    alone was chosen for fewer Actions minutes on a private repository, and because it works for a
-    project that is not Node. A project's `package.json` does not pin steward: the crew runs it
-    locally with the same `npx` form, so the version is pinned only in the workflow files and the
+    install steward alone, at a pinned tag (`npx --yes --package=github:luplows/steward#v<version>
+    steward <command>`, or an equivalent), not the project's dependencies. Steward's own workflows
+    run the same commands from its checkout, so steward runs them on itself, and a test keeps
+    steward's own files and the thin files in step except for how steward is started. Considered and
+    not chosen: the thin files running the project's `npm ci`, and steward from its `node_modules`.
+    Steward alone was chosen for fewer Actions minutes on a private repository, and because it works
+    for a project that is not Node. A project's `package.json` does not pin steward: the crew runs
+    it locally with the same `npx` form, so the version is pinned only in the workflow files and the
     commands the crew types. Whether that hurts adoption is to be revisited later (owner). A tag in
     steward's repository is never moved once cut (owner), so a pinned tag names one version for
     good. Considered and not chosen: pinning the commit the tag points at, which is safer against a
@@ -2595,12 +2595,12 @@ is still open.
   by the owner, as proposed, with the git-tag pin** (below):
   - **A Node package with a command-line entry point**, added as a development dependency of each
     project and pinned to a tagged version. To begin with it is installed straight from the
-    workflow's public repository by git tag, so no package registry account is needed; publishing
-    to npm can come later. **Revised 2026-10-19 by the owner:** a project's `package.json` does
-    not pin steward. The crew runs it with `npx --yes github:luplows/steward#v<version> steward
-    <command>`, the form the thin workflow files use, so the version is pinned only in the
-    workflow files and the commands the crew types; whether that hurts adoption is to be
-    revisited later ("Decided so far").
+    workflow's public repository by git tag, so no package registry account is needed; publishing to
+    npm can come later. **Revised 2026-10-19 by the owner:** a project's `package.json` does not pin
+    steward. The crew runs it with `npx --yes --package=github:luplows/steward#v<version> steward
+    <command>`, the form the thin workflow files use, so the version is pinned only in the workflow
+    files and the commands the crew types; whether that hurts adoption is to be revisited later
+    ("Decided so far").
   - **The loop runs from the project's own worktree, as now** (`loop.mjs --init`). Today every story
     runs the dispatch code as it is on `origin/main` (OQ-86). With a pinned dependency, that becomes
     the engine version `origin/main` pins, so a project takes a new workflow version only through

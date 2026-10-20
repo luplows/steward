@@ -3,7 +3,7 @@ id: ST-42
 title: Run the gate's logic as steward commands, and ship thin workflow files that start steward at a pinned tag
 tier: next
 kind: workflow
-depends_on: []
+depends_on: [ST-24]
 model: null
 blocked: null
 ---
@@ -18,16 +18,17 @@ nothing of its own to run the gate.
 ## Acceptance criteria
 
 - [ ] **AC-1** — Everything `review-gate.yml` and `land-approved.yml` do beyond triggers,
-      permissions, concurrency and environment is a steward command in `cli.mjs`'s `COMMANDS`:
-      one for each script they run today (`scripts/land/apply-review-blocked.mjs`,
+      permissions, concurrency and environment is a steward command in `cli.mjs`'s `COMMANDS`: one
+      for each script they run today (`scripts/land/apply-review-blocked.mjs`,
       `select-candidates.mjs`, `check-author.mjs` and `delete-merged-heads.mjs`), and one for each
       piece of inline shell they run today (the `pending` job's status post, the `verdict` job's
       marker reading and status post, and the `land` job's circuit breaker, candidate loop and
       merge), or one command taking over several of these. Each command keeps what its part does
-      today: the honoured associations, the marker pattern, the circuit breaker's limit of five
-      and its two exemptions, `mergeable_state` `clean`, the direct re-check of `review/agent`,
-      `--squash` and `--match-head-commit`, and deleting merged heads without failing the run.
-      `cli.test.mjs` shows each new command is in `COMMANDS`.
+      when this story is built: the honoured associations, the marker pattern, the circuit breaker's
+      limit of five and its two exemptions, the landing rule as ST-24 leaves it (the checks
+      `landWhen` names, in place of `mergeable_state` `clean`), the direct re-check of
+      `review/agent`, `--squash` and `--match-head-commit`, and deleting merged heads without
+      failing the run. `cli.test.mjs` shows each new command is in `COMMANDS`.
 - [ ] **AC-2** — Each test that reads `review-gate.yml` or `land-approved.yml` to check that
       logic (in `ci.test.mjs`, `github.test.mjs`, `review.test.mjs`,
       `scripts/land/*.test.mjs` and `scripts/report/review-verdicts.test.mjs`) checks the same
@@ -38,14 +39,14 @@ nothing of its own to run the gate.
       no other logic. Their file names and their `name:`s ("Review gate", "Land approved PRs") are
       unchanged, since `land.mjs` dispatches `land-approved.yml` by file name (`WORKFLOW`) and
       `ci.yml`'s `workflow_run` names "Land approved PRs".
-- [ ] **AC-4** — The package carries the thin workflow files a project uses: a `review-gate.yml`
-      and a `land-approved.yml`, in one directory of the package, which ST-44's `init` copies
-      from. Each has the same triggers, permissions, concurrency, jobs and environment as
-      steward's own, and runs the same commands, starting steward from the package installed
-      alone at a pinned tag (`npx --yes github:luplows/steward#v<version> steward
-      <command>`, or an equivalent that installs steward and nothing of the project's). The tag
-      is a placeholder in the file, which `init` fills (ST-44). Neither file checks out the
-      project to install its dependencies or runs the project's `npm ci`.
+- [ ] **AC-4** — The package carries the thin workflow files a project uses: a `review-gate.yml` and
+      a `land-approved.yml`, in one directory of the package, which ST-44's `init` copies from. Each
+      has the same triggers, permissions, concurrency, jobs and environment as steward's own, and
+      runs the same commands, starting steward from the package installed alone at a pinned tag
+      (`npx --yes --package=github:luplows/steward#v<version> steward <command>`, or an equivalent
+      that installs steward and nothing of the project's). The tag is a placeholder in the file,
+      which `init` fills (ST-44). Neither file checks out the project to install its dependencies or
+      runs the project's `npm ci`.
 - [ ] **AC-5** — A test fails when steward's own workflow files and the thin files differ in
       anything but how steward is started: the steps or lines that start it from the checkout in
       one and from the pinned package in the other. It reads the four files from the repository,
@@ -82,11 +83,11 @@ nothing of its own to run the gate.
   pinned tag was chosen over running the project's `npm ci`, for fewer Actions minutes on a private
   repository and because it works for a project that is not Node. A project's `package.json` does
   not pin steward: the crew runs it locally with the same `npx --yes
-  github:luplows/steward#v<version> steward <command>` form, so the version is pinned only in the
-  workflow files and the commands the crew types. Whether that hurts adoption is to be revisited
-  later (owner). A tag in steward's repository is never moved once cut (owner), so a pinned tag
-  names one version for good. Considered and not chosen: pinning the commit the tag points at, which
-  is safer against a moved tag but harder to read.
+  --package=github:luplows/steward#v<version> steward <command>` form, so the version is pinned only
+  in the workflow files and the commands the crew types. Whether that hurts adoption is to be
+  revisited later (owner). A tag in steward's repository is never moved once cut (owner), so a
+  pinned tag names one version for good. Considered and not chosen: pinning the commit the tag
+  points at, which is safer against a moved tag but harder to read.
 - Design doc, Part 3, R1 (the logic of `review-gate.yml` and `land-approved.yml` moves to steward;
   thin workflow files call it) and R2 ("the triggers and permissions, then one step running the
   package's command").
@@ -106,6 +107,9 @@ nothing of its own to run the gate.
   `steward` is `scripts/dispatch/cli.mjs`, `version` `0.0.0`. `origin` has no tags
   (`git ls-remote --tags origin`, 2026-10-19).
 - `scripts/dispatch/land.mjs`, line 49: `const WORKFLOW = 'land-approved.yml'`.
+- ST-24 replaces the runway's and the pilot's `mergeable_state` `clean` rule with the checks
+  `landWhen` names, in `land-approved.yml` and `land.mjs`. This story depends on it, so the rule
+  it moves into a command is ST-24's.
 - ST-16 (AC-4, AC-5) and ST-17 change `review-gate.yml` and `apply-review-blocked.mjs`, citing
   line numbers this story will move. Whichever lands second carries the other's change into
   where the logic then lives.

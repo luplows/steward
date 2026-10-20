@@ -95,11 +95,11 @@ afternoon of copying files from steward's repository. It runs no model.
 - [ ] **AC-12** — It exits 0 when it finished, whatever it left alone or could not set, and
       non-zero, having written nothing more, when a request to GitHub fails other than as AC-10
       describes, when it refuses under AC-2, or when the checkout is not a git repository.
-- [ ] **AC-13** — `README.md`'s "Steward runs on this repository only" is replaced by how to set
-      up another project with `init`, and its "Setup" says how the crew runs steward in a project:
-      `npx --yes github:luplows/steward#v<version> steward <command>`, the form the workflows use.
-      `docs/settings.md`'s "What `init` will write" column says what `init` writes for each key,
-      and its sentence "`init` is not built yet", with its **Planned** marker, goes.
+- [ ] **AC-13** — `README.md`'s "Steward runs on this repository only" is replaced by how to set up
+      another project with `init`, and its "Setup" says how the crew runs steward in a project: `npx
+      --yes --package=github:luplows/steward#v<version> steward <command>`, the form the workflows
+      use. `docs/settings.md`'s "What `init` will write" column says what `init` writes for each
+      key, and its sentence "`init` is not built yet", with its **Planned** marker, goes.
 - [ ] **AC-14** — Every **Planned** marker naming ST-44 in `docs/agent-workflow-design.md` is
       resolved, as its "Reading this document" note says.
 
@@ -133,8 +133,8 @@ afternoon of copying files from steward's repository. It runs no model.
   its own recent history, are `init`'s. `inspect` takes `--since-days`, default 7 (its AC-1).
 - `docs/outline.md`, "Land", "What installing steward sets up", and "Settings": steward's code
   holds no default for any key, and `init` writes a starting value for each.
-- `docs/settings.md`: the keys, and "Not decided" for `repo`, `land` and `unitLinks`, and "not
-  decided" for `rulesFile`.
+- `docs/settings.md`: the keys, and its "What `init` will write" column, which gives the values
+  decided on 2026-10-19, and says that `init` is not built yet.
 - `scripts/dispatch/machine-settings.mjs`: `machineSettingsPath` and `readMachineSettings`;
   `docs/machine-settings.md`, "An example".
 - `.github/pull_request_template.md`: the `Unit:` line, then What changed, Verification and Docs
