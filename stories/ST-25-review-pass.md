@@ -3,7 +3,7 @@ id: ST-25
 title: A rotation of the review side, started as one command
 tier: next
 kind: workflow
-depends_on: [ST-21, ST-22, ST-23, ST-24, ST-29, ST-37]
+depends_on: [ST-21, ST-22, ST-23, ST-24, ST-29, ST-37, ST-45]
 model: sonnet
 blocked: null
 ---
@@ -26,11 +26,11 @@ as it is on `main`.
       (`loop.mjs`'s `requireOwnWorktree`), then brings its worktree to `origin/main`, detached,
       and stops with status `dirty`, doing nothing more, if the worktree has anything uncommitted
       (`loop.mjs`'s `updateCheckout`). It reads the settings after the update.
-- [ ] **AC-3** — Step 2: it lists the open pull requests against `main` once. Step 3: oldest first
-      (lowest number), it reviews each that is not a draft, whose author the gate honours
-      (`HONOURED_ASSOCIATIONS`), and that has no honoured verdict at its current head, with
-      `reviewPullRequest`, stopping once it has reviewed `--max-reviews` of them. Every pull
-      request is a candidate whoever opened it.
+- [ ] **AC-3** — Step 2: it lists the open pull requests against `main` or a release branch (ST-45,
+      AC-1) once. Step 3: oldest first (lowest number), it reviews each that is not a draft, whose
+      author the gate honours (`HONOURED_ASSOCIATIONS`), and that has no honoured verdict at its
+      current head, with `reviewPullRequest`, stopping once it has reviewed `--max-reviews` of them.
+      Every pull request is a candidate whoever opened it.
 - [ ] **AC-4** — Step 4: when the settings' `land` is true, it then reads each pull request from
       the list again and, one at a time, calls `landPullRequest` with `once: true` (ST-23) for
       each whose current head has an honoured `pass` or `pass-with-observations` verdict,

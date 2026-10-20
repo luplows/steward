@@ -3,7 +3,7 @@ id: ST-40
 title: Make the reviewer's prompt work in any project, and name the project's repository in both prompts
 tier: next
 kind: workflow
-depends_on: []
+depends_on: [ST-45]
 model: null
 blocked: "Built by hand: changes .claude/prompts/reviewer.md and coder.md, which a spawned coder session cannot edit (docs/agent-workflow-design.md, A spawned session cannot edit .claude/prompts/)"
 ---
@@ -103,6 +103,9 @@ where it runs, and reviewed against my checklist alone.
 - `scripts/dispatch/settings.mjs`: `REPO_RE`, and the validation of `rulesFile`.
 - Design doc, Part 3, R1: the prompts' project-specific lines "become a `{{REPO}}` slot and a
   project section the project supplies".
+- ST-45 changes `reviewer.md` and `invocation.mjs` too, giving the prompt the pull request's base
+  as `{{BASE_BRANCH}}`, and moving the line numbers AC-5 gives at `950137c`. This story depends
+  on it.
 
 ## Open questions
 
