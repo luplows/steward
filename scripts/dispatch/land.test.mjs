@@ -676,4 +676,27 @@ describe('ST-24: land when the checks landWhen names are green', () => {
     await expect(w.run({ ctx })).rejects.toThrow(/150 check runs/)
     w.cleanup()
   })
+
+  it('ST-24/AC-2: a head with more statuses than one page returns is not read as green', async () => {
+    const w = world({ pullAt: () => pull() })
+    const page = Array.from({ length: 30 }, (_, i) => ({ id: i + 1, context: `ci/${i}`, state: 'success' }))
+    const ctx = createLandContext({
+      repo: REPO,
+      landing: true,
+      landWhen: 'all-checks',
+      getToken: async () => 't',
+      fetch: async (url) => ({
+        ok: true,
+        status: 200,
+        json: async () => {
+          if (url.includes('/check-runs')) return { total_count: 0, check_runs: [] }
+          if (url.includes('/commits/')) return { total_count: 45, statuses: [{ id: 99, context: 'review/agent', state: 'success' }, ...page] }
+          return pull()
+        },
+      }),
+    })
+    await expect(w.run({ ctx })).rejects.toThrow(/45 statuses and only 31 were returned/)
+    expect(w.dispatches).toEqual([])
+    w.cleanup()
+  })
 })

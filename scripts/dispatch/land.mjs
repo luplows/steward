@@ -5,9 +5,12 @@
  * only thing that merges; this module never does. Its one write is a
  * `workflow_dispatch` of that workflow on `main`, whose one input names this pull request.
  *
- * Landable means: not a draft, no `review-blocked` label, `mergeable_state`
- * `clean`, and `review/agent` = `success` on the head SHA. The sweep re-checks
- * every one of those itself; this only decides when to ask it to.
+ * Landable means: not a draft, no `review-blocked` label, `review/agent` = `success` on the head
+ * SHA, the checks the settings' `landWhen` names green on the head (read with `checksGreen`,
+ * `scripts/land/checks-green.mjs`), and a `mergeable_state` GitHub would merge in
+ * (`MERGEABLE_STATES` there). A `dirty` one is a conflict; a `blocked` one with those checks
+ * green is `github-blocked`, and `unknown` (or any state not named) is waited for. The sweep
+ * re-checks the same itself with the same function; this only decides when to ask it to.
  *
  * Every reason a pull request cannot become landable is a distinct `status` on
  * the result rather than an indefinite wait. `unknown` is the exception: GitHub
@@ -197,13 +200,21 @@ function reviewState(json) {
   return (json.statuses ?? []).find((s) => s.context === 'review/agent')?.state ?? 'absent'
 }
 
-/** The checks `landWhen` names, read from the head's commit statuses and check runs (ST-24). */
+/**
+ * The checks `landWhen` names, read from the head's commit statuses and check runs (ST-24). A
+ * response with fewer statuses or check runs than it counts is refused rather than read as green:
+ * the rest could hold a failure, which the sweep, reading every page, would see.
+ */
 function readChecks(statusJson, checkRunsJson, landWhen) {
+  const statuses = statusJson.statuses ?? []
+  if (statusJson.total_count > statuses.length) {
+    throw new Error(`the head has ${statusJson.total_count} statuses and only ${statuses.length} were returned`)
+  }
   const checkRuns = checkRunsJson.check_runs ?? []
   if (checkRunsJson.total_count > checkRuns.length) {
     throw new Error(`the head has ${checkRunsJson.total_count} check runs and only ${checkRuns.length} were returned`)
   }
-  return checksGreen({ checkRuns, statuses: statusJson.statuses ?? [], landWhen })
+  return checksGreen({ checkRuns, statuses, landWhen })
 }
 
 /**
