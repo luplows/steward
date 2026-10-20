@@ -1210,7 +1210,7 @@ in a headless session".
   `workflow_run` of `Land approved PRs`, and skips unless the runway moved `main`
   (`github.event.workflow_run.head_sha != github.sha`), so a runway run that landed nothing costs
   no runner (OQ-124). The runway gained no permission, token or secret for that (decided
-  2026-10-08 by the owner; see "Portability", "Decided so far"). **Planned (ST-24):** it gains
+  2026-10-08 by the owner; see "Portability", "Decided so far"). Later it gained
   `checks: read`, to read the head's check runs for `landWhen` (Part 3, "Decided so far", "The
   runway reads the head's check runs, with `checks: read`").
 - **Converting a PR to draft is GraphQL only.** REST's "Update a pull request" takes `title`,
@@ -2490,7 +2490,7 @@ shortened where it is long, so that it can be found there with its date.
   whole review; the planning session pushing `v0.1.0` on the crew's word; and the crew tagging by
   hand.
 - **The runway reads the head's check runs, with `checks: read`** (decided 2026-10-20 by the owner,
-  with the planning session; **Planned (ST-24)**). ST-24 has the runway decide whether the checks
+  with the planning session). ST-24 has the runway decide whether the checks
   `landWhen` names are green from the head's check runs and commit statuses, and CI's `test` is a
   check run, not a status. Its coder found that `land-approved.yml`'s `permissions:` (`contents:
   write`, `pull-requests: write`, `statuses: read`) grant no `checks` scope. On this repository that

@@ -37,6 +37,8 @@ permissions:
   contents: write
   pull-requests: write
   statuses: read
+  # For reading the head's check runs (scripts/land/checks-green.mjs, ST-24); nothing else.
+  checks: read
 
 # Never two sweeps at once: both would read the same pre-merge state.
 concurrency:

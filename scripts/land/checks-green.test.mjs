@@ -203,10 +203,11 @@ describe('ST-24/AC-3: land-approved.yml calls it in place of the mergeable_state
     expect(merge).toBeGreaterThan(verdict)
   })
 
-  it('ST-24/AC-3: it takes no new permission', () => {
+  it('ST-24/AC-3a: its permissions are the three it had and checks: read, with a comment saying why', () => {
     const permissions = WORKFLOW.slice(WORKFLOW.indexOf('\npermissions:'), WORKFLOW.indexOf('\n# Never two sweeps'))
     expect(permissions.split('\n').filter((line) => /^\s+\w[\w-]*: /.test(line)).map((l) => l.trim()))
-      .toEqual(['contents: write', 'pull-requests: write', 'statuses: read'])
+      .toEqual(['contents: write', 'pull-requests: write', 'statuses: read', 'checks: read'])
+    expect(permissions).toMatch(/# For reading the head's check runs[^\n]*\n\s+checks: read/)
   })
 
   it('ST-24/AC-3: steward.config.json has a landWhen the function accepts', async () => {
