@@ -502,6 +502,34 @@ describe('OQ-69/AC-5: the reviewer runs in a clean checkout that is not the code
   }, REVIEW_TEST_TIMEOUT)
 })
 
+describe('ST-39/AC-1: the fetch before a review takes every branch on origin, pruned', () => {
+  it('ST-39/AC-1: a branch created on origin since an earlier fetch is there, and one deleted since is gone', async () => {
+    const repoDir = dirtyClone()
+    // The clone fetches only main, so the refspec must come from the fetch itself.
+    git(repoDir, 'config', 'remote.origin.fetch', '+refs/heads/main:refs/remotes/origin/main')
+    commitBranch('st39/gone', { 'gone.txt': 'g' })
+    git(repoDir, 'fetch', '-q', 'origin', '+refs/heads/st39/gone:refs/remotes/origin/st39/gone')
+    git(seedDir, 'push', '-q', 'origin', '--delete', 'st39/gone')
+    commitBranch('st39/new', { 'new.txt': 'n' })
+    const { done, session } = review('story/OQ-99-thing', {
+      repoDir,
+      reply: (i) => {
+        const { cwd } = session.calls[i]
+        session.calls[i].seen = git(cwd, 'for-each-ref', '--format=%(refname)', 'refs/remotes/origin/').split('\n')
+        return verdictText(shas['story/OQ-99-thing'])
+      },
+    })
+    const result = await done
+    expect(result).toMatchObject({ status: 'recorded' })
+    const refs = session.calls[0].seen
+    expect(refs).toContain('refs/remotes/origin/st39/new')
+    expect(refs).not.toContain('refs/remotes/origin/st39/gone')
+    expect(refs).toContain('refs/remotes/origin/story/OQ-99-thing')
+    expect(refs).toContain('refs/remotes/origin/main')
+    git(seedDir, 'push', '-q', 'origin', '--delete', 'st39/new')
+  }, REVIEW_TEST_TIMEOUT)
+})
+
 // ------------------------------------------------- ST-22: the unit the body links
 
 // The lines of the bounded block `label` in `prompt`, without the code-block indent.
