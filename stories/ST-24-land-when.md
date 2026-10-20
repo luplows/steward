@@ -41,6 +41,10 @@ with no branch protection, where GitHub's `mergeable_state` says nothing about r
       and runs AC-1's function through a script under `scripts/land/` instead of its
       `mergeable_state != clean` test. Its "Belt and braces" check of `review/agent`, and every
       other check it makes, are unchanged.
+- [ ] **AC-3a** — `land-approved.yml`'s `permissions:` add `checks: read`, with a comment saying
+      it is for AC-3's request for the head's check runs, and nothing else is added. A test reads
+      `land-approved.yml` and shows its `permissions:` are exactly `contents: write`,
+      `pull-requests: write`, `statuses: read` and `checks: read`.
 - [ ] **AC-4** — Tests, named `ST-24/AC-<n>`: AC-1's function for each case (all green; one
       waiting; one failing; a rerun whose latest run is green after a failed one; a named check
       absent; `review/agent` failing while everything else is green, which is green here); and
@@ -58,10 +62,15 @@ with no branch protection, where GitHub's `mergeable_state` says nothing about r
 ## Constraints
 
 - Node, ESM, no new runtime dependencies.
-- The runway still takes no new permission, token or secret.
+- The runway takes no new token or secret, and one new permission only, `checks: read` (AC-3a).
 
 ## Context
 
+- **Decided on 2026-10-20 by the owner**, with the planning session, after this story's coder
+  found that the runway's `permissions:` grant no `checks` scope (design doc, Part 3, "Decided so
+  far", "The runway reads the head's check runs, with `checks: read`"). A scope its
+  `permissions:` do not list is none, and the runway's script runs under `set -euo pipefail`
+  (`land-approved.yml`, line 60), so a refused read there would end the run.
 - `docs/outline.md`, "Defining steward", "Land" (a project says which checks must pass;
   the default is every check on the head green) and "Settings" (`landWhen`).
 - `scripts/dispatch/land.mjs`'s `assess`: `clean` lands, `blocked` and `unknown` wait, `dirty` is

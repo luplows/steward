@@ -1158,8 +1158,10 @@ in a headless session".
   runway's merges, made with `github.token`, start no `push` run of `ci.yml`. `ci.yml` also runs on
   `workflow_run` of `Land approved PRs`, and skips unless the runway moved `main`
   (`github.event.workflow_run.head_sha != github.sha`), so a runway run that landed nothing costs
-  no runner (OQ-124). The runway itself gains no permission, token or secret (decided 2026-10-08
-  by the owner; see "Portability", "Decided so far").
+  no runner (OQ-124). The runway gained no permission, token or secret for that (decided
+  2026-10-08 by the owner; see "Portability", "Decided so far"). **Planned (ST-24):** it gains
+  `checks: read`, to read the head's check runs for `landWhen` (Part 3, "Decided so far", "The
+  runway reads the head's check runs, with `checks: read`").
 - **Converting a PR to draft is GraphQL only.** REST's "Update a pull request" takes `title`,
   `body`, `state`, `base` and `maintainer_can_modify`, with no `draft`; the GraphQL mutation
   `convertPullRequestToDraft` does it (checked 2026-09-25). `github.mjs`
@@ -2377,6 +2379,18 @@ shortened where it is long, so that it can be found there with its date.
 
   The first release, `v0.1.0`, is cut by a release review session, whose instructions are a
   separate pull request.
+- **The runway reads the head's check runs, with `checks: read`** (decided 2026-10-20 by the
+  owner, with the planning session; **Planned (ST-24)**). ST-24 has the runway decide whether the
+  checks `landWhen` names are green from the head's check runs and commit statuses, but its coder
+  found that `land-approved.yml`'s `permissions:` (`contents: write`, `pull-requests: write`,
+  `statuses: read`) grant no `checks` scope, and a scope they do not list is none. CI's `test` is
+  a check run, not a status, so the runway cannot see it without reading check runs. The runway
+  gains `checks: read` alone, which reads and writes nothing else; it still gains no token or
+  secret. This revises ST-24's constraint that the runway takes no new permission, which carried
+  forward the decision of 2026-10-08 for the after-sweep CI run ("GitHub mechanics").
+  Considered and not chosen: keeping no new permission, deciding from commit statuses and
+  `mergeable_state` alone, which cannot see a check run: `"all-checks"` would then pass with CI's
+  `test` failing, and a list naming `test` could never be met.
 
 ### The move, in order
 
