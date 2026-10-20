@@ -35,8 +35,9 @@ name: Review gate
 # pull request -- not only the comment that triggered this run -- and applies
 # `review-blocked` once there are three (OQ-48's bound). This workflow sees every pull
 # request, including ones no dispatcher ran, so it is where that label can be produced
-# reliably rather than applied by hand. The label is never removed or reapplied by anything
-# here: see `scripts/land/apply-review-blocked.mjs`.
+# reliably rather than applied by hand. Nothing here removes the label. Once it has been removed
+# by hand, only blocks recorded after the latest removal count towards applying it again (ST-16):
+# see `scripts/land/apply-review-blocked.mjs`.
 
 on:
   pull_request:
@@ -56,8 +57,12 @@ permissions:
   statuses: write
   # Widened from `read` to `write` (OQ-80): this workflow applies `review-blocked` itself
   # once a pull request reaches the round bound, which costs the write. Nothing here removes
-  # a label or reads anything the `read` scope did not already cover.
+  # a label.
   pull-requests: write
+  # For the pull request's issue events (ST-16's AC-1), which tell this workflow when the label
+  # was last removed by hand. GitHub lists that endpoint under both Issues and Pull requests
+  # read; `issues: read` settles it whichever the endpoint needs.
+  issues: read
 
 jobs:
   # A new head commit always returns the gate to pending. That is what makes

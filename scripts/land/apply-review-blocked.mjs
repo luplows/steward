@@ -16,9 +16,11 @@
 // transcription `github.mjs`'s `WELL_FORMED_RE` keeps of that step's grep; a test here
 // checks it against the workflow too.
 //
-// The label is applied once and never removed or reapplied (AC-2): a pull request that
-// already carries it is left exactly as it is, and nothing here ever calls the
-// labels-removal endpoint.
+// This module never removes the label (OQ-80's AC-2): a pull request that already carries it
+// is left exactly as it is, and nothing here ever calls the labels-removal endpoint. A member
+// of the crew removing it by hand means "I have seen the cost, proceed" (ST-16), so once it
+// has been removed, only blocks recorded after the latest removal count towards applying it
+// again; the removals are read from the pull request's `unlabeled` events.
 //
 // Usage: node scripts/land/apply-review-blocked.mjs
 // Reads GH_TOKEN, REPO (owner/name) and PR (number) from the environment, as
@@ -40,19 +42,36 @@ function lastVerdict(body) {
   return matches.length === 0 ? null : matches[matches.length - 1][1]
 }
 
-/** How many comments carry a well-formed blocking verdict from an honoured author (AC-3). */
-export function countBlockingVerdicts(comments) {
+/**
+ * When the label was last removed: the latest `createdAt` among `events` (ST-16's AC-1), as
+ * milliseconds, or null if it never was. `events` are the pull request's `unlabeled` events for
+ * this label, each `{createdAt}`.
+ */
+export function latestRemoval(events) {
+  const times = events.map((e) => Date.parse(e.createdAt)).filter((t) => !Number.isNaN(t))
+  return times.length === 0 ? null : Math.max(...times)
+}
+
+/**
+ * How many comments carry a well-formed blocking verdict from an honoured author (AC-3). With a
+ * `since` (milliseconds), only comments created strictly later count (ST-16's AC-1).
+ */
+export function countBlockingVerdicts(comments, since = null) {
   return comments.filter((c) => {
+    if (since !== null && !(Date.parse(c.createdAt) > since)) return false
     if (!isHonouredAuthor(c.authorAssociation)) return false
     const verdict = lastVerdict(c.body)
     return verdict === 'block' || verdict === 'fail'
   }).length
 }
 
-/** Whether to apply the label: at the bound, and only if it is not already there (AC-1, AC-2). */
-export function decideReviewBlocked({ comments, labels }) {
+/**
+ * Whether to apply the label: at the bound, counting only blocks recorded since the latest
+ * removal of it, and only if it is not already there (OQ-80's AC-1, AC-2; ST-16's AC-1).
+ */
+export function decideReviewBlocked({ comments, labels, events = [] }) {
   if (labels.includes(REVIEW_BLOCKED_LABEL)) return { apply: false, reason: 'already-applied', count: null }
-  const count = countBlockingVerdicts(comments)
+  const count = countBlockingVerdicts(comments, latestRemoval(events))
   if (count < ROUND_BOUND) return { apply: false, reason: 'below-bound', count }
   return { apply: true, reason: 'bound-reached', count }
 }
@@ -69,7 +88,7 @@ function parseNdjson(text) {
 }
 
 /**
- * Reads the pull request's comments and labels, decides, and applies the label if the
+ * Reads the pull request's comments, labels and events, decides, and applies the label if the
  * decision says to. `api` is injectable for tests; it takes the argument list after `gh api`
  * and returns stdout, or throws.
  */
@@ -79,11 +98,19 @@ export function applyReviewBlocked(repo, pr, api = ghApi) {
       `repos/${repo}/issues/${pr}/comments`,
       '--paginate',
       '--jq',
-      '.[] | {body: .body, authorAssociation: .author_association}',
+      '.[] | {body: .body, authorAssociation: .author_association, createdAt: .created_at}',
+    ]),
+  )
+  const events = parseNdjson(
+    api([
+      `repos/${repo}/issues/${pr}/events`,
+      '--paginate',
+      '--jq',
+      `.[] | select(.event == "unlabeled" and .label.name == "${REVIEW_BLOCKED_LABEL}") | {createdAt: .created_at}`,
     ]),
   )
   const labels = JSON.parse(api([`repos/${repo}/issues/${pr}/labels`, '--jq', '[.[].name]']))
-  const decision = decideReviewBlocked({ comments, labels })
+  const decision = decideReviewBlocked({ comments, labels, events })
   if (decision.apply) api(['-X', 'POST', `repos/${repo}/issues/${pr}/labels`, '-f', `labels[]=${REVIEW_BLOCKED_LABEL}`])
   return decision
 }

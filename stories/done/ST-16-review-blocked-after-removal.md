@@ -21,39 +21,39 @@ applying it again.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `applyReviewBlocked` reads the pull request's issue events
+- [x] **AC-1** — `applyReviewBlocked` reads the pull request's issue events
       (`GET repos/<repo>/issues/<pr>/events`, all pages) and finds the latest
       `unlabeled` event whose `label.name` is `review-blocked`. When there is
       one, only comments whose `created_at` is later than that event's
       `created_at` count towards the bound. When there is none, every comment
       counts, as today.
-- [ ] **AC-2** — Tests of the decision, with comments and events as data:
+- [x] **AC-2** — Tests of the decision, with comments and events as data:
       - no removal and three honoured blocks: applied (unchanged);
       - removed after three blocks, then two more: not applied;
       - removed after three blocks, then three more: applied;
       - removed twice: only blocks after the second removal count;
       - a block whose `created_at` equals the removal's does not count;
       - a label already present is left as it is (unchanged).
-- [ ] **AC-3** — A test of `applyReviewBlocked` with an injected `api` shows
+- [x] **AC-3** — A test of `applyReviewBlocked` with an injected `api` shows
       the events request it makes, and that it still never calls the
       labels-removal endpoint.
-- [ ] **AC-4** — `review-gate.yml`'s `permissions:` add `issues: read`, with
+- [x] **AC-4** — `review-gate.yml`'s `permissions:` add `issues: read`, with
       a comment saying it is for AC-1's events request. The comment above
       `pull-requests: write` (`review-gate.yml` lines 57–59, "Nothing here
       removes a label or reads anything the `read` scope did not already
       cover") is corrected to match.
-- [ ] **AC-5** — The three places that say the label is never reapplied are
+- [x] **AC-5** — The three places that say the label is never reapplied are
       corrected to say what AC-1 does: the header of
       `scripts/land/apply-review-blocked.mjs` (lines 19–21), the comment in
       `review-gate.yml` (lines 38–39), and the title of the
       `describe` block in `scripts/land/apply-review-blocked.test.mjs`
       (line 65, "OQ-80/AC-2: applied once, never removed or reapplied"), whose
       `OQ-80/AC-2` id stays.
-- [ ] **AC-5a** — `docs/glossary.md`'s `review-blocked` entry, which says
+- [x] **AC-5a** — `docs/glossary.md`'s `review-blocked` entry, which says
       the gate puts the label on a flight after three `block` verdicts, says
       that once the label has been removed by hand, only verdicts recorded
       since the latest removal count.
-- [ ] **AC-6** — The **Planned (ST-16)** sentence in
+- [x] **AC-6** — The **Planned (ST-16)** sentence in
       `docs/agent-workflow-design.md`, "Merging", is resolved as that
       document's "Reading this document" note says.
 
