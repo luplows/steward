@@ -23,13 +23,13 @@ writes a story. The words are those of [`glossary.md`](glossary.md).
 
 A release is cut from `main`, or, as a patch release, from the newest release's tag.
 
-- **The batch of a release from `main`** is every commit on `main` since the previous release
-  branch was cut from it: `git log <base>..origin/main`, where `<base>` is
-  `git merge-base origin/main origin/release/<previous>`, and `<previous>` is the newest
-  `release/v*` branch on `origin` (`git ls-remote --heads origin "release/v*"`, sorted by version).
-  With no release branch yet, the batch is all of `main`. A patch release's branch meets `main`
-  where the release it repairs does, since its cherry-picks and reverts are new commits, so the
-  same command serves after one.
+- **The batch of a release from `main`** is every commit on `main` since the previous release branch
+  was cut from it: `git log <base>..origin/main`, where `<base>` is `git merge-base origin/main
+  origin/<previous>`, and `<previous>` is the newest release branch, such as `release/v0.1.0`: the
+  newest by version of those `git ls-remote --heads origin "release/v*"` lists, without their
+  `refs/heads/`. With no release branch yet, the batch is all of `main`. A patch release's branch
+  meets `main` where the release it repairs does, since its cherry-picks and reverts are new
+  commits, so the same command serves after one.
 - **It also takes every capability the previous release deferred**: each one the newest release's
   notes list as deferred, with the pull requests that built it. Its commits predate `<base>`, but
   it is still on `main`, and ships in this release unless it is deferred again, so it gets a

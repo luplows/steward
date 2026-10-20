@@ -94,7 +94,7 @@ nothing of its own to run the gate.
 - `.github/workflows/review-gate.yml`: the `pending` job posts `review/agent` pending with
   `gh api`; the `verdict` job checks out the repository, reads the marker in shell, with its own
   `OWNER|MEMBER|COLLABORATOR` `case`, posts the status, and runs
-  `node scripts/land/apply-review-blocked.mjs` (line 187). Line 3 names `Open-Questions.md`.
+  `node scripts/land/apply-review-blocked.mjs` (line 192). Line 3 names `Open-Questions.md`.
 - `.github/workflows/land-approved.yml`: one job that checks out the repository, runs the circuit
   breaker in shell (`-ge 5`, line 80), `node scripts/land/select-candidates.mjs` (line 89), and
   for each candidate `node scripts/land/check-author.mjs` (line 110), the label and
