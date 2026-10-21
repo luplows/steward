@@ -652,7 +652,7 @@ Verified on the owner's Windows machine: `claude` CLI 2.1.273, `gh` 2.100.0 auth
 | Death at $0 | observed | **not applicable** |
 
 The cost is that the machine must be on. For a small crew that is acceptable, and inspection
-([watchdog](#watchdog), not built) would cover the case where it isn't.
+([watchdog](#watchdog)) covers the case where it isn't.
 
 ### ATC is scripts
 
@@ -917,20 +917,24 @@ questions table below and is not built.
 
 ### Watchdog
 
-Not built. ATC is scripts, so it cannot lose context, but it can stop, and nothing would notice.
-Because state is derived, a **scheduled GitHub Action** can compute "is anything stuck?" from
-branches and pull requests alone, independently of ATC, and survives the machine being off.
+ATC is scripts, so it cannot lose context, but it can stop, and nothing would notice. Because
+state is derived, a check can compute "is anything stuck?" from branches and pull requests alone,
+independently of ATC. Inspection, as the glossary names it, is that check: one command, `inspect`
+(`scripts/dispatch/inspect.mjs`, run as `node scripts/dispatch/cli.mjs inspect`), which the
+controller runs after each rotation's landings and which a scheduled workflow, `inspection.yml`,
+runs once a day, survives the machine being off, and a project may keep or drop.
 
-It should also check the observable consequence of branch-protection regression: **did any PR merge
+It also checks the observable consequence of branch-protection regression: **did any PR merge
 without a successful `review/agent` status?** A required check vanished silently once. Reading
-protection config needs admin scope; merge history needs none.
-
-**Planned (ST-29):** inspection, as the glossary names it, is one command, `inspect`, run after
-each rotation and by a scheduled workflow, `inspection.yml`, that a project keeps or drops. It
-raises each finding as one issue labelled `inspection`: a merge to `main` whose pull request's head
-had no `review/agent` `success` posted by the gate before it merged, a commit on `main` without a
-pull request, and a pull request from the crew left pending or holding longer than the settings'
-`inspectAfterHours` (Part 3, "Decided so far", 2026-10-15).
+protection config needs admin scope; merge history needs none. It raises each finding as one issue
+labelled `inspection`: a merge to `main` whose pull request's head had no `review/agent`
+`success` created by `github-actions[bot]`, the account the gate posts as, at or before it merged
+(a status any other account posts does not count); a commit on `main` without a pull request; and
+a pull request from the crew, not a draft, left pending or holding (a `success` that has not
+landed) longer than the settings' `inspectAfterHours` (Part 3, "Decided so far", 2026-10-15). It
+opens no issue whose title is already on an issue labelled `inspection`, open or closed, so
+closing one is how the crew says it has seen it. Its exit code is 0 when it opened no issue, 1 when
+it opened at least one, and 2 when a request failed or the settings did not read.
 
 **Scheduled workflows are best-effort, and here they proved far worse than that.** A `*/15` cron on
 `land-approved.yml` delivered about one run every five hours — roughly 5% of the configured rate,
@@ -2112,7 +2116,7 @@ shortened where it is long, so that it can be found there with its date.
   code where the crew member's credentials are reachable, are ST-27's open questions.
 - **Inspection runs after each rotation and on a schedule, and raises each finding as an issue**
   (decided 2026-10-15 by the owner, with the planning session, while asking what a solid review
-  side needs; **Planned (ST-29)**). It checks for a merge to `main` without a passing verdict, the
+  side needs). It checks for a merge to `main` without a passing verdict, the
   outline's definition, and for two stalls on the review side: a pull request from the crew left
   pending, or holding, longer than a new setting, `inspectAfterHours`. A passing verdict is a
   `review/agent` `success` created by `github-actions[bot]`, the account the gate posts as, on the

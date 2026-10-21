@@ -28,6 +28,7 @@ decisions behind the keys are in [`outline.md`](outline.md), "Defining steward",
 | `land` | `true` or `false` | Whether steward lands pull requests. `false`: steward still reviews, and the project merges. | Asked; default `true`. |
 | `unitLinks` | An array, possibly empty, of distinct values from `"issue"`, `"file"` and `"other"` | The kinds of link steward reads from a pull request's body to find its unit. | Asked; default `["file", "issue"]`. |
 | `rulesFile` | A relative path with forward slashes, neither absolute nor containing a `..` segment | The file of rules a pull request is reviewed against, read from `main`. | Asked; default `REVIEW.md`. `init` copies steward's example checklist there. |
+| `inspectAfterHours` | A positive integer | How many hours a pull request may stay pending or holding before inspection raises it. | Asked; default 24. |
 
 `init` is not built yet (**Planned (ST-44)**). The column says what it will write, as decided on
 2026-10-19 (`agent-workflow-design.md`, Part 3, "Decided so far"); steward's own file (below)
@@ -65,11 +66,13 @@ body and the rules.
   "landWhen": "all-checks",
   "land": true,
   "unitLinks": ["file"],
-  "rulesFile": "REVIEW.md"
+  "rulesFile": "REVIEW.md",
+  "inspectAfterHours": 24
 }
 ```
 
-Steward's scripts use `repo`, `storyPrefix`, `rulesFile`, `unitLinks`, `land` and `landWhen`
-today: the pilot and the runway land on the checks `landWhen` names. The other keys are read and
-validated, and each is taken into use by the story that builds it (see
+Steward's scripts use `repo`, `storyPrefix`, `rulesFile`, `unitLinks`, `land`, `landWhen` and
+`inspectAfterHours` today: the pilot and the runway land on the checks `landWhen` names, and
+inspection raises a pull request pending or holding longer than `inspectAfterHours`. The other keys
+are read and validated, and each is taken into use by the story that builds it (see
 [`agent-workflow-design.md`](agent-workflow-design.md), the "Planned" markers).

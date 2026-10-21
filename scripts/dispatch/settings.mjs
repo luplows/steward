@@ -32,6 +32,7 @@ const ALLOWED_KEYS = [
   'land',
   'unitLinks',
   'rulesFile',
+  'inspectAfterHours',
 ]
 
 /** A non-empty array of distinct values, each passing `itemOk`. */
@@ -177,7 +178,7 @@ export async function readSettings(projectRoot) {
   const setup = validateCommand(filePath, 'setup', data.setup)
   const check = validateCommand(filePath, 'check', data.check)
 
-  const { landWhen, land, unitLinks, rulesFile } = data
+  const { landWhen, land, unitLinks, rulesFile, inspectAfterHours } = data
   if (
     landWhen !== LAND_WHEN_ALL &&
     !isDistinctArray(landWhen, (name) => typeof name === 'string' && name !== '', { allowEmpty: false })
@@ -200,5 +201,11 @@ export async function readSettings(projectRoot) {
     )
   }
 
-  return { repo, storyPrefix, setup, check, landWhen, land, unitLinks, rulesFile }
+  if (!Number.isInteger(inspectAfterHours) || inspectAfterHours < 1) {
+    throw new Error(
+      `${filePath}: 'inspectAfterHours' must be a positive integer, got ${JSON.stringify(inspectAfterHours)}`,
+    )
+  }
+
+  return { repo, storyPrefix, setup, check, landWhen, land, unitLinks, rulesFile, inspectAfterHours }
 }

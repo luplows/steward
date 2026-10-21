@@ -6,5 +6,6 @@
   "landWhen": "all-checks",
   "land": true,
   "unitLinks": ["file"],
-  "rulesFile": "REVIEW.md"
+  "rulesFile": "REVIEW.md",
+  "inspectAfterHours": 24
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -80,6 +80,7 @@ describe('readSettings', () => {
       land: true,
       unitLinks: ['file'],
       rulesFile: 'REVIEW.md',
+      inspectAfterHours: 24,
     })
   })
 
@@ -166,9 +167,42 @@ describe('readSettings', () => {
   })
 })
 
+describe('ST-29: inspectAfterHours', () => {
+  async function readBack(settings) {
+    return withTempProject(async (dir) => {
+      writeConfig(dir, JSON.stringify(settings))
+      return readSettings(dir)
+    })
+  }
+
+  it('ST-29/AC-7: a positive integer is read back unchanged', async () => {
+    for (const value of [1, 24, 168]) {
+      expect((await readBack(fixtureSettings({ inspectAfterHours: value }))).inspectAfterHours).toBe(value)
+    }
+  })
+
+  it('ST-29/AC-7: a file without inspectAfterHours is refused, naming the file and the key', async () => {
+    await expectRejected(withoutKey('inspectAfterHours'), "missing required key 'inspectAfterHours'")
+  })
+
+  it('ST-29/AC-7: a value that is not a positive integer is refused, naming the key', async () => {
+    for (const bad of [0, -1, 1.5, '24', null, true, [24], NaN]) {
+      await expectRejected(fixtureSettings({ inspectAfterHours: bad }), "'inspectAfterHours' must be a positive integer")
+    }
+  })
+
+  it("ST-29/AC-7: this repository's steward.config.json and the page's copy of it hold 24", async () => {
+    expect((await readSettings(REPO_ROOT)).inspectAfterHours).toBe(24)
+    const page = readFileSync(path.join(REPO_ROOT, 'docs', 'settings.md'), 'utf8')
+    const copy = JSON.parse(page.match(/## This repository's file\s+```json\n([\s\S]*?)```/)[1])
+    expect(copy).toEqual(JSON.parse(readFileSync(path.join(REPO_ROOT, 'steward.config.json'), 'utf8')))
+    expect(page).toMatch(/\| `inspectAfterHours` \| A positive integer \|.*\| Asked; default 24\. \|/)
+  })
+})
+
 describe('ST-18: the review side settings keys', () => {
   const COMMAND_KEYS = ['setup', 'check']
-  const NEW_KEYS = ['setup', 'check', 'landWhen', 'land', 'unitLinks', 'rulesFile']
+  const NEW_KEYS = ['setup', 'check', 'landWhen', 'land', 'unitLinks', 'rulesFile', 'inspectAfterHours']
 
   async function readBack(settings) {
     return withTempProject(async (dir) => {

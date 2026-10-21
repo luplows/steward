@@ -1,0 +1,41 @@
+name: Inspection
+
+# Looks for a merge to `main` without a passing verdict, a commit on `main` without a pull request,
+# and a pull request left pending or holding too long, and raises each as an issue labelled
+# `inspection` (scripts/dispatch/inspect.mjs; docs/agent-workflow-design.md, "Watchdog"). It runs
+# here so that it runs while the crew's machine is off; the controller also runs the same command
+# after each rotation.
+#
+# A project sets how often it runs by editing the schedule below, or drops it by deleting this
+# file. On a private repository each run costs Actions minutes, rounded up to the next whole
+# minute. A run exits 1 when it opened an issue, so that run shows as failed; that is the signal.
+# GitHub delivers a schedule late and sometimes not at all (docs/agent-workflow-design.md,
+# "Watchdog"), so read the cadence as "sometime".
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * *'
+
+permissions:
+  # To check out the repository, so the settings (steward.config.json) can be read.
+  contents: read
+  # To read the open pull requests, and the pull requests of a commit on `main`.
+  pull-requests: read
+  # To read the `review/agent` statuses.
+  statuses: read
+  # To list the `inspection` issues, open the ones that are missing, and create the label.
+  issues: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Inspect
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/dispatch/cli.mjs inspect
