@@ -12,9 +12,9 @@
 // itself being the third.
 //
 // `isHonouredAuthor` comes from `check-author.mjs`, already kept identical to
-// review-gate.yml's `case` by a test there. The marker pattern below is the same
-// transcription `github.mjs`'s `WELL_FORMED_RE` keeps of that step's grep; a test here
-// checks it against the workflow too.
+// review-gate.yml's `case` by a test there. Markers are read with `github.mjs`'s
+// `parseMarkerComment`, the parser `story.mjs` counts rounds with, so the two cannot disagree
+// about which comments are blocks; a test here checks the marker pattern against the workflow.
 //
 // This module never removes the label (OQ-80's AC-2): a pull request that already carries it
 // is left exactly as it is, and nothing here ever calls the labels-removal endpoint. A member
@@ -28,19 +28,10 @@
 
 import { execFileSync } from 'node:child_process'
 import { isHonouredAuthor } from './check-author.mjs'
+import { parseMarkerComment } from '../dispatch/github.mjs'
 
 export const ROUND_BOUND = 3 // OQ-48's AC-3 sets this; restated here and must not drift from it.
 export const REVIEW_BLOCKED_LABEL = 'review-blocked'
-
-// Transcribes the "Apply verdict from marker" step's grep: a well-formed marker lies on one
-// line, and the last one in a comment wins.
-const MARKER_RE =
-  /<!--[^\S\n]*agent-review[^\S\n]+head=[0-9a-f]{40}[^\S\n]+verdict=(pass-with-observations|pass|block|fail)[^\S\n]*-->/g
-
-function lastVerdict(body) {
-  const matches = [...(body ?? '').matchAll(MARKER_RE)]
-  return matches.length === 0 ? null : matches[matches.length - 1][1]
-}
 
 /**
  * When the label was last removed: the latest `createdAt` among `events` (ST-16's AC-1), as
@@ -60,8 +51,8 @@ export function countBlockingVerdicts(comments, since = null) {
   return comments.filter((c) => {
     if (since !== null && !(Date.parse(c.createdAt) > since)) return false
     if (!isHonouredAuthor(c.authorAssociation)) return false
-    const verdict = lastVerdict(c.body)
-    return verdict === 'block' || verdict === 'fail'
+    const marker = parseMarkerComment(c.body)
+    return marker.kind === 'marker' && marker.verdict === 'block'
   }).length
 }
 
