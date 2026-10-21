@@ -17,6 +17,8 @@ import {
 import { coderAllowedTools, READ_ONLY_SHELL_UTILS } from './coder-env.mjs'
 import { splitPromptFile } from './render.mjs'
 import { parseRules } from './rules.mjs'
+import { isRulesFilePath } from './rules-file-path.mjs'
+import { RULES_FILE_CANDIDATES } from './rules-file-path-candidates.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '..', '..')
@@ -530,17 +532,19 @@ describe('OQ-74/AC-7: the module starts nothing and reads nothing', () => {
   })
 
   // ST-45/AC-7 added the release branch's name, which `{{BASE_BRANCH}}`'s pattern is built
-  // from: a module that, like this one, starts nothing and reads nothing, and that imports
-  // nothing at all.
-  it('imports only the two sibling modules it composes, and the release branch\'s name', () => {
+  // from, and ST-40 the check of a `rulesFile`, which `{{RULES_FILE}}` is validated with: modules
+  // that, like this one, start nothing and read nothing, and that import nothing at all.
+  it('imports only the two sibling modules it composes, the release branch\'s name and the rulesFile check', () => {
     const source = readFileSync(path.join(here, 'invocation.mjs'), 'utf8')
     const imports = [...source.matchAll(/^import\s[^;]*?from\s+'([^']+)'/gm)].map((m) => m[1])
-    expect(imports.sort()).toEqual(['../land/release-branch.mjs', './coder-env.mjs', './render.mjs'])
+    expect(imports.sort()).toEqual(['../land/release-branch.mjs', './coder-env.mjs', './render.mjs', './rules-file-path.mjs'])
     const releaseBranch = readFileSync(path.join(here, '..', 'land', 'release-branch.mjs'), 'utf8')
-    for (const text of [source, releaseBranch]) {
+    const rulesFilePath = readFileSync(path.join(here, 'rules-file-path.mjs'), 'utf8')
+    for (const text of [source, releaseBranch, rulesFilePath]) {
       expect(text).not.toMatch(/child_process|\bspawn\(|\bexec\w*\(|\bfetch\(|process\.env|readFile|writeFile/)
     }
     expect(releaseBranch).not.toMatch(/^import\s/m)
+    expect(rulesFilePath).not.toMatch(/^import\s/m)
   })
 })
 
@@ -609,7 +613,7 @@ describe('ST-40: the prompts work in any project, and name its repository', () =
 
   it('ST-40/AC-4: the checklist is named by rulesFile, in the form readSettings allows', () => {
     expect(render(other)).toContain('If the pull request changes `docs/checklist.md`, its copy is in the diff')
-    for (const good of ['REVIEW.md', 'docs/my checklist.md', '.github/review.md']) {
+    for (const good of ['REVIEW.md', 'docs/my checklist.md', '.github/review.md', 'docs/review(checklist).md']) {
       expect(render({ ...other, rulesFile: good })).toContain(`changes \`${good}\``)
     }
     for (const bad of ['../x.md', 'a/../x.md', '/abs.md', 'C:/x.md', 'a\\b.md', 'a//b.md', 'a/', 'a\nb.md', 'a`b.md']) {
@@ -617,6 +621,15 @@ describe('ST-40: the prompts work in any project, and name its repository', () =
     }
     const { rulesFile: _f, ...noFile } = other
     expect(() => render(noFile)).toThrow(/requires the checklist's path/)
+  })
+
+  // The settings' side of the same set is `settings.test.mjs`'s ST-40/AC-4 test: together they
+  // show that the prompt takes every rulesFile `readSettings` reads, and no other.
+  it('ST-40/AC-4: the prompt takes a rulesFile exactly when isRulesFilePath, readSettings\' check, does', () => {
+    for (const value of RULES_FILE_CANDIDATES) {
+      const takes = (() => { try { render({ ...other, rulesFile: value }); return true } catch { return false } })()
+      expect(takes, JSON.stringify(value)).toBe(isRulesFilePath(value))
+    }
   })
 
   it('ST-40/AC-5: the rendered prompt holds none of steward\'s own repository particulars', () => {

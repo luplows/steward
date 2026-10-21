@@ -18,6 +18,7 @@
 import { coderAllowedTools, coderEnv, CODER_DISALLOWED_TOOLS, READ_ONLY_SHELL_UTILS } from './coder-env.mjs'
 import { render, wrapInjectedBlock } from './render.mjs'
 import { RELEASE_BRANCH_RE } from '../land/release-branch.mjs'
+import { isRulesFilePath } from './rules-file-path.mjs'
 
 export const ROLES = ['coder', 'reviewer']
 
@@ -161,9 +162,9 @@ const TRUSTED_INLINE = {
   // ST-40/AC-3: the absolute path of steward's `review-tools.mjs`, which the prompt gives inside
   // double quotes, so it may hold a space but no quote, newline, backtick or angle bracket.
   REVIEW_TOOLS: /^[^\r\n`"<>]+review-tools\.mjs$/,
-  // ST-40/AC-4: the settings' `rulesFile`, in the form `readSettings` allows (a relative path
-  // with forward slashes, no empty or `..` segment), in plain path characters only.
-  RULES_FILE: /^(?![A-Za-z]:)(?!(?:.*\/)?\.\.(?:\/|$))[A-Za-z0-9._ -]+(?:\/[A-Za-z0-9._ -]+)*$/,
+  // ST-40/AC-4: the settings' `rulesFile`, in exactly the form `readSettings` allows: both check
+  // it with `isRulesFilePath`, which refuses a newline, a backtick, `<` and `>`.
+  RULES_FILE: { test: isRulesFilePath },
 }
 
 /**

@@ -11,6 +11,7 @@
  */
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { isRulesFilePath } from './rules-file-path.mjs'
 
 const SETTINGS_FILENAME = 'steward.config.json'
 
@@ -43,13 +44,6 @@ function isDistinctArray(value, itemOk, { allowEmpty }) {
     value.every(itemOk) &&
     new Set(value).size === value.length
   )
-}
-
-/** A relative path with forward slashes: not absolute, no `..` segment, no empty segment. */
-function isRelativeForwardPath(value) {
-  if (typeof value !== 'string' || value === '') return false
-  if (value.includes('\\') || value.startsWith('/') || /^[A-Za-z]:/.test(value)) return false
-  return value.split('/').every((segment) => segment !== '' && segment !== '..')
 }
 
 /** Validates a `setup` or `check` value: `null`, or { command, timeoutMinutes }. */
@@ -195,9 +189,9 @@ export async function readSettings(projectRoot) {
       `${filePath}: 'unitLinks' must be an array of distinct values from ${JSON.stringify(UNIT_LINK_KINDS)}, got ${JSON.stringify(unitLinks)}`,
     )
   }
-  if (!isRelativeForwardPath(rulesFile)) {
+  if (!isRulesFilePath(rulesFile)) {
     throw new Error(
-      `${filePath}: 'rulesFile' must be a relative path with forward slashes and no '..' segment, got ${JSON.stringify(rulesFile)}`,
+      `${filePath}: 'rulesFile' must be a relative path with forward slashes, no '..' segment, and no control character, backtick, '<' or '>', got ${JSON.stringify(rulesFile)}`,
     )
   }
 
