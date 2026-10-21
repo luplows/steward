@@ -623,6 +623,17 @@ describe('ST-40: the prompts work in any project, and name its repository', () =
     }
   })
 
+  // #68's review at 2d6b13f: PowerShell also takes U+2018 to U+201B as single quotes, and
+  // U+201C to U+201E as double quotes, so `'C:\Users\O’Brien\…'` does not parse there.
+  it('ST-40/AC-3: every quote PowerShell recognizes is refused, and another letter is given verbatim', () => {
+    for (const quote of ["'", '"', '\u2018', '\u2019', '\u201A', '\u201B', '\u201C', '\u201D', '\u201E']) {
+      const bad = `C:\\Users\\O${quote}Brien\\review-tools.mjs`
+      expect(() => render({ ...other, reviewTools: bad }), bad).toThrow(/plain token/)
+    }
+    const accented = 'C:\\Users\\José Müller\\steward\\scripts\\dispatch\\review-tools.mjs'
+    expect(render({ ...other, reviewTools: accented })).toContain(`node '${accented}' repeat <n>`)
+  })
+
   it('ST-40/AC-4: the checklist is named by rulesFile, in the form readSettings allows', () => {
     expect(render(other)).toContain('If the pull request changes `docs/checklist.md`, its copy is in the diff')
     for (const good of ['REVIEW.md', 'docs/my checklist.md', '.github/review.md', 'docs/review(checklist).md']) {

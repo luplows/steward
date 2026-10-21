@@ -161,12 +161,13 @@ const TRUSTED_INLINE = {
   REPO: /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/,
   // ST-40/AC-3: the absolute path of steward's `review-tools.mjs`, which the prompt gives inside
   // single quotes: PowerShell (the Codex reviewer's shell) and Bash both take everything there
-  // literally, `$`, `%` and backslashes included, except a single quote, which neither can hold
-  // there, and a double quote, which Windows PowerShell 5.1 mangles in a native command's
-  // argument (and Windows allows in no file name). So it may hold a space, `$` or `%`, but no
-  // quote of either kind, control character, backtick (which would end the inline code it sits
-  // in) or angle bracket.
-  REVIEW_TOOLS: /^[^\p{Cc}'"`<>]+review-tools\.mjs$/u,
+  // literally, `$`, `%` and backslashes included, except a quote. Bash ends single quotes only at
+  // `'`; PowerShell at any of its single quotes, `'` and U+2018 to U+201B (‘ ’ ‚ ‛), and Windows
+  // PowerShell 5.1 mangles its double quotes, `"` and U+201C to U+201E (“ ” „), in a native
+  // command's argument. So it may hold a space, `$`, `%` or any other letter, but none of those
+  // nine quotes, no control character, no backtick (which would end the inline code it sits in)
+  // and no angle bracket.
+  REVIEW_TOOLS: /^[^\p{Cc}'"`<>\u2018-\u201E]+review-tools\.mjs$/u,
   // ST-40/AC-4: the settings' `rulesFile`, in exactly the form `readSettings` allows: both check
   // it with `isRulesFilePath`, which refuses a newline, a backtick, `<` and `>`.
   RULES_FILE: { test: isRulesFilePath },
