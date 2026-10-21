@@ -24,6 +24,18 @@ describe('OQ-93/AC-2: select-candidates.mjs', () => {
     expect(selectCandidates(LIST, '99')).toEqual([])
   })
 
+  it('ST-45/AC-2: takes a ready pull request into a release branch, and none into release/next or feature/x', () => {
+    const into = (ref) => ({ base: { ref } })
+    const list = [
+      pr(3), pr(11, into('release/v0.1.0')), pr(12, into('release/next')), pr(13, into('feature/x')),
+      pr(14, { draft: true, ...into('release/v0.1.0') }),
+    ]
+    expect(selectCandidates(list)).toEqual([3, 11])
+    expect(selectCandidates(list, '11')).toEqual([11])
+    expect(selectCandidates(list, '12')).toEqual([])
+    expect(selectCandidates(list, '13')).toEqual([])
+  })
+
   it.each(['0', '-1', '7 8', '7;x', '07'])('refuses the invalid value %j', (value) => {
     expect(() => selectCandidates(LIST, value)).toThrow(/pr input/)
   })

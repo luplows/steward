@@ -59,7 +59,7 @@ const reviewerOptions = {
   promptTemplate: REVIEWER_TEMPLATE,
   unit: { note: HOSTILE, text: HOSTILE },
   branch: BRANCH,
-  pr: { number: 129, headSha: SHA, body: HOSTILE },
+  pr: { number: 129, headSha: SHA, body: HOSTILE, baseRef: 'main' },
   rules: HOSTILE,
   baseEnv: { PATH: '/bin' },
   model: 'opus',
@@ -274,7 +274,8 @@ describe('ST-38/AC-3: the reviewer starts in a checkout of the base and reads th
       '`git show {{HEAD_SHA}}:<path>`',
       '`git grep <pattern> {{HEAD_SHA}}`',
       '`git ls-tree -r --name-only {{HEAD_SHA}}`',
-      '`git diff origin/main...{{HEAD_SHA}}`',
+      // ST-45/AC-6: against the pull request's base, which is not always `main`.
+      '`git diff origin/{{BASE_BRANCH}}...{{HEAD_SHA}}`',
     ]) expect(flat, command).toContain(command)
   })
 
@@ -408,7 +409,7 @@ describe('OQ-74/AC-4: every untrusted value is bounded', () => {
   it('reviewer: ST-22/AC-2\'s {{UNIT_NOTE}} and {{UNIT}}, {{PR_BODY}} and ST-21/AC-2\'s {{RULES}} each carry one begin and one end marker', () => {
     const { prompt } = buildInvocation(reviewerOptions)
     const baseline = emptyRender(REVIEWER_TEMPLATE, {
-      PR_NUMBER: '129', HEAD_BRANCH: BRANCH, HEAD_SHA: SHA, UNIT_NOTE: '', UNIT: '', PR_BODY: '', RULES: '',
+      PR_NUMBER: '129', HEAD_BRANCH: BRANCH, HEAD_SHA: SHA, BASE_BRANCH: 'main', UNIT_NOTE: '', UNIT: '', PR_BODY: '', RULES: '',
     })
     assertBounded(prompt, ['UNIT_NOTE', 'UNIT', 'PR_BODY', 'RULES'], baseline)
   })
@@ -518,10 +519,41 @@ describe('OQ-74/AC-7: the module starts nothing and reads nothing', () => {
     ])
   })
 
-  it('imports only the two sibling modules it composes', () => {
+  // ST-45/AC-7 added the release branch's name, which `{{BASE_BRANCH}}`'s pattern is built
+  // from: a module that, like this one, starts nothing and reads nothing, and that imports
+  // nothing at all.
+  it('imports only the two sibling modules it composes, and the release branch\'s name', () => {
     const source = readFileSync(path.join(here, 'invocation.mjs'), 'utf8')
     const imports = [...source.matchAll(/^import\s[^;]*?from\s+'([^']+)'/gm)].map((m) => m[1])
-    expect(imports.sort()).toEqual(['./coder-env.mjs', './render.mjs'])
-    expect(source).not.toMatch(/child_process|\bspawn\(|\bexec\w*\(|\bfetch\(|process\.env|readFile|writeFile/)
+    expect(imports.sort()).toEqual(['../land/release-branch.mjs', './coder-env.mjs', './render.mjs'])
+    const releaseBranch = readFileSync(path.join(here, '..', 'land', 'release-branch.mjs'), 'utf8')
+    for (const text of [source, releaseBranch]) {
+      expect(text).not.toMatch(/child_process|\bspawn\(|\bexec\w*\(|\bfetch\(|process\.env|readFile|writeFile/)
+    }
+    expect(releaseBranch).not.toMatch(/^import\s/m)
+  })
+})
+
+describe('ST-45/AC-8: the reviewer prompt names the pull request\'s base', () => {
+  const plain = { ...reviewerOptions, unit: { note: 'note', text: 'unit' }, pr: { ...reviewerOptions.pr, body: 'body' }, rules: 'rules' }
+  const withBase = (baseRef) => invocationModule.renderReviewerPrompt({ ...plain, pr: { ...plain.pr, baseRef } })
+
+  it('ST-45/AC-8: rendered with release/v0.1.0, the diff is against that base and nothing says origin/main', () => {
+    const prompt = withBase('release/v0.1.0')
+    expect(prompt).toContain(`git diff origin/release/v0.1.0...${SHA}`)
+    expect(prompt).not.toContain('origin/main')
+    expect(prompt).toContain('a checkout of the base branch, `release/v0.1.0`')
+  })
+
+  it('ST-45/AC-8: rendered with main, the diff is against origin/main as before', () => {
+    expect(withBase('main')).toContain(`git diff origin/main...${SHA}`)
+  })
+
+  it('ST-45/AC-8: a base that is neither main nor a release branch, or carries a newline, is refused', () => {
+    expect(() => withBase('feature/x')).toThrow(/plain token/)
+    expect(() => withBase('main\n')).toThrow(/plain token/)
+    expect(() => buildInvocation({ ...plain, pr: { ...plain.pr, baseRef: 'feature/x' } })).toThrow(/plain token/)
+    const { baseRef: _baseRef, ...noBase } = plain.pr
+    expect(() => buildInvocation({ ...plain, pr: noBase })).toThrow(/requires the pull request's base/)
   })
 })

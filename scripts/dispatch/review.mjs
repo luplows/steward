@@ -88,6 +88,9 @@ const ENGINE_ROOT = path.resolve(DISPATCH_DIR, '..', '..')
 const REVIEWER_PROMPT = path.join(ENGINE_ROOT, '.claude', 'prompts', 'reviewer.md')
 
 const REMOTE = 'origin'
+// ST-45/AC-5: the branch the unit and the checklist are read from, whatever the pull request's
+// base. Both are written on `main`; the reviewer's checkout and diff are of the base itself.
+const UNIT_AND_RULES_BASE = 'main'
 
 // The author associations review-gate.yml's "Apply verdict from marker" step
 // honours. A restatement so the two read the same; a test compares it to the
@@ -307,7 +310,8 @@ async function git(cwd, args) {
  * Throws unless `dir` is a checkout of exactly `sha`, with nothing uncommitted,
  * that is not `repoDir` (AC-5). `sha` is the base branch's tip (ST-38/AC-2):
  * the session starts in a checkout of the base, whose instructions and settings
- * are `main`'s, and reads the head through git. A dirty or wrong tree would
+ * are the base branch's, `main` or a release branch (ST-45), and reads the head
+ * through git. A dirty or wrong tree would
  * give it someone else's.
  */
 export async function assertReviewableCheckout(dir, sha, repoDir) {
@@ -372,7 +376,8 @@ export async function assertReviewableCheckout(dir, sha, repoDir) {
  * `resetsAt`) and `usage-unknown` (ST-31) are, and the CLI exits 1 for them: a
  * review that was asked for did not happen. The last two start no session.
  * `rules-unreadable` (ST-21/AC-1) is a checklist (the settings' `rulesFile`)
- * that is missing from the base branch or does not parse: it carries
+ * that is missing from `main`, which it is read from whatever the base
+ * (`UNIT_AND_RULES_BASE`), or does not parse: it carries
  * `problems`, and comes before any session. `reviewer-unavailable`
  * (ST-34/AC-5) is a machine whose reviewer choices all have the coder's model:
  * no session is started, and it is a failure like the others. So is `choice-unavailable`
@@ -445,19 +450,21 @@ export async function reviewPullRequest({
     // from the base. The head is read through git, from the refs just fetched.
     const baseSha = (await git(repoDir, ['rev-parse', `${REMOTE}/${pr.baseRef}`])).trim()
 
-    // ST-21/AC-1: the checklist as it stands on the base branch, never the
-    // pull request's own copy, read before a session is started,
-    // so a missing or broken file costs no review.
-    const rules = await readRules({ repoDir, base: pr.baseRef, rulesFile })
+    // ST-21/AC-1: the checklist as it stands on `main`, never the pull
+    // request's own copy, read before a session is started, so a missing or
+    // broken file costs no review. ST-45/AC-5: from `main` whatever the base.
+    const rules = await readRules({ repoDir, base: UNIT_AND_RULES_BASE, rulesFile })
     if (!rules.ok) {
       return { status: 'rules-unreadable', problems: rules.problems, reason: rules.problems.join('; ') }
     }
 
-    // ST-22/AC-1: the unit the body links, read as it stands on the base
-    // branch, never the head. A missing, unreadable, `Unit: none` or
+    // ST-22/AC-1: the unit the body links, read as it stands on `main`, never
+    // the head. ST-45/AC-5: from `main` whatever the base, since units are
+    // written there: a fix cherry-picked into a release branch links a story
+    // that branch never had. A missing, unreadable, `Unit: none` or
     // several-link case is reviewed, with the note saying which.
     const found = findUnitLink(pr.body, unitLinks)
-    const read = found.kind === 'link' ? await readUnit(found, { repoDir, base: pr.baseRef, ctx }) : null
+    const read = found.kind === 'link' ? await readUnit(found, { repoDir, base: UNIT_AND_RULES_BASE, ctx }) : null
     const unit = { note: describeUnit(found, read), text: read?.read === true ? read.text : NO_UNIT_TEXT }
     // ST-34/AC-5, ST-35/AC-2, AC-8: the choices whose model is not one the coder ran, or no
     // session at all. A choice named by hand is final (ST-35/AC-1) and needs none of this.
@@ -512,7 +519,7 @@ export async function reviewPullRequest({
       promptTemplate: template,
       unit,
       branch: pr.headRef,
-      pr: { number, headSha: pr.headSha, body: pr.body },
+      pr: { number, headSha: pr.headSha, body: pr.body, baseRef: pr.baseRef },
       rules: rules.text,
     }
     let attempt = 0

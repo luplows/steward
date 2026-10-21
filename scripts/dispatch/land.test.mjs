@@ -700,3 +700,16 @@ describe('ST-24: land when the checks landWhen names are green', () => {
     w.cleanup()
   })
 })
+
+describe('ST-45/AC-3: a pull request into a release branch is landed as one into main', () => {
+  it('ST-45/AC-3: dispatches land-approved.yml on main, with the pull request\'s number, for a base of release/v0.1.0', async () => {
+    const w = world({
+      checksAt: () => [run('test', 'success')],
+      pullAt: (t, dispatches) => pull({ base: { ref: 'release/v0.1.0' }, merged: dispatches > 0 }),
+    })
+    const result = await w.run()
+    expect(result).toMatchObject({ status: 'merged', pr: 7, headSha: SHA, triggers: 1 })
+    expect(w.dispatches).toEqual([{ method: 'POST', url: `${BASE}/actions/workflows/land-approved.yml/dispatches`, body: { ref: 'main', inputs: { pr: '7' } } }])
+    w.cleanup()
+  })
+})

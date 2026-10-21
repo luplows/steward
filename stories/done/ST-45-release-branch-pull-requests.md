@@ -17,31 +17,31 @@ through the gate.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — One definition of a release branch's name, `release/v<major>.<minor>.<patch>`
+- [x] **AC-1** — One definition of a release branch's name, `release/v<major>.<minor>.<patch>`
       with each part a non-negative integer, is exported from one module under `scripts/`, with
       a function saying whether a branch name is one. Tests: `release/v0.1.0` and
       `release/v12.0.3` are; `release/0.1.0`, `release/v0.1`, `release/v0.1.0-rc`,
       `release/v0.1.0/x` and `main` are not.
-- [ ] **AC-2** — `selectCandidates` (`scripts/land/select-candidates.mjs`) takes a pull request
+- [x] **AC-2** — `selectCandidates` (`scripts/land/select-candidates.mjs`) takes a pull request
       whose base is `main` or a release branch (AC-1), and still none whose base is anything else.
       Tests: a ready pull request into `release/v0.1.0` is a candidate; one into
       `release/next` or `feature/x` is not; and the existing cases are unchanged.
-- [ ] **AC-3** — `land.mjs` requests landing for a landable pull request into a release branch as
+- [x] **AC-3** — `land.mjs` requests landing for a landable pull request into a release branch as
       for one into `main`, dispatching `land-approved.yml` on `main` with the pull request's number
       (the workflow runs from `main`, whatever the pull request's base). A test shows the dispatch
       for a pull request whose base is `release/v0.1.0`.
-- [ ] **AC-4** — `.github/workflows/ci.yml` runs its `test` job on a pull request into a release
+- [x] **AC-4** — `.github/workflows/ci.yml` runs its `test` job on a pull request into a release
       branch and on a push to one, as it does for `main`, with its story containment step
       unchanged (it compares against the pull request's own base). A test reads `ci.yml` and shows
       both triggers name `main` and the release branches.
-- [ ] **AC-5** — `reviewPullRequest` (`review.mjs`) reads the unit and the checklist from `main`
+- [x] **AC-5** — `reviewPullRequest` (`review.mjs`) reads the unit and the checklist from `main`
       whatever the pull request's base, since both are written on `main` (`readUnit` and
       `readRules`, each with `base: 'main'`), and still starts the reviewer in a checkout of the
       base's tip. A test shows a pull request into `release/v0.1.0` reviewed from a checkout of
       that branch's tip, with a unit file and a checklist that differ between `main` and the
       release branch read as they are on `main`; and a pull request into `main` reviewed as
       before.
-- [ ] **AC-6** — `.claude/prompts/reviewer.md` names the pull request's base through a
+- [x] **AC-6** — `.claude/prompts/reviewer.md` names the pull request's base through a
       placeholder, `{{BASE_BRANCH}}`, wherever it now names `main` as the base of the diff or of
       the checkout (line numbers at `566b6be`): `git diff origin/main...{{HEAD_SHA}}`, which
       becomes `git diff origin/{{BASE_BRANCH}}...{{HEAD_SHA}}` (lines 144, 179 and 220); "a
@@ -50,23 +50,23 @@ through the gate.
       (20, 22, 32 to 33, 66, 70, 94 and 135) keep `main`. In the header, line 42 says the
       instructions, settings and hooks come from the base, and the placeholder table gains a
       `{{BASE_BRANCH}}` row saying what it is substituted with.
-- [ ] **AC-7** — `buildInvocation` and `renderReviewerPrompt` (`scripts/dispatch/invocation.mjs`)
+- [x] **AC-7** — `buildInvocation` and `renderReviewerPrompt` (`scripts/dispatch/invocation.mjs`)
       substitute `{{BASE_BRANCH}}` with the pull request's base, `pr.baseRef`, which
       `reviewPullRequest` passes for a Claude and a Codex reviewer alike. `BASE_BRANCH` is a
       `TRUSTED_INLINE` placeholder whose pattern admits only `main` and a release branch's name
       (AC-1), and an invocation without a base, or with any other, is refused.
-- [ ] **AC-8** — `invocation.test.mjs` renders the reviewer prompt with the base `release/v0.1.0`
+- [x] **AC-8** — `invocation.test.mjs` renders the reviewer prompt with the base `release/v0.1.0`
       and shows `git diff origin/release/v0.1.0...` followed by the head's SHA, and no
       `origin/main` anywhere; renders it with `main` and shows `git diff origin/main...` as before;
       and shows a refusal for the bases `feature/x` and `main` followed by a newline.
-- [ ] **AC-9** — `REVIEW.md` says, in "Every pull request", that a pull request into a release
+- [x] **AC-9** — `REVIEW.md` says, in "Every pull request", that a pull request into a release
       branch changes nothing under `stories/` (`docs/release-review.md`), and that the section's
       item 4 also accepts `Unit: none` for one into a release branch that reverts a deferred
       capability and names the pull requests it reverts; and, in "Conformance to the unit", that
       item 1's ticking and item 4 apply only to a pull request into `main`.
-- [ ] **AC-10** — `docs/controller.md`'s rotation takes each open pull request against `main` or a
+- [x] **AC-10** — `docs/controller.md`'s rotation takes each open pull request against `main` or a
       release branch, and says so.
-- [ ] **AC-11** — Every **Planned** marker naming ST-45 in `docs/agent-workflow-design.md` is
+- [x] **AC-11** — Every **Planned** marker naming ST-45 in `docs/agent-workflow-design.md` is
       resolved, as its "Reading this document" note says.
 
 ## Out of scope
