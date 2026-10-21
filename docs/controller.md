@@ -34,7 +34,8 @@ Until the rotation is built (ST-25), you run its steps by hand
 outcome as it will.
 
 - A rotation takes the pull requests it was asked for, or, when none are named, each open pull
-  request against `main`, oldest first.
+  request against `main` or a release branch (`release/vX.Y.Z`; `docs/release-review.md`),
+  oldest first.
 - Review, with `review.mjs`, each that is not a draft, whose author the gate honours, and that has
   no honoured verdict at its current head, up to five reviews in one rotation (ST-25's default).
 - Then, one at a time, run the pilot for each that is cleared: an honoured `pass` or

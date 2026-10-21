@@ -973,10 +973,9 @@ every capability the release deferred, which is still on `main`. A patch release
 newest release on a branch cut from its tag, and its batch is only the pull requests into that
 branch. `main`'s `package.json` keeps the version `0.0.0`, since `main` is never released directly
 (`release-review.md`; Part 3, "Decided so far", "The release review cuts each release on a
-release branch, and a tag is never moved"). **Planned (ST-45):** CI, the reviewer, the pilot and
-the runway handle a pull request into a release branch as one into `main`; the reviewer starts in
-a checkout of the pull request's base and diffs against it, and is given the unit and the
-checklist from `main`.
+release branch, and a tag is never moved"). CI, the reviewer, the pilot and the runway handle a
+pull request into a release branch as one into `main`; the reviewer starts in a checkout of the
+pull request's base and diffs against it, and is given the unit and the checklist from `main`.
 
 ### Mechanics
 
@@ -2437,9 +2436,9 @@ shortened where it is long, so that it can be found there with its date.
   separate pull request.
 - **The release review cuts each release on a release branch, and a tag is never moved** (decided
   2026-10-19 by the owner, with the planning session, while planning how steward installs in another
-  project; **Planned (ST-45, ST-44)**). A project pins steward by a tag, so the first tag, `v0.1.0`,
-  needs a way to be cut. A release review session cuts it, as the release review was always meant to
-  end in a tag, with its instructions in `release-review.md`: the crew starts it when it wants a
+  project; **Planned (ST-44)**). A project pins steward by a tag, so the first tag, `v0.1.0`, needs
+  a way to be cut. A release review session cuts it, as the release review was always meant to end
+  in a tag, with its instructions in `release-review.md`: the crew starts it when it wants a
   release, not on a schedule or a count of merged pull requests. It cuts the release on a branch of
   its own, `release/vX.Y.Z`, from `main` at the batch's end, on the crew's word, and gives it
   `main`'s branch protection. The branch changes only through pull requests into it, reviewed and
@@ -2460,39 +2459,39 @@ shortened where it is long, so that it can be found there with its date.
   runs, from the release branch: `init` on a scratch repository the crew provides, then a review and
   a landing of a test pull request there; until `init` exists, it reads steward's own rotations
   during the batch. `AGENTS.md` says that no other session pushes, moves or deletes a tag, or pushes
-  to a release branch. CI, the reviewer, the pilot and the runway are to handle a pull request into
-  a release branch as one into `main` (ST-45). **After #58's third review, on 2026-10-20** (owner,
-  with the planning session): a capability deferred from a release stays on `main`, so the next
-  release review's batch takes every capability the previous release's notes list as deferred, with
-  a verdict of its own; a patch release repairs only the newest release, on `release/vX.Y.(Z+1)` cut
-  from its tag, when no newer release branch exists, and its batch is only the pull requests into
-  that branch, while a release from `main` keeps measuring its batch from the newest release
-  branch's merge base with `main`, which a patch release's branch shares with the release it
-  repairs; no pull request into a release branch changes anything under `stories/`, and ATC reads
-  the unit, such as a cherry-picked fix's, and the checklist from `main` whatever the base; and the
-  reviewer diffs against the pull request's base, through a `{{BASE_BRANCH}}` placeholder, so ST-45
-  is built by hand. Considered and not chosen then: reverting a deferred capability on `main` as
-  well, to come back through a new pull request; reading the checklist from the base, the rules the
-  release was cut with; patching any release, not only the newest, which needs a rule for versions
-  that collide with a release from `main`; measuring a release from `main` from the newest
-  `release/vX.Y.0`, which a patch version cut from `main` breaks; a cherry-pick with `Unit: none`;
-  and a story of its own for the prompt's change. **After its fourth review, on 2026-10-20**
-  (owner): the walkthrough runs `init --ref <commit>` (ST-44), pinning the scratch repository's
-  workflow files to the release branch's last commit, since the tag is cut only after acceptance,
-  and runs again whenever a fix or revert lands into the branch (ST-44 builds `--ref`). Considered
-  and not chosen then: a release-candidate tag, `vX.Y.Z-rc.N`, which needs a pull request setting
-  that version for each candidate; and walking through after tagging, which tags before acceptance.
-  **After its fifth review, on 2026-10-20** (owner): each walkthrough, the first and every repeat,
-  runs on a new scratch repository, since `init` leaves a file that already exists as it is; not
-  chosen: a way for `init` to repin existing workflow files. This replaces "pause the coders,
-  review, tag, resume", which "Release branches are optional and deferred" had recommended while
-  work is not parallel; the release branch was then deferred. The owner's reasons: work on `main`
-  need not wait for a release, and the branch gives a place to defer items from. Considered and not
-  chosen: tagging the commit that lands the notes on `main`, which takes in whatever landed during
-  the review unreviewed, or needs landings held while the notes land; tagging the batch's last
-  commit on `main`, which would not hold its own notes or version; holding every landing for the
-  whole review; the planning session pushing `v0.1.0` on the crew's word; and the crew tagging by
-  hand.
+  to a release branch. CI, the reviewer, the pilot and the runway handle a pull request into a
+  release branch as one into `main` (built in ST-45). **After #58's third review, on 2026-10-20**
+  (owner, with the planning session): a capability deferred from a release stays on `main`, so the
+  next release review's batch takes every capability the previous release's notes list as deferred,
+  with a verdict of its own; a patch release repairs only the newest release, on
+  `release/vX.Y.(Z+1)` cut from its tag, when no newer release branch exists, and its batch is only
+  the pull requests into that branch, while a release from `main` keeps measuring its batch from the
+  newest release branch's merge base with `main`, which a patch release's branch shares with the
+  release it repairs; no pull request into a release branch changes anything under `stories/`, and
+  ATC reads the unit, such as a cherry-picked fix's, and the checklist from `main` whatever the
+  base; and the reviewer diffs against the pull request's base, through a `{{BASE_BRANCH}}`
+  placeholder, so ST-45 is built by hand. Considered and not chosen then: reverting a deferred
+  capability on `main` as well, to come back through a new pull request; reading the checklist from
+  the base, the rules the release was cut with; patching any release, not only the newest, which
+  needs a rule for versions that collide with a release from `main`; measuring a release from `main`
+  from the newest `release/vX.Y.0`, which a patch version cut from `main` breaks; a cherry-pick with
+  `Unit: none`; and a story of its own for the prompt's change. **After its fourth review, on
+  2026-10-20** (owner): the walkthrough runs `init --ref <commit>` (ST-44), pinning the scratch
+  repository's workflow files to the release branch's last commit, since the tag is cut only after
+  acceptance, and runs again whenever a fix or revert lands into the branch (ST-44 builds `--ref`).
+  Considered and not chosen then: a release-candidate tag, `vX.Y.Z-rc.N`, which needs a pull request
+  setting that version for each candidate; and walking through after tagging, which tags before
+  acceptance. **After its fifth review, on 2026-10-20** (owner): each walkthrough, the first and
+  every repeat, runs on a new scratch repository, since `init` leaves a file that already exists as
+  it is; not chosen: a way for `init` to repin existing workflow files. This replaces "pause the
+  coders, review, tag, resume", which "Release branches are optional and deferred" had recommended
+  while work is not parallel; the release branch was then deferred. The owner's reasons: work on
+  `main` need not wait for a release, and the branch gives a place to defer items from. Considered
+  and not chosen: tagging the commit that lands the notes on `main`, which takes in whatever landed
+  during the review unreviewed, or needs landings held while the notes land; tagging the batch's
+  last commit on `main`, which would not hold its own notes or version; holding every landing for
+  the whole review; the planning session pushing `v0.1.0` on the crew's word; and the crew tagging
+  by hand.
 - **The runway reads the head's check runs, with `checks: read`** (decided 2026-10-20 by the owner,
   with the planning session). ST-24 has the runway decide whether the checks
   `landWhen` names are green from the head's check runs and commit statuses, and CI's `test` is a

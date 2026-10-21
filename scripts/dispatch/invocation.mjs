@@ -17,6 +17,7 @@
 
 import { coderAllowedTools, coderEnv, CODER_DISALLOWED_TOOLS, READ_ONLY_SHELL_UTILS } from './coder-env.mjs'
 import { render, wrapInjectedBlock } from './render.mjs'
+import { RELEASE_BRANCH_RE } from '../land/release-branch.mjs'
 
 export const ROLES = ['coder', 'reviewer']
 
@@ -150,6 +151,9 @@ const TRUSTED_INLINE = {
   HEAD_BRANCH: /^[A-Za-z0-9][A-Za-z0-9._/-]*$/,
   HEAD_SHA: /^[0-9a-f]{40}$/,
   PR_NUMBER: /^[0-9]+$/,
+  // ST-45/AC-7: the pull request's base, which steward reviews only when it is `main` or a
+  // release branch (`release-branch.mjs`).
+  BASE_BRANCH: new RegExp(`^(?:main|${RELEASE_BRANCH_RE.source.slice(1, -1)})$`),
 }
 
 /**
@@ -229,6 +233,32 @@ export function retrySection({ round, roundsRemaining, findings, branch, source 
   ].join('\n')
 }
 
+/** The reviewer prompt's placeholder values; throws on a missing `pr`, base or `rules`. */
+function reviewerValues({ unit, branch, pr, rules }) {
+  if (!unit) throw new Error('a reviewer invocation requires a unit')
+  if (!pr) throw new Error('a reviewer invocation requires pr')
+  if (typeof pr.baseRef !== 'string') throw new Error("a reviewer invocation requires the pull request's base")
+  if (typeof rules !== 'string') throw new Error('a reviewer invocation requires rules')
+  return {
+    PR_NUMBER: String(pr.number),
+    HEAD_BRANCH: branch,
+    HEAD_SHA: pr.headSha,
+    BASE_BRANCH: pr.baseRef,
+    UNIT_NOTE: unit.note,
+    UNIT: unit.text,
+    PR_BODY: pr.body,
+    RULES: rules,
+  }
+}
+
+/**
+ * The reviewer prompt, rendered exactly as `buildInvocation` renders it, for a reviewer that is
+ * not started with Claude Code's arguments: the Codex CLI's (`codex.mjs`, ST-32).
+ */
+export function renderReviewerPrompt({ promptTemplate, unit, branch, pr, rules }) {
+  return renderBounded(promptTemplate, reviewerValues({ unit, branch, pr, rules })).text
+}
+
 /**
  * Builds everything needed to start one session, and starts nothing.
  *
@@ -239,8 +269,9 @@ export function retrySection({ round, roundsRemaining, findings, branch, source 
  *                   words and the unit's text, rendered as `{{UNIT_NOTE}}` and
  *                   `{{UNIT}}` (ST-22)
  *   branch          coder: the branch it works on. reviewer: the PR's head branch
- *   pr              reviewer only: { number, headSha, body }
- *   rules           reviewer only: the project's checklist as read from `main`
+ *   pr              reviewer only: { number, headSha, body, baseRef }, `baseRef` rendered as
+ *                   `{{BASE_BRANCH}}` (ST-45)
+ *   rules           reviewer only: the project's checklist as read from `main`, whatever the base
  *                   (`readRules`'s `text`), rendered as `{{RULES}}` (ST-21)
  *   retry          coder only, optional: { round, roundsRemaining, findings, source, storyMoved }
  *                   (`source` is 'review' or 'ci'; `storyMoved` is false when the story file is still under stories/)
@@ -258,30 +289,6 @@ export function retrySection({ round, roundsRemaining, findings, branch, source 
  * `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` removed so background commands stay
  * available (OQ-107).
  */
-/** The reviewer prompt's placeholder values; throws on a missing `pr` or `rules`. */
-function reviewerValues({ unit, branch, pr, rules }) {
-  if (!unit) throw new Error('a reviewer invocation requires a unit')
-  if (!pr) throw new Error('a reviewer invocation requires pr')
-  if (typeof rules !== 'string') throw new Error('a reviewer invocation requires rules')
-  return {
-    PR_NUMBER: String(pr.number),
-    HEAD_BRANCH: branch,
-    HEAD_SHA: pr.headSha,
-    UNIT_NOTE: unit.note,
-    UNIT: unit.text,
-    PR_BODY: pr.body,
-    RULES: rules,
-  }
-}
-
-/**
- * The reviewer prompt, rendered exactly as `buildInvocation` renders it, for a reviewer that is
- * not started with Claude Code's arguments: the Codex CLI's (`codex.mjs`, ST-32).
- */
-export function renderReviewerPrompt({ promptTemplate, unit, branch, pr, rules }) {
-  return renderBounded(promptTemplate, reviewerValues({ unit, branch, pr, rules })).text
-}
-
 export function buildInvocation(options) {
   const { role, promptTemplate, story, unit, branch, pr, rules, retry, baseEnv, emptyGhConfigDir } = options
   if (!ROLES.includes(role)) throw new Error(`unknown role: ${JSON.stringify(role)}`)

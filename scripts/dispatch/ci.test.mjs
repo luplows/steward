@@ -579,8 +579,9 @@ function jobBlock(text, jobName) {
 describe('OQ-124/AC-1: ci.yml also triggers on workflow_run of the sweep, completed; pull_request and push unchanged', () => {
   const text = readFileSync(CI_WORKFLOW_FILE, 'utf8')
 
+  // ST-45/AC-4 added the release branches to both, with a comment above them.
   it('keeps the existing pull_request and push triggers', () => {
-    expect(text).toMatch(/^on:\n {2}pull_request:\n {4}branches: \[main\]\n {2}push:\n {4}branches: \[main\]\n/m)
+    expect(text).toMatch(/^on:\n(?: {2}#.*\n)* {2}pull_request:\n {4}branches: \[main, 'release\/v\*'\]\n {2}push:\n {4}branches: \[main, 'release\/v\*'\]\n/m)
   })
 
   it(`adds workflow_run on "${sweepName}", types: [completed]`, () => {
