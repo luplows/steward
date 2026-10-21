@@ -184,7 +184,7 @@ function dirtyClone() {
 
 // A fake GitHub. `states` is consumed one per read of the pull request, the last
 // repeating, so a test can move the head between two reads.
-function fakeGitHub({ branch, states, comments = [], body = 'PR body' }) {
+function fakeGitHub({ branch, states, comments = [], body = 'PR body', base = 'main' }) {
   const requests = []
   const posted = []
   let read = 0
@@ -197,7 +197,7 @@ function fakeGitHub({ branch, states, comments = [], body = 'PR body' }) {
     }
     if (/\/pulls\/\d+$/.test(url)) {
       const sha = states[Math.min(read++, states.length - 1)] ?? shas[branch]
-      return json({ head: { sha, ref: branch }, base: { ref: 'main' }, body, draft: false, labels: [] })
+      return json({ head: { sha, ref: branch }, base: { ref: base }, body, draft: false, labels: [] })
     }
     if (/\/comments\?/.test(url)) return json(comments)
     throw new Error(`unexpected request ${init.method} ${url}`)
@@ -235,8 +235,8 @@ function standIn(reply) {
 // running anything else has pushed past the 5 s default. Passed to the tests that call review().
 const REVIEW_TEST_TIMEOUT = 30_000
 
-const review = (branch, { states, comments, body, reply, baseEnv = {}, repoDir, rereview, scratchRoot, machineSettings, choice, extra } = {}) => {
-  const github = fakeGitHub({ branch, states: states ?? [shas[branch]], comments, body })
+const review = (branch, { states, comments, body, base, reply, baseEnv = {}, repoDir, rereview, scratchRoot, machineSettings, choice, extra } = {}) => {
+  const github = fakeGitHub({ branch, states: states ?? [shas[branch]], comments, body, base })
   const session = standIn(reply ?? verdictText(shas[branch]))
   const done = reviewPullRequest({
     number: 7, ctx: github.ctx, repoDir: repoDir ?? dirtyClone(), baseEnv, rereview, scratchRoot,
@@ -527,6 +527,46 @@ describe('ST-39/AC-1: the fetch before a review takes every branch on origin, pr
     expect(refs).toContain('refs/remotes/origin/story/OQ-99-thing')
     expect(refs).toContain('refs/remotes/origin/main')
     git(seedDir, 'push', '-q', 'origin', '--delete', 'st39/new')
+  }, REVIEW_TEST_TIMEOUT)
+})
+
+describe('ST-45/AC-5: a pull request into a release branch', () => {
+  it('ST-45/AC-5: is reviewed from a checkout of the release branch, with the unit and the checklist read from main', async () => {
+    // A release branch cut from main, whose checklist differs and which lacks the unit's file, as
+    // one would when its fix's story was written on main after the cut.
+    git(seedDir, 'checkout', '-q', '-B', 'release/v0.1.0', 'main')
+    writeFileSync(path.join(seedDir, 'REVIEW.md'), '## Release only\n\n1. ON THE RELEASE BRANCH.\n')
+    git(seedDir, 'rm', '-q', 'stories/OQ-99-thing.md')
+    git(seedDir, 'commit', '-q', '-am', 'release')
+    git(seedDir, 'push', '-q', '-f', 'origin', 'release/v0.1.0')
+    const releaseTip = git(seedDir, 'rev-parse', 'HEAD')
+    git(seedDir, 'checkout', '-q', '-B', 'fix/OQ-99-cherry', 'release/v0.1.0')
+    writeFileSync(path.join(seedDir, 'fix.txt'), 'f')
+    git(seedDir, 'add', 'fix.txt')
+    git(seedDir, 'commit', '-q', '-m', 'cherry-pick')
+    git(seedDir, 'push', '-q', '-f', 'origin', 'fix/OQ-99-cherry')
+    shas['fix/OQ-99-cherry'] = git(seedDir, 'rev-parse', 'HEAD')
+    git(seedDir, 'checkout', '-q', 'main')
+
+    const { done, session } = review('fix/OQ-99-cherry', { base: 'release/v0.1.0', body: 'Unit: stories/OQ-99-thing.md' })
+    const result = await done
+    expect(result).toMatchObject({ status: 'recorded', headSha: shas['fix/OQ-99-cherry'] })
+    const [call] = session.calls
+    expect(call.checkout.head).toBe(releaseTip)
+    expect(blockOf(call.prompt, 'UNIT')).toBe(STORY('sonnet').trim())
+    expect(blockOf(call.prompt, 'RULES')).toContain('## Reading the pull request body')
+    expect(call.prompt).not.toContain('ON THE RELEASE BRANCH')
+    expect(call.prompt).toContain(`git diff origin/release/v0.1.0...${shas['fix/OQ-99-cherry']}`)
+    git(seedDir, 'push', '-q', 'origin', '--delete', 'release/v0.1.0', 'fix/OQ-99-cherry')
+  }, REVIEW_TEST_TIMEOUT)
+
+  it("ST-45/AC-5: a pull request into main is reviewed as before, from main's tip, with its diff against origin/main", async () => {
+    const { done, session } = review('story/OQ-99-thing', { body: 'Unit: stories/OQ-99-thing.md' })
+    await done
+    const [call] = session.calls
+    expect(call.checkout.head).toBe(git(originDir, 'rev-parse', 'main'))
+    expect(blockOf(call.prompt, 'UNIT')).toBe(STORY('sonnet').trim())
+    expect(call.prompt).toContain(`git diff origin/main...${shas['story/OQ-99-thing']}`)
   }, REVIEW_TEST_TIMEOUT)
 })
 
@@ -1454,6 +1494,13 @@ describe('ST-32/AC-2, AC-3, AC-5: a reviewer whose choice runs on Codex', () => 
     })
     return { done, github, stand, claude, usageCalls }
   }
+
+  it("ST-45/AC-7: a Codex reviewer is given the pull request's base too", async () => {
+    const { done, stand } = reviewWithCodex('story/OQ-99-thing')
+    await done
+    expect(stand.calls[0].prompt).toContain(`git diff origin/main...${shas['story/OQ-99-thing']}`)
+    expect(stand.calls[0].prompt).not.toContain('{{BASE_BRANCH}}')
+  }, REVIEW_TEST_TIMEOUT)
 
   it('ST-32/AC-2: runs codex exec read-only in the review checkout, with the prompt a Claude reviewer gets, and records its verdict', async () => {
     const { done, github, stand, claude } = reviewWithCodex('story/OQ-99-thing')

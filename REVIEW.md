@@ -35,9 +35,14 @@ A section that restates the PR title in other words is also unfilled.
    which component does what), are true at its head.
 4. A change to code links the unit it implements, with a `Unit:` line in its
    body. `Unit: none` is accepted only where no unit could exist, such as a
-   pull request that writes the unit itself. The review's note on the unit
-   says which it found: a link read, a link not read and why, `Unit: none`, or
-   no `Unit:` line, and several links are reported as such.
+   pull request that writes the unit itself, or one into a release branch
+   that reverts a deferred capability and names the pull requests it
+   reverts. The review's note on the unit says which it found: a link read, a
+   link not read and why, `Unit: none`, or no `Unit:` line, and several links
+   are reported as such.
+5. A pull request into a release branch (`release/vX.Y.Z`) changes nothing
+   under `stories/`: stories are written and moved on `main`
+   (`docs/release-review.md`).
 
 ## Changes to code
 
@@ -64,10 +69,11 @@ Applies when: the diff changes code, tests, workflow files or prompts.
 Applies when: the pull request implements a unit.
 
 1. **Completeness** — every acceptance criterion in the unit is delivered.
-   Name any that are not. The PR ticks each AC it delivered in the story file
-   (`stories/README.md`, "Acceptance criteria and tests"). An AC left unticked
-   must be explained in the PR body, and an AC delivered but left unticked is
-   a finding here.
+   Name any that are not. A PR into `main` ticks each AC it delivered in the
+   story file (`stories/README.md`, "Acceptance criteria and tests"). An AC
+   left unticked must be explained in the PR body, and an AC delivered but left
+   unticked is a finding here. A PR into a release branch ticks nothing: it
+   changes nothing under `stories/`.
 2. **Fidelity** — each AC is genuinely satisfied, not merely named in a test.
    A test named `ST-49/AC-3` that does not exercise AC-3 fails this item. So
    does a ticked AC: a tick is the author's claim, and one that is not
@@ -83,7 +89,8 @@ Applies when: the pull request implements a unit.
    file. The reviewer's judgement is still needed for the rest —
    whether the diff outside `stories/` strays into the unit's Out of scope,
    or implements a decision it left open.
-4. When the unit is a story file, it is moved to `stories/done/` in this PR.
+4. When the unit is a story file and the PR is into `main`, the story file is
+   moved to `stories/done/` in this PR. A PR into a release branch moves none.
 
 ## Changes to stories
 
