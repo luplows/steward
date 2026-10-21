@@ -163,7 +163,8 @@ export async function resolveToken(env = process.env, authToken = ghAuthToken) {
 
 /**
  * Builds the context the requests are sent through. `fetch` and `getToken` are injectable; the
- * token is read once, on first use. A failed request throws an error carrying its `status`.
+ * token is read once, on first use. A failed request throws an error carrying its `status` and
+ * its parsed JSON `body` (`null` when the response is not JSON).
  */
 export function createInspectContext({ repo, fetch = globalThis.fetch, getToken = resolveToken }) {
   repoPath(repo)
@@ -184,8 +185,14 @@ export function createInspectContext({ repo, fetch = globalThis.fetch, getToken 
         body: request.body === undefined ? undefined : JSON.stringify(request.body),
       })
       if (!response.ok) {
-        const error = new Error(`${request.method} ${request.url} failed: ${response.status} ${await response.text()}`)
+        const text = await response.text()
+        const error = new Error(`${request.method} ${request.url} failed: ${response.status} ${text}`)
         error.status = response.status
+        try {
+          error.body = JSON.parse(text)
+        } catch {
+          error.body = null
+        }
         throw error
       }
       return response.json()
@@ -315,10 +322,20 @@ export async function inspectStalls(ctx, { now, afterHours }) {
 
 // ----------------------------------------------------------------- raising
 
+/** Whether a failed label creation is GitHub saying the label already exists. */
+function isLabelAlreadyExists(error) {
+  return (
+    error.status === 422 &&
+    Array.isArray(error.body?.errors) &&
+    error.body.errors.some((e) => e?.code === 'already_exists')
+  )
+}
+
 /**
  * Raises each finding as an issue unless one labelled `inspection`, open or closed, already has
- * its title. The label is created once, just before the first issue is opened, and a 422 from
- * that request means the repository already has it. Returns one result per finding, passing each to
+ * its title. The label is created once, just before the first issue is opened, and a 422 whose
+ * `errors` holds an `already_exists` entry means the repository already has it; any other failure
+ * is thrown. Returns one result per finding, passing each to
  * `onResult` as it is settled, so a later failure does not lose the lines of issues already opened.
  */
 export async function raiseFindings(ctx, findings, onResult = () => {}) {
@@ -339,7 +356,7 @@ export async function raiseFindings(ctx, findings, onResult = () => {}) {
       try {
         await ctx.send(buildCreateInspectionLabel(ctx.repo))
       } catch (error) {
-        if (error.status !== 422) throw error
+        if (!isLabelAlreadyExists(error)) throw error
       }
       labelled = true
     }

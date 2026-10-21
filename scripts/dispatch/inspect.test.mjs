@@ -65,9 +65,10 @@ const issue = (title, state = 'open', number = 900) => ({ number, title, state }
  * A fake GitHub. `commits` is main's commit list; `pulls[sha]` the pull requests of a commit;
  * `statuses[sha]` the statuses of a head; `open` the open pull requests; `issues` the issues
  * labelled `inspection`. Every request is recorded; a POST to `/issues` answers a number, and
- * `labelExists` makes the label creation answer 422.
+ * `labelExists` makes the label creation answer GitHub's 422 for a duplicate; `labelText` makes it
+ * answer 422 with that response text instead.
  */
-function world({ commits = [], pulls = {}, statuses = {}, open = [], issues = [], labelExists = false, failOn = null } = {}) {
+function world({ commits = [], pulls = {}, statuses = {}, open = [], issues = [], labelExists = false, labelText = null, failOn = null } = {}) {
   const w = { requests: [], posts: [], nextIssue: 1000 }
   const ok = (json) => ({ ok: true, status: 200, json: async () => json })
   w.fetch = async (url, init) => {
@@ -77,7 +78,12 @@ function world({ commits = [], pulls = {}, statuses = {}, open = [], issues = []
     if (init.method === 'POST') {
       w.posts.push(request)
       if (url.endsWith('/labels')) {
-        return labelExists ? { ok: false, status: 422, text: async () => 'already_exists' } : ok({ name: 'inspection' })
+        const duplicate = JSON.stringify({
+          message: 'Validation Failed',
+          errors: [{ resource: 'Label', code: 'already_exists', field: 'name' }],
+        })
+        if (labelText !== null) return { ok: false, status: 422, text: async () => labelText }
+        return labelExists ? { ok: false, status: 422, text: async () => duplicate } : ok({ name: 'inspection' })
       }
       return ok({ number: w.nextIssue++ })
     }
@@ -538,6 +544,37 @@ describe('ST-29/AC-5: output and exit codes', () => {
       const { code } = await run(dir, w)
       expect(code).toBe(2)
       expect(w.requests.filter((r) => r.method === 'POST' && r.url.endsWith('/issues'))).toHaveLength(1)
+    })
+  })
+
+  it('ST-29/AC-4 and AC-5: a 422 that is not already_exists, or has no JSON body, exits 2 and opens no issue', async () => {
+    const bodies = [
+      JSON.stringify({ message: 'Validation Failed', errors: [{ resource: 'Label', code: 'invalid', field: 'color' }] }),
+      JSON.stringify({ message: 'Validation Failed' }),
+      JSON.stringify({ message: 'Validation Failed', errors: [] }),
+      JSON.stringify({ errors: 'already_exists' }),
+      'already_exists',
+      '',
+    ]
+    for (const labelText of bodies) {
+      await project(async (dir) => {
+        writeSettings(dir)
+        const w = world({ commits: [commit(sha('1'))], labelText })
+        const { code, errors } = await run(dir, w)
+        expect(code, labelText).toBe(2)
+        expect(errors.join()).toMatch(/failed: 422/)
+        expect(w.posts.filter((r) => r.url.endsWith('/issues'))).toEqual([])
+      })
+    }
+  })
+
+  it('ST-29/AC-4 and AC-5: a 422 for a duplicate label, among other errors, still lets the issue open', async () => {
+    await project(async (dir) => {
+      writeSettings(dir)
+      const labelText = JSON.stringify({ errors: [{ code: 'custom' }, { code: 'already_exists' }] })
+      const w = world({ commits: [commit(sha('1'))], labelText })
+      expect((await run(dir, w)).code).toBe(1)
+      expect(w.posts.filter((r) => r.url.endsWith('/issues'))).toHaveLength(1)
     })
   })
 
