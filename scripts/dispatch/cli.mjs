@@ -29,6 +29,7 @@ export const COMMANDS = {
   land: path.join(DISPATCH_DIR, 'land.mjs'),
   queue: path.join(DISPATCH_DIR, 'queue.mjs'),
   lint: path.join(SCRIPTS_DIR, 'lint-stories.mjs'),
+  inspect: path.join(DISPATCH_DIR, 'inspect.mjs'),
   verdicts: path.join(SCRIPTS_DIR, 'report', 'review-verdicts.mjs'),
 }
 

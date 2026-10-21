@@ -12,6 +12,7 @@ export const FIXTURE_SETTINGS = {
   land: true,
   unitLinks: ['file'],
   rulesFile: 'REVIEW.md',
+  inspectAfterHours: 24,
 }
 
 export function fixtureSettings(overrides = {}) {

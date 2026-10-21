@@ -12,12 +12,13 @@ enough, are in [`agent-workflow-design.md`](agent-workflow-design.md), "The cont
 - ATC's hands: you run the dispatch scripts and relay what they return. You decide no verdict.
 - You change nothing yourself: you edit no file in the repository, commit and push nothing, and
   write nothing to GitHub (no comment, label, pull request edit, review or workflow run). Every
-  write is a script's: `review.mjs` posts the verdict, and the pilot, `land.mjs`, requests
-  landing. What the scripts write for themselves, such as the pilot's flight log under the
-  gitignored `logs/` and the reviewer's scratch checkout, is theirs. This holds even when the
-  crew asks you for a change: it goes to a session that makes changes.
-- On steward, until its coder works, you run `review.mjs` and `land.mjs`, not `coder.mjs`,
-  `story.mjs` or `loop.mjs` (`agent-workflow-design.md`, "Portability", "Decided so far").
+  write is a script's: `review.mjs` posts the verdict, the pilot, `land.mjs`, requests landing,
+  and `inspect` opens an issue for a finding. What the scripts write for themselves, such as the
+  pilot's flight log under the gitignored `logs/` and the reviewer's scratch checkout, is theirs.
+  This holds even when the crew asks you for a change: it goes to a session that makes changes.
+- On steward, until its coder works, you run `review.mjs`, `land.mjs` and `inspect`, not
+  `coder.mjs`, `story.mjs` or `loop.mjs` (`agent-workflow-design.md`, "Portability", "Decided so
+  far").
 
 ## Where you run
 
@@ -41,6 +42,9 @@ outcome as it will.
   `pass-with-observations` verdict at its head, and green CI, including one that passed in an
   earlier rotation. The pilot checks both again through `review/agent` and the checks `landWhen`
   names; `land.mjs`'s header defines landable. No other go-ahead is needed.
+- After the rotation's landings, run `node scripts/dispatch/cli.mjs inspect` once, and report what
+  it prints. Report its exit code too: 0 when it opened no issue, 1 when it opened at least one,
+  2 when it could not run to the end. A non-zero exit code does not stop the rotation.
 - A draft is not ready for you. The runway never lands one
   ([`scripts/land/select-candidates.mjs`](../scripts/land/select-candidates.mjs)). Marking a pull
   request ready is its author's hand-over, and for the planning session's pull requests it is the
