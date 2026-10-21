@@ -113,6 +113,87 @@ describe('parseRules', () => {
     expect(r.sections[0].items.map((i) => i.number)).toEqual([1, 5])
     expect(r.sections[1].items.map((i) => i.number)).toEqual([1])
   })
+
+  const WITH_COMMENTS = `Preamble.
+<!-- a comment in the preamble -->
+
+<!--
+  A comment over
+  several lines.
+-->
+## First
+
+Applies when: always. <!-- trailing comment -->
+
+A lead. <!-- inline --> More lead.
+
+<!-- a comment between the lead and the items -->
+1. one<!-- inline in an item -->
+   still one
+<!-- a comment inside item one
+2. not an item
+-->
+2. two
+
+<!-- ## Hidden heading
+1. hidden item
+-->
+
+## Second
+
+1. only
+`
+  const WITHOUT_COMMENTS = `Preamble.
+
+## First
+
+Applies when: always.
+
+A lead.  More lead.
+
+1. one
+   still one
+2. two
+
+## Second
+
+1. only
+`
+
+  it('ST-43/AC-1 a file with comments parses to the same sections as the file without them', () => {
+    const withComments = parseRules(WITH_COMMENTS)
+    expect(withComments.ok).toBe(true)
+    expect(withComments).toEqual(parseRules(WITHOUT_COMMENTS))
+    expect(withComments.sections.map((s) => s.name)).toEqual(['First', 'Second'])
+    expect(withComments.sections[0].items.map((i) => i.number)).toEqual([1, 2])
+    expect(withComments.sections[0].lead).toBe('A lead.  More lead.')
+  })
+
+  it('ST-43/AC-1 a commented-out heading and a commented-out item are not parsed', () => {
+    const r = parseRules('## A\n\n1. a\n<!-- 2. b -->\n\n<!--\n## Gone\n1. g\n-->\n')
+    expect(r.ok).toBe(true)
+    expect(r.sections.map((s) => s.name)).toEqual(['A'])
+    expect(r.sections[0].items).toEqual([{ number: 1, text: 'a' }])
+  })
+
+  it('ST-43/AC-1 a section holding only a commented-out item has no item', () => {
+    const r = parseRules('## A\n\n<!-- 1. a -->\n')
+    expect(r.ok).toBe(false)
+    expect(r.problems[0]).toContain('"A"')
+  })
+
+  it('ST-43/AC-1 a comment that is never closed runs to the end of the file', () => {
+    const r = parseRules('## A\n\n1. a\n<!-- 2. b\n## B\n1. c\n')
+    expect(r.ok).toBe(true)
+    expect(r.sections.map((s) => s.name)).toEqual(['A'])
+    expect(r.sections[0].items).toEqual([{ number: 1, text: 'a' }])
+  })
+
+  it('ST-43/AC-1 a comment in a CRLF file is removed as in any other', () => {
+    const r = parseRules('## A\r\n\r\n<!-- c -->\r\n1. a\r\n')
+    expect(r.ok).toBe(true)
+    expect(r.sections[0].items).toEqual([{ number: 1, text: 'a' }])
+  })
 })
 
 describe('readRules', { timeout: GIT_TIMEOUT }, () => {
@@ -186,5 +267,143 @@ describe('readRules', { timeout: GIT_TIMEOUT }, () => {
   it('ST-20/AC-3 does not throw when repoDir is not a repository', async () => {
     const r = await readRules({ repoDir: tmp, base: 'main', rulesFile: 'RULES.md' })
     expect(r.ok).toBe(false)
+  })
+
+  async function putOnMain(name, content) {
+    const seed = path.join(tmp, 'seed')
+    git(seed, 'checkout', '-q', 'main')
+    await writeFile(path.join(seed, name), content)
+    git(seed, 'add', '.')
+    git(seed, 'commit', '-q', '-m', `add ${name}`)
+    git(seed, 'push', '-q', 'origin', 'main')
+    git(repoDir, 'fetch', '-q', 'origin', 'main')
+  }
+
+  it('ST-43/AC-2 the text readRules returns has no comment and keeps every rule', async () => {
+    const source = '# Rules\n<!-- note to the crew -->\n\n## A\n\n<!-- where to add -->\n1. a\n2. b <!-- inline -->\n\n## B\n\n1. c\n'
+    await putOnMain('COMMENTED.md', source)
+    const r = await readRules({ repoDir, base: 'main', rulesFile: 'COMMENTED.md' })
+    expect(r.ok).toBe(true)
+    expect(r.text).not.toContain('<!--')
+    expect(r.text).not.toContain('-->')
+    expect(r.text).not.toContain('note to the crew')
+    expect(r.text).toBe('# Rules\n\n## A\n\n1. a\n2. b \n\n## B\n\n1. c\n')
+    expect(parseRules(r.text)).toEqual(parseRules(source))
+  })
+
+  it('ST-43/AC-5 the example as readRules returns it holds none of its placeholders', async () => {
+    const raw = readFileSync(EXAMPLE, 'utf8')
+    const comments = [...raw.matchAll(/<!--([\s\S]*?)-->/g)].map((m) => m[1])
+    expect(comments.length).toBeGreaterThanOrEqual(3)
+    await putOnMain('EXAMPLE.md', raw)
+    const r = await readRules({ repoDir, base: 'main', rulesFile: 'EXAMPLE.md' })
+    expect(r.ok).toBe(true)
+    expect(r.text).not.toContain('<!--')
+    expect(r.text).not.toContain('-->')
+    for (const comment of comments) {
+      for (const line of comment.split('\n').map((l) => l.trim()).filter((l) => l.length > 20)) {
+        expect(r.text).not.toContain(line)
+      }
+    }
+    expect(r.sections.map((s) => [s.name, s.items.length])).toEqual(EXAMPLE_SECTIONS)
+  })
+})
+
+const EXAMPLE = new URL('../../templates/review-checklist.md', import.meta.url)
+
+// The sections of the example checklist and their item counts (ST-43/AC-3).
+const EXAMPLE_SECTIONS = [
+  ['Reading the pull request body', 1],
+  ['Every pull request', 3],
+  ['Changes to code', 1],
+  ['Integrity', 4],
+  ['Conformance to the unit', 3],
+]
+
+describe('the example checklist', () => {
+  const raw = readFileSync(EXAMPLE, 'utf8')
+  const stripped = raw.replace(/<!--[\s\S]*?-->/g, '')
+  const r = parseRules(raw)
+  const section = (name) => r.sections.find((s) => s.name === name)
+
+  it('ST-43/AC-3 holds exactly the sections of the story, with their item counts, in order', () => {
+    expect(r.ok).toBe(true)
+    expect(r.sections.map((s) => [s.name, s.items.length])).toEqual(EXAMPLE_SECTIONS)
+    for (const s of r.sections) {
+      expect(s.items.map((i) => i.number)).toEqual(s.items.map((_, n) => n + 1))
+    }
+  })
+
+  it('ST-43/AC-3 keeps the conditions of "Changes to code" and "Conformance to the unit"', () => {
+    expect(section('Reading the pull request body').appliesWhen).toBeNull()
+    expect(section('Every pull request').appliesWhen).toBeNull()
+    expect(section('Integrity').appliesWhen).toBeNull()
+    expect(section('Changes to code').appliesWhen).toBe(
+      'the diff changes code, tests, workflow files or prompts.',
+    )
+    expect(section('Conformance to the unit').appliesWhen).toBe(
+      'the pull request implements a unit.',
+    )
+  })
+
+  it('ST-43/AC-3 "Reading the pull request body" names the Unit: line and the three sections', () => {
+    const body = section('Reading the pull request body')
+    expect(body.lead).toContain('`Unit:` line')
+    for (const name of ['What changed', 'Verification', 'Docs check']) {
+      expect(body.lead).toContain(`**${name}**`)
+    }
+    expect(body.items[0].text).toContain('`Unit:` line')
+  })
+
+  it('ST-43/AC-3 "Conformance to the unit" has completeness, fidelity and containment', () => {
+    expect(section('Conformance to the unit').items.map((i) => i.text.split(' ')[0])).toEqual([
+      '**Completeness**',
+      '**Fidelity**',
+      '**Containment**',
+    ])
+  })
+
+  it('ST-43/AC-3 takes the items it keeps verbatim from REVIEW.md', () => {
+    const review = parseRules(readFileSync(new URL('../../REVIEW.md', import.meta.url), 'utf8'))
+    const kept = (name, from, to) => {
+      const text = review.sections.find((s) => s.name === name).items[from - 1].text
+      expect(section(name).items[to - 1].text).toBe(text)
+    }
+    kept('Every pull request', 1, 1)
+    kept('Every pull request', 2, 2)
+    kept('Changes to code', 1, 1)
+    for (const n of [1, 2, 3, 4]) kept('Integrity', n, n)
+  })
+
+  it('ST-43/AC-4 leaves out what is one project\'s choice', () => {
+    for (const word of ['README.md', 'coverage', 'stories/', 'ST-', 'AGENTS.md', 'story-containment']) {
+      expect(raw).not.toContain(word)
+    }
+    expect(stripped).not.toMatch(/\btick/i)
+  })
+
+  it('ST-43/AC-5 has placeholders in the preamble, in a section and in the pull request body', () => {
+    const comments = [...raw.matchAll(/<!--([\s\S]*?)-->/g)].map((m) => ({
+      text: m[1],
+      at: m.index,
+    }))
+    const firstSection = raw.indexOf('\n## ')
+    const bodySection = raw.indexOf('\n## Reading the pull request body')
+    const nextSection = raw.indexOf('\n## ', bodySection + 1)
+    // Before the first section: where a project adds its own sections.
+    expect(comments.some((c) => c.at < firstSection && /sections/.test(c.text))).toBe(true)
+    // In "Reading the pull request body": naming the project's own template and sections.
+    expect(
+      comments.some((c) => c.at > bodySection && c.at < nextSection && /template/.test(c.text)),
+    ).toBe(true)
+    // In a later section: where a project adds its own items.
+    expect(comments.some((c) => c.at > nextSection && /items/.test(c.text))).toBe(true)
+  })
+
+  it('ST-43/AC-6 holds rules only, nothing on how steward runs a review', () => {
+    for (const word of ['verdict', 'marker', 'workflow enforces', 'review/agent', 'Coder:']) {
+      expect(stripped).not.toContain(word)
+    }
+    expect(stripped).not.toMatch(/\bgate\b/i)
   })
 })

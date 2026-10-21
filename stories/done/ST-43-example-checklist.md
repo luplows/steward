@@ -17,15 +17,15 @@ hold for any project, and the placeholders never reach the reviewer as rules.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `parseRules` (`scripts/dispatch/rules.mjs`) ignores HTML comments (`<!-- … -->`,
+- [x] **AC-1** — `parseRules` (`scripts/dispatch/rules.mjs`) ignores HTML comments (`<!-- … -->`,
       on one line or across several): a comment adds nothing to a section's lead or items, and a
       `## ` heading or a numbered line inside a comment starts no section and no item. Tests: a
       file with comments parses to the same sections, leads and items as the file with them
       removed; a commented-out heading and a commented-out item are not parsed.
-- [ ] **AC-2** — `readRules` returns, as the `text` the reviewer is given (`{{RULES}}`), the
+- [x] **AC-2** — `readRules` returns, as the `text` the reviewer is given (`{{RULES}}`), the
       checklist with its HTML comments removed. A test reads a checklist holding a comment from a
       repository's `main` and shows the text has no `<!--` and keeps every rule.
-- [ ] **AC-3** — The package carries an example checklist, one Markdown file, which `init` copies
+- [x] **AC-3** — The package carries an example checklist, one Markdown file, which `init` copies
       (ST-44). It starts from steward's `REVIEW.md` and keeps exactly these sections and items, in
       this order, worded with no story conventions:
       - "Reading the pull request body": its lead text and item 1, matching the template `init`
@@ -37,22 +37,22 @@ hold for any project, and the placeholders never reach the reviewer as rules.
       - "Conformance to the unit", with its `Applies when:` line: items 1 to 3 (completeness,
         fidelity, containment), with no ticking of acceptance criteria, no story file, no
         `ST-<n>` id and no sentence on `story-containment.mjs`.
-- [ ] **AC-4** — The example leaves out: "Every pull request", item 3 (the claims item); the
+- [x] **AC-4** — The example leaves out: "Every pull request", item 3 (the claims item); the
       Docs check on named files ("Reading the pull request body", item 2, `README.md`); "Changes
       to code", item 2 (no coverage tooling); "Conformance to the unit", item 4 (a story file
       moved into `stories/done/`); and all of "Changes to stories". A test parses the example and
       shows exactly the sections of AC-3, with their item counts, and that none of `README.md`,
       `coverage`, `stories/`, `ST-`, `AGENTS.md` and `story-containment` is in it.
-- [ ] **AC-5** — The example's placeholders for a project's own additions are HTML comments, at
+- [x] **AC-5** — The example's placeholders for a project's own additions are HTML comments, at
       least one in the preamble saying where a project adds its own sections, one in a section
       saying where it adds its own items, and one in "Reading the pull request body" saying that a
       project whose pull request template differs from the one `init` writes names its own template
       and sections there. A test shows the example's text as `readRules` returns it holds none of
       them.
-- [ ] **AC-6** — The example holds rules only: nothing on the verdict marker, the three verdicts,
+- [x] **AC-6** — The example holds rules only: nothing on the verdict marker, the three verdicts,
       a review with no verdict, what the gate's workflow enforces, or how the coder's pull request
       is opened (`docs/outline.md`, "The checklist's shape", "The file holds rules only").
-- [ ] **AC-7** — Every **Planned** marker naming ST-43 in `docs/agent-workflow-design.md` is
+- [x] **AC-7** — Every **Planned** marker naming ST-43 in `docs/agent-workflow-design.md` is
       resolved, as its "Reading this document" note says.
 
 ## Out of scope

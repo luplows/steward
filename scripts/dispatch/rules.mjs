@@ -5,6 +5,10 @@
  * heading, an optional `Applies when:` line, and its own numbered items; a
  * finding cites a section and an item.
  *
+ * An HTML comment (`<!-- … -->`, on one line or across several) is not part of a
+ * checklist: `stripComments` removes it, and what the reviewer is given has
+ * none (ST-43).
+ *
  * Its caller will be the rotation, which parses the file before it starts
  * a reviewer so that a file that does not parse costs no review (ST-21).
  */
@@ -20,7 +24,39 @@ const CONDITION_PREFIX = 'Applies when:'
 const ITEM_RE = /^(\d+)\. (.*)$/
 
 /**
- * Parses the text of a rules file. Pure. Returns
+ * Returns `text` with every HTML comment removed. A comment that is alone on
+ * its lines takes its lines with it, so that removing it leaves no blank line
+ * where it stood; one that shares a line with other text leaves that text. A
+ * comment with no closing `-->` runs to the end of the text, so that nothing
+ * after an unclosed opening reaches the reviewer. Pure (ST-43).
+ */
+export function stripComments(text) {
+  const s = String(text)
+  let out = ''
+  let i = 0
+  for (;;) {
+    const open = s.indexOf('<!--', i)
+    if (open === -1) {
+      out += s.slice(i)
+      return out
+    }
+    const close = s.indexOf('-->', open + 4)
+    const end = close === -1 ? s.length : close + 3
+    const before = out + s.slice(i, open)
+    const lineStart = before.lastIndexOf('\n') + 1
+    const trailing = /^[ \t]*(?:\r?\n|$)/.exec(s.slice(end))
+    if (before.slice(lineStart).trim() === '' && trailing) {
+      out = before.slice(0, lineStart)
+      i = end + trailing[0].length
+    } else {
+      out = before
+      i = end
+    }
+  }
+}
+
+/**
+ * Parses the text of a rules file, ignoring its HTML comments (ST-43). Pure. Returns
  * `{ ok: true, preamble, sections: [{ name, appliesWhen, lead, items: [{ number, text }] }] }`,
  * or `{ ok: false, problems }` listing every problem found, each naming its
  * section. `appliesWhen` is `null` for a section without a condition, which
@@ -32,7 +68,7 @@ const ITEM_RE = /^(\d+)\. (.*)$/
 export function parseRules(text) {
   const preambleLines = []
   const raw = []
-  for (const line of String(text).split(/\r?\n/)) {
+  for (const line of stripComments(text).split(/\r?\n/)) {
     const heading = SECTION_RE.exec(line)
     if (heading) raw.push({ name: heading[1].trim(), lines: [] })
     else if (raw.length > 0) raw[raw.length - 1].lines.push(line)
@@ -98,9 +134,9 @@ export function parseRules(text) {
 /**
  * Reads `rulesFile` as it stands on `<remote>/<base>` in `repoDir`, never a
  * pull request's head, and parses it. A file that parses returns
- * `parseRules`'s result with the file's `text` added, which is what the
- * reviewer is given (ST-21). A file missing from there, or one that does not
- * parse, returns `{ ok: false, problems }`; neither throws.
+ * `parseRules`'s result with the file's `text` added, its HTML comments
+ * removed, which is what the reviewer is given (ST-21, ST-43). A file missing
+ * from there, or one that does not parse, returns `{ ok: false, problems }`; neither throws.
  */
 export async function readRules({ repoDir, base, rulesFile }) {
   let text
@@ -118,6 +154,6 @@ export async function readRules({ repoDir, base, rulesFile }) {
     }
   }
   const parsed = parseRules(text)
-  if (parsed.ok) return { ...parsed, text }
+  if (parsed.ok) return { ...parsed, text: stripComments(text) }
   return { ok: false, problems: parsed.problems.map((problem) => `${rulesFile}: ${problem}`) }
 }

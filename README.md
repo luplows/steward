@@ -49,6 +49,9 @@ What the review side reads:
   in the machine's settings, [`docs/machine-settings.md`](docs/machine-settings.md).
 - **The checklist**, [`REVIEW.md`](REVIEW.md) here, read from `main`, so that a pull request cannot
   change the rules it is reviewed against.
+  A project's checklist may hold HTML comments; they are removed before the reviewer is given it.
+  The package carries an example for another project to start from,
+  [`templates/review-checklist.md`](templates/review-checklist.md).
 - **Three workflows** in `.github/workflows/`: `ci.yml` runs lint and the tests, `review-gate.yml`
   turns a posted verdict into the `review/agent` status, and `land-approved.yml`, the runway, does
   the merge. Here, `main` is protected and requires `test` and `review/agent`.
