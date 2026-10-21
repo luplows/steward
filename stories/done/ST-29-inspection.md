@@ -19,14 +19,14 @@ around the gate.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `node scripts/dispatch/cli.mjs inspect [--repo owner/name] [--since-days N]` runs
+- [x] **AC-1** — `node scripts/dispatch/cli.mjs inspect [--repo owner/name] [--since-days N]` runs
       a new module, `scripts/dispatch/inspect.mjs`, and `cli.mjs`'s table of commands gains
       `inspect`. `--repo` defaults to the settings' `repo`. `--since-days` takes a positive
       integer and defaults to 7. The token is `GH_TOKEN` when it is set and not empty, so that
       the workflow (AC-8) uses `github.token`, and otherwise the output of `gh auth token`, which
       is how `github.mjs`'s `ghAuthToken` obtains it. `ghAuthToken` reads no environment
       variable, so the `GH_TOKEN` step is new in `inspect.mjs`.
-- [ ] **AC-2** — **Merges.** For each commit on `main` committed within the last `--since-days`
+- [x] **AC-2** — **Merges.** For each commit on `main` committed within the last `--since-days`
       days, it asks GitHub for the pull requests associated with that commit
       (`GET /repos/{repo}/commits/{sha}/pulls`), and keeps those that are merged and whose base is
       `main`. A commit with none is a finding: a commit on `main` without a pull request. For each
@@ -35,7 +35,7 @@ around the gate.
       `github-actions[bot]`, the account `review-gate.yml` posts as. Any other merge is a finding:
       a merge without a passing verdict. A pull request is judged once, however many of its
       commits are on `main`.
-- [ ] **AC-3** — **Stalls.** For each open pull request against `main` that is not a draft and
+- [x] **AC-3** — **Stalls.** For each open pull request against `main` that is not a draft and
       whose author the gate honours (`HONOURED_ASSOCIATIONS`, `scripts/land/check-author.mjs`), it
       reads the latest `review/agent` status on its head:
       - `pending`, created more than the settings' `inspectAfterHours` ago: a finding, the pull
@@ -43,7 +43,7 @@ around the gate.
       - `success`, created by `github-actions[bot]` more than `inspectAfterHours` ago: a finding,
         the pull request holding at that head;
       - anything else, or no `review/agent` status at all, is not a stall finding.
-- [ ] **AC-4** — **Raising.** Each finding is raised as one issue labelled `inspection`, whose
+- [x] **AC-4** — **Raising.** Each finding is raised as one issue labelled `inspection`, whose
       title names the finding and nothing that changes between runs:
       - `Inspection: #<n> merged without a passing verdict`;
       - `Inspection: <short sha> on main without a pull request`;
@@ -54,29 +54,29 @@ around the gate.
       lists every issue labelled `inspection`, open or closed, and opens none whose title is
       already there, so closing an issue is how the crew says it has seen it. It creates the
       `inspection` label when the repository does not have it.
-- [ ] **AC-5** — It prints one line per finding, saying whether it opened an issue or one was
+- [x] **AC-5** — It prints one line per finding, saying whether it opened an issue or one was
       already there, and a last line with the counts. It exits 0 when it opened no issue, 1 when it
       opened at least one, and 2, opening nothing more, when a request fails or the settings do
       not read.
-- [ ] **AC-6** — `inspect.mjs` has its own request allowlist, checked before any network call, as
+- [x] **AC-6** — `inspect.mjs` has its own request allowlist, checked before any network call, as
       `land.mjs` and `review-verdicts.mjs` have theirs. It admits only: listing `main`'s commits,
       a commit's pull requests, a commit's statuses, the open pull requests, and the issues
       labelled `inspection`; creating an issue; and creating the `inspection` label. A test shows
       that any other request is refused with nothing sent.
-- [ ] **AC-7** — A new required settings key, `inspectAfterHours`, a positive integer: how long a
+- [x] **AC-7** — A new required settings key, `inspectAfterHours`, a positive integer: how long a
       pull request may stay pending or holding before inspection raises it. `readSettings` refuses a
       file without it, or with a value that is not a positive integer, as it refuses any other key,
       and its tests say so. `docs/settings.md` gains its row, with `init`'s value "Asked; default
       24" (ST-44). `steward.config.json`, the page's copy of it, and `FIXTURE_SETTINGS`
       (`scripts/dispatch/settings-fixture.mjs`) gain `"inspectAfterHours": 24`.
-- [ ] **AC-8** — A new workflow, `.github/workflows/inspection.yml` ("Inspection"), runs
+- [x] **AC-8** — A new workflow, `.github/workflows/inspection.yml` ("Inspection"), runs
       `node scripts/dispatch/cli.mjs inspect`, after checking out the repository so that it can
       read the settings, on `workflow_dispatch` and on a schedule of once a day, with `GH_TOKEN`
       set to `github.token`. Its `permissions:` are `contents: read`, `pull-requests: read`,
       `statuses: read` and `issues: write`, with a comment saying what each is for. A comment at
       the top says that a project sets how often it runs by editing the schedule, or drops the
       file, and that on a private repository each run costs Actions minutes.
-- [ ] **AC-9** — Tests in `inspect.test.mjs`, named `ST-29/AC-<n>`, with the requests and the time
+- [x] **AC-9** — Tests in `inspect.test.mjs`, named `ST-29/AC-<n>`, with the requests and the time
       injected:
       - a squash merge with a gate-posted `success` before `merged_at`: no finding;
       - a merge whose latest `review/agent` before `merged_at` is `failure` or `pending`, one
@@ -90,11 +90,11 @@ around the gate.
       - a finding whose title is already on an open issue, and one on a closed issue: no issue
         opened; a new finding: one issue opened, with the label;
       - the exit codes of AC-5.
-- [ ] **AC-10** — `docs/controller.md`, "A rotation", tells the controller to run
+- [x] **AC-10** — `docs/controller.md`, "A rotation", tells the controller to run
       `node scripts/dispatch/cli.mjs inspect` once after the rotation's landings, and to report what
       it prints. Its exit code is reported, and does not stop the rotation. "What you are" names
       `inspect` beside `review.mjs` and `land.mjs` among the scripts the controller runs on steward.
-- [ ] **AC-11** — The `**Planned (ST-29)**` markers in `docs/agent-workflow-design.md` lose
+- [x] **AC-11** — The `**Planned (ST-29)**` markers in `docs/agent-workflow-design.md` lose
       `ST-29`, and each passage is corrected wherever what was built differs. The glossary's
       `inspection` entry drops its "(planned: ST-29)", and `docs/outline.md`, "Land", no longer
       says the design doc's "Watchdog" describes something not built.

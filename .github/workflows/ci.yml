@@ -1,10 +1,12 @@
 name: CI
 
 on:
+  # Release branches, `release/vX.Y.Z`, are checked as `main` is (ST-45): a release changes only
+  # through pull requests into its branch (docs/release-review.md). GitHub's `*` matches no `/`.
   pull_request:
-    branches: [main]
+    branches: [main, 'release/v*']
   push:
-    branches: [main]
+    branches: [main, 'release/v*']
   workflow_run:
     workflows: [Land approved PRs]
     types: [completed]

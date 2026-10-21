@@ -171,11 +171,13 @@ Naming a test after an AC does not satisfy it — `REVIEW.md`, "Conformance to t
 unit", exists precisely to catch a test named `ST-49/AC-3` that does not
 exercise AC-3.
 
-**The pull request that implements a story ticks each AC it delivered**, in the
-story file, as part of that pull request — `- [ ]` becomes `- [x]`. A story is
-written with every box unticked, and nothing else ticks them. An AC left
-unticked is one the pull request says it did not deliver, and its body says
-why.
+**The pull request into `main` that implements a story ticks each AC it
+delivered**, in the story file, as part of that pull request — `- [ ]` becomes
+`- [x]`. A story is written with every box unticked, and nothing else ticks
+them. An AC left unticked is one the pull request says it did not deliver, and
+its body says why. A pull request into a release branch, such as a fix
+cherry-picked from `main`, ticks nothing: it changes nothing under `stories/`
+(`docs/release-review.md`).
 
 A tick is the author's claim, not evidence. It shows in the diff, and the
 reviewer checks it against `REVIEW.md`, "Conformance to the unit": an AC
@@ -195,8 +197,9 @@ decided.
    questions** must be empty before a coder can take it.
 2. A coder takes it: ATC claims the branch `story/ST-49-<slug>`, the coder
    implements and commits, and ATC pushes the work and opens the pull request.
-3. The pull request **ticks each AC it delivered** — see above — and **moves the
-   story file to `stories/done/`** (`REVIEW.md`, "Conformance to the unit").
+3. The pull request, into `main`, **ticks each AC it delivered** — see above —
+   and **moves the story file to `stories/done/`** (`REVIEW.md`, "Conformance
+   to the unit").
    Completion is a `git mv` inside the story's own pull request, visible in the
    diff and checkable by the reviewer. A spike's pull request may also add the
    stories its findings recommend, each a draft with a new number, and points

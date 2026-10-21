@@ -39,6 +39,7 @@ Then, from a checkout of the repository:
 ```sh
 node scripts/dispatch/cli.mjs review <pr-number>   # review the pull request at its head
 node scripts/dispatch/cli.mjs land <pr-number>     # land it, once it has passed and is green
+node scripts/dispatch/cli.mjs inspect              # raise a merge without a passing verdict, or a stall
 ```
 
 What the review side reads:
@@ -52,9 +53,10 @@ What the review side reads:
   A project's checklist may hold HTML comments; they are removed before the reviewer is given it.
   The package carries an example for another project to start from,
   [`templates/review-checklist.md`](templates/review-checklist.md).
-- **Three workflows** in `.github/workflows/`: `ci.yml` runs lint and the tests, `review-gate.yml`
-  turns a posted verdict into the `review/agent` status, and `land-approved.yml`, the runway, does
-  the merge. Here, `main` is protected and requires `test` and `review/agent`.
+- **Four workflows** in `.github/workflows/`: `ci.yml` runs lint and the tests, `review-gate.yml`
+  turns a posted verdict into the `review/agent` status, `land-approved.yml`, the runway, does the
+  merge, and `inspection.yml` runs `inspect` once a day (a project keeps it or drops it). Here,
+  `main` is protected and requires `test` and `review/agent`.
 
 ## Contributing
 
