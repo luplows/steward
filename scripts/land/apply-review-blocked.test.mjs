@@ -142,7 +142,7 @@ describe('OQ-80/AC-3: only markers the gate itself honours are counted', () => {
     expect(countBlockingVerdicts(comments)).toBe(2)
   })
 
-  it('the marker pattern is the one review-gate.yml greps with, transcribed', () => {
+  it('review-gate.yml greps with the marker pattern github.mjs parses', () => {
     expect(GATE).toContain(
       'agent-review[[:space:]]+head=[0-9a-f]{40}[[:space:]]+verdict=(pass-with-observations|pass|block|fail)',
     )
@@ -151,6 +151,31 @@ describe('OQ-80/AC-3: only markers the gate itself honours are counted', () => {
 
   it('the association set is check-author.mjs\'s, kept identical to review-gate.yml by its own test', () => {
     expect(GATE).toContain('OWNER|MEMBER|COLLABORATOR')
+  })
+})
+
+describe('ST-17: one marker parser', () => {
+  const source = readFileSync(path.join(ROOT, 'scripts', 'land', 'apply-review-blocked.mjs'), 'utf8')
+
+  it('ST-17/AC-1: a comment counts when parseMarkerComment reads a block, fail included', () => {
+    expect(countBlockingVerdicts([comment('block'), comment('fail'), comment('pass')])).toBe(2)
+    expect(countBlockingVerdicts([comment('block', 'NONE'), { body: 'no marker', authorAssociation: 'OWNER' }])).toBe(0)
+  })
+
+  it('ST-17/AC-2: the module imports parseMarkerComment and defines no marker pattern of its own', () => {
+    expect(source).toMatch(/import\s*\{[^}]*parseMarkerComment[^}]*\}\s*from\s*'\.\.\/dispatch\/github\.mjs'/)
+    expect(source).not.toMatch(/MARKER_RE/)
+    expect(source).not.toMatch(/lastVerdict/)
+    const patterns = source
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('//') && /\/[^/\n]*agent-review[^/\n]*\//.test(line))
+    expect(patterns).toEqual([])
+  })
+
+  it('ST-17/AC-4: the header says markers are read with parseMarkerComment, not transcribed', () => {
+    const header = source.slice(0, source.indexOf('// Usage:'))
+    expect(header).toContain('`parseMarkerComment`')
+    expect(header).not.toMatch(/transcription/)
   })
 })
 

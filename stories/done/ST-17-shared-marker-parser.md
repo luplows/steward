@@ -20,30 +20,30 @@ agree today, but nothing would fail if one changed and the other did not.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `countBlockingVerdicts` in
+- [x] **AC-1** — `countBlockingVerdicts` in
       `scripts/land/apply-review-blocked.mjs` decides each comment's verdict
       with `parseMarkerComment` from `scripts/dispatch/github.mjs`. A comment
       counts when it parses as `kind: 'marker'` with `verdict: 'block'` and
       its author is honoured (`isHonouredAuthor`, as now). The deprecated
       `fail` spelling counts because `parseMarkerComment` maps it to `block`,
       not because this module does.
-- [ ] **AC-2** — `apply-review-blocked.mjs` no longer defines a marker
+- [x] **AC-2** — `apply-review-blocked.mjs` no longer defines a marker
       pattern or a verdict mapping of its own: `MARKER_RE` and `lastVerdict`
       are gone. A test asserts that the module imports `parseMarkerComment`
       from `../dispatch/github.mjs` and defines no regular expression that
       matches `agent-review`, as `scripts/dispatch/review.test.mjs`'s
       "OQ-83/AC-5" test checks `writer-prs.mjs` for its own copy of
       `HONOURED_ASSOCIATIONS`.
-- [ ] **AC-3** — Every test in `scripts/land/apply-review-blocked.test.mjs`
+- [x] **AC-3** — Every test in `scripts/land/apply-review-blocked.test.mjs`
       under "OQ-80/AC-3: only markers the gate itself honours are counted"
       passes with its expectations unchanged: malformed markers, authors
       without write access, `fail` counting as `block`, and the last
       well-formed marker in a comment winning.
-- [ ] **AC-4** — The header comment of `apply-review-blocked.mjs` (lines
+- [x] **AC-4** — The header comment of `apply-review-blocked.mjs` (lines
       14–17) says that markers are read with `github.mjs`'s
       `parseMarkerComment`, and no longer says the module keeps a
       transcription of the gate's pattern.
-- [ ] **AC-5** — The test titled "the marker pattern is the one
+- [x] **AC-5** — The test titled "the marker pattern is the one
       review-gate.yml greps with, transcribed"
       (`scripts/land/apply-review-blocked.test.mjs`, line 145) is renamed so
       that its title says what it checks, that `review-gate.yml` greps with
