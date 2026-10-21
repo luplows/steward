@@ -5,6 +5,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readSettings } from './settings.mjs'
 import { fixtureSettings } from './settings-fixture.mjs'
+import { isRulesFilePath } from './rules-file-path.mjs'
+import { RULES_FILE_CANDIDATES } from './rules-file-path-candidates.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -285,6 +287,23 @@ describe('ST-18: the review side settings keys', () => {
     const bad = ['', '/REVIEW.md', 'C:/rules.md', 'docs\\REVIEW.md', '../REVIEW.md', 'a/../b.md', 'a//b.md', 'a/', 3, null]
     for (const value of bad) {
       await expectRejected(fixtureSettings({ rulesFile: value }), "'rulesFile' must be")
+    }
+  })
+
+  it('ST-40/AC-4: rulesFile refuses a control character, a backtick, < and >, which the reviewer\'s prompt cannot take inline', async () => {
+    for (const value of ['a\nb.md', 'a\u0000b.md', 'a`b.md', '<!-- x -->.md', 'a>b.md']) {
+      await expectRejected(fixtureSettings({ rulesFile: value }), "no control character, backtick, '<' or '>'")
+    }
+  })
+
+  // The prompt's side of the same set is `invocation.test.mjs`'s ST-40/AC-4 test.
+  it('ST-40/AC-4: readSettings reads a rulesFile exactly when isRulesFilePath, the prompt\'s check, takes it', async () => {
+    for (const value of RULES_FILE_CANDIDATES) {
+      const reads = await withTempProject(async (dir) => {
+        writeConfig(dir, JSON.stringify(fixtureSettings({ rulesFile: value })))
+        try { await readSettings(dir); return true } catch { return false }
+      })
+      expect(reads, JSON.stringify(value)).toBe(isRulesFilePath(value))
     }
   })
 

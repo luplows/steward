@@ -64,6 +64,7 @@ const STORY = { id: 'OQ-65', path: 'stories/OQ-65-spawn-sessions.md', text: 'sto
 const CODER_OPTIONS = {
   role: 'coder',
   promptTemplate: CODER_TEMPLATE,
+  repo: 'luplows/steward',
   story: STORY,
   branch: 'story/OQ-65-spawn-sessions',
   cwd: repoRoot,
