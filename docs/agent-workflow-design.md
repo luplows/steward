@@ -2353,7 +2353,7 @@ shortened where it is long, so that it can be found there with its date.
   machine of the kind ST-6 is to find how to keep from sessions, and of no use to a Codex reviewer,
   which has no network; and ATC fetching the pull requests and comments a body cites.
 - **Steward installs in another project as a review gate, through `init`** (decided 2026-10-19 by
-  the owner, with the planning session; **Planned (ST-40, ST-41, ST-42, ST-43, ST-44)**). Steward
+  the owner, with the planning session; **Planned (ST-40, ST-41, ST-42, ST-44)**). Steward
   is installed in another project as a review gate only: first in pinpoint, a private Node
   repository on GitHub Free, so with no branch protection, whose units are GitHub issues; then in
   tower-workshop-paths, which is public and keeps file stories with the prefix `OQ`, by its own
@@ -2390,16 +2390,16 @@ shortened where it is long, so that it can be found there with its date.
     steward's repository is never moved once cut (owner), so a pinned tag names one version for
     good. Considered and not chosen: pinning the commit the tag points at, which is safer against a
     moved tag but harder to read.
-  - **A basic example checklist ships in the package**, applicable to any project running
-    steward, with obvious placeholders for a project's own additions (ST-43). It starts from
-    steward's `REVIEW.md`, less the claims item, the Docs check on named files, the rule against
-    coverage tooling, ticking acceptance criteria and moving story files, the sentences on story
-    containment, and all of "Changes to stories"; "Conformance to the unit" keeps its first three
-    items, in words with no story conventions. Steward's own `REVIEW.md` is unchanged. The
-    placeholders are HTML comments: the checklist's parser ignores them, and ATC gives the
-    reviewer the checklist with them removed, so the reviewer never sees them. Considered and not
-    chosen: telling the reviewer that comments are not rules, which relies on the model obeying,
-    and a separate setup guide. The cost, accepted: a comment can carry nothing to the reviewer.
+  - **A basic example checklist ships in the package**, applicable to any project running steward,
+    with obvious placeholders for a project's own additions: `templates/review-checklist.md`. It
+    starts from steward's `REVIEW.md`, less the claims item, the Docs check on named files, the rule
+    against coverage tooling, ticking acceptance criteria and moving story files, the sentences on
+    story containment, and all of "Changes to stories"; "Conformance to the unit" keeps its first
+    three items, in words with no story conventions. Steward's own `REVIEW.md` is unchanged. The
+    placeholders are HTML comments: the checklist's parser ignores them, and ATC gives the reviewer
+    the checklist with them removed, so the reviewer never sees them. Considered and not chosen:
+    telling the reviewer that comments are not rules, which relies on the model obeying, and a
+    separate setup guide. The cost, accepted: a comment can carry nothing to the reviewer.
   - **`init`, `steward init`, run in a project's checkout, with no AI, and interactive** (ST-44). By
     default it asks each question at the terminal; every question can also be answered by a
     command-line flag, and `--yes` accepts every default; with no terminal and no answer given for a
