@@ -570,6 +570,18 @@ describe('ST-45/AC-5: a pull request into a release branch', () => {
   }, REVIEW_TEST_TIMEOUT)
 })
 
+describe("ST-40: a review's prompt names the run's repository, steward's review-tools.mjs and the checklist's path", () => {
+  it("ST-40/AC-2, AC-3, AC-4: a Claude reviewer is given ctx.repo, the review-tools.mjs beside review.mjs, and the settings' rulesFile", async () => {
+    const { done, session } = review('story/OQ-99-thing', { body: 'Unit: stories/OQ-99-thing.md' })
+    await done
+    const prompt = session.calls[0].prompt.replace(/\s+/g, ' ')
+    expect(prompt).toContain(`in \`${REPO}\`, at head commit`)
+    expect(prompt).toContain(`node "${path.join(here, 'review-tools.mjs')}" repeat`)
+    expect(prompt).toContain('If the pull request changes `REVIEW.md`, its copy is in the diff')
+    expect(prompt).not.toContain('luplows/steward')
+  }, REVIEW_TEST_TIMEOUT)
+})
+
 // ------------------------------------------------- ST-22: the unit the body links
 
 // The lines of the bounded block `label` in `prompt`, without the code-block indent.
@@ -1501,6 +1513,15 @@ describe('ST-32/AC-2, AC-3, AC-5: a reviewer whose choice runs on Codex', () => 
     await done
     expect(stand.calls[0].prompt).toContain(`git diff origin/main...${shas['story/OQ-99-thing']}`)
     expect(stand.calls[0].prompt).not.toContain('{{BASE_BRANCH}}')
+  }, REVIEW_TEST_TIMEOUT)
+
+  it("ST-40/AC-2, AC-3: a Codex reviewer is given the run's repository and steward's review-tools.mjs too", async () => {
+    const { done, stand } = reviewWithCodex('story/OQ-99-thing')
+    await done
+    const prompt = stand.calls[0].prompt.replace(/\s+/g, ' ')
+    expect(prompt).toContain(`in \`${REPO}\`, at head commit`)
+    expect(prompt).toContain(`node "${path.join(here, 'review-tools.mjs')}" repeat`)
+    expect(prompt).not.toMatch(/\{\{(REPO|REVIEW_TOOLS|RULES_FILE)\}\}/)
   }, REVIEW_TEST_TIMEOUT)
 
   it('ST-32/AC-2: runs codex exec read-only in the review checkout, with the prompt a Claude reviewer gets, and records its verdict', async () => {

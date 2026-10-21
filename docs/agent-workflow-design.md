@@ -2353,18 +2353,19 @@ shortened where it is long, so that it can be found there with its date.
   machine of the kind ST-6 is to find how to keep from sessions, and of no use to a Codex reviewer,
   which has no network; and ATC fetching the pull requests and comments a body cites.
 - **Steward installs in another project as a review gate, through `init`** (decided 2026-10-19 by
-  the owner, with the planning session; **Planned (ST-40, ST-41, ST-42, ST-44)**). Steward
+  the owner, with the planning session; **Planned (ST-41, ST-42, ST-44)**). Steward
   is installed in another project as a review gate only: first in pinpoint, a private Node
   repository on GitHub Free, so with no branch protection, whose units are GitHub issues; then in
   tower-workshop-paths, which is public and keeps file stories with the prefix `OQ`, by its own
   OQ-115. The coding side is not part of it. Five stories build it, written in one pull request:
-  - **The prompts work as delivered, in any project** (ST-40). Both name the project's repository
-    through a `{{REPO}}` placeholder, filled from the settings' `repo`. The reviewer's prompt
-    loses every line particular to steward's repository: its rules about steward's own stories,
-    each of which `REVIEW.md` already holds; the path of `review-tools.mjs`, which becomes the
-    installed path, through a placeholder; `REVIEW.md` by name, which becomes the settings'
-    `rulesFile`; the design doc as "the design of record"; and examples that name steward's files
-    or a checklist item the example checklist does not have. The rest of `coder.md` is the coding
+  - **The prompts work as delivered, in any project.** Both name the project's repository
+    through a `{{REPO}}` placeholder, filled from the settings' `repo`, or from the `--repo` a
+    command is given. The reviewer's prompt has no line particular to steward's repository: its
+    rules about steward's own stories, each of which `REVIEW.md` already holds, are gone; the path
+    of `review-tools.mjs` is the installed one, through `{{REVIEW_TOOLS}}`; the checklist is named
+    by the settings' `rulesFile`, through `{{RULES_FILE}}`; the design doc is "the project's
+    recorded design", named without a path; and its examples name no file of steward's and cite
+    only items the example checklist has. The rest of `coder.md` is the coding
     side's. The prompts' project section (R1) is not in it: tower-workshop-paths needs it only
     once its coder runs.
   - **The story prefix belongs to the story convention, which some projects will not have**
@@ -2557,11 +2558,12 @@ Found 2026-10-08 while refining OQ-115. Each is built in steward, before OQ-115 
   **Planned (ST-42, ST-44)**, decided 2026-10-19 ("Decided so far"). Revised the same day: `init`
   writes no after-sweep trigger, since a project's CI is its own (R2).
 - **The prompts' `{{REPO}}` slot and project section** (R1), so this project's lines come back.
-  **Planned (ST-40):** the slot. The project section is in no story yet: tower-workshop-paths
-  needs it only once its coder runs (owner, 2026-10-19).
+  The slot is built. The project section is in no story yet: tower-workshop-paths needs it only
+  once its coder runs (owner, 2026-10-19).
 - **Delivering steward's rules and checklist to a project's sessions**, and **a project's own
   review items to the reviewer** (R3). Before OQ-133. Today `coder.md` reads `AGENTS.md` and
-  `REVIEW.md` from the repository root, and `reviewer.md` reads `REVIEW.md` there.
+  `REVIEW.md` from the repository root, and the reviewer is given the project's checklist, the
+  settings' `rulesFile`, as it stands on `main`.
 - **The setup-step prefix exported** from the package, for this repository's
   `scripts/ci-workflows.test.mjs`. Before OQ-132.
 - **The screenshot directory as a project setting.** `coder.mjs` line 125 (`main` at `c97aa50`)
@@ -2639,8 +2641,9 @@ is still open.
   The prompts' project-specific lines are few. In `coder.md`: the repository name, the testing
   frameworks and screenshot-baseline rules, and `mytower.app` being reachable. In `reviewer.md`:
   the repository name. They become a `{{REPO}}` slot and a project section the project supplies,
-  rendered by the same bounded injection as the story (`render.mjs`). **Planned (ST-40):** the
-  `{{REPO}}` slot, filled from the settings' `repo` (decided 2026-10-19, "Decided so far").
+  rendered by the same bounded injection as the story (`render.mjs`). The `{{REPO}}` slot is
+  built, filled from the settings' `repo`, or from the `--repo` a command is given (decided
+  2026-10-19, "Decided so far").
 
   **Decided 2026-10-08 by the owner: steward starts clean.** At the bootstrap, steward's copies
   of the prompts have this repository's lines stripped by hand: its name, Vitest and Playwright,

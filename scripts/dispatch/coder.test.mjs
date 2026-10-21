@@ -2092,3 +2092,21 @@ describe("ST-35: the coder's choice for a run", () => {
     expect(header).toMatch(/coder\.mjs retry OQ-<n> .*\[--choice <name>\]/)
   })
 })
+
+describe("ST-40/AC-2: the coder's prompt names the run's repository", () => {
+  const named = (prompt) => prompt.replace(/\s+/g, ' ').includes(`in \`${REPO}\`, on the branch`)
+
+  it('ST-40/AC-2: a dispatch passes ctx.repo', async () => {
+    const { fake } = await dispatch(makeWorld(), ({ cwd }) => {
+      finishStory(cwd)
+      return block('Ship OQ-98', 'ready', '### What changed\n\nShipped.')
+    })
+    expect(named(fake.calls[0].prompt)).toBe(true)
+    expect(fake.calls[0].prompt).not.toContain('luplows/steward')
+  })
+
+  it('ST-40/AC-2: a retry passes ctx.repo', async () => {
+    const { fake } = await retry(makeRetryWorld(), ({ cwd }) => { commitWork(cwd); return block() })
+    expect(named(fake.calls[0].prompt)).toBe(true)
+  })
+})

@@ -154,6 +154,16 @@ const TRUSTED_INLINE = {
   // ST-45/AC-7: the pull request's base, which steward reviews only when it is `main` or a
   // release branch (`release-branch.mjs`).
   BASE_BRANCH: new RegExp(`^(?:main|${RELEASE_BRANCH_RE.source.slice(1, -1)})$`),
+  // ST-40/AC-2: the repository the run works on, both roles'. Only `owner/name`, in the
+  // characters GitHub allows in either part; narrower than `settings.mjs`'s `REPO_RE`, which
+  // admits anything but a slash or a space in each.
+  REPO: /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/,
+  // ST-40/AC-3: the absolute path of steward's `review-tools.mjs`, which the prompt gives inside
+  // double quotes, so it may hold a space but no quote, newline, backtick or angle bracket.
+  REVIEW_TOOLS: /^[^\r\n`"<>]+review-tools\.mjs$/,
+  // ST-40/AC-4: the settings' `rulesFile`, in the form `readSettings` allows (a relative path
+  // with forward slashes, no empty or `..` segment), in plain path characters only.
+  RULES_FILE: /^(?![A-Za-z]:)(?!(?:.*\/)?\.\.(?:\/|$))[A-Za-z0-9._ -]+(?:\/[A-Za-z0-9._ -]+)*$/,
 }
 
 /**
@@ -233,13 +243,26 @@ export function retrySection({ round, roundsRemaining, findings, branch, source 
   ].join('\n')
 }
 
-/** The reviewer prompt's placeholder values; throws on a missing `pr`, base or `rules`. */
-function reviewerValues({ unit, branch, pr, rules }) {
+/** `repo`, checked present: both roles' prompts name it (ST-40/AC-2). */
+function requireRepo(repo) {
+  if (typeof repo !== 'string' || repo === '') throw new Error('an invocation requires the repository, repo')
+  return repo
+}
+
+/**
+ * The reviewer prompt's placeholder values; throws on a missing `repo`, `pr`, base, `rules`,
+ * `rulesFile` or `reviewTools`.
+ */
+function reviewerValues({ repo, unit, branch, pr, rules, rulesFile, reviewTools }) {
+  requireRepo(repo)
   if (!unit) throw new Error('a reviewer invocation requires a unit')
   if (!pr) throw new Error('a reviewer invocation requires pr')
   if (typeof pr.baseRef !== 'string') throw new Error("a reviewer invocation requires the pull request's base")
   if (typeof rules !== 'string') throw new Error('a reviewer invocation requires rules')
+  if (typeof rulesFile !== 'string') throw new Error("a reviewer invocation requires the checklist's path, rulesFile")
+  if (typeof reviewTools !== 'string') throw new Error("a reviewer invocation requires review-tools.mjs's path, reviewTools")
   return {
+    REPO: repo,
     PR_NUMBER: String(pr.number),
     HEAD_BRANCH: branch,
     HEAD_SHA: pr.headSha,
@@ -248,6 +271,8 @@ function reviewerValues({ unit, branch, pr, rules }) {
     UNIT: unit.text,
     PR_BODY: pr.body,
     RULES: rules,
+    RULES_FILE: rulesFile,
+    REVIEW_TOOLS: reviewTools,
   }
 }
 
@@ -255,8 +280,8 @@ function reviewerValues({ unit, branch, pr, rules }) {
  * The reviewer prompt, rendered exactly as `buildInvocation` renders it, for a reviewer that is
  * not started with Claude Code's arguments: the Codex CLI's (`codex.mjs`, ST-32).
  */
-export function renderReviewerPrompt({ promptTemplate, unit, branch, pr, rules }) {
-  return renderBounded(promptTemplate, reviewerValues({ unit, branch, pr, rules })).text
+export function renderReviewerPrompt({ promptTemplate, repo, unit, branch, pr, rules, rulesFile, reviewTools }) {
+  return renderBounded(promptTemplate, reviewerValues({ repo, unit, branch, pr, rules, rulesFile, reviewTools })).text
 }
 
 /**
@@ -264,6 +289,8 @@ export function renderReviewerPrompt({ promptTemplate, unit, branch, pr, rules }
  *
  *   role            'coder' | 'reviewer'
  *   promptTemplate  the text of the role's prompt file (the caller reads it)
+ *   repo            required: the repository the run works on, `owner/name`, rendered as
+ *                   `{{REPO}}` in both roles' prompts (ST-40)
  *   story           coder only: { id, path, text, model }
  *   unit            reviewer only: { note, text }, the note `describeUnit`
  *                   words and the unit's text, rendered as `{{UNIT_NOTE}}` and
@@ -273,6 +300,9 @@ export function renderReviewerPrompt({ promptTemplate, unit, branch, pr, rules }
  *                   `{{BASE_BRANCH}}` (ST-45)
  *   rules           reviewer only: the project's checklist as read from `main`, whatever the base
  *                   (`readRules`'s `text`), rendered as `{{RULES}}` (ST-21)
+ *   rulesFile       reviewer only: the settings' `rulesFile`, rendered as `{{RULES_FILE}}` (ST-40)
+ *   reviewTools     reviewer only: the absolute path of steward's `review-tools.mjs`, rendered as
+ *                   `{{REVIEW_TOOLS}}` (ST-40)
  *   retry          coder only, optional: { round, roundsRemaining, findings, source, storyMoved }
  *                   (`source` is 'review' or 'ci'; `storyMoved` is false when the story file is still under stories/)
  *   baseEnv         the environment to derive the process environment from
@@ -290,7 +320,7 @@ export function renderReviewerPrompt({ promptTemplate, unit, branch, pr, rules }
  * available (OQ-107).
  */
 export function buildInvocation(options) {
-  const { role, promptTemplate, story, unit, branch, pr, rules, retry, baseEnv, emptyGhConfigDir } = options
+  const { role, promptTemplate, repo, story, unit, branch, pr, rules, rulesFile, reviewTools, retry, baseEnv, emptyGhConfigDir } = options
   if (!ROLES.includes(role)) throw new Error(`unknown role: ${JSON.stringify(role)}`)
   if (role === 'coder' && !story) throw new Error('a coder invocation requires a story')
   if (role === 'coder' && unit) throw new Error('a coder invocation takes no unit')
@@ -311,7 +341,11 @@ export function buildInvocation(options) {
   if (role === 'coder') {
     if (pr) throw new Error('a coder invocation takes no pr')
     if (rules !== undefined) throw new Error('a coder invocation takes no rules')
+    if (rulesFile !== undefined || reviewTools !== undefined) {
+      throw new Error('a coder invocation takes no rulesFile or reviewTools')
+    }
     values = {
+      REPO: requireRepo(repo),
       STORY_ID: story.id,
       STORY_PATH: retry && retry.storyMoved !== false ? donePath(story.path) : story.path,
       STORY: story.text,
@@ -323,7 +357,7 @@ export function buildInvocation(options) {
     delete env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS
   } else {
     if (retry) throw new Error('a reviewer invocation takes no retry')
-    values = reviewerValues({ unit, branch, pr, rules })
+    values = reviewerValues({ repo, unit, branch, pr, rules, rulesFile, reviewTools })
     env = { ...(baseEnv ?? {}) }
     env.BASH_DEFAULT_TIMEOUT_MS = SHELL_TIMEOUT_MS
     env.BASH_MAX_TIMEOUT_MS = SHELL_TIMEOUT_MS

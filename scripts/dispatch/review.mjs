@@ -86,6 +86,9 @@ const DISPATCH_DIR = path.dirname(fileURLToPath(import.meta.url))
 // location (OQ-123). Not the project -- see `repoDir` below.
 const ENGINE_ROOT = path.resolve(DISPATCH_DIR, '..', '..')
 const REVIEWER_PROMPT = path.join(ENGINE_ROOT, '.claude', 'prompts', 'reviewer.md')
+// ST-40/AC-3: the `review-tools.mjs` beside this file, where steward is installed, which the
+// reviewer's prompt names as `{{REVIEW_TOOLS}}`: a project's checkout has no copy of it.
+const REVIEW_TOOLS = path.join(DISPATCH_DIR, 'review-tools.mjs')
 
 const REMOTE = 'origin'
 // ST-45/AC-5: the branch the unit and the checklist are read from, whatever the pull request's
@@ -517,10 +520,13 @@ export async function reviewPullRequest({
 
     const reviewerInputs = {
       promptTemplate: template,
+      repo: ctx.repo,
       unit,
       branch: pr.headRef,
       pr: { number, headSha: pr.headSha, body: pr.body, baseRef: pr.baseRef },
       rules: rules.text,
+      rulesFile,
+      reviewTools: REVIEW_TOOLS,
     }
     let attempt = 0
     const runSession = () => {

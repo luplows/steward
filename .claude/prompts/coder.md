@@ -12,6 +12,7 @@ placeholders, and on a retry appends `retrySection`:
 
 | Placeholder | Substituted with |
 |---|---|
+| `{{REPO}}` | the repository the run works on, `owner/name`: the settings' `repo`, unless `--repo` names another (ST-40) |
 | `{{STORY_ID}}` | the story's id, e.g. `ST-49` |
 | `{{STORY_PATH}}` | the story file's path, e.g. `stories/ST-49-queue-json.md` |
 | `{{STORY}}` | the entire contents of that file, verbatim |
@@ -56,8 +57,8 @@ A prompt that gains one fix per failed run can end up reading like an attack
 
 ---
 
-You are implementing **{{STORY_ID}}** in `luplows/steward`, on the
-branch `{{BRANCH}}`.
+You are implementing **{{STORY_ID}}** in `{{REPO}}`, on the branch
+`{{BRANCH}}`.
 
 ## The story
 

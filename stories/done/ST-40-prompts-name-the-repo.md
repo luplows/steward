@@ -17,28 +17,28 @@ where it runs, and reviewed against my checklist alone.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — Both prompts take the repository from a placeholder, `{{REPO}}`, in place of
+- [x] **AC-1** — Both prompts take the repository from a placeholder, `{{REPO}}`, in place of
       `luplows/steward`: `.claude/prompts/reviewer.md` in "You are reviewing pull request
       **#{{PR_NUMBER}}** in …" and `.claude/prompts/coder.md` in "You are implementing
       **{{STORY_ID}}** in …". Neither file spells `luplows/steward` anywhere. Each prompt's
       placeholder table gains a `{{REPO}}` row saying what it is substituted with.
-- [ ] **AC-2** — `buildInvocation` and `renderReviewerPrompt` (`scripts/dispatch/invocation.mjs`)
+- [x] **AC-2** — `buildInvocation` and `renderReviewerPrompt` (`scripts/dispatch/invocation.mjs`)
       substitute `{{REPO}}` with the repository the run works on, `ctx.repo`, which the command
       line takes from the settings' `repo` unless `--repo` names another. `reviewPullRequest`
       (`review.mjs`), `dispatchCoder` and `retryStory` (`coder.mjs`) pass it, for a Claude and a
       Codex reviewer alike. `REPO` is a `TRUSTED_INLINE` placeholder whose pattern admits only
       `owner/name`, with no newline, and an invocation without a repository is refused.
-- [ ] **AC-3** — `reviewer.md` takes the path of `review-tools.mjs` from a placeholder,
+- [x] **AC-3** — `reviewer.md` takes the path of `review-tools.mjs` from a placeholder,
       `{{REVIEW_TOOLS}}`, substituted with the absolute path of the `review-tools.mjs` beside the
       running `review.mjs`, which is where steward is installed, not the project's checkout.
       Every command line the prompt gives for it uses the placeholder, quoted so that a path with
       spaces runs. The placeholder is trusted inline, with a pattern that admits no newline and
       no backtick.
-- [ ] **AC-4** — `reviewer.md` names the checklist by the settings' `rulesFile`, through a
+- [x] **AC-4** — `reviewer.md` names the checklist by the settings' `rulesFile`, through a
       placeholder, `{{RULES_FILE}}`, in place of `REVIEW.md` in "If the pull request changes
       `REVIEW.md`, its copy is in the diff". It is trusted inline, with the form `readSettings`
       allows for `rulesFile`.
-- [ ] **AC-5** — After this story the rendered reviewer prompt holds none of the following, each
+- [x] **AC-5** — After this story the rendered reviewer prompt holds none of the following, each
       of which is in `reviewer.md` today (line numbers at `950137c`):
       1. lines 77 to 82: the rule that a story unit's file is moved into `stories/done/`, and that
          "Changes to stories" applies to a pull request that changes `stories/`;
@@ -63,13 +63,13 @@ where it runs, and reviewed against my checklist alone.
 
       Each example finding and section the prompt keeps cites a section and item the example
       checklist has (ST-43).
-- [ ] **AC-6** — `invocation.test.mjs` renders the reviewer prompt with `owner/other`, a
+- [x] **AC-6** — `invocation.test.mjs` renders the reviewer prompt with `owner/other`, a
       `rulesFile` of `docs/checklist.md` and a `review-tools.mjs` path containing a space, and
       shows: `owner/other`, `docs/checklist.md` and the quoted path where the placeholders were;
       none of `luplows/steward`, `REVIEW.md`, `stories/`, `docs/agent-workflow-design.md`,
       `scripts/dispatch/`, `queue.mjs` or `AC-3`; and a refusal for a `{{REPO}}` value with a
       newline or no `/`. A coder prompt rendered with `owner/other` says `owner/other`.
-- [ ] **AC-7** — Every **Planned** marker naming ST-40 in `docs/agent-workflow-design.md` is
+- [x] **AC-7** — Every **Planned** marker naming ST-40 in `docs/agent-workflow-design.md` is
       resolved, as its "Reading this document" note says.
 
 ## Out of scope
