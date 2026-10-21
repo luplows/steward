@@ -310,7 +310,8 @@ async function git(cwd, args) {
  * Throws unless `dir` is a checkout of exactly `sha`, with nothing uncommitted,
  * that is not `repoDir` (AC-5). `sha` is the base branch's tip (ST-38/AC-2):
  * the session starts in a checkout of the base, whose instructions and settings
- * are `main`'s, and reads the head through git. A dirty or wrong tree would
+ * are the base branch's, `main` or a release branch (ST-45), and reads the head
+ * through git. A dirty or wrong tree would
  * give it someone else's.
  */
 export async function assertReviewableCheckout(dir, sha, repoDir) {
@@ -375,7 +376,8 @@ export async function assertReviewableCheckout(dir, sha, repoDir) {
  * `resetsAt`) and `usage-unknown` (ST-31) are, and the CLI exits 1 for them: a
  * review that was asked for did not happen. The last two start no session.
  * `rules-unreadable` (ST-21/AC-1) is a checklist (the settings' `rulesFile`)
- * that is missing from the base branch or does not parse: it carries
+ * that is missing from `main`, which it is read from whatever the base
+ * (`UNIT_AND_RULES_BASE`), or does not parse: it carries
  * `problems`, and comes before any session. `reviewer-unavailable`
  * (ST-34/AC-5) is a machine whose reviewer choices all have the coder's model:
  * no session is started, and it is a failure like the others. So is `choice-unavailable`

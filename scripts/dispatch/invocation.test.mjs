@@ -520,7 +520,8 @@ describe('OQ-74/AC-7: the module starts nothing and reads nothing', () => {
   })
 
   // ST-45/AC-7 added the release branch's name, which `{{BASE_BRANCH}}`'s pattern is built
-  // from: a module that, like this one, starts nothing, reads nothing and imports nothing.
+  // from: a module that, like this one, starts nothing and reads nothing, and that imports
+  // nothing at all.
   it('imports only the two sibling modules it composes, and the release branch\'s name', () => {
     const source = readFileSync(path.join(here, 'invocation.mjs'), 'utf8')
     const imports = [...source.matchAll(/^import\s[^;]*?from\s+'([^']+)'/gm)].map((m) => m[1])
