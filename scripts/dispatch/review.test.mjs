@@ -576,7 +576,7 @@ describe("ST-40: a review's prompt names the run's repository, steward's review-
     await done
     const prompt = session.calls[0].prompt.replace(/\s+/g, ' ')
     expect(prompt).toContain(`in \`${REPO}\`, at head commit`)
-    expect(prompt).toContain(`node "${path.join(here, 'review-tools.mjs')}" repeat`)
+    expect(prompt).toContain(`node '${path.join(here, 'review-tools.mjs')}' repeat`)
     expect(prompt).toContain('If the pull request changes `REVIEW.md`, its copy is in the diff')
     expect(prompt).not.toContain('luplows/steward')
   }, REVIEW_TEST_TIMEOUT)
@@ -1520,7 +1520,7 @@ describe('ST-32/AC-2, AC-3, AC-5: a reviewer whose choice runs on Codex', () => 
     await done
     const prompt = stand.calls[0].prompt.replace(/\s+/g, ' ')
     expect(prompt).toContain(`in \`${REPO}\`, at head commit`)
-    expect(prompt).toContain(`node "${path.join(here, 'review-tools.mjs')}" repeat`)
+    expect(prompt).toContain(`node '${path.join(here, 'review-tools.mjs')}' repeat`)
     expect(prompt).not.toMatch(/\{\{(REPO|REVIEW_TOOLS|RULES_FILE)\}\}/)
   }, REVIEW_TEST_TIMEOUT)
 

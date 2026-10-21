@@ -599,16 +599,28 @@ describe('ST-40: the prompts work in any project, and name its repository', () =
     expect(() => buildInvocation(coderNoRepo)).toThrow(/requires the repository/)
   })
 
-  it('ST-40/AC-3: every review-tools.mjs command gives the installed path, quoted', () => {
+  it('ST-40/AC-3: every review-tools.mjs command gives the installed path, in single quotes', () => {
     const prompt = render(other)
-    expect(prompt.split(`node "${SPACED_TOOLS}" `)).toHaveLength(4)
-    for (const sub of ['repeat <n>', 'exit --', 'sorted [--unique]']) expect(prompt).toContain(`node "${SPACED_TOOLS}" ${sub}`)
+    expect(prompt.split(`node '${SPACED_TOOLS}' `)).toHaveLength(4)
+    for (const sub of ['repeat <n>', 'exit --', 'sorted [--unique]']) expect(prompt).toContain(`node '${SPACED_TOOLS}' ${sub}`)
     expect(prompt).not.toContain('scripts/dispatch/review-tools.mjs')
-    for (const bad of ['/x/review-tools.mjs\n', '/x/`y`/review-tools.mjs', '/x/"y"/review-tools.mjs', '/x/review-tools.js']) {
+    for (const bad of ['/x/review-tools.mjs\n', '/x/`y`/review-tools.mjs', '/x/<y>/review-tools.mjs', '/x/review-tools.js']) {
       expect(() => render({ ...other, reviewTools: bad }), bad).toThrow(/plain token/)
     }
     const { reviewTools: _t, ...noTools } = other
     expect(() => render(noTools)).toThrow(/requires review-tools\.mjs's path/)
+  })
+
+  // #68's review at 06e35fd: inside double quotes, PowerShell and Bash expand `$`. Inside single
+  // quotes both take the path literally, so a path holding `$` or `%` is given verbatim. One
+  // holding a single quote, which neither shell can put there, or a double quote, which Windows
+  // PowerShell 5.1 mangles in a native command's argument, is refused.
+  it('ST-40/AC-3: a path with $ or % is given verbatim in single quotes, and one with either quote is refused', () => {
+    const shelly = 'C:\\Tools\\$st40\\%PATH%\\review-tools.mjs'
+    expect(render({ ...other, reviewTools: shelly })).toContain(`node '${shelly}' repeat <n>`)
+    for (const bad of ["C:\\Users\\O'Brien\\review-tools.mjs", 'C:\\Tools\\"q"\\review-tools.mjs']) {
+      expect(() => render({ ...other, reviewTools: bad }), bad).toThrow(/plain token/)
+    }
   })
 
   it('ST-40/AC-4: the checklist is named by rulesFile, in the form readSettings allows', () => {
@@ -659,7 +671,7 @@ describe('ST-40: the prompts work in any project, and name its repository', () =
     const prompt = render(other)
     expect(prompt).toContain('`owner/other`')
     expect(prompt).toContain('`docs/checklist.md`')
-    expect(prompt).toContain(`node "${SPACED_TOOLS}"`)
+    expect(prompt).toContain(`node '${SPACED_TOOLS}'`)
     for (const text of [
       'luplows/steward', 'REVIEW.md', 'stories/', 'docs/agent-workflow-design.md', 'scripts/dispatch/', 'queue.mjs', 'AC-3',
     ]) expect(prompt, text).not.toContain(text)

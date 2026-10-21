@@ -253,10 +253,11 @@ not by your allowlist alone.** Read-only pipes, chains and loops usually run,
 such as `git log --oneline | head`. A command the layer cannot confirm is safe
 is refused as a whole, and a shell expansion such as `$?` is enough for that.
 If a command is refused, do not try variants of it. For a repeated run, an exit
-code or sorted output, use steward's `review-tools.mjs`, with its path quoted
-as here: `node "{{REVIEW_TOOLS}}" repeat <n> -- <command…>`,
-`node "{{REVIEW_TOOLS}}" exit -- <command…>` or
-`node "{{REVIEW_TOOLS}}" sorted [--unique] -- <command…>`. It runs only
+code or sorted output, use steward's `review-tools.mjs`, with its path in
+single quotes exactly as here, so that no shell changes it:
+`node '{{REVIEW_TOOLS}}' repeat <n> -- <command…>`,
+`node '{{REVIEW_TOOLS}}' exit -- <command…>` or
+`node '{{REVIEW_TOOLS}}' sorted [--unique] -- <command…>`. It runs only
 commands your allowlist admits, other than `node`: it refuses every `node`
 command, a repository script included. It exits 0 whenever it ran the
 command, so read the result from its output. For anything else, run the parts
