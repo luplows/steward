@@ -6,12 +6,14 @@
 // deleted by that setting, for instance -- or cannot be deleted never fails the
 // landing run (OQ-52's AC-2).
 //
-// A branch is deleted only if it is a same-repository head, is not the base
-// branch, and still points at the exact commit the merged PR had as its head.
+// A branch is deleted only if it is a same-repository head, is neither `main` nor a release
+// branch (`isLandingBase`), is not the pull request's own base, and still points at the exact
+// commit the merged PR had as its head.
 // A branch that has moved since -- for instance a spawn reusing the name of a
 // merged story branch -- is someone's live work and is left alone.
 
 import { execFileSync } from 'node:child_process'
+import { isLandingBase } from './release-branch.mjs'
 
 // Node's default maxBuffer is 1 MiB; an unprojected listing of 100 PRs is about 2 MB and
 // made every call fail with ENOBUFS. The listing is projected (see LIST_PROJECTION) and the
@@ -48,7 +50,15 @@ export function deleteMergedHeads(repo, api = ghApi) {
     if (!pr.merged_at) continue
     if (!pr.head?.repo || pr.head.repo.full_name !== repo) continue
     const ref = pr.head.ref
-    if (ref === pr.base.ref || seen.has(ref)) continue
+    if (seen.has(ref)) continue
+    // `main` and a release branch are never deleted, whatever this pull request's base: a merge
+    // from `main` into a release branch, or back, has one of them as its head.
+    if (isLandingBase(ref)) {
+      seen.add(ref)
+      results.push({ pr: pr.number, ref, outcome: 'kept: main and release branches are never deleted' })
+      continue
+    }
+    if (ref === pr.base.ref) continue
 
     let tip
     try {
