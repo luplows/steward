@@ -22,7 +22,7 @@
 import { readFile, readdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { readSettings } from './dispatch/settings.mjs'
+import { readStoryPrefix } from './dispatch/story-prefix.mjs'
 
 /** The filename pattern for a project's stories, built from its story-id prefix (OQ-127). */
 export function storyFilenameRe(prefix) {
@@ -375,7 +375,7 @@ export async function lintDocs(rootDir) {
   }
 
   const mdFiles = entries.filter((entry) => entry.isFile() && entry.name.endsWith('.md')).map((entry) => path.join(docsDir, entry.name))
-  const { storyPrefix: prefix } = await readSettings(rootDir)
+  const prefix = await readStoryPrefix(rootDir)
   const { open, done } = await collectStoryIds(rootDir, prefix)
   const idRe = new RegExp(`^${prefix}-\\d+$`)
 
@@ -403,12 +403,12 @@ export async function lintDocs(rootDir) {
   return violations
 }
 
-/** Runs every check (AC-2 through AC-5, and AC-7) across the whole repo, against its own `steward.config.json` story-id prefix (OQ-127). */
+/** Runs every check (AC-2 through AC-5, and AC-7) across the whole repo, against its own story-id prefix, `stories/stories.json`'s `prefix` (ST-41). */
 export async function lintAll(rootDir = process.cwd()) {
   const violations = []
   const storiesDir = path.join(rootDir, 'stories')
   const doneDir = path.join(storiesDir, 'done')
-  const { storyPrefix } = await readSettings(rootDir)
+  const storyPrefix = await readStoryPrefix(rootDir)
 
   for (const file of [...(await listStoryFiles(storiesDir, storyPrefix)), ...(await listStoryFiles(doneDir, storyPrefix))]) {
     const source = await readFile(file, 'utf8')

@@ -217,6 +217,8 @@ async function localTip(repoDir, branch) {
  * the failed push).
  */
 export async function pickStory(repoDir) {
+  // Stopgap: loadQueue reads the story prefix from stories/stories.json. The coder's stories own
+  // this and will rework it with the coder's readiness setting.
   const queue = await loadQueue(repoDir)
   const skipped = []
   for (const story of dispatchable(queue)) {

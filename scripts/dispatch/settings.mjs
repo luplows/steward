@@ -2,11 +2,11 @@
 /**
  * Reads and validates a project's `steward.config.json` (OQ-122). This is the
  * first step of moving the workflow to a repository of its own: a project's
- * repository and story-id prefix are read from this file rather than carried
- * as constants in the scripts, so the same code can run a queue numbered
- * `ST-<n>` (`docs/agent-workflow-design.md`, "The story artifact", "Format").
+ * repository is read from this file rather than carried as a constant in the
+ * scripts. The story-id prefix is not a setting (ST-41): it is the `prefix` of
+ * `stories/stories.json` (`story-prefix.mjs`).
  *
- * Its callers are the dispatch scripts, the story lint and the verdict
+ * Its callers are the dispatch scripts and the verdict
  * report, each passing the project root it works on.
  */
 import { readFile } from 'node:fs/promises'
@@ -16,7 +16,6 @@ import { isRulesFilePath } from './rules-file-path.mjs'
 const SETTINGS_FILENAME = 'steward.config.json'
 
 const REPO_RE = /^[^/\s]+\/[^/\s]+$/
-const STORY_PREFIX_RE = /^[A-Z]{1,8}$/
 
 const COMMAND_KEYS = ['command', 'timeoutMinutes']
 const LAND_WHEN_ALL = 'all-checks'
@@ -26,7 +25,6 @@ const UNIT_LINK_KINDS = ['issue', 'file', 'other']
 
 const ALLOWED_KEYS = [
   'repo',
-  'storyPrefix',
   'setup',
   'check',
   'landWhen',
@@ -151,7 +149,7 @@ export async function readSettings(projectRoot) {
     }
   }
 
-  const { repo, storyPrefix } = data
+  const { repo } = data
 
   for (const key of ALLOWED_KEYS) {
     if (!(key in data)) {
@@ -161,12 +159,6 @@ export async function readSettings(projectRoot) {
 
   if (typeof repo !== 'string' || !REPO_RE.test(repo)) {
     throw new Error(`${filePath}: 'repo' must be of the form owner/name, got ${JSON.stringify(repo)}`)
-  }
-
-  if (typeof storyPrefix !== 'string' || !STORY_PREFIX_RE.test(storyPrefix)) {
-    throw new Error(
-      `${filePath}: 'storyPrefix' must match ${STORY_PREFIX_RE}, got ${JSON.stringify(storyPrefix)}`,
-    )
   }
 
   const setup = validateCommand(filePath, 'setup', data.setup)
@@ -201,5 +193,5 @@ export async function readSettings(projectRoot) {
     )
   }
 
-  return { repo, storyPrefix, setup, check, landWhen, land, unitLinks, rulesFile, inspectAfterHours }
+  return { repo, setup, check, landWhen, land, unitLinks, rulesFile, inspectAfterHours }
 }

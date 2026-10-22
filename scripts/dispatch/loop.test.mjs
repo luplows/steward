@@ -59,7 +59,9 @@ function makeRepo(root) {
   const repoDir = path.join(root, 'clone')
   git(root, 'clone', origin, repoDir)
   writeFileSync(path.join(repoDir, 'README.md'), 'init\n')
-  writeFileSync(path.join(repoDir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: 'luplows/tower-workshop-paths', storyPrefix: 'OQ' })))
+  writeFileSync(path.join(repoDir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: 'luplows/tower-workshop-paths' })))
+  mkdirSync(path.join(repoDir, 'stories'), { recursive: true })
+  writeFileSync(path.join(repoDir, 'stories', 'stories.json'), JSON.stringify({ prefix: 'OQ' }))
   git(repoDir, 'add', '.')
   git(repoDir, 'commit', '-m', 'init')
   git(repoDir, 'push', 'origin', 'main')
@@ -655,7 +657,7 @@ describe('OQ-86/AC-6: --max-stories caps how many stories a run starts', () => {
     // (OQ-125), read because parseArgs' default projectRoot is process.cwd()
     // (OQ-130) -- the fixture, for this call -- and this test supplies none of
     // its own.
-    await withTempSettings({ repo: 'luplows/tower-workshop-paths', storyPrefix: 'OQ' }, async (dir) => {
+    await withTempSettings({ repo: 'luplows/tower-workshop-paths' }, async (dir) => {
       const cwd = process.cwd()
       process.chdir(dir)
       try {
@@ -667,7 +669,7 @@ describe('OQ-86/AC-6: --max-stories caps how many stories a run starts', () => {
   })
 
   it('OQ-125/AC-3: parseArgs takes the default repo from steward.config.json at projectRoot, not --repo', async () => {
-    await withTempSettings({ repo: 'owner/other', storyPrefix: 'OQ' }, async (projectRoot) => {
+    await withTempSettings({ repo: 'owner/other' }, async (projectRoot) => {
       expect(await parseArgs([], { projectRoot })).toEqual({ repo: 'owner/other', maxStories: undefined })
       expect(await parseArgs(['--repo', 'x/y'], { projectRoot })).toEqual({ repo: 'x/y', maxStories: undefined })
     })
@@ -683,7 +685,7 @@ describe('OQ-125/AC-3: runLoop takes the default repo from steward.config.json a
   const merged = async () => ({ status: 'ran', result: { status: 'merged' } })
 
   it('OQ-125/AC-3: with no repo, the story process is given the projectRoot\'s settings repo', async () => {
-    await withTempSettings({ repo: 'owner/other', storyPrefix: 'OQ' }, async (projectRoot) => {
+    await withTempSettings({ repo: 'owner/other' }, async (projectRoot) => {
       const repos = []
       const runStoryProcess = async ({ repo }) => (repos.push(repo), merged())
       await runLoop({ projectRoot, deps: { updateCheckout: updated, pickStory: oneReady(), runStoryProcess } })
@@ -692,7 +694,7 @@ describe('OQ-125/AC-3: runLoop takes the default repo from steward.config.json a
   })
 
   it('OQ-125/AC-3: an explicit repo wins over the settings default', async () => {
-    await withTempSettings({ repo: 'owner/other', storyPrefix: 'OQ' }, async (projectRoot) => {
+    await withTempSettings({ repo: 'owner/other' }, async (projectRoot) => {
       const repos = []
       const runStoryProcess = async ({ repo }) => (repos.push(repo), merged())
       await runLoop({ projectRoot, repo: 'x/y', deps: { updateCheckout: updated, pickStory: oneReady(), runStoryProcess } })
@@ -1198,7 +1200,7 @@ describe('OQ-130: the project root is the working directory, not the engine root
     async () => {
       const projectRoot = mkdtempSync(path.join(tmpdir(), 'tw-loop-defaults-'))
       try {
-        writeFileSync(path.join(projectRoot, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: 'owner/other', storyPrefix: 'OQ' })))
+        writeFileSync(path.join(projectRoot, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: 'owner/other' })))
         // runLoop itself cannot be called in-process with a chosen process.cwd()
         // (process.chdir is unavailable in this suite's worker pool), so a small
         // child script imports it and calls it directly, started with its cwd
