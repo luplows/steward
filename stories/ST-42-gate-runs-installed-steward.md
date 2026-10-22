@@ -38,7 +38,15 @@ nothing of its own to run the gate.
       these commands from steward's checkout (`node scripts/dispatch/cli.mjs <command>`), and hold
       no other logic. Their file names and their `name:`s ("Review gate", "Land approved PRs") are
       unchanged, since `land.mjs` dispatches `land-approved.yml` by file name (`WORKFLOW`) and
-      `ci.yml`'s `workflow_run` names "Land approved PRs".
+      `ci.yml`'s `workflow_run` names "Land approved PRs". The `pending` job, which runs on the
+      pull request's own event with a token that can post statuses, checks out the pull request's
+      base, not its merge tree, so that it runs no code the pull request changes. Its step running
+      `mark-pending` runs only when the base holds that command's module (`if: hashFiles(…) != ''`
+      on the module's path), and is otherwise skipped, so that the job succeeds. The base holds it
+      only once this story has landed, so this story's own pull request gets no pending post and no
+      failed check, and every later one gets the post (owner, 2026-10-22; Context). A test shows
+      the `pending` job checks out the base and carries that condition, and AC-5's comparison
+      ignores both as part of how steward is started.
 - [ ] **AC-4** — The package carries the thin workflow files a project uses: a `review-gate.yml` and
       a `land-approved.yml`, in one directory of the package, which ST-44's `init` copies from. Each
       has the same triggers, permissions, concurrency, jobs and environment as steward's own, and
@@ -96,17 +104,17 @@ nothing of its own to run the gate.
   `OWNER|MEMBER|COLLABORATOR` `case`, posts the status, and runs
   `node scripts/land/apply-review-blocked.mjs` (line 192). Line 3 names `Open-Questions.md`.
 - `.github/workflows/land-approved.yml`: one job that checks out the repository, runs the circuit
-  breaker in shell (`-ge 5`, line 80), `node scripts/land/select-candidates.mjs` (line 89), and
-  for each candidate `node scripts/land/check-author.mjs` (line 110), the label and
+  breaker in shell (`-ge 5`, line 82), `node scripts/land/select-candidates.mjs` (line 91), and
+  for each candidate `node scripts/land/check-author.mjs` (line 112), the label and
   `mergeable_state` checks, the `review/agent` re-check, and `gh pr merge … --squash
-  --match-head-commit` (line 166); then `node scripts/land/delete-merged-heads.mjs` (line 186)
-  with `continue-on-error`. Line 76 names `Completed-Questions.md`, and lines 101 to 102 say the
+  --match-head-commit` (line 178); then `node scripts/land/delete-merged-heads.mjs` (line 198)
+  with `continue-on-error`. Line 78 names `Completed-Questions.md`, and line 103 says the
   repository is public.
 - Neither workflow runs `actions/setup-node`; `ci.yml` does, with Node 22.
 - `scripts/dispatch/cli.mjs`: `COMMANDS`, each run as its own process. `package.json`: `bin`
   `steward` is `scripts/dispatch/cli.mjs`, `version` `0.0.0`. `origin` has no tags
   (`git ls-remote --tags origin`, 2026-10-19).
-- `scripts/dispatch/land.mjs`, line 49: `const WORKFLOW = 'land-approved.yml'`.
+- `scripts/dispatch/land.mjs`, line 54: `const WORKFLOW = 'land-approved.yml'`.
 - ST-24 replaces the runway's and the pilot's `mergeable_state` `clean` rule with the checks
   `landWhen` names, in `land-approved.yml` and `land.mjs`. This story depends on it, so the rule
   it moves into a command is ST-24's.
@@ -114,6 +122,24 @@ nothing of its own to run the gate.
   numbers this story will move. This story depends on both, as on ST-24, so the logic it moves
   includes their changes. It also depends on ST-45, which changes `select-candidates.mjs` to take
   pull requests into a release branch.
+- **Revised on 2026-10-22 by the owner**, after #74's second and third reviews (comments 6334578130
+  and 6334852619). The `pending` job runs on the pull request's own event with `statuses: write`;
+  given the default checkout, the merge tree, it would run the pull request's own `cli.mjs`, which
+  could post `review/agent` success with no review. Today's step runs no checked-out code: it
+  posts a literal pending status with `gh api`. So steward's own `pending` job checks out the
+  base. The base has no `mark-pending` until this story lands, and a step that runs it there would
+  fail, leaving a failed check on this story's own head, which `landWhen`'s `"all-checks"`
+  (`steward.config.json`, `scripts/land/checks-green.mjs`) would never let land (#77's first
+  review, comment 6343032828). So the step runs only when the base holds the command's module,
+  and is skipped otherwise: this story's own pull request gets no pending post and no failed check.
+  A missing pending post costs nothing, since landing waits for `review/agent` success, which the
+  `verdict` job posts from `main`. Considered and not chosen then: keeping today's `gh api` step in
+  this story's pull request and switching it in a follow-up, which is one more pull request and an
+  exception to AC-3 in the meantime. Considered and not chosen before: the merge tree, arguing
+  that on a pull request's event GitHub also takes the workflow file from the pull request, so a
+  pull request could already rewrite the job, which makes forging the status easier to miss in review;
+  and falling back to `gh api` when the command is missing, which AC-3 forbids as logic in the
+  workflow file. The thin files check out nothing and start steward at a pinned tag (AC-4).
 
 ## Open questions
 

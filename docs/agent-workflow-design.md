@@ -2400,7 +2400,14 @@ shortened where it is long, so that it can be found there with its date.
     install steward alone, at a pinned tag (`npx --yes --package=github:luplows/steward#v<version>
     steward <command>`, or an equivalent), not the project's dependencies. Steward's own workflows
     run the same commands from its checkout, so steward runs them on itself, and a test keeps
-    steward's own files and the thin files in step except for how steward is started. Considered and
+    steward's own files and the thin files in step except for how steward is started. Steward's own
+    `pending` job, which runs on a pull request's event with a token that can post statuses, checks
+    out the pull request's base rather than its merge tree, so that it runs no code the pull
+    request changes. Its `mark-pending` step runs only when the base holds that command, and is
+    skipped otherwise, so ST-42's own pull request gets no pending post and no failed check, which
+    `"all-checks"` would never let land (owner, 2026-10-22, after #74's third review and #77's
+    first; not chosen: the merge tree, a `gh api` fallback, and keeping today's step until a
+    follow-up). Considered and
     not chosen: the thin files running the project's `npm ci`, and steward from its `node_modules`.
     Steward alone was chosen for fewer Actions minutes on a private repository, and because it works
     for a project that is not Node. A project's `package.json` does not pin steward: the crew runs
