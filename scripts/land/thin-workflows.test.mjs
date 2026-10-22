@@ -220,3 +220,53 @@ describe('ST-42/AC-6: no comment makes a statement particular to steward\'s repo
     }
   })
 })
+
+describe('ST-44/AC-6: the thin inspection workflow the package carries stays in step with steward\'s own', () => {
+  const FILE = 'inspection.yml'
+
+  it('ST-44/AC-6: differs from steward\'s own inspection.yml only in how steward is started', () => {
+    expect(firstDifference(OWN(FILE), THIN(FILE))).toBeNull()
+    expect(OWN(FILE)).toContain(`run: ${OWN_START}inspect`)
+    expect(THIN(FILE)).toContain(`run: ${THIN_START}inspect`)
+    expect(OWN(FILE)).not.toBe(THIN(FILE))
+  })
+
+  it('ST-44/AC-6: fails on a thin file with a changed permission, trigger or timeout', () => {
+    for (const [from, to] of [
+      ['issues: write', 'issues: read'],
+      ['workflow_dispatch:', 'workflow_dispatch:\n  push:'],
+      ["cron: '17 6 * * *'", "cron: '17 6 * * 1'"],
+      ['timeout-minutes: 10', 'timeout-minutes: 30'],
+    ]) {
+      const changed = THIN(FILE).replace(from, () => to)
+      expect(changed).not.toBe(THIN(FILE))
+      expect(firstDifference(OWN(FILE), changed)).not.toBeNull()
+    }
+  })
+
+  it('ST-44/AC-6: fails on a thin file that runs another command, or whose job lost its checkout', () => {
+    expect(firstDifference(OWN(FILE), THIN(FILE).replace(`${THIN_START}inspect`, () => `${THIN_START}land`))).not.toBeNull()
+    const lost = THIN(FILE).replace(/ {6}- name: Check out the repository\n {8}uses: actions\/checkout@v4\n\n/, () => '')
+    expect(lost).not.toBe(THIN(FILE))
+    expect(firstDifference(OWN(FILE), lost)).not.toBeNull()
+  })
+
+  it('ST-44/AC-6: starts steward from the package at the pinned tag, with the one placeholder, and keeps the checkout that gives it the project\'s settings', () => {
+    const text = THIN(FILE)
+    expect(text).toMatch(/^name: Inspection$/m)
+    expect(commandsIn(text, THIN_START)).toEqual(['inspect'])
+    expect(Object.keys(COMMANDS)).toContain('inspect')
+    expect(text.match(/\{\{[A-Z_]+\}\}/g)).toEqual(['{{STEWARD_VERSION}}'])
+    expect(text).toContain('uses: actions/checkout@v4')
+    expect(text).not.toMatch(/npm ci|npm install|setup-node/)
+  })
+
+  it('ST-44/AC-6: no comment in either file makes a statement particular to steward\'s repository', () => {
+    for (const file of [OWN(FILE), THIN(FILE)]) {
+      const text = file.split('\n').filter((line) => line.trimStart().startsWith('#')).join('\n')
+      expect(text.length).toBeGreaterThan(500)
+      expect(text).not.toMatch(/\bST-\d+|\bOQ-\d+|tower-workshop-paths|controller|\brotation\b/)
+      expect(text).not.toMatch(/(?:^|[\s`(])(?:scripts|docs|templates)\//m)
+    }
+  })
+})

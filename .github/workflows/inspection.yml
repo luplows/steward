@@ -2,14 +2,14 @@ name: Inspection
 
 # Looks for a merge to `main` without a passing verdict, a commit on `main` without a pull request,
 # and a pull request left pending or holding too long, and raises each as an issue labelled
-# `inspection` (scripts/dispatch/inspect.mjs; docs/agent-workflow-design.md, "Watchdog"). It checks
+# `inspection` (steward's `inspect` command; steward's design document, "Watchdog"). It checks
 # each release branch as it checks `main`. It runs here so that it runs while the crew's machine
-# is off; the controller also runs the same command after each rotation.
+# is off.
 #
 # A project sets how often it runs by editing the schedule below, or drops it by deleting this
 # file. On a private repository each run costs Actions minutes, rounded up to the next whole
 # minute. A run exits 1 when it opened an issue, so that run shows as failed; that is the signal.
-# GitHub delivers a schedule late and sometimes not at all (docs/agent-workflow-design.md,
+# GitHub delivers a schedule late and sometimes not at all (steward's design document,
 # "Watchdog"), so read the cadence as "sometime".
 
 on:

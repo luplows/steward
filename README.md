@@ -13,8 +13,9 @@ build, and what is fit to release.
   For now a member of the crew starts each run by hand.
 - **The coding side is designed but not built.** Until it is, pull requests are written by people,
   or in their own agent sessions.
-- **Steward runs on this repository only.** `init`, which will set up another project, is not built
-  yet.
+- **Another project can use the review side.** Run `steward init` in the project's checkout (see
+  "Setting up another project", below). It asks what it needs, writes the files the gate needs,
+  creates the labels, and commits nothing. Nothing of the coding side is installed.
 
 ## Setup
 
@@ -42,6 +43,18 @@ node scripts/dispatch/cli.mjs land <pr-number>     # land it, once it has passed
 node scripts/dispatch/cli.mjs inspect              # raise a merge without a passing verdict, or a stall, on main or a release branch
 ```
 
+In another project, the crew runs steward from the package at the tag the project's workflow files
+pin, the form those files use, from the project's checkout:
+
+```sh
+npx --yes --package=github:luplows/steward#v<version> steward <command>
+```
+
+with `<command>` one of the commands of
+[`scripts/dispatch/cli.mjs`](scripts/dispatch/cli.mjs), such as `review <pr-number>`. The project's
+`package.json` does not pin steward: the version is in the workflow files and in the commands the
+crew types.
+
 What the review side reads:
 
 - **`steward.config.json`**, the project's settings: its repository, its setup and check commands,
@@ -60,8 +73,37 @@ What the review side reads:
   `land-approved.yml` hold only their triggers, permissions and environment, and run steward's
   commands (`mark-pending`, `apply-verdict`, `apply-review-blocked`, `runway` and
   `delete-merged-heads`) from this checkout. The package carries the same two files in thin form,
-  [`templates/workflows/`](templates/workflows/), which run those commands from steward installed
-  alone at a pinned tag, with a placeholder for the tag.
+  and `inspection.yml` too, in [`templates/workflows/`](templates/workflows/): they run those
+  commands from steward installed alone at a pinned tag, with a placeholder for the tag, which
+  `init` fills. Inspection's keeps a checkout of the project, for its settings.
+
+## Setting up another project
+
+In the project's checkout, with `gh` signed in as an account that can administer the repository
+(for branch protection) and Node 22:
+
+```sh
+npx --yes --package=github:luplows/steward#v<version> steward init
+```
+
+`init` runs no model. It asks each question at the terminal, showing its default; every question
+has a flag, and `--yes` takes the default of each one no flag answers. With no terminal and a
+question unanswered it refuses, names the question's flag, and writes nothing. It never overwrites
+a file: one already there is named and left. It writes:
+
+- `steward.config.json`, with `repo` from the `origin` remote ([`docs/settings.md`](docs/settings.md)
+  says what it writes for each key), and the example checklist at its `rulesFile` path;
+- the thin workflow files for the gate and the runway, and for inspection when asked, in
+  `.github/workflows/`, pinned to the version of the steward that ran it (`--ref <commit>` pins a
+  commit's full SHA instead);
+- a pull request template, only when the project has none;
+- the labels steward reads and applies, `review-blocked`, `breaker-override` and `inspection`;
+- the machine's settings (`~/.steward/settings.json`), only when that file is missing;
+- branch protection on `main`, requiring `review/agent`, only on a yes (the default is no). Where
+  GitHub offers none, as on a private repository on GitHub Free, it says so and goes on.
+
+It commits, stages and pushes nothing, and does not touch the project's `package.json`, its CI or
+its stories. The crew commits what it wrote through a pull request of the project's own.
 
 ## Contributing
 

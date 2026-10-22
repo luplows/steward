@@ -70,8 +70,7 @@ A release is cut from `main`, or, as a patch release, from the newest release's 
   command and its result. Run it again at the new last commit whenever a fix or a revert lands into
   the release branch, on another new scratch repository: `init` leaves a file that already exists as
   it is, so it would not repin the first one's workflows (ST-44). The tag's commit differs from the
-  last one walked through only by the notes and the version. Until `init` exists, the walkthrough is
-  steward's own rotations during the batch, read from their verdicts and landings.
+  last one walked through only by the notes and the version.
 - Give each capability one verdict: `accepted`, `accepted-with-followup` or `blocks-release`.
 - **A blocker is fixed or deferred.** A fix lands on `main` first, as any `fix` story, written with
   the crew as `planning-session.md` says, and then comes to the release branch as a pull request
