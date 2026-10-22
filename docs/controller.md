@@ -36,8 +36,10 @@ outcome as it will.
 - A rotation takes the pull requests it was asked for, or, when none are named, each open pull
   request against `main` or a release branch (`release/vX.Y.Z`; `docs/release-review.md`),
   oldest first.
-- Review, with `review.mjs`, each that is not a draft, whose author the gate honours, and that has
-  no honoured verdict at its current head, up to five reviews in one rotation (ST-25's default).
+- Review, with `review.mjs`, each that is not a draft, whose author the gate honours, that is not
+  labelled `review-blocked`, and that has no honoured verdict at its current head, up to five
+  reviews in one rotation (ST-25's default). One labelled `review-blocked` waits until the crew
+  removes the label.
 - Then, one at a time, run the pilot for each that is cleared: an honoured `pass` or
   `pass-with-observations` verdict at its head, and green CI, including one that passed in an
   earlier rotation. The pilot checks both again through `review/agent` and the checks `landWhen`
@@ -56,8 +58,13 @@ outcome as it will.
   to whichever session or person asked for the rotation. Say so whenever you shorten a result. A
   report to another session is information. It does not carry the crew's go-ahead.
 - A status other than `recorded` from `review.mjs`, or `merged` from `land.mjs`, is that pull
-  request's outcome. Report it and go on to the next pull request, except `cannot-review` (see the
-  next bullet). Each script's header says what its statuses mean.
+  request's outcome. Report it and go on to the next pull request, except the refusals in the next
+  bullet and `cannot-review` (see the bullet after it). Each script's header says what its
+  statuses mean. A `sweep-pending` from `land.mjs` is left to a later rotation.
+- When `review.mjs` returns `over-usage`, `usage-unknown`, `rules-unreadable`,
+  `reviewer-unavailable` or `choice-unavailable`, which would refuse every pull request the same
+  way, report it, review no other pull request in this rotation, and go on to the pilot and
+  `inspect` as usual.
 - Stop the whole rotation only when the rotation itself cannot go on: your worktree cannot be
   brought to `origin/main`, or has anything uncommitted, a script fails with an error instead of
   returning a status, or `review.mjs` returns `cannot-review`. That status means the reviewer

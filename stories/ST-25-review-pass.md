@@ -28,9 +28,12 @@ as it is on `main`.
       (`loop.mjs`'s `updateCheckout`). It reads the settings after the update.
 - [ ] **AC-3** — Step 2: it lists the open pull requests against `main` or a release branch (ST-45,
       AC-1) once. Step 3: oldest first (lowest number), it reviews each that is not a draft, whose
-      author the gate honours (`HONOURED_ASSOCIATIONS`), and that has no honoured verdict at its
-      current head, with `reviewPullRequest`, stopping once it has reviewed `--max-reviews` of them.
-      Every pull request is a candidate whoever opened it.
+      author the gate honours (`HONOURED_ASSOCIATIONS`), that is not labelled `review-blocked`, and
+      that has no honoured verdict at its current head, with `reviewPullRequest`, stopping once it
+      has reviewed `--max-reviews` of them. Every pull request is a candidate whoever opened it.
+      One labelled `review-blocked` is skipped until the crew removes the label (owner,
+      2026-10-21), and step 4 still passes it to the pilot when it has a passing verdict at its
+      head, which returns `review-blocked` (AC-5e).
 - [ ] **AC-4** — Step 4: when the settings' `land` is true, it then reads each pull request from
       the list again and, one at a time, calls `landPullRequest` with `once: true` (ST-23) for
       each whose current head has an honoured `pass` or `pass-with-observations` verdict,
@@ -49,9 +52,9 @@ as it is on `main`.
 - [ ] **AC-5a** — A script error stops the rotation (owner, 2026-10-14). When `reviewPullRequest`
       or `landPullRequest` throws, rather than returning a status, the rotation prints which pull
       request and step it was, reviews and lands nothing more, and exits non-zero. A status other
-      than `recorded` or `merged`, and other than `cannot-review` (AC-5c), is that pull request's
-      outcome, printed as AC-5 says, and the rotation goes on (`docs/controller.md`, "Reporting
-      and stopping").
+      than `recorded` or `merged`, and other than `cannot-review` (AC-5c) and AC-5d's refusals, is
+      that pull request's outcome, printed as AC-5 says, and the rotation goes on
+      (`docs/controller.md`, "Reporting and stopping").
 - [ ] **AC-5b** — A worktree changed by a review stops the rotation (owner, 2026-10-15). After
       each review in step 3, before the next review or step 4, the rotation checks its worktree
       again: `HEAD` is still the commit step 1 checked out, and `git status --porcelain` prints
@@ -63,10 +66,27 @@ as it is on `main`.
       it was and the reviewer's `summary`, reviews and lands nothing more, and exits non-zero. A
       test, with the review function injected, shows `cannot-review` on the first of two pull
       requests stopping the rotation before the second is reviewed and before any landing.
+- [ ] **AC-5d** — A refusal that holds for every pull request ends the reviewing, not the rotation
+      (owner, 2026-10-21). When `reviewPullRequest` returns `over-usage`, `usage-unknown`,
+      `rules-unreadable`, `reviewer-unavailable` or `choice-unavailable`, each of which refuses
+      before a session starts, the rotation prints which pull request it was, the status and what
+      the result carries to say why, reviews no other pull request, and goes on to step 4 and step
+      4a as usual. It exits 0 unless something else in AC-5 stops it. A test, with the review function injected, shows
+      each of the five on the first of two pull requests: the second is not reviewed, and a third,
+      which passed in an earlier rotation, is still landed.
+- [ ] **AC-5e** — Every result of the pilot is printed, and landing goes on (owner, 2026-10-21).
+      Each status `landPullRequest` returns with `once: true` (`merged`, `sweep-pending`,
+      `closed`, `head-moved`, `landing-off`, `draft`, `review-blocked`, `review-failed`,
+      `conflict`, `checks-failed`, `github-blocked` and `not-landable`) is printed on that pull
+      request's line with what the result carries (`reason` and `waiting` on `not-landable`,
+      `failing` on `checks-failed`, `newHeadSha` on `head-moved`), and the rotation goes on to the
+      next pull request in step 4. A `sweep-pending` pull request is left to a later rotation. A
+      test, with the land function injected, returns each status for a first pull request, with its
+      fields, and shows the line printed and a second pull request still landed.
 - [ ] **AC-6** — Tests in `rotation.test.mjs`, named `ST-25/AC-<n>`, with the GitHub, review and
-      land functions injected: the order and the cap; each skip (draft, outsider, verdict already at
-      the head); a pull request that passed in an earlier rotation and lands in this one;
-      `land: false` landing nothing; a review that records no verdict leaving that pull request to
+      land functions injected: the order and the cap; each skip (draft, outsider, `review-blocked`,
+      verdict already at the head); a pull request that passed in an earlier rotation and lands in
+      this one; `land: false` landing nothing; a review that records no verdict leaving that pull request to
       the next rotation; a thrown error stopping the rotation (AC-5a); and the refusals in AC-2.
 - [ ] **AC-7** — Each `**Planned (ST-25)**` marker in `docs/agent-workflow-design.md` loses
       `ST-25`, and each passage is corrected wherever what was built differs.
