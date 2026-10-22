@@ -62,6 +62,7 @@ import { RETRY_SOURCES } from './invocation.mjs'
 import { coderChoice, readMachineSettings } from './machine-settings.mjs'
 import { buildStory, deriveStatus, dispatchable, isStoryFilename, orderStories, parseFrontmatter } from './queue.mjs'
 import { readSettings } from './settings.mjs'
+import { readStoryPrefix } from './story-prefix.mjs'
 import { spawnSession } from './spawn.mjs'
 import { readUsage } from './usage.mjs'
 
@@ -368,7 +369,9 @@ export async function dispatchCoder({
 
   // The queue is read from the tip just fetched, and the worktree is made from
   // that same commit, so the story chosen is the story the coder is handed.
-  const { storyPrefix } = await readSettings(repoDir)
+  // Stopgap: the coder reads the story prefix from stories/stories.json. The coder's stories own
+  // this and will rework it with the coder's readiness setting.
+  const storyPrefix = await readStoryPrefix(repoDir)
   const machine = await machineSettings()
   await git(repoDir, ['fetch', REMOTE, BASE])
   const mainSha = (await git(repoDir, ['rev-parse', `${REMOTE}/${BASE}`])).trim()
@@ -675,7 +678,9 @@ export async function retryStory({
   usage = readUsage, choice: named, codexUsage = readCodexUsage,
   machineSettings = () => readMachineSettings({ env: process.env, homedir: homedir() }),
 }) {
-  const { storyPrefix } = await readSettings(repoDir)
+  // Stopgap: the coder reads the story prefix from stories/stories.json. The coder's stories own
+  // this and will rework it with the coder's readiness setting.
+  const storyPrefix = await readStoryPrefix(repoDir)
   const machine = await machineSettings()
   if (!new RegExp(`^${storyPrefix}-\\d+$`).test(storyId ?? '')) {
     throw new Error(`retryStory requires a story id of the form ${storyPrefix}-<n>, got ${JSON.stringify(storyId)}`)
@@ -854,7 +859,10 @@ async function mainRetry(args, repo, storyPrefix) {
 
 async function main(argv) {
   const args = [...argv]
-  const { repo: settingsRepo, storyPrefix } = await readSettings(process.cwd())
+  const { repo: settingsRepo } = await readSettings(process.cwd())
+  // Stopgap: the coder reads the story prefix from stories/stories.json. The coder's stories own
+  // this and will rework it with the coder's readiness setting.
+  const storyPrefix = await readStoryPrefix(process.cwd())
   if (args[0] === 'retry') {
     args.shift()
     const repoAt = args.indexOf('--repo')

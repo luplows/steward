@@ -32,15 +32,17 @@ const BRANCH = 'story/OQ-9-a-story'
 const SHAS = ['a', 'b', 'c', 'd', 'e', 'f'].map((c) => c.repeat(40))
 const [H1, H2, H3, H4] = SHAS
 
-// runStory reads the project's settings from repoDir. The harness passes a
+// runStory reads the project's story prefix from repoDir. The harness passes a
 // directory of its own, whose prefix matches STORY, so the tests do not
-// depend on the settings of the checkout they run in.
-const SETTINGS_DIR = mkdtempSync(path.join(tmpdir(), 'tw-story-settings-'))
+// depend on the story prefix of the checkout they run in.
+const PROJECT_DIR = mkdtempSync(path.join(tmpdir(), 'tw-story-prefix-'))
 writeFileSync(
-  path.join(SETTINGS_DIR, 'steward.config.json'),
-  JSON.stringify(fixtureSettings({ repo: REPO, storyPrefix: 'OQ' })),
+  path.join(PROJECT_DIR, 'steward.config.json'),
+  JSON.stringify(fixtureSettings({ repo: REPO })),
 )
-afterAll(() => rmSync(SETTINGS_DIR, { recursive: true, force: true }))
+mkdirSync(path.join(PROJECT_DIR, 'stories'))
+writeFileSync(path.join(PROJECT_DIR, 'stories', 'stories.json'), JSON.stringify({ prefix: 'OQ' }))
+afterAll(() => rmSync(PROJECT_DIR, { recursive: true, force: true }))
 
 function comment(id, verdict, head, { association = 'OWNER', text = 'A finding.' } = {}) {
   const body = `${text}\n\n<!-- agent-review head=${head} verdict=${verdict} -->`
@@ -91,7 +93,7 @@ function harness({
     getPullRequestLabels: async () => state.labels,
   }
   const ctx = { repo: REPO, send: async () => state.pr }
-  const run = (extra = {}) => runStory({ storyId: STORY, ctx, ciCtx: {}, landCtx: {}, repoDir: SETTINGS_DIR, deps, ...extra })
+  const run = (extra = {}) => runStory({ storyId: STORY, ctx, ciCtx: {}, landCtx: {}, repoDir: PROJECT_DIR, deps, ...extra })
   return { deps, state, calls, run, names: () => calls.map((c) => c[0]) }
 }
 
@@ -618,24 +620,26 @@ describe('OQ-48/AC-9: resuming an existing pull request', () => {
   })
 })
 
-// --------------------------------------------------- OQ-128: id prefix from settings
+// --------------------------------------------------- OQ-128: id prefix from stories/stories.json
 
-/** A directory holding only a `steward.config.json` with the given `storyPrefix`. */
-function withSettings(storyPrefix, fn) {
-  const dir = mkdtempSync(path.join(tmpdir(), 'tw-story-settings-'))
-  writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO, storyPrefix })))
+/** A directory holding a `steward.config.json` and a `stories/stories.json` with the given `prefix`. */
+function withStoryPrefix(storyPrefix, fn) {
+  const dir = mkdtempSync(path.join(tmpdir(), 'tw-story-prefix-'))
+  writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO })))
+  mkdirSync(path.join(dir, 'stories'))
+  writeFileSync(path.join(dir, 'stories', 'stories.json'), JSON.stringify({ prefix: storyPrefix }))
   return fn(dir).finally(() => rmSync(dir, { recursive: true, force: true }))
 }
 
-describe('OQ-128/AC-2: runStory takes its story-id check from settings\' storyPrefix', () => {
-  it('refuses OQ-3 with the "requires a story id" error, under a project whose settings say ST', () =>
-    withSettings('ST', async (dir) => {
+describe('OQ-128/AC-2: runStory takes its story-id check from the prefix of stories/stories.json', () => {
+  it('refuses OQ-3 with the "requires a story id" error, under a project whose stories/stories.json says ST', () =>
+    withStoryPrefix('ST', async (dir) => {
       await expect(runStory({ storyId: 'OQ-3', repoDir: dir, ctx: {}, ciCtx: {}, landCtx: {} }))
         .rejects.toThrow('runStory requires a story id of the form ST-<n>, got "OQ-3"')
     }))
 
-  it('accepts ST-3, going on past the story-id check, under the same settings', () =>
-    withSettings('ST', async (dir) => {
+  it('accepts ST-3, going on past the story-id check, under the same stories/stories.json', () =>
+    withStoryPrefix('ST', async (dir) => {
       // Reaching dispatchCoder (rather than the story-id error) shows ST-3 passed the check.
       const calls = []
       const result = await runStory({

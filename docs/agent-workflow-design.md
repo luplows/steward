@@ -442,9 +442,9 @@ Steward's own units are story files, one per story, numbered `ST-<n>` and never 
 renumbered (`stories/README.md`, which defines the schema). They are the convention of steward's
 own repository: a project need not use stories, and steward is to read a project's unit as
 written, without parsing or linting it (`outline.md`, "Review"). Today `review.mjs` still finds a
-story by the file the diff moves. The prefix is `storyPrefix` in the settings, and every story-id
-pattern the scripts use is built from it; the outline decides that `storyPrefix` leaves steward's
-settings (`outline.md`, "Settings"), and no story yet does that.
+story by the file the diff moves. The prefix is the `prefix` of `stories/stories.json`, and
+every story-id pattern the scripts use is built from it; `storyPrefix` is no longer a setting
+(`outline.md`, "Settings").
 
 ```
 stories/
@@ -1648,9 +1648,8 @@ shortened where it is long, so that it can be found there with its date.
   containment are its own convention ("Decided so far", 2026-10-10, below), so they keep the
   prefix in tooling of their own; `scripts/no-project-literals.test.mjs`, which keeps the prefix
   out of the code, changes with it; and how a coder finds ready units waits for the coder's
-  readiness setting. **Planned (ST-41):** the prefix moves to `stories/stories.json`, which
-  steward's story tooling reads, and the engine's coder reads as a stopgap (decided 2026-10-19,
-  "Decided so far").
+  readiness setting. The prefix is in `stories/stories.json`, which steward's story tooling reads,
+  and the engine's coder reads as a stopgap (decided 2026-10-19, "Decided so far").
 - **`setup` and `check`: one command each, run through the platform's shell.** Not chosen: an
   argument list run without a shell. What follows for `check` (the planning session, 2026-10-11):
   its program must be one the coder's allowlist admits, which today means `npm`, `npx` or `node`.
@@ -2372,7 +2371,7 @@ shortened where it is long, so that it can be found there with its date.
   machine of the kind ST-6 is to find how to keep from sessions, and of no use to a Codex reviewer,
   which has no network; and ATC fetching the pull requests and comments a body cites.
 - **Steward installs in another project as a review gate, through `init`** (decided 2026-10-19 by
-  the owner, with the planning session; **Planned (ST-41, ST-42, ST-44)**). Steward
+  the owner, with the planning session; **Planned (ST-42, ST-44)**). Steward
   is installed in another project as a review gate only: first in pinpoint, a private Node
   repository on GitHub Free, so with no branch protection, whose units are GitHub issues; then in
   tower-workshop-paths, which is public and keeps file stories with the prefix `OQ`, by its own
@@ -2388,7 +2387,7 @@ shortened where it is long, so that it can be found there with its date.
     side's. The prompts' project section (R1) is not in it: tower-workshop-paths needs it only
     once its coder runs.
   - **The story prefix belongs to the story convention, which some projects will not have**
-    (ST-41). `storyPrefix` leaves steward's settings, as decided on 2026-10-11 ("The outline's
+    `storyPrefix` leaves steward's settings, as decided on 2026-10-11 ("The outline's
     reasoning", "Settings", above), and a settings file holding it is refused as an unknown key.
     Steward's story lint, story containment and queue are steward's own tooling, and read the
     prefix from a file of the convention's own, `stories/stories.json` (`{ "prefix": "ST" }`); a

@@ -1,7 +1,6 @@
 // @vitest-environment node
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { fixtureSettings } from './settings-fixture.mjs'
 import { execFileSync } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -47,11 +46,8 @@ let tmpRoot
 
 beforeEach(async () => {
   tmpRoot = await mkdtemp(path.join(tmpdir(), 'queue-test-'))
-  await writeFile(
-    path.join(tmpRoot, 'steward.config.json'),
-    JSON.stringify(fixtureSettings({ repo: 'luplows/tower-workshop-paths', storyPrefix: 'OQ' })),
-    'utf8',
-  )
+  await mkdir(path.join(tmpRoot, 'stories'), { recursive: true })
+  await writeFile(path.join(tmpRoot, 'stories', 'stories.json'), JSON.stringify({ prefix: 'OQ' }), 'utf8')
 })
 
 afterEach(async () => {
@@ -87,14 +83,10 @@ describe('OQ-49/AC-1: filename filtering', () => {
   })
 })
 
-describe('OQ-126/AC-3: the story-id prefix comes from settings, not a hardcoded OQ-', () => {
-  it('loadQueue loads an ST-<n> story and ignores an OQ-<n> one sitting beside it, for a project whose settings say ST', async () => {
+describe('OQ-126/AC-3: the story-id prefix comes from stories/stories.json, not a hardcoded OQ-', () => {
+  it('loadQueue loads an ST-<n> story and ignores an OQ-<n> one sitting beside it, for a project whose stories/stories.json says ST', async () => {
     const storiesDir = path.join(tmpRoot, 'stories')
-    await writeFile(
-      path.join(tmpRoot, 'steward.config.json'),
-      JSON.stringify(fixtureSettings({ repo: 'owner/repo', storyPrefix: 'ST' })),
-      'utf8',
-    )
+    await writeFile(path.join(storiesDir, 'stories.json'), JSON.stringify({ prefix: 'ST' }), 'utf8')
     await writeStory(storiesDir, 'ST-3-thing.md', storySource({ id: 'ST-3' }))
     await writeStory(storiesDir, 'OQ-3-thing.md', storySource({ id: 'OQ-3' }))
 

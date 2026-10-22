@@ -63,11 +63,12 @@ describe('OQ-131/AC-2: cli.mjs runs the project in the working directory, not th
     execFileSync('git', ['config', 'user.name', 'Test'], { cwd: tmpRoot })
     await writeFile(
       path.join(tmpRoot, 'steward.config.json'),
-      JSON.stringify(fixtureSettings({ repo: 'owner/repo', storyPrefix: 'ST' })),
+      JSON.stringify(fixtureSettings({ repo: 'owner/repo' })),
       'utf8',
     )
     const storiesDir = path.join(tmpRoot, 'stories')
     await mkdir(storiesDir, { recursive: true })
+    await writeFile(path.join(storiesDir, 'stories.json'), JSON.stringify({ prefix: 'ST' }), 'utf8')
     const story = [
       '---',
       'id: ST-1',

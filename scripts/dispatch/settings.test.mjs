@@ -75,7 +75,6 @@ describe('readSettings', () => {
     const settings = await readSettings(REPO_ROOT)
     expect(settings).toEqual({
       repo: 'luplows/steward',
-      storyPrefix: 'ST',
       setup: { command: 'npm ci', timeoutMinutes: 5 },
       check: { command: 'npm run check', timeoutMinutes: 10 },
       landWhen: 'all-checks',
@@ -115,16 +114,6 @@ describe('readSettings', () => {
     })
   })
 
-  it('OQ-135/AC-3 - throws naming the file and the problem when storyPrefix is missing', async () => {
-    await withTempProject(async (dir) => {
-      writeConfig(dir, JSON.stringify(withoutKey('storyPrefix')))
-      const filePath = path.join(dir, 'steward.config.json')
-      const promise = readSettings(dir)
-      await expect(promise).rejects.toThrow(filePath)
-      await expect(promise).rejects.toThrow("missing required key 'storyPrefix'")
-    })
-  })
-
   it('OQ-135/AC-3 - throws naming the file and the problem when repo is not owner/name', async () => {
     await withTempProject(async (dir) => {
       writeConfig(dir, JSON.stringify(fixtureSettings({ repo: 'not-a-slug' })))
@@ -132,26 +121,6 @@ describe('readSettings', () => {
       const promise = readSettings(dir)
       await expect(promise).rejects.toThrow(filePath)
       await expect(promise).rejects.toThrow("'repo' must be of the form owner/name")
-    })
-  })
-
-  it('OQ-135/AC-3 - throws naming the file and the problem when storyPrefix is lower case', async () => {
-    await withTempProject(async (dir) => {
-      writeConfig(dir, JSON.stringify(fixtureSettings({ storyPrefix: 'oq' })))
-      const filePath = path.join(dir, 'steward.config.json')
-      const promise = readSettings(dir)
-      await expect(promise).rejects.toThrow(filePath)
-      await expect(promise).rejects.toThrow("'storyPrefix' must match")
-    })
-  })
-
-  it('OQ-135/AC-3 - throws naming the file and the problem when storyPrefix is longer than 8 characters', async () => {
-    await withTempProject(async (dir) => {
-      writeConfig(dir, JSON.stringify(fixtureSettings({ storyPrefix: 'TOOLONGPREFIX' })))
-      const filePath = path.join(dir, 'steward.config.json')
-      const promise = readSettings(dir)
-      await expect(promise).rejects.toThrow(filePath)
-      await expect(promise).rejects.toThrow("'storyPrefix' must match")
     })
   })
 
@@ -307,8 +276,8 @@ describe('ST-18: the review side settings keys', () => {
     }
   })
 
-  it('ST-18/AC-2: nothing is defaulted: a file with only repo and storyPrefix is rejected', async () => {
-    await expectRejected({ repo: 'owner/repo', storyPrefix: 'ST' }, "missing required key 'setup'")
+  it('ST-18/AC-2: nothing is defaulted: a file with only repo is rejected', async () => {
+    await expectRejected({ repo: 'owner/repo' }, "missing required key 'setup'")
   })
 })
 
@@ -320,5 +289,22 @@ describe('ST-34/AC-3: usageLimits left the project settings', () => {
 
   it("ST-34/AC-3: this repository's steward.config.json has no usageLimits", async () => {
     expect(await readSettings(REPO_ROOT)).not.toHaveProperty('usageLimits')
+  })
+})
+
+describe('ST-41/AC-1: storyPrefix left the project settings', () => {
+  it('ST-41/AC-1: reads a file with every other key and no storyPrefix, and returns none', async () => {
+    await withTempProject(async (dir) => {
+      writeConfig(dir, JSON.stringify(fixtureSettings()))
+      expect(await readSettings(dir)).not.toHaveProperty('storyPrefix')
+    })
+  })
+
+  it('ST-41/AC-1: refuses storyPrefix as an unknown key, naming it', async () => {
+    await expectRejected(fixtureSettings({ storyPrefix: 'ST' }), "unrecognised key 'storyPrefix'")
+  })
+
+  it("ST-41/AC-1: this repository's steward.config.json has no storyPrefix", async () => {
+    expect(await readSettings(REPO_ROOT)).not.toHaveProperty('storyPrefix')
   })
 })

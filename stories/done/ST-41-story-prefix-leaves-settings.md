@@ -17,38 +17,38 @@ belongs to the story convention, so it lives in a file of that convention's own.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `storyPrefix` is no longer a key of the settings: `readSettings`
+- [x] **AC-1** — `storyPrefix` is no longer a key of the settings: `readSettings`
       (`scripts/dispatch/settings.mjs`) drops it from `ALLOWED_KEYS`, refuses a file that holds it
       as an unknown key, naming it, as for any other unknown key, and returns no `storyPrefix`.
       `STORY_PREFIX_RE` goes from `settings.mjs`. Tests in `settings.test.mjs`: a file with every
       other key and no `storyPrefix` is read; one with `storyPrefix` is refused, naming it.
-- [ ] **AC-2** — `stories/stories.json` holds steward's prefix, `{ "prefix": "ST" }`. The planning
+- [x] **AC-2** — `stories/stories.json` holds steward's prefix, `{ "prefix": "ST" }`. The planning
       session's pull request adds it before this story's, which changes nothing under `stories/`
       but its own move and ticks (Context). One reader, in steward's story tooling, reads it from
       a project root:
       it refuses, naming the file and the problem, a missing file, invalid JSON, a key other than
       `prefix`, or a `prefix` that is not 1 to 8 capital letters. Tests show each.
-- [ ] **AC-3** — Steward's story tooling takes the prefix from that reader and reads no settings
+- [x] **AC-3** — Steward's story tooling takes the prefix from that reader and reads no settings
       file for it: the story lint (`scripts/lint-stories.mjs`, `lintAll` and `lintDocs`), story
       containment (`scripts/dispatch/story-containment.mjs`) and the queue reader (`loadQueue`,
       `scripts/dispatch/queue.mjs`).
-- [ ] **AC-4** — The engine's coder takes the prefix from the same reader, and reads no settings
+- [x] **AC-4** — The engine's coder takes the prefix from the same reader, and reads no settings
       file for it: `coder.mjs` (`dispatchCoder`, `retryStory` and its command line), `story.mjs`
       (`runStory` and its command line), and `loop.mjs` through `loadQueue`. A comment at each
       read says it is a stopgap, which the coder's stories own and will rework with the coder's
       readiness setting.
-- [ ] **AC-5** — `scripts/no-project-literals.test.mjs` guards steward's own prefix, `ST-`, and
+- [x] **AC-5** — `scripts/no-project-literals.test.mjs` guards steward's own prefix, `ST-`, and
       steward's own repository, `luplows/steward`, in place of tower-workshop-paths' `OQ-` and
       `luplows/tower-workshop-paths`, in the modules it checks today, and its own cases show it
       finding each in a regular expression, a string and a template literal, and not in a
       comment.
-- [ ] **AC-6** — `steward.config.json` and `FIXTURE_SETTINGS`
+- [x] **AC-6** — `steward.config.json` and `FIXTURE_SETTINGS`
       (`scripts/dispatch/settings-fixture.mjs`) lose `storyPrefix`, and no test writes it into a
       settings file except AC-1's, which shows it refused; a test that needs another prefix writes a
       `stories/stories.json`. `docs/settings.md` loses its `storyPrefix` row, and its copy of this
       repository's file and its sentence on which keys steward's scripts use no longer name it.
-- [ ] **AC-7** — This story's pull request leaves `stories/README.md` unchanged (Context).
-- [ ] **AC-8** — Every **Planned** marker naming ST-41 in `docs/agent-workflow-design.md` is
+- [x] **AC-7** — This story's pull request leaves `stories/README.md` unchanged (Context).
+- [x] **AC-8** — Every **Planned** marker naming ST-41 in `docs/agent-workflow-design.md` is
       resolved, as its "Reading this document" note says.
 
 ## Out of scope

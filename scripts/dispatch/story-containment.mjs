@@ -27,7 +27,7 @@ import { execFile } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { buildStory, deriveStatus, isStoryFilename, parseFrontmatter, storyFilenameRe } from './queue.mjs'
-import { readSettings } from './settings.mjs'
+import { readStoryPrefix } from './story-prefix.mjs'
 
 const execFileAsync = promisify(execFile)
 
@@ -216,7 +216,7 @@ function checkAddedDraft(file, newText, prefix, baseIds, claimed) {
  * conforms (AC-2), or `{ ok: false, violations: [{ file, line, message }] }`.
  */
 export async function checkStoryContainment({ cwd, base, head, branch }) {
-  const { storyPrefix } = await readSettings(cwd)
+  const storyPrefix = await readStoryPrefix(cwd)
   const nameStatus = await git(cwd, ['diff', '--name-status', '--no-renames', `${base}...${head}`, '--', 'stories/'])
   const resolved = resolveStory({ nameStatus, branch, prefix: storyPrefix })
   if (resolved.kind === 'none') return { ok: true }
