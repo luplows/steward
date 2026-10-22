@@ -85,8 +85,8 @@ export function buildListMainCommits(repo, since, page = 1) {
 }
 
 /** Request to list the branches whose names start `release/v`; the caller keeps the release branches. */
-export function buildListReleaseBranchRefs(repo, page = 1) {
-  return { method: 'GET', url: `${repoPath(repo)}/git/matching-refs/heads/release/v?per_page=${PAGE}&page=${page}` }
+export function buildListReleaseBranchRefs(repo) {
+  return { method: 'GET', url: `${repoPath(repo)}/git/matching-refs/heads/release/v` }
 }
 
 /** Request to list the pull requests GitHub associates with a commit. */
@@ -139,7 +139,7 @@ const landingBase = (encoded) => {
 // branch pass.
 const ALLOWED = [
   ['GET', new RegExp(`^/commits\\?sha=([^&=]+)&since=[^&=]+&per_page=${PAGE}&page=${N}$`), null, landingBase],
-  ['GET', new RegExp(`^/git/matching-refs/heads/release/v\\?per_page=${PAGE}&page=${N}$`), null],
+  ['GET', /^\/git\/matching-refs\/heads\/release\/v$/, null],
   ['GET', new RegExp(`^/commits/${SHA_PATH}/pulls\\?per_page=${PAGE}&page=${N}$`), null],
   ['GET', new RegExp(`^/commits/${SHA_PATH}/statuses\\?per_page=${PAGE}&page=${N}$`), null],
   ['GET', new RegExp(`^/pulls\\?base=([^&=]+)&state=open&per_page=${PAGE}&page=${N}$`), null, landingBase],
@@ -279,7 +279,8 @@ const postedByGate = (status) => status.creator === GATE_ACCOUNT
  * the prefix in the request only narrows the listing.
  */
 export async function listReleaseBranches(ctx) {
-  const refs = await listAll(ctx, (page) => buildListReleaseBranchRefs(ctx.repo, page))
+  // One request: GitHub's matching-refs listing does not page, and answers every matching ref.
+  const refs = await ctx.send(buildListReleaseBranchRefs(ctx.repo))
   const prefix = 'refs/heads/'
   return refs
     .map((r) => (typeof r?.ref === 'string' && r.ref.startsWith(prefix) ? r.ref.slice(prefix.length) : null))

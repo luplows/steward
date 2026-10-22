@@ -91,7 +91,7 @@ function world({ commits = [], branches = {}, pulls = {}, statuses = {}, open = 
       return ok({ number: w.nextIssue++ })
     }
     const path = url.slice(BASE.length)
-    if (path.startsWith('/git/matching-refs/heads/release/v?')) {
+    if (path === '/git/matching-refs/heads/release/v') {
       return ok(Object.keys(branches).map((name) => ({ ref: `refs/heads/${name}` })))
     }
     if (path.startsWith('/commits?')) {
@@ -627,7 +627,7 @@ describe('ST-29/AC-6: the request allowlist', () => {
   const ok = [
     buildListMainCommits(REPO, iso(NOW), 1),
     buildListBranchCommits(REPO, 'release/v1.2.3', iso(NOW), 2),
-    buildListReleaseBranchRefs(REPO, 1),
+    buildListReleaseBranchRefs(REPO),
     buildListOpenPullRequests(REPO, 1, 'release/v1.2.3'),
     buildListCommitPullRequests(REPO, sha('a'), 2),
     buildListCommitStatuses(REPO, sha('a'), 1),
@@ -663,7 +663,7 @@ describe('ST-29/AC-6: the request allowlist', () => {
     { method: 'GET', url: `${BASE}/pulls?base=other&state=open&per_page=100&page=1` },
     { method: 'GET', url: `${BASE}/pulls?base=release%2Fnext&state=open&per_page=100&page=1` },
     { method: 'GET', url: `${BASE}/git/matching-refs/heads/other?per_page=100&page=1` },
-    { method: 'GET', url: `${BASE}/git/matching-refs/heads/release/v` },
+    { method: 'GET', url: `${BASE}/git/matching-refs/heads/release/v?per_page=100&page=1` },
     { method: 'GET', url: `${BASE}/git/refs/heads/main` },
     { method: 'GET', url: `${BASE}/pulls?base=main&state=open&per_page=100&page=1`, body: { x: 1 } },
     { method: 'POST', url: `${BASE}/issues`, body: { title: 't', body: 'b', labels: ['bug'] } },
@@ -773,6 +773,16 @@ describe('ST-46: release branches', () => {
     expect(w.requests.filter((r) => r.url.includes('/pulls?base=')).map((r) => r.url)).toEqual([
       `${BASE}/pulls?base=main&state=open&per_page=100&page=1`,
     ])
+  })
+
+  it('ST-46/AC-1: the refs listing is read once, however many refs it answers, and inspection finishes', async () => {
+    const branches = Object.fromEntries(Array.from({ length: 120 }, (_, i) => [`release/v1.0.${i}`, []]))
+    const w = world({ branches })
+    await w.run()
+    expect(w.requests.filter((r) => r.url.includes('/git/matching-refs/'))).toEqual([
+      { method: 'GET', url: `${BASE}/git/matching-refs/heads/release/v`, body: undefined },
+    ])
+    expect(w.requests.filter((r) => r.url.includes('/commits?'))).toHaveLength(121)
   })
 
   it('ST-46/AC-1: two release branches are each inspected, in name order, after main', async () => {
