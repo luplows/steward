@@ -2455,8 +2455,10 @@ shortened where it is long, so that it can be found there with its date.
     `review/agent`, with `enforce_admins` on, as steward's own `main` has it; the project's own CI
     checks are the crew's to add. Where GitHub offers none, as on a private repository on GitHub
     Free, or the account cannot set it, it says so plainly, says that nothing on GitHub then
-    enforces the gate, and goes on; protection that is already on `main` is left as it is, and it
-    says when that does not require `review/agent`. It does not write the
+    enforces the gate, and goes on. Where `main` already has protection, it keeps the project's own:
+    it adds `review/agent` to the required status checks unless it is there, and turns
+    `enforce_admins` on unless it is on, changing nothing else, and says which it did. It does not
+    write the
     after-sweep CI trigger, since a project's CI is its own ("Steward enforces nothing about CI");
     it does not touch `package.json`; it neither reads nor writes the story prefix or anything about
     story files; and it commits nothing: the crew commits what it wrote through the project's own

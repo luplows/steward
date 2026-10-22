@@ -99,7 +99,8 @@ a file: one already there is named and left. It writes:
 - a pull request template, only when the project has none;
 - the labels steward reads and applies, `review-blocked`, `breaker-override` and `inspection`;
 - the machine's settings (`~/.steward/settings.json`), only when that file is missing;
-- branch protection on `main`, requiring `review/agent`, only on a yes (the default is no). Where
+- branch protection on `main`, requiring `review/agent` with `enforce_admins` on, only on a yes (the
+  default is no); protection already there is kept, and only those two are added to it. Where
   GitHub offers none, as on a private repository on GitHub Free, it says so and goes on.
 
 It commits, stages and pushes nothing, and does not touch the project's `package.json`, its CI or

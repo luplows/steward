@@ -31,7 +31,7 @@ import path from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { fileURLToPath } from 'node:url'
 import { ghAuthToken } from './github.mjs'
-import { INSPECTION_LABEL } from './inspect.mjs'
+import { INSPECTION_LABEL, isLabelAlreadyExists } from './inspect.mjs'
 import { machineSettingsPath, TOOL_EFFORTS } from './machine-settings.mjs'
 import { isRulesFilePath } from './rules-file-path.mjs'
 import { BREAKER_OVERRIDE_LABEL, REVIEW_BLOCKED_LABEL } from '../land/runway.mjs'
@@ -347,14 +347,14 @@ const isFile = (file) => {
   }
 }
 
-/** The first file named `name` on the PATH (with each of the platform's extensions), or `null`. */
+/** The absolute path of the first file named `name` on the PATH (with each of the platform's extensions), or `null`. */
 export function findOnPath(name, env = process.env, platform = process.platform) {
   const dirs = (env.PATH ?? env.Path ?? '').split(path.delimiter).filter((d) => d !== '')
   const exts = platform === 'win32' ? (env.PATHEXT ?? '.EXE;.CMD').split(';').filter((e) => e !== '') : ['']
   for (const dir of dirs) {
     for (const ext of exts) {
       const candidate = path.join(dir, `${name}${ext}`)
-      if (isFile(candidate)) return candidate
+      if (isFile(candidate)) return path.resolve(candidate)
     }
   }
   return null
@@ -427,6 +427,12 @@ export const buildGetLabel = (repo, name) => ({ method: 'GET', url: `${repoPath(
 export const buildCreateLabel = (repo, label) => ({ method: 'POST', url: `${repoPath(repo)}/labels`, body: { ...label } })
 export const buildGetProtection = (repo) => ({ method: 'GET', url: `${repoPath(repo)}/branches/${MAIN}/protection` })
 export const buildSetProtection = (repo) => ({ method: 'PUT', url: `${repoPath(repo)}/branches/${MAIN}/protection`, body: PROTECTION_BODY })
+export const buildAddRequiredCheck = (repo) => ({
+  method: 'POST',
+  url: `${repoPath(repo)}/branches/${MAIN}/protection/required_status_checks/contexts`,
+  body: [GATE_CONTEXT],
+})
+export const buildEnableEnforceAdmins = (repo) => ({ method: 'POST', url: `${repoPath(repo)}/branches/${MAIN}/protection/enforce_admins` })
 
 /** Throws unless `request` is one of the operations `init` performs; runs before any network call. */
 export function assertAllowedRequest(repo, request) {
@@ -441,6 +447,8 @@ export function assertAllowedRequest(repo, request) {
   const protection = `/branches/${MAIN}/protection`
   if (method === 'GET' && rest === protection && body === undefined) return
   if (method === 'PUT' && rest === protection && sameJson(body, PROTECTION_BODY)) return
+  if (method === 'POST' && rest === `${protection}/required_status_checks/contexts` && sameJson(body, [GATE_CONTEXT])) return
+  if (method === 'POST' && rest === `${protection}/enforce_admins` && body === undefined) return
   const labelGet = /^\/labels\/([^/?#]+)$/.exec(rest)
   if (method === 'GET' && labelGet && body === undefined && labelNames().includes(decodeURIComponent(labelGet[1]))) return
   if (method === 'POST' && rest === '/labels' && LABELS.some((l) => sameJson(body, l))) return
@@ -490,8 +498,9 @@ export async function ensureLabels(ctx, out) {
     if (found.status !== 404) throw new HttpError(buildGetLabel(ctx.repo, label.name), found.status, found.body)
     const request = buildCreateLabel(ctx.repo, label)
     const created = await ctx.send(request)
-    if (created.status === 422) {
-      // Another run created it between the read and the write: it exists, which is what was wanted.
+    if (isLabelAlreadyExists(created)) {
+      // Another run created it between the read and the write: GitHub says it exists, which is what
+      // was wanted. Any other failure, a 422 with another error among them, stops init.
       out(`label ${label.name}: found, left as it is`)
       continue
     }
@@ -500,32 +509,38 @@ export async function ensureLabels(ctx, out) {
   }
 }
 
+// What GitHub's error messages say, for the two refusals AC-10 lets init go on from. Transcribed from
+// GitHub's documentation and reports, not checked against a live response: a message that matches
+// neither stops init, so a wrong match here stops it rather than letting it go on.
 const PLAN_RE = /upgrade to github pro|make this repository public/i
-
-/** `'plan'`, `'admin'` or `null` for a refusal of a branch protection request; `null` is no refusal of AC-10's kinds. */
-function protectionRefusal({ status, body }) {
-  if (status !== 403 && status !== 404) return null
-  if (PLAN_RE.test(body?.message ?? '')) return 'plan'
-  return 'admin'
-}
+const ADMIN_RE = /must have admin rights|resource not accessible by (?:integration|personal access token)/i
 
 /**
- * Asks GitHub to protect `main`, requiring `review/agent`, unless `main` already has protection,
- * which is left as it is. Where GitHub offers none (the plan) or the account cannot set it (admin
- * access), it says so plainly and returns; any other failure throws.
+ * `'plan'` (GitHub offers no protection on the plan) or `'admin'` (the account lacks admin access),
+ * read from a 403 or 404's message and not from the status alone; `null` for any other failure,
+ * such as a rate limit's 403, which stops init.
+ */
+function protectionRefusal({ status, body }) {
+  if (status !== 403 && status !== 404) return null
+  const message = body?.message ?? ''
+  if (PLAN_RE.test(message)) return 'plan'
+  if (ADMIN_RE.test(message)) return 'admin'
+  return null
+}
+
+const ok = (response) => response.status >= 200 && response.status < 300
+
+/**
+ * Makes `main` require `review/agent` with `enforce_admins` on, keeping the project's own protection.
+ * With none there, it sets `PROTECTION_BODY`. With some there, it adds `review/agent` to the required
+ * status checks unless it is required, and turns `enforce_admins` on unless it is on, and changes
+ * nothing else. Where GitHub offers none (the plan) or the account cannot set it (admin access), it
+ * says so plainly and returns; any other failure throws.
  */
 export async function protectMain(ctx, out) {
   const read = buildGetProtection(ctx.repo)
   const existing = await ctx.send(read)
-  if (existing.status >= 200 && existing.status < 300) {
-    const checks = existing.body?.required_status_checks
-    const required = [...(checks?.contexts ?? []), ...(checks?.checks ?? []).map((c) => c.context)]
-    out(`branch protection on ${MAIN}: already set, left as it is`)
-    if (!required.includes(GATE_CONTEXT)) {
-      out(`  it does not require ${GATE_CONTEXT}; adding it is the crew's, since init changes no protection that is there`)
-    }
-    return
-  }
+  if (ok(existing)) return keepProtection(ctx, existing.body, out)
   const notProtected = existing.status === 404 && /branch not protected/i.test(existing.body?.message ?? '')
   if (!notProtected) {
     const kind = protectionRefusal(existing)
@@ -534,7 +549,7 @@ export async function protectMain(ctx, out) {
   }
   const request = buildSetProtection(ctx.repo)
   const set = await ctx.send(request)
-  if (set.status >= 200 && set.status < 300) {
+  if (ok(set)) {
     out(`branch protection on ${MAIN}: set. It requires ${GATE_CONTEXT}, with enforce_admins on.`)
     out("  The project's own CI checks are the crew's to add to it.")
     return
@@ -542,6 +557,36 @@ export async function protectMain(ctx, out) {
   const kind = protectionRefusal(set)
   if (kind === null) throw new HttpError(request, set.status, set.body)
   return refused(kind, out)
+}
+
+/** The protection `main` already has: adds what the gate needs of it and leaves the rest as it is. */
+async function keepProtection(ctx, protection, out) {
+  const checks = protection?.required_status_checks
+  const required = [...(checks?.contexts ?? []), ...(checks?.checks ?? []).map((c) => c.context)]
+  const adminsOn = protection?.enforce_admins?.enabled === true
+  out(`branch protection on ${MAIN}: already there, so the project's own is kept`)
+  // Each step is sent and judged alone: a refusal (plan, admin) ends init's work on protection, and
+  // any other failure throws.
+  const steps = []
+  if (required.includes(GATE_CONTEXT)) out(`  ${GATE_CONTEXT} is already required`)
+  else if (checks === null || checks === undefined) {
+    throw new Error(
+      `branch protection on ${MAIN} requires no status checks at all, and GitHub adds ${GATE_CONTEXT} only to a protection that requires some; ` +
+        'enable required status checks in the repository settings, then run init again',
+    )
+  } else steps.push([buildAddRequiredCheck(ctx.repo), `added ${GATE_CONTEXT} to its required status checks`])
+  if (adminsOn) out('  enforce_admins is already on')
+  else steps.push([buildEnableEnforceAdmins(ctx.repo), 'turned enforce_admins on'])
+  for (const [request, said] of steps) {
+    const response = await ctx.send(request)
+    if (!ok(response)) {
+      const kind = protectionRefusal(response)
+      if (kind === null) throw new HttpError(request, response.status, response.body)
+      return refused(kind, out)
+    }
+    out(`  ${said}`)
+  }
+  out("  Everything else in it is as it was. The project's own CI checks are the crew's to add.")
 }
 
 function refused(kind, out) {

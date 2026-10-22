@@ -85,9 +85,11 @@ const MESSAGES = {
 /**
  * GitHub's answers, injected as `fetch`. `protection` is `none` (not protected, and settable),
  * `existing`, `plan` (every protection request refused for the plan), `admin` (settable only with
- * admin rights the account lacks) or `broken` (a 500). Records every request.
+ * admin rights the account lacks), `limited` (a rate limit's 403) or `broken` (a 500); `existing` is
+ * the body returned for `existing`. `labelCreate` is `already_exists` or `other` (a 422 for each).
+ * Records every request.
  */
-function fakeGitHub({ labels = [], protection = 'none', labelStatus = null } = {}) {
+function fakeGitHub({ labels = [], protection = 'none', labelStatus = null, labelCreate = null, existing = null } = {}) {
   const have = new Set(labels)
   const requests = []
   const fetch = async (url, init) => {
@@ -101,13 +103,17 @@ function fakeGitHub({ labels = [], protection = 'none', labelStatus = null } = {
       return have.has(decodeURIComponent(label[1])) ? reply(200, { name: label[1] }) : reply(404, { message: 'Not Found' })
     }
     if (rest === '/labels' && init.method === 'POST') {
+      if (labelCreate === 'already_exists') return reply(422, { message: 'Validation Failed', errors: [{ resource: 'Label', code: 'already_exists', field: 'name' }] })
+      if (labelCreate === 'other') return reply(422, { message: 'Validation Failed', errors: [{ resource: 'Label', code: 'invalid', field: 'color' }] })
       have.add(body.name)
       return reply(201, body)
     }
+    if (rest.startsWith('/branches/main/protection/') && init.method === 'POST') return reply(200, {})
     if (rest === '/branches/main/protection') {
+      if (protection === 'limited') return reply(403, { message: 'API rate limit exceeded for user ID 1.' })
       if (protection === 'broken') return reply(500, { message: 'server error' })
       if (init.method === 'GET') {
-        if (protection === 'existing') return reply(200, { required_status_checks: { contexts: ['test'] } })
+        if (protection === 'existing') return reply(200, existing ?? { required_status_checks: { contexts: ['test'] }, enforce_admins: { enabled: false } })
         if (protection === 'plan') return reply(403, { message: MESSAGES.upgrade })
         return reply(404, { message: 'Branch not protected' })
       }
@@ -480,6 +486,14 @@ describe('ST-44/AC-7: labels', () => {
     expect(() => assertAllowedRequest(REPO, { method: 'GET', url: `https://api.github.com/repos/${REPO}/labels/other` })).toThrow(/refusing/)
     expect(() => assertAllowedRequest(REPO, { method: 'PUT', url: `https://api.github.com/repos/${REPO}/branches/main/protection`, body: { enforce_admins: false } })).toThrow(/refusing/)
     expect(() => assertAllowedRequest(REPO, { method: 'PUT', url: `https://api.github.com/repos/${REPO}/branches/main/protection`, body: PROTECTION_BODY })).not.toThrow()
+    const base = `https://api.github.com/repos/${REPO}/branches/main/protection`
+    const contexts = { method: 'POST', url: `${base}/required_status_checks/contexts`, body: ['review/agent'] }
+    expect(() => assertAllowedRequest(REPO, contexts)).not.toThrow()
+    expect(() => assertAllowedRequest(REPO, { ...contexts, body: ['review/agent', 'x'] })).toThrow(/refusing/)
+    expect(() => assertAllowedRequest(REPO, { ...contexts, method: 'PUT' })).toThrow(/refusing/)
+    expect(() => assertAllowedRequest(REPO, { method: 'POST', url: `${base}/enforce_admins` })).not.toThrow()
+    expect(() => assertAllowedRequest(REPO, { method: 'DELETE', url: `${base}/enforce_admins` })).toThrow(/refusing/)
+    expect(() => assertAllowedRequest(REPO, { method: 'POST', url: `${base}/enforce_admins`, body: {} })).toThrow(/refusing/)
   })
 })
 
@@ -615,6 +629,25 @@ describe('ST-44/AC-9: the machine\'s settings', () => {
     expect(findOnPath('codex', { PATH: dir }, 'linux')).toBeNull()
     expect(findOnPath('codex', { PATH: '' }, 'linux')).toBeNull()
   })
+
+  it('ST-44/AC-9: a relative PATH entry gives an absolute executable, which readMachineSettings reads', async () => {
+    const dir = fresh('rel')
+    mkdirSync(path.join(dir, 'bin'))
+    writeFileSync(path.join(dir, 'bin', 'codex'), '')
+    const before = process.cwd()
+    process.chdir(dir)
+    let found
+    try {
+      found = findOnPath('codex', { PATH: './bin' }, 'linux')
+    } finally {
+      process.chdir(before)
+    }
+    expect(path.isAbsolute(found)).toBe(true)
+    const machine = path.join(fresh('home'), 'settings.json')
+    const { code } = await runInit(['--yes', '--reviewer', 'codex', '--codex-model', 'm', '--codex-effort', 'low'], { cwd: makeRepo(), machine, codex: found })
+    expect(code).toBe(0)
+    expect((await readMachineSettings({ env: { STEWARD_SETTINGS: machine }, homedir: '/nowhere' })).tools.codex.executable).toBe(found)
+  })
 })
 
 describe('ST-44/AC-10: branch protection', () => {
@@ -682,13 +715,92 @@ describe('ST-44/AC-10: branch protection', () => {
     expect(existsSync(machine)).toBe(true)
   })
 
-  it('ST-44/AC-10: protection that is already there is left as it is, and the missing review/agent is said', async () => {
+  const CONTEXTS = '/branches/main/protection/required_status_checks/contexts'
+  const ENFORCE = '/branches/main/protection/enforce_admins'
+
+  it('ST-44/AC-10: on a yes with protection already there lacking review/agent and enforce_admins, it adds both and sends nothing else', async () => {
     const gh = fakeGitHub({ protection: 'existing' })
     const { code, out } = await runInit(['--yes', '--protect-main', 'yes'], { cwd: makeRepo(), gh })
     expect(code).toBe(0)
-    expect(gh.requests.some((r) => r.method === 'PUT')).toBe(false)
-    expect(out).toMatch(/already set, left as it is/)
-    expect(out).toMatch(/does not require review\/agent/)
+    expect(gh.requests.filter((r) => r.rest.startsWith(PROTECTION))).toEqual([
+      { method: 'GET', rest: PROTECTION, body: undefined },
+      { method: 'POST', rest: CONTEXTS, body: ['review/agent'] },
+      { method: 'POST', rest: ENFORCE, body: undefined },
+    ])
+    expect(out).toMatch(/already there, so the project's own is kept/)
+    expect(out).toMatch(/added review\/agent to its required status checks/)
+    expect(out).toMatch(/turned enforce_admins on/)
+    expect(out).toMatch(/Everything else in it is as it was/)
+  })
+
+  it('ST-44/AC-10: with only one of the two missing it adds only that one', async () => {
+    const noAdmins = fakeGitHub({ protection: 'existing', existing: { required_status_checks: { contexts: ['test'] }, enforce_admins: { enabled: true } } })
+    await runInit(['--yes', '--protect-main', 'yes'], { cwd: makeRepo(), gh: noAdmins })
+    expect(writes(noAdmins).map((r) => r.rest)).toEqual(['/labels', '/labels', '/labels', CONTEXTS])
+    const noCheck = fakeGitHub({ protection: 'existing', existing: { required_status_checks: { checks: [{ context: 'review/agent' }] }, enforce_admins: { enabled: false } } })
+    const { out } = await runInit(['--yes', '--protect-main', 'yes'], { cwd: makeRepo(), gh: noCheck })
+    expect(writes(noCheck).map((r) => r.rest)).toEqual(['/labels', '/labels', '/labels', ENFORCE])
+    expect(out).toMatch(/review\/agent is already required/)
+  })
+
+  it('ST-44/AC-10: with protection already there with both, it sends nothing', async () => {
+    const gh = fakeGitHub({ protection: 'existing', existing: { required_status_checks: { contexts: ['test', 'review/agent'] }, enforce_admins: { enabled: true } } })
+    const { code, out } = await runInit(['--yes', '--protect-main', 'yes'], { cwd: makeRepo(), gh })
+    expect(code).toBe(0)
+    expect(writes(gh).filter((r) => r.rest.startsWith(PROTECTION))).toEqual([])
+    expect(out).toMatch(/review\/agent is already required/)
+    expect(out).toMatch(/enforce_admins is already on/)
+  })
+
+  it('ST-44/AC-10: protection requiring no status checks at all stops init, which cannot add one there', async () => {
+    const gh = fakeGitHub({ protection: 'existing', existing: { required_status_checks: null, enforce_admins: { enabled: false } } })
+    const { code, err } = await runInit(['--yes', '--protect-main', 'yes'], { cwd: makeRepo(), gh })
+    expect(code).toBe(1)
+    expect(err).toMatch(/requires no status checks at all/)
+    expect(writes(gh).filter((r) => r.rest.startsWith(PROTECTION))).toEqual([])
+  })
+
+  it('ST-44/AC-12: a rate limit 403 on protection stops init with a non-zero exit, and writes no machine settings', async () => {
+    const machine = path.join(fresh('home'), 'settings.json')
+    const { code, err } = await runInit(['--yes', '--protect-main', 'yes'], { cwd: makeRepo(), gh: fakeGitHub({ protection: 'limited' }), machine })
+    expect(code).toBe(1)
+    expect(err).toMatch(/rate limit/)
+    expect(existsSync(machine)).toBe(false)
+  })
+
+  it('ST-44/AC-12: a 403 or 404 that says neither the plan nor admin rights stops init', async () => {
+    for (const status of [403, 404]) {
+      const gh = fakeGitHub()
+      const original = gh.fetch
+      gh.fetch = async (url, init) => (init.method === 'PUT' ? { status, text: async () => JSON.stringify({ message: 'Not Found' }) } : original(url, init))
+      expect((await runInit(['--yes', '--protect-main', 'yes'], { cwd: makeRepo(), gh })).code, String(status)).toBe(1)
+    }
+  })
+
+  it('ST-44/AC-12: a refusal in the middle of adding to existing protection ends it as the plan or admin refusal does', async () => {
+    const gh = fakeGitHub({ protection: 'existing' })
+    const original = gh.fetch
+    gh.fetch = async (url, init) =>
+      init.method === 'POST' && url.endsWith('enforce_admins') ? { status: 403, text: async () => JSON.stringify({ message: MESSAGES.admin }) } : original(url, init)
+    const { code, out } = await runInit(['--yes', '--protect-main', 'yes'], { cwd: makeRepo(), gh })
+    expect(code).toBe(0)
+    expect(out).toMatch(/cannot set it/)
+  })
+})
+
+describe('ST-44/AC-7 and AC-12: a label that fails to create', () => {
+  it('ST-44/AC-7: a 422 whose errors say already_exists counts as found', async () => {
+    const { code, out } = await runInit(['--yes'], { cwd: makeRepo(), gh: fakeGitHub({ labelCreate: 'already_exists' }) })
+    expect(code).toBe(0)
+    expect(out).toContain('label review-blocked: found, left as it is')
+  })
+
+  it('ST-44/AC-12: a 422 with another error stops init with a non-zero exit, writing no machine settings', async () => {
+    const machine = path.join(fresh('home'), 'settings.json')
+    const { code, err } = await runInit(['--yes'], { cwd: makeRepo(), gh: fakeGitHub({ labelCreate: 'other' }), machine })
+    expect(code).toBe(1)
+    expect(err).toMatch(/422/)
+    expect(existsSync(machine)).toBe(false)
   })
 })
 

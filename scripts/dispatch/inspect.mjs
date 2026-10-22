@@ -398,7 +398,7 @@ export async function inspectStalls(ctx, { now, afterHours, branches }) {
 // ----------------------------------------------------------------- raising
 
 /** Whether a failed label creation is GitHub saying the label already exists. */
-function isLabelAlreadyExists(error) {
+export function isLabelAlreadyExists(error) {
   return (
     error.status === 422 &&
     Array.isArray(error.body?.errors) &&
