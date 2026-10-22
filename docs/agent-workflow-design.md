@@ -2435,6 +2435,20 @@ shortened where it is long, so that it can be found there with its date.
 
   The first release, `v0.1.0`, is cut by a release review session, whose instructions are a
   separate pull request.
+- **The crew validates review installation in two existing projects** (crew, 2026-10-21;
+  **Planned (ST-48)**). After ST-25, ST-42 and ST-44 are delivered, the crew manually installs
+  the review gate first in pinpoint and then in tower-workshop-paths, preserving their existing
+  issue and file-story conventions. Each installation uses steward's package and thin workflows,
+  with no copied implementation scripts. Each project supplies a real review verdict on the
+  correct pull-request head and a successful review-gated landing; at least one also demonstrates
+  that a blocking verdict prevents landing. Procedures, evidence, outcomes and defects are recorded
+  separately for each project. Repairs are separate follow-up work, and a defect that prevents a
+  demonstration leaves that demonstration outstanding until a rerun succeeds. This is crew-only
+  work, grounded in the queue, and does not enable automated coding. Considered and not chosen:
+  validating only steward itself or a scratch project, which misses existing client conventions;
+  migrating client units to steward's stories; copying steward's scripts into clients; and folding
+  defect repairs into the validation story. The release review's scratch-project walkthrough
+  remains separate. Writing this story does not start either client installation.
 - **The release review cuts each release on a release branch, and a tag is never moved** (decided
   2026-10-19 by the owner, with the planning session, while planning how steward installs in another
   project; **Planned (ST-44)**). A project pins steward by a tag, so the first tag, `v0.1.0`, needs
