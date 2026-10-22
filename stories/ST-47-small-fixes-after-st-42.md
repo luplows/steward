@@ -34,9 +34,10 @@ into steward commands, so that they are fixed where the code then lives.
 - [ ] **AC-3** — **Codex's process is stopped.** In `scripts/dispatch/codex.test.mjs`, the two
       ST-32/AC-3 tests named for stopping the process ("…, and stops the process" and "no answer
       within the time limit is unreadable, and the process is stopped") each assert that the
-      process the fake app server runs in has exited by the time the result is returned. The pull
-      request's body shows each failing with the call that stops the process removed from
-      `rateLimitsRpc` (`scripts/dispatch/codex.mjs`).
+      process the fake app server runs in exits after the result is returned, waiting for its exit
+      for at most 5 seconds; the stand-in never exits by itself. The pull request's body shows each
+      failing with the call that stops the process removed from `rateLimitsRpc`
+      (`scripts/dispatch/codex.mjs`).
 - [ ] **AC-4** — **A test named for what it checks.** The test in
       `scripts/land/apply-review-blocked.test.mjs` titled "applyReviewBlocked makes no labels
       request at all when the label is already there" is retitled to say what it checks: that no
@@ -71,9 +72,13 @@ into steward commands, so that they are fixed where the code then lives.
   `commits/${sha}/status?per_page=100` with `--paginate`. It fails safe: a `review/agent` it does
   not read skips the pull request.
 - `scripts/dispatch/codex.test.mjs`: `fakeAppServer` spawns node running a stand-in for `codex
-  app-server`; `rateLimitsRpc` stops the process with `killTree` (`scripts/dispatch/spawn.mjs`)
-  before it resolves. The two tests assert the answer, and the second the time taken, but neither
-  that the process ended.
+  app-server`, which keeps running on a `setInterval` until it is stopped. `rateLimitsRpc` resolves
+  once `killTree` (`scripts/dispatch/spawn.mjs`) resolves (`codex.mjs`, `finish`). On Windows
+  `killTree` waits for `taskkill` to exit, kills the child directly, then resolves; elsewhere it
+  sends `SIGKILL` and resolves at once, without waiting for the child to exit. So the process may
+  still be running when the result is returned, and the tests wait for its exit rather than
+  expect it already gone (owner, 2026-10-22, after #69's first review). The two tests assert the
+  answer, and the second the time taken, but neither that the process ended.
 - `scripts/land/apply-review-blocked.test.mjs`: the test asserts that no call starts with `-X`; the
   function still reads the labels endpoint.
 
