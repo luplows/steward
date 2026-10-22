@@ -67,13 +67,18 @@ as it is on `main`.
       test, with the review function injected, shows `cannot-review` on the first of two pull
       requests stopping the rotation before the second is reviewed and before any landing.
 - [ ] **AC-5d** — A refusal that holds for every pull request ends the reviewing, not the rotation
-      (owner, 2026-10-21). When `reviewPullRequest` returns `over-usage`, `usage-unknown`,
-      `rules-unreadable`, `reviewer-unavailable` or `choice-unavailable`, each of which refuses
-      before a session starts, the rotation prints which pull request it was, the status and what
-      the result carries to say why, reviews no other pull request, and goes on to step 4 and step
-      4a as usual. It exits 0 unless something else in AC-5 stops it. A test, with the review function injected, shows
-      each of the five on the first of two pull requests: the second is not reviewed, and a third,
-      which passed in an earlier rotation, is still landed.
+      (owner, 2026-10-21 and 2026-10-22). When `reviewPullRequest` returns `rules-unreadable` (the
+      checklist is read from `main`) or `choice-unavailable` (the choice the crew named is not
+      one), each of which refuses before a session starts, the rotation prints which pull request
+      it was, the status and what the result carries to say why, reviews no other pull request, and
+      goes on to step 4 and step 4a as usual. It exits 0 unless something else in AC-5 stops it.
+      `over-usage`, `usage-unknown` and `reviewer-unavailable` are not among them: which choices
+      may review depends on the pull request (`coderModelsRan` and `reviewerCandidates`,
+      `scripts/dispatch/review.mjs`), so each is that pull request's outcome, as AC-5a says, and
+      the next is reviewed. Tests, with the review function injected: each of the two on the first
+      of two pull requests, where the second is not reviewed and a third, which passed in an
+      earlier rotation, is still landed; and each of the other three on the first, where the
+      second is still reviewed.
 - [ ] **AC-5e** — Every result of the pilot is printed, and landing goes on (owner, 2026-10-21).
       Each status `landPullRequest` returns with `once: true` (`merged`, `sweep-pending`,
       `closed`, `head-moved`, `landing-off`, `draft`, `review-blocked`, `review-failed`,
@@ -86,8 +91,8 @@ as it is on `main`.
 - [ ] **AC-6** — Tests in `rotation.test.mjs`, named `ST-25/AC-<n>`, with the GitHub, review and
       land functions injected: the order and the cap; each skip (draft, outsider, `review-blocked`,
       verdict already at the head); a pull request that passed in an earlier rotation and lands in
-      this one; `land: false` landing nothing; a review that records no verdict leaving that pull request to
-      the next rotation; a thrown error stopping the rotation (AC-5a); and the refusals in AC-2.
+      this one; `land: false` landing nothing; a review that records no verdict leaving that pull
+      request to the next rotation; a thrown error stopping the rotation (AC-5a); and the refusals in AC-2.
 - [ ] **AC-7** — Each `**Planned (ST-25)**` marker in `docs/agent-workflow-design.md` loses
       `ST-25`, and each passage is corrected wherever what was built differs.
 - [ ] **AC-8** — `docs/controller.md` tells the controller to run a rotation with this command, in

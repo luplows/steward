@@ -61,10 +61,10 @@ outcome as it will.
   request's outcome. Report it and go on to the next pull request, except the refusals in the next
   bullet and `cannot-review` (see the bullet after it). Each script's header says what its
   statuses mean. A `sweep-pending` from `land.mjs` is left to a later rotation.
-- When `review.mjs` returns `over-usage`, `usage-unknown`, `rules-unreadable`,
-  `reviewer-unavailable` or `choice-unavailable`, which would refuse every pull request the same
-  way, report it, review no other pull request in this rotation, and go on to the pilot and
-  `inspect` as usual.
+- When `review.mjs` returns `rules-unreadable` or `choice-unavailable`, which would refuse every
+  pull request the same way, report it, review no other pull request in this rotation, and go on
+  to the pilot and `inspect` as usual. `over-usage`, `usage-unknown` and `reviewer-unavailable`
+  are not among them: which choices may review depends on the pull request, so go on to the next.
 - Stop the whole rotation only when the rotation itself cannot go on: your worktree cannot be
   brought to `origin/main`, or has anything uncommitted, a script fails with an error instead of
   returning a status, or `review.mjs` returns `cannot-review`. That status means the reviewer
