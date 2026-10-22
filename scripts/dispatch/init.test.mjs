@@ -2,7 +2,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -622,18 +622,38 @@ describe('ST-44/AC-9: the machine\'s settings', () => {
     expect(bad.err).toMatch(/--codex-path/)
   })
 
-  it('ST-44/AC-9: findOnPath finds a file on the PATH with the platform\'s extensions', () => {
+  it('ST-44/AC-9: findOnPath, as on Windows, tries each of PATHEXT\'s extensions as written', () => {
+    const dir = fresh('bin')
+    // Named as PATHEXT writes it, so that the file is found on a case-sensitive file system too.
+    writeFileSync(path.join(dir, 'codex.CMD'), '')
+    expect(findOnPath('codex', { PATH: dir, PATHEXT: '.EXE;.CMD' }, 'win32')).toBe(path.join(dir, 'codex.CMD'))
+    expect(findOnPath('codex', { PATH: dir, PATHEXT: '.EXE' }, 'win32')).toBeNull()
+    expect(findOnPath('codex', { PATH: '' }, 'win32')).toBeNull()
+  })
+
+  it('ST-44/AC-9: findOnPath, as on POSIX, tries the bare name and wants an executable bit', () => {
     const dir = fresh('bin')
     writeFileSync(path.join(dir, 'codex.cmd'), '')
-    expect(findOnPath('codex', { PATH: dir, PATHEXT: '.EXE;.CMD' }, 'win32')?.toLowerCase()).toBe(path.join(dir, 'codex.cmd').toLowerCase())
+    chmodSync(path.join(dir, 'codex.cmd'), 0o755)
     expect(findOnPath('codex', { PATH: dir }, 'linux')).toBeNull()
     expect(findOnPath('codex', { PATH: '' }, 'linux')).toBeNull()
+    writeFileSync(path.join(dir, 'codex'), '')
+    chmodSync(path.join(dir, 'codex'), 0o755)
+    expect(findOnPath('codex', { PATH: dir }, 'linux')).toBe(path.join(dir, 'codex'))
+  })
+
+  it.skipIf(process.platform === 'win32')('ST-44/AC-9: on a POSIX host a file without an executable bit is not found', () => {
+    const dir = fresh('bin')
+    writeFileSync(path.join(dir, 'codex'), '')
+    chmodSync(path.join(dir, 'codex'), 0o644)
+    expect(findOnPath('codex', { PATH: dir }, 'linux')).toBeNull()
   })
 
   it('ST-44/AC-9: a relative PATH entry gives an absolute executable, which readMachineSettings reads', async () => {
     const dir = fresh('rel')
     mkdirSync(path.join(dir, 'bin'))
     writeFileSync(path.join(dir, 'bin', 'codex'), '')
+    chmodSync(path.join(dir, 'bin', 'codex'), 0o755)
     const before = process.cwd()
     process.chdir(dir)
     let found

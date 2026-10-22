@@ -24,7 +24,7 @@
  *   steward init [--yes] [--ref <40-hex commit>] [--<question flag> <answer>]...
  */
 import { execFileSync } from 'node:child_process'
-import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs'
+import { accessSync, constants, existsSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir as osHomedir } from 'node:os'
 import path from 'node:path'
@@ -347,14 +347,29 @@ const isFile = (file) => {
   }
 }
 
-/** The absolute path of the first file named `name` on the PATH (with each of the platform's extensions), or `null`. */
+/** Whether `file` may be executed: on POSIX its executable bit, which Windows has no counterpart of. */
+const isExecutable = (file, platform) => {
+  if (platform === 'win32') return true
+  try {
+    accessSync(file, constants.X_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The absolute path of the first file named `name` on the PATH that can be executed, or `null`. On
+ * Windows each of PATHEXT's extensions is tried, as written (the file system ignores case there); on
+ * POSIX the name is tried as it is, and the file must have an executable bit.
+ */
 export function findOnPath(name, env = process.env, platform = process.platform) {
   const dirs = (env.PATH ?? env.Path ?? '').split(path.delimiter).filter((d) => d !== '')
   const exts = platform === 'win32' ? (env.PATHEXT ?? '.EXE;.CMD').split(';').filter((e) => e !== '') : ['']
   for (const dir of dirs) {
     for (const ext of exts) {
       const candidate = path.join(dir, `${name}${ext}`)
-      if (isFile(candidate)) return path.resolve(candidate)
+      if (isFile(candidate) && isExecutable(candidate, platform)) return path.resolve(candidate)
     }
   }
   return null
