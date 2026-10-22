@@ -303,9 +303,9 @@ design doc, "The outline's reasoning", under the same headings.
     repository's settings.
   - It offers inspection, never forces it, as it offers branch protection: a check that opens an
     issue for any merge to `main` without a passing verdict (design doc, "Watchdog"). Inspection
-    also raises a pull request left pending or holding longer than the project's settings allow,
-    runs after each rotation, and runs on a schedule only if the project keeps its workflow (owner,
-    2026-10-15).
+    checks each release branch as it checks `main`. It also raises a pull request left pending or
+    holding longer than the project's settings allow, runs after each rotation, and runs on a
+    schedule only if the project keeps its workflow (owner, 2026-10-15).
   - Where GitHub offers no branch protection, as on a private repository on GitHub Free, it says
     plainly that nothing on GitHub enforces the gate. Steward's own runway still checks the verdict
     on the head before each merge it makes (`land-approved.yml`, "Belt and braces").
