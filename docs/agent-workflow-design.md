@@ -934,7 +934,9 @@ a pull request from the crew, not a draft, left pending or holding (a `success` 
 landed) longer than the settings' `inspectAfterHours` (Part 3, "Decided so far", 2026-10-15). It
 opens no issue whose title is already on an issue labelled `inspection`, open or closed, so
 closing one is how the crew says it has seen it. Its exit code is 0 when it opened no issue, 1 when
-it opened at least one, and 2 when a request failed or the settings did not read.
+it opened at least one, and 2 when a request failed or the settings did not read. **Planned
+(ST-46)**: it checks each release branch as it checks `main`, for both merges and stalls (Part 3,
+"Decided so far", "Inspection checks release branches as it checks `main`").
 
 **Scheduled workflows are best-effort, and here they proved far worse than that.** A `*/15` cron on
 `land-approved.yml` delivered about one run every five hours — roughly 5% of the configured rate,
@@ -2524,6 +2526,16 @@ shortened where it is long, so that it can be found there with its date.
   public repository only; and deciding from commit statuses and `mergeable_state` alone, which
   cannot see a check run: `"all-checks"` would then pass with CI's `test` failing, and a list naming
   `test` could never be met.
+- **Inspection checks release branches as it checks `main`** (decided 2026-10-21 by the owner,
+  with the planning session; **Planned (ST-46)**). A release branch changes only through pull
+  requests reviewed and landed through the gate (`release-review.md`), as `main` does, but
+  inspection reads only `main`: a pull request into a release branch left pending, or a commit
+  that reached one around the gate, would not be raised. Both checks cover each branch that
+  `isReleaseBranch` accepts: a commit on it within the window with no merged pull request into
+  `main` or into it, or whose pull request merged without a passing verdict, and an open pull
+  request into it left pending or holding. A finding on `main` keeps its title, so nothing already
+  raised is raised again. Considered and not chosen: the stall check alone, leaving merges on a
+  release branch to branch protection.
 
 ### The move, in order
 
