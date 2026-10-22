@@ -2,9 +2,9 @@ name: Inspection
 
 # Looks for a merge to `main` without a passing verdict, a commit on `main` without a pull request,
 # and a pull request left pending or holding too long, and raises each as an issue labelled
-# `inspection` (scripts/dispatch/inspect.mjs; docs/agent-workflow-design.md, "Watchdog"). It runs
-# here so that it runs while the crew's machine is off; the controller also runs the same command
-# after each rotation.
+# `inspection` (scripts/dispatch/inspect.mjs; docs/agent-workflow-design.md, "Watchdog"). It checks
+# each release branch as it checks `main`. It runs here so that it runs while the crew's machine
+# is off; the controller also runs the same command after each rotation.
 #
 # A project sets how often it runs by editing the schedule below, or drops it by deleting this
 # file. On a private repository each run costs Actions minutes, rounded up to the next whole
@@ -20,7 +20,8 @@ on:
 permissions:
   # To check out the repository, so the settings (steward.config.json) can be read.
   contents: read
-  # To read the open pull requests, and the pull requests of a commit on `main`.
+  # To read the open pull requests, and the pull requests of a commit, on `main` or a release
+  # branch.
   pull-requests: read
   # To read the `review/agent` statuses.
   statuses: read
