@@ -854,6 +854,18 @@ describe('ST-46: release branches', () => {
     expect(titlesOpened(failed)).toEqual(['Inspection: #7 merged without a passing verdict'])
   })
 
+  it('ST-46/AC-2: a commit not on main, merged into one release branch and pushed onto another, is raised on the other', async () => {
+    const head = sha('b')
+    const w = world({
+      branches: { [R1]: [commit(sha('a'))], [R2]: [commit(sha('a'))] },
+      pulls: { [sha('a')]: [mergedPull(7, head, hoursAgo(1), into(R1))] },
+      statuses: { [head]: [reviewStatus('success', hoursAgo(3))] },
+    })
+    await w.run()
+    expect(titlesOpened(w)).toEqual([relTitle('a', R2)])
+    expect(w.requests.filter((r) => r.url.includes(`/commits/${sha('a')}/pulls`))).toHaveLength(1)
+  })
+
   it('ST-46/AC-2: a commit on a release branch whose pull request merged into main is not raised for being there', async () => {
     const head = sha('b')
     const w = world({

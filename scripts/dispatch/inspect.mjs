@@ -297,17 +297,22 @@ export async function inspectMerges(ctx, { now, sinceDays, branches }) {
   const releaseBranches = branches ?? (await listReleaseBranches(ctx))
   const statusesBySha = new Map()
   const judged = new Set()
-  const seenCommits = new Set()
+  const judgedOnMain = new Set()
+  const pullsBySha = new Map()
   const findings = []
   for (const branch of [MAIN, ...releaseBranches]) {
     const commits = (
       await listAll(ctx, (page) => buildListBranchCommits(ctx.repo, branch, since.toISOString(), page))
     ).filter((c) => Date.parse(c.commit?.committer?.date) >= since.getTime())
     for (const { sha } of commits) {
-      // A commit on `main` and on a release branch is judged once, as a commit of `main`.
-      if (seenCommits.has(sha)) continue
-      seenCommits.add(sha)
-      const merged = (await listAll(ctx, (page) => buildListCommitPullRequests(ctx.repo, sha, page))).filter(
+      // A commit on `main` and on a release branch is judged once, as a commit of `main`. A
+      // commit not on `main` is judged on each release branch it is on, whatever another said.
+      if (branch === MAIN) judgedOnMain.add(sha)
+      else if (judgedOnMain.has(sha)) continue
+      if (!pullsBySha.has(sha)) {
+        pullsBySha.set(sha, await listAll(ctx, (page) => buildListCommitPullRequests(ctx.repo, sha, page)))
+      }
+      const merged = pullsBySha.get(sha).filter(
         (pr) => pr.merged_at && (pr.base?.ref === MAIN || pr.base?.ref === branch),
       )
       if (merged.length === 0) {
