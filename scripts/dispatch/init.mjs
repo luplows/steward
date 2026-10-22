@@ -434,6 +434,94 @@ export const buildAddRequiredCheck = (repo) => ({
 })
 export const buildEnableEnforceAdmins = (repo) => ({ method: 'POST', url: `${repoPath(repo)}/branches/${MAIN}/protection/enforce_admins` })
 
+export const buildRebuildProtection = (repo, body) => ({ method: 'PUT', url: `${repoPath(repo)}/branches/${MAIN}/protection`, body })
+export const buildEnableRequiredSignatures = (repo) => ({
+  method: 'POST',
+  url: `${repoPath(repo)}/branches/${MAIN}/protection/required_signatures`,
+})
+
+const GATE_CHECKS = { strict: false, contexts: [GATE_CONTEXT] }
+// The PUT's optional booleans, each read from the GET's `{ enabled }`.
+const PROTECTION_FLAGS = [
+  'required_linear_history',
+  'allow_force_pushes',
+  'allow_deletions',
+  'block_creations',
+  'required_conversation_resolution',
+  'lock_branch',
+  'allow_fork_syncing',
+]
+const REVIEW_BOOLEANS = ['dismiss_stale_reviews', 'require_code_owner_reviews', 'require_last_push_approval']
+const ACTORS = ['users', 'teams', 'apps']
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
+const isStrings = (v) => Array.isArray(v) && v.every((s) => typeof s === 'string' && s !== '')
+const onlyKeys = (o, keys) => isObj(o) && Object.keys(o).every((k) => keys.includes(k))
+const actorsOk = (o) => onlyKeys(o, ACTORS) && ACTORS.every((k) => o[k] === undefined || isStrings(o[k]))
+
+/**
+ * Whether `body` is a protection PUT `init` may send: `PROTECTION_BODY`, or a rebuild
+ * (`rebuildProtectionBody`): `review/agent` required with strict off, `enforce_admins` true, the
+ * reviews and restrictions null or of the PUT's shape, and no key beyond the PUT's.
+ */
+export function isProtectionPut(body) {
+  if (!onlyKeys(body, ['required_status_checks', 'enforce_admins', 'required_pull_request_reviews', 'restrictions', ...PROTECTION_FLAGS])) return false
+  if (!sameJson(body.required_status_checks, GATE_CHECKS) || body.enforce_admins !== true) return false
+  if (!('required_pull_request_reviews' in body) || !('restrictions' in body)) return false
+  const reviews = body.required_pull_request_reviews
+  if (reviews !== null) {
+    const keys = ['dismissal_restrictions', 'bypass_pull_request_allowances', 'required_approving_review_count', ...REVIEW_BOOLEANS]
+    if (!onlyKeys(reviews, keys)) return false
+    if (reviews.dismissal_restrictions !== undefined && !actorsOk(reviews.dismissal_restrictions)) return false
+    if (reviews.bypass_pull_request_allowances !== undefined && !actorsOk(reviews.bypass_pull_request_allowances)) return false
+    if (reviews.required_approving_review_count !== undefined && !Number.isInteger(reviews.required_approving_review_count)) return false
+    if (REVIEW_BOOLEANS.some((k) => reviews[k] !== undefined && typeof reviews[k] !== 'boolean')) return false
+  }
+  const { restrictions } = body
+  if (restrictions !== null && !(onlyKeys(restrictions, ACTORS) && ACTORS.every((k) => isStrings(restrictions[k])))) return false
+  return PROTECTION_FLAGS.every((k) => body[k] === undefined || typeof body[k] === 'boolean')
+}
+
+/** GitHub's actors, `{ users: [{ login }], teams: [{ slug }], apps: [{ slug }] }`, as the PUT's login and slug arrays. */
+function actorsForPut(actors) {
+  const out = {}
+  for (const [kind, field] of [['users', 'login'], ['teams', 'slug'], ['apps', 'slug']]) {
+    if (Array.isArray(actors?.[kind])) out[kind] = actors[kind].map((a) => a[field])
+  }
+  return out
+}
+
+/**
+ * The PUT that rebuilds protection read as `protection` (GitHub's GET shape) with `review/agent`
+ * required and `enforce_admins` on, keeping every other setting the PUT carries: the pull request
+ * reviews with each of their fields, the restrictions, and each of `PROTECTION_FLAGS` the GET
+ * reports (an `{ enabled }` object in the GET, a boolean in the PUT). The status checks the project
+ * had are not kept, since it had none. `required_signatures` is not a field of the PUT; see
+ * `keepProtection`.
+ */
+export function rebuildProtectionBody(protection) {
+  const reviews = protection?.required_pull_request_reviews
+  const body = {
+    required_status_checks: { ...GATE_CHECKS },
+    enforce_admins: true,
+    required_pull_request_reviews: null,
+    restrictions: null,
+  }
+  if (isObj(reviews)) {
+    const kept = {}
+    if (isObj(reviews.dismissal_restrictions)) kept.dismissal_restrictions = actorsForPut(reviews.dismissal_restrictions)
+    if (isObj(reviews.bypass_pull_request_allowances)) kept.bypass_pull_request_allowances = actorsForPut(reviews.bypass_pull_request_allowances)
+    if (Number.isInteger(reviews.required_approving_review_count)) kept.required_approving_review_count = reviews.required_approving_review_count
+    for (const k of REVIEW_BOOLEANS) if (typeof reviews[k] === 'boolean') kept[k] = reviews[k]
+    body.required_pull_request_reviews = kept
+  }
+  if (isObj(protection?.restrictions)) {
+    const actors = actorsForPut(protection.restrictions)
+    body.restrictions = { users: actors.users ?? [], teams: actors.teams ?? [], apps: actors.apps ?? [] }
+  }
+  for (const k of PROTECTION_FLAGS) if (typeof protection?.[k]?.enabled === 'boolean') body[k] = protection[k].enabled
+  return body
+}
+
 /** Throws unless `request` is one of the operations `init` performs; runs before any network call. */
 export function assertAllowedRequest(repo, request) {
   const prefix = repoPath(repo)
@@ -446,7 +534,8 @@ export function assertAllowedRequest(repo, request) {
   const { method, body } = request
   const protection = `/branches/${MAIN}/protection`
   if (method === 'GET' && rest === protection && body === undefined) return
-  if (method === 'PUT' && rest === protection && sameJson(body, PROTECTION_BODY)) return
+  if (method === 'PUT' && rest === protection && isProtectionPut(body)) return
+  if (method === 'POST' && rest === `${protection}/required_signatures` && body === undefined) return
   if (method === 'POST' && rest === `${protection}/required_status_checks/contexts` && sameJson(body, [GATE_CONTEXT])) return
   if (method === 'POST' && rest === `${protection}/enforce_admins` && body === undefined) return
   const labelGet = /^\/labels\/([^/?#]+)$/.exec(rest)
@@ -559,7 +648,14 @@ export async function protectMain(ctx, out) {
   return refused(kind, out)
 }
 
-/** The protection `main` already has: adds what the gate needs of it and leaves the rest as it is. */
+/**
+ * The protection `main` already has: adds what the gate needs of it and keeps the rest. With status
+ * checks on, `review/agent` is added through the contexts endpoint and `enforce_admins` through its
+ * own. With none on, init does not rely on a request that switches them on alone, so the protection is
+ * rebuilt by one PUT of every setting it has (`rebuildProtectionBody`) plus `review/agent` and
+ * `enforce_admins`; `required_signatures`, which that PUT does not carry, is turned on again after
+ * it when it was on.
+ */
 async function keepProtection(ctx, protection, out) {
   const checks = protection?.required_status_checks
   const required = [...(checks?.contexts ?? []), ...(checks?.checks ?? []).map((c) => c.context)]
@@ -568,15 +664,20 @@ async function keepProtection(ctx, protection, out) {
   // Each step is sent and judged alone: a refusal (plan, admin) ends init's work on protection, and
   // any other failure throws.
   const steps = []
-  if (required.includes(GATE_CONTEXT)) out(`  ${GATE_CONTEXT} is already required`)
-  else if (checks === null || checks === undefined) {
-    throw new Error(
-      `branch protection on ${MAIN} requires no status checks at all, and GitHub adds ${GATE_CONTEXT} only to a protection that requires some; ` +
-        'enable required status checks in the repository settings, then run init again',
-    )
-  } else steps.push([buildAddRequiredCheck(ctx.repo), `added ${GATE_CONTEXT} to its required status checks`])
-  if (adminsOn) out('  enforce_admins is already on')
-  else steps.push([buildEnableEnforceAdmins(ctx.repo), 'turned enforce_admins on'])
+  if (!isObj(checks)) {
+    steps.push([
+      buildRebuildProtection(ctx.repo, rebuildProtectionBody(protection)),
+      `required no status checks, so rebuilt it with every setting it had, adding ${GATE_CONTEXT} as a required status check and enforce_admins on`,
+    ])
+    if (protection?.required_signatures?.enabled === true) {
+      steps.push([buildEnableRequiredSignatures(ctx.repo), 'turned required signatures on again, which the rebuild does not carry'])
+    }
+  } else {
+    if (required.includes(GATE_CONTEXT)) out(`  ${GATE_CONTEXT} is already required`)
+    else steps.push([buildAddRequiredCheck(ctx.repo), `added ${GATE_CONTEXT} to its required status checks`])
+    if (adminsOn) out('  enforce_admins is already on')
+    else steps.push([buildEnableEnforceAdmins(ctx.repo), 'turned enforce_admins on'])
+  }
   for (const [request, said] of steps) {
     const response = await ctx.send(request)
     if (!ok(response)) {

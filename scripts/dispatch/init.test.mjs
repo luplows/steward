@@ -752,12 +752,93 @@ describe('ST-44/AC-10: branch protection', () => {
     expect(out).toMatch(/enforce_admins is already on/)
   })
 
-  it('ST-44/AC-10: protection requiring no status checks at all stops init, which cannot add one there', async () => {
-    const gh = fakeGitHub({ protection: 'existing', existing: { required_status_checks: null, enforce_admins: { enabled: false } } })
-    const { code, err } = await runInit(['--yes', '--protect-main', 'yes'], { cwd: makeRepo(), gh })
-    expect(code).toBe(1)
-    expect(err).toMatch(/requires no status checks at all/)
-    expect(writes(gh).filter((r) => r.rest.startsWith(PROTECTION))).toEqual([])
+  // GitHub's GET shape: objects with `enabled` and `url`, and actors as objects with login or slug.
+  const ACTORS = { users: [{ login: 'ann', id: 1 }], teams: [{ slug: 'core', id: 2 }], apps: [{ slug: 'bot', id: 3 }] }
+  const NO_CHECKS = {
+    url: 'https://api.github.com/x',
+    required_pull_request_reviews: {
+      url: 'u',
+      dismissal_restrictions: { url: 'u', users_url: 'u', teams_url: 'u', ...ACTORS },
+      bypass_pull_request_allowances: { users: [{ login: 'bob' }], teams: [], apps: [{ slug: 'ci' }] },
+      dismiss_stale_reviews: true,
+      require_code_owner_reviews: false,
+      required_approving_review_count: 2,
+      require_last_push_approval: true,
+    },
+    restrictions: { url: 'u', users_url: 'u', teams_url: 'u', apps_url: 'u', ...ACTORS },
+    enforce_admins: { url: 'u', enabled: false },
+    required_linear_history: { enabled: true },
+    allow_force_pushes: { enabled: false },
+    allow_deletions: { enabled: false },
+    block_creations: { enabled: true },
+    required_conversation_resolution: { enabled: true },
+    lock_branch: { enabled: false },
+    allow_fork_syncing: { enabled: true },
+  }
+
+  it('ST-44/AC-10: protection with no status checks is rebuilt by one PUT keeping every setting, plus review/agent and enforce_admins', async () => {
+    const gh = fakeGitHub({ protection: 'existing', existing: NO_CHECKS })
+    const { code, out } = await runInit(['--yes', '--protect-main', 'yes'], { cwd: makeRepo(), gh })
+    expect(code).toBe(0)
+    expect(gh.requests.filter((r) => r.rest.startsWith(PROTECTION))).toEqual([
+      { method: 'GET', rest: PROTECTION, body: undefined },
+      {
+        method: 'PUT',
+        rest: PROTECTION,
+        body: {
+          required_status_checks: { strict: false, contexts: ['review/agent'] },
+          enforce_admins: true,
+          required_pull_request_reviews: {
+            dismissal_restrictions: { users: ['ann'], teams: ['core'], apps: ['bot'] },
+            bypass_pull_request_allowances: { users: ['bob'], teams: [], apps: ['ci'] },
+            dismiss_stale_reviews: true,
+            require_code_owner_reviews: false,
+            required_approving_review_count: 2,
+            require_last_push_approval: true,
+          },
+          restrictions: { users: ['ann'], teams: ['core'], apps: ['bot'] },
+          required_linear_history: true,
+          allow_force_pushes: false,
+          allow_deletions: false,
+          block_creations: true,
+          required_conversation_resolution: true,
+          lock_branch: false,
+          allow_fork_syncing: true,
+        },
+      },
+    ])
+    expect(out).toMatch(/required no status checks, so rebuilt it with every setting it had/)
+  })
+
+  it('ST-44/AC-10: a rebuild with no reviews or restrictions sends them null, and turns required signatures on again when they were on', async () => {
+    const gh = fakeGitHub({ protection: 'existing', existing: { enforce_admins: { enabled: true }, required_signatures: { enabled: true } } })
+    const { code } = await runInit(['--yes', '--protect-main', 'yes'], { cwd: makeRepo(), gh })
+    expect(code).toBe(0)
+    expect(gh.requests.filter((r) => r.rest.startsWith(PROTECTION) && r.method !== 'GET')).toEqual([
+      { method: 'PUT', rest: PROTECTION, body: PROTECTION_BODY },
+      { method: 'POST', rest: '/branches/main/protection/required_signatures', body: undefined },
+    ])
+  })
+
+  it('ST-44/AC-10: the allowlist admits a rebuild PUT exactly: review/agent with strict off, enforce_admins true, the PUT\'s own shape', () => {
+    const url = `https://api.github.com/repos/${REPO}/branches/main/protection`
+    const put = (body) => () => assertAllowedRequest(REPO, { method: 'PUT', url, body })
+    const good = { ...PROTECTION_BODY, required_pull_request_reviews: { required_approving_review_count: 1 }, restrictions: { users: [], teams: [], apps: [] }, required_linear_history: true }
+    expect(put(good)).not.toThrow()
+    for (const bad of [
+      { ...good, enforce_admins: false },
+      { ...good, required_status_checks: { strict: true, contexts: ['review/agent'] } },
+      { ...good, required_status_checks: { strict: false, contexts: ['review/agent', 'test'] } },
+      { ...good, required_status_checks: null },
+      { ...good, extra: true },
+      { ...good, required_linear_history: { enabled: true } },
+      { ...good, required_pull_request_reviews: { dismiss_stale_reviews: 'yes' } },
+      { ...good, required_pull_request_reviews: { dismissal_restrictions: { users: [{ login: 'ann' }] } } },
+      { ...good, restrictions: { users: ['ann'] } },
+      { enforce_admins: true, required_status_checks: PROTECTION_BODY.required_status_checks },
+    ]) {
+      expect(put(bad), JSON.stringify(bad)).toThrow(/refusing/)
+    }
   })
 
   it('ST-44/AC-12: a rate limit 403 on protection stops init with a non-zero exit, and writes no machine settings', async () => {

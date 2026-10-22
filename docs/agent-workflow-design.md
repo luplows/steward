@@ -2457,9 +2457,10 @@ shortened where it is long, so that it can be found there with its date.
     Free, or the account cannot set it, it says so plainly, says that nothing on GitHub then
     enforces the gate, and goes on. Where `main` already has protection, it keeps the project's own:
     it adds `review/agent` to the required status checks unless it is there, and turns
-    `enforce_admins` on unless it is on, changing nothing else, and says which it did. It does not
-    write the
-    after-sweep CI trigger, since a project's CI is its own ("Steward enforces nothing about CI");
+    `enforce_admins` on unless it is on, changing nothing else, and says which it did; where it
+    requires no status checks at all, it rebuilds the protection with one PUT of every setting it
+    has plus those two, rather than rely on a request that switches them on alone. It does not write
+    the after-sweep CI trigger, since a project's CI is its own ("Steward enforces nothing about CI");
     it does not touch `package.json`; it neither reads nor writes the story prefix or anything about
     story files; and it commits nothing: the crew commits what it wrote through the project's own
     pull request. Exploring the repository (D8) stays open.
