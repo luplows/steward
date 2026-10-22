@@ -5,7 +5,6 @@
  */
 export const FIXTURE_SETTINGS = {
   repo: 'owner/repo',
-  storyPrefix: 'ST',
   setup: { command: 'npm ci', timeoutMinutes: 5 },
   check: { command: 'npm run check', timeoutMinutes: 10 },
   landWhen: 'all-checks',

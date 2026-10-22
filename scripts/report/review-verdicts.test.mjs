@@ -266,19 +266,19 @@ describe('OQ-125/AC-3: the CLI\'s default repo comes from steward.config.json at
   }
 
   it('OQ-125/AC-3: no --repo takes the projectRoot\'s settings repo', async () => {
-    await withTempSettings({ repo: 'owner/other', storyPrefix: 'OQ' }, async (projectRoot) => {
+    await withTempSettings({ repo: 'owner/other' }, async (projectRoot) => {
       expect(await parseArgs([], { projectRoot })).toEqual({ repo: 'owner/other', limit: DEFAULT_LIMIT })
     })
   })
 
   it('OQ-125/AC-3: --repo overrides the settings default', async () => {
-    await withTempSettings({ repo: 'owner/other', storyPrefix: 'OQ' }, async (projectRoot) => {
+    await withTempSettings({ repo: 'owner/other' }, async (projectRoot) => {
       expect(await parseArgs(['--repo', 'x/y'], { projectRoot })).toEqual({ repo: 'x/y', limit: DEFAULT_LIMIT })
     })
   })
 
   it('OQ-125/AC-3: with tower-workshop-paths\' settings, the default is unchanged', async () => {
-    await withTempSettings({ repo: 'luplows/tower-workshop-paths', storyPrefix: 'OQ' }, async (projectRoot) => {
+    await withTempSettings({ repo: 'luplows/tower-workshop-paths' }, async (projectRoot) => {
       expect(await parseArgs([], { projectRoot })).toEqual({ repo: 'luplows/tower-workshop-paths', limit: DEFAULT_LIMIT })
     })
   })

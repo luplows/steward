@@ -43,6 +43,7 @@ import { createLandContext, landPullRequest } from './land.mjs'
 import { parseFrontmatter } from './queue.mjs'
 import { HONOURED_ASSOCIATIONS, reviewPullRequest } from './review.mjs'
 import { readSettings } from './settings.mjs'
+import { readStoryPrefix } from './story-prefix.mjs'
 
 const execFileAsync = promisify(execFile)
 
@@ -294,7 +295,9 @@ function findingsOf(comment) {
 export async function runStory({
   storyId, prNumber, ctx, ciCtx, landCtx, repoDir = process.cwd(), options = {}, deps = {},
 }) {
-  const { storyPrefix } = await readSettings(repoDir)
+  // Stopgap: the coder reads the story prefix from stories/stories.json. The coder's stories own
+  // this and will rework it with the coder's readiness setting.
+  const storyPrefix = await readStoryPrefix(repoDir)
   if (!new RegExp(`^${storyPrefix}-\\d+$`).test(storyId ?? '')) {
     throw new Error(`runStory requires a story id of the form ${storyPrefix}-<n>, got ${JSON.stringify(storyId)}`)
   }
@@ -422,7 +425,10 @@ async function main(argv) {
     const at = args.indexOf(name)
     return at === -1 ? undefined : args.splice(at, 2)[1]
   }
-  const { repo: settingsRepo, storyPrefix, land: landing, landWhen } = await readSettings(process.cwd())
+  const { repo: settingsRepo, land: landing, landWhen } = await readSettings(process.cwd())
+  // Stopgap: the coder reads the story prefix from stories/stories.json. The coder's stories own
+  // this and will rework it with the coder's readiness setting.
+  const storyPrefix = await readStoryPrefix(process.cwd())
   const repoFlag = take('--repo')
   const repo = repoFlag ?? settingsRepo
   const pr = take('--pr')

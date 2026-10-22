@@ -88,8 +88,9 @@ function makeWorld() {
   git(dir, 'init', '-q', '--bare', '-b', 'main', origin)
   git(dir, 'clone', '-q', origin, seed)
   git(seed, 'checkout', '-q', '-b', 'main')
-  writeFileSync(path.join(seed, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO, storyPrefix: 'OQ' })))
+  writeFileSync(path.join(seed, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO })))
   mkdirSync(path.join(seed, 'stories'))
+  writeFileSync(path.join(seed, 'stories', 'stories.json'), JSON.stringify({ prefix: 'OQ' }))
   writeFileSync(path.join(seed, 'stories', 'OQ-96-waits.md'), story('OQ-96', { deps: 'OQ-95' }))
   writeFileSync(path.join(seed, 'stories', 'OQ-98-first.md'), story('OQ-98'))
   writeFileSync(path.join(seed, 'stories', 'OQ-99-second.md'), story('OQ-99'))
@@ -727,7 +728,9 @@ describe('OQ-123: the project root is the working directory, not the engine root
     const dir = mkdtempSync(path.join(root, 'project-'))
     try {
       git(dir, 'init', '-q', '-b', 'main')
-      writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: 'owner/other', storyPrefix: 'ST' })))
+      writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: 'owner/other' })))
+      mkdirSync(path.join(dir, 'stories'))
+      writeFileSync(path.join(dir, 'stories', 'stories.json'), JSON.stringify({ prefix: 'ST' }))
       let threw
       try {
         execFileSync('node', [path.join(here, 'coder.mjs')], { cwd: dir, encoding: 'utf8' })
@@ -1558,14 +1561,16 @@ describe("OQ-112/AC-2: a claim's age", () => {
 
 // --------------------------------------------------- OQ-128: id prefix from settings
 
-/** A directory holding only a `steward.config.json` with the given `storyPrefix`. */
+/** A directory holding a `steward.config.json` and a `stories/stories.json` with the given `prefix`. */
 function withSettings(storyPrefix, fn) {
   const dir = mkdtempSync(path.join(tmpdir(), 'tw-coder-settings-'))
-  writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO, storyPrefix })))
+  writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO })))
+  mkdirSync(path.join(dir, 'stories'))
+  writeFileSync(path.join(dir, 'stories', 'stories.json'), JSON.stringify({ prefix: storyPrefix }))
   return fn(dir).finally(() => rmSync(dir, { recursive: true, force: true }))
 }
 
-describe('OQ-128/AC-1: retryStory takes its story-id check from settings\' storyPrefix', () => {
+describe('OQ-128/AC-1: retryStory takes its story-id check from the prefix of stories/stories.json', () => {
   it('refuses OQ-3 with the "requires a story id" error, under a project whose settings say ST', () =>
     withSettings('ST', async (dir) => {
       await expect(retryStory({

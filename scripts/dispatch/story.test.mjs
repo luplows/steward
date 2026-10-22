@@ -32,14 +32,16 @@ const BRANCH = 'story/OQ-9-a-story'
 const SHAS = ['a', 'b', 'c', 'd', 'e', 'f'].map((c) => c.repeat(40))
 const [H1, H2, H3, H4] = SHAS
 
-// runStory reads the project's settings from repoDir. The harness passes a
+// runStory reads the project's story prefix from repoDir. The harness passes a
 // directory of its own, whose prefix matches STORY, so the tests do not
-// depend on the settings of the checkout they run in.
+// depend on the story prefix of the checkout they run in.
 const SETTINGS_DIR = mkdtempSync(path.join(tmpdir(), 'tw-story-settings-'))
 writeFileSync(
   path.join(SETTINGS_DIR, 'steward.config.json'),
-  JSON.stringify(fixtureSettings({ repo: REPO, storyPrefix: 'OQ' })),
+  JSON.stringify(fixtureSettings({ repo: REPO })),
 )
+mkdirSync(path.join(SETTINGS_DIR, 'stories'))
+writeFileSync(path.join(SETTINGS_DIR, 'stories', 'stories.json'), JSON.stringify({ prefix: 'OQ' }))
 afterAll(() => rmSync(SETTINGS_DIR, { recursive: true, force: true }))
 
 function comment(id, verdict, head, { association = 'OWNER', text = 'A finding.' } = {}) {
@@ -620,14 +622,16 @@ describe('OQ-48/AC-9: resuming an existing pull request', () => {
 
 // --------------------------------------------------- OQ-128: id prefix from settings
 
-/** A directory holding only a `steward.config.json` with the given `storyPrefix`. */
+/** A directory holding a `steward.config.json` and a `stories/stories.json` with the given `prefix`. */
 function withSettings(storyPrefix, fn) {
   const dir = mkdtempSync(path.join(tmpdir(), 'tw-story-settings-'))
-  writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO, storyPrefix })))
+  writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO })))
+  mkdirSync(path.join(dir, 'stories'))
+  writeFileSync(path.join(dir, 'stories', 'stories.json'), JSON.stringify({ prefix: storyPrefix }))
   return fn(dir).finally(() => rmSync(dir, { recursive: true, force: true }))
 }
 
-describe('OQ-128/AC-2: runStory takes its story-id check from settings\' storyPrefix', () => {
+describe('OQ-128/AC-2: runStory takes its story-id check from the prefix of stories/stories.json', () => {
   it('refuses OQ-3 with the "requires a story id" error, under a project whose settings say ST', () =>
     withSettings('ST', async (dir) => {
       await expect(runStory({ storyId: 'OQ-3', repoDir: dir, ctx: {}, ciCtx: {}, landCtx: {} }))

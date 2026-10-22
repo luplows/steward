@@ -15,7 +15,7 @@
 import { readFile, readdir } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
-import { readSettings } from './settings.mjs'
+import { readStoryPrefix } from './story-prefix.mjs'
 
 export const TIERS = ['fix', 'next', 'normal', 'later']
 
@@ -265,11 +265,11 @@ async function readStoryDir(dir, isDone, prefix) {
  * Reads and orders the full queue from `<rootDir>/stories` and
  * `<rootDir>/stories/done`. Throws, naming the offending file, on the first
  * story that fails to parse (AC-2) -- never skips it. The story-id prefix
- * (OQ-126) is read from `<rootDir>/steward.config.json`; nothing falls back
+ * (OQ-126) is read from `<rootDir>/stories/stories.json`; nothing falls back
  * to a default when it is missing.
  */
 export async function loadQueue(rootDir = process.cwd()) {
-  const { storyPrefix } = await readSettings(rootDir)
+  const storyPrefix = await readStoryPrefix(rootDir)
   const storiesDir = path.join(rootDir, 'stories')
   const doneDir = path.join(storiesDir, 'done')
 

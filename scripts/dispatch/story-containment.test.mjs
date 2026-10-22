@@ -60,8 +60,9 @@ let repo
 beforeAll(() => {
   repo = mkdtempSync(path.join(tmpdir(), 'tw-containment-test-'))
   git(repo, 'init', '-q', '-b', 'main')
-  writeFileSync(path.join(repo, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: 'luplows/tower-workshop-paths', storyPrefix: 'OQ' })))
+  writeFileSync(path.join(repo, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: 'luplows/tower-workshop-paths' })))
   mkdirSync(path.join(repo, 'stories'))
+  writeFileSync(path.join(repo, 'stories', 'stories.json'), JSON.stringify({ prefix: 'OQ' }))
   writeFileSync(path.join(repo, 'stories', 'OQ-82-foo.md'), STORY('OQ-82'))
   writeFileSync(path.join(repo, 'stories', 'OQ-90-other.md'), STORY('OQ-90'))
   git(repo, 'add', '.')

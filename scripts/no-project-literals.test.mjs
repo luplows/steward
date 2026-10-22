@@ -1,12 +1,12 @@
 // @vitest-environment node
 
 /**
- * OQ-129: fails if the story prefix (`OQ-`) or this repository's name
- * (`luplows/tower-workshop-paths`) comes back into the modules OQ-125 to
- * OQ-128 made take them from the project's settings (steward.config.json),
- * in a regular expression literal, a string literal or a template literal.
- * Comments are left alone deliberately -- they spell `OQ-` throughout these
- * files, documenting the very story numbers that moved it out of the code.
+ * ST-41/AC-5: fails if steward's own story prefix (`ST-`) or steward's own repository
+ * (`luplows/steward`) is spelt in the modules that take them from the project, in a regular
+ * expression literal, a string literal or a template literal. The prefix is the `prefix` of
+ * `stories/stories.json` and the repository is `steward.config.json`'s `repo`. Comments are left
+ * alone deliberately -- they spell `ST-` throughout these files, documenting the stories that
+ * built them. (OQ-129 wrote this guard for tower-workshop-paths' `OQ-` and repository.)
  */
 
 import { describe, expect, it } from 'vitest'
@@ -203,13 +203,25 @@ function findUncommentedOccurrences(source, needle) {
   return hits
 }
 
-function assertNoneFound(relativePath, needle) {
-  const text = readFileSync(path.join(repoRoot, relativePath), 'utf8')
-  const hits = findUncommentedOccurrences(text, needle)
-  expect(hits, `${relativePath} has ${JSON.stringify(needle)} outside a comment on line(s) ${hits.join(', ')}`).toEqual([])
+/**
+ * The lines of `source` where any of `spellings` is spelt outside a comment, in order. A regular
+ * expression literal cannot hold a bare `/`, so a repository name has a second spelling there.
+ */
+function findSpelt(source, spellings) {
+  const lines = new Set(spellings.flatMap((spelling) => findUncommentedOccurrences(source, spelling)))
+  return [...lines].sort((a, b) => a - b)
 }
 
-describe('OQ-129/AC-1', () => {
+function assertNoneFound(relativePath, spellings) {
+  const text = readFileSync(path.join(repoRoot, relativePath), 'utf8')
+  const hits = findSpelt(text, spellings)
+  expect(hits, `${relativePath} has ${JSON.stringify(spellings)} outside a comment on line(s) ${hits.join(', ')}`).toEqual([])
+}
+
+const PREFIX = ['ST-']
+const REPOSITORY = ['luplows/steward', 'luplows\\/steward']
+
+describe('ST-41/AC-5: the story prefix', () => {
   const files = [
     'dispatch/queue.mjs',
     'lint-stories.mjs',
@@ -219,11 +231,11 @@ describe('OQ-129/AC-1', () => {
   ]
 
   it.each(files)('%s does not spell the story prefix outside a comment', (relativePath) => {
-    assertNoneFound(relativePath, 'OQ-')
+    assertNoneFound(relativePath, PREFIX)
   })
 })
 
-describe('OQ-129/AC-2', () => {
+describe('ST-41/AC-5: the repository', () => {
   const files = [
     'dispatch/coder.mjs',
     'dispatch/land.mjs',
@@ -233,38 +245,43 @@ describe('OQ-129/AC-2', () => {
     'report/review-verdicts.mjs',
   ]
 
-  it.each(files)('%s does not spell this repository\'s name outside a comment', (relativePath) => {
-    assertNoneFound(relativePath, 'luplows/tower-workshop-paths')
+  it.each(files)("%s does not spell this repository's name outside a comment", (relativePath) => {
+    assertNoneFound(relativePath, REPOSITORY)
   })
 })
 
-describe('OQ-129/AC-3', () => {
-  it('reports OQ- found in a regex literal, a string literal and a template literal', () => {
+describe('ST-41/AC-5: the guard finds each in code and not in a comment', () => {
+  it('reports ST- found in a regex literal, a string literal and a template literal', () => {
     const source = [
-      "const re = /OQ-\\d+/",
-      "const str = 'OQ-300'",
-      "const tmpl = `OQ-400`",
+      'const re = /ST-\\d+/',
+      "const str = 'ST-300'",
+      'const tmpl = `ST-400`',
     ].join('\n')
 
-    expect(findUncommentedOccurrences(source, 'OQ-')).toEqual([1, 2, 3])
+    expect(findSpelt(source, PREFIX)).toEqual([1, 2, 3])
   })
 
-  it("reports luplows/tower-workshop-paths found in a string literal", () => {
-    const source = "const repo = 'luplows/tower-workshop-paths'"
+  it('reports luplows/steward found in a regex literal, a string literal and a template literal', () => {
+    const source = [
+      'const re = /luplows\\/steward/',
+      "const str = 'luplows/steward'",
+      'const tmpl = `luplows/steward`',
+    ].join('\n')
 
-    expect(findUncommentedOccurrences(source, 'luplows/tower-workshop-paths')).toEqual([1])
+    expect(findSpelt(source, REPOSITORY)).toEqual([1, 2, 3])
   })
 
   it('reports nothing when both only appear in // and /* ... */ comments', () => {
     const source = [
-      '// OQ-100 is mentioned here',
-      '/* luplows/tower-workshop-paths is mentioned here too */',
+      '// ST-100 is mentioned here',
+      '/* luplows/steward is mentioned here too */',
       '/*',
-      ' * and OQ-200 spans multiple comment lines',
+      ' * and ST-200 spans multiple comment lines',
+      ' * and a regex-shaped luplows\\/steward',
       ' */',
     ].join('\n')
 
-    expect(findUncommentedOccurrences(source, 'OQ-')).toEqual([])
-    expect(findUncommentedOccurrences(source, 'luplows/tower-workshop-paths')).toEqual([])
+    expect(findSpelt(source, PREFIX)).toEqual([])
+    expect(findSpelt(source, REPOSITORY)).toEqual([])
   })
 })
