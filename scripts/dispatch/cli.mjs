@@ -20,6 +20,7 @@ import path from 'node:path'
 
 const DISPATCH_DIR = path.dirname(fileURLToPath(import.meta.url))
 const SCRIPTS_DIR = path.resolve(DISPATCH_DIR, '..')
+const LAND_DIR = path.join(SCRIPTS_DIR, 'land')
 
 export const COMMANDS = {
   loop: path.join(DISPATCH_DIR, 'loop.mjs'),
@@ -31,6 +32,12 @@ export const COMMANDS = {
   lint: path.join(SCRIPTS_DIR, 'lint-stories.mjs'),
   inspect: path.join(DISPATCH_DIR, 'inspect.mjs'),
   verdicts: path.join(SCRIPTS_DIR, 'report', 'review-verdicts.mjs'),
+  // The gate's and the runway's parts, run by the workflow files (ST-42).
+  'mark-pending': path.join(LAND_DIR, 'mark-pending.mjs'),
+  'apply-verdict': path.join(LAND_DIR, 'apply-verdict.mjs'),
+  'apply-review-blocked': path.join(LAND_DIR, 'apply-review-blocked.mjs'),
+  'runway': path.join(LAND_DIR, 'runway.mjs'),
+  'delete-merged-heads': path.join(LAND_DIR, 'delete-merged-heads.mjs'),
 }
 
 function usage() {

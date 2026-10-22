@@ -45,8 +45,8 @@ describe('deleteMergedHeads', () => {
 
   it('OQ-52/AC-1 - the landing workflow runs the deletion after the merge step, even when the merge step fails', () => {
     const yml = readFileSync(path.join(ROOT, '.github/workflows/land-approved.yml'), 'utf8')
-    const mergeAt = yml.indexOf('gh pr merge')
-    const cleanupAt = yml.indexOf('run: node scripts/land/delete-merged-heads.mjs')
+    const mergeAt = yml.indexOf('run: node scripts/dispatch/cli.mjs runway')
+    const cleanupAt = yml.indexOf('run: node scripts/dispatch/cli.mjs delete-merged-heads')
     expect(mergeAt).toBeGreaterThan(-1)
     expect(cleanupAt).toBeGreaterThan(mergeAt)
     expect(yml.slice(yml.lastIndexOf('- name:', cleanupAt), cleanupAt)).toMatch(/if: always\(\)/)
@@ -73,7 +73,7 @@ describe('deleteMergedHeads', () => {
 
   it('OQ-52/AC-2 - the cleanup step in the workflow cannot fail the run', () => {
     const yml = readFileSync(path.join(ROOT, '.github/workflows/land-approved.yml'), 'utf8')
-    const step = yml.slice(yml.lastIndexOf('- name:', yml.indexOf('run: node scripts/land/delete-merged-heads.mjs')))
+    const step = yml.slice(yml.lastIndexOf('- name:', yml.indexOf('run: node scripts/dispatch/cli.mjs delete-merged-heads')))
     expect(step).toMatch(/continue-on-error: true/)
   })
 

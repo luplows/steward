@@ -378,7 +378,7 @@ it:
   one, so nothing starves. The rotation decides which pull request is ready, and a runway that
   landed a different one would spend the pilot's requests and land pull requests nobody asked it
   to (decided 2026-09-28). The candidate choice is made in `scripts/land/select-candidates.mjs`,
-  which is tested without running the workflow.
+  which `runway.mjs` calls and which is tested without running the workflow.
 - **Re-checks `review/agent` directly** rather than trusting branch protection to require it,
   because a required check vanished from protection once. Prevention, not detection.
 - **`--match-head-commit`**, which refuses the merge if anything was pushed between the check and
@@ -1287,7 +1287,7 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
   build up. Two separate limits come closest today: two or more open `loop-stuck` issues stop
   the loop (`STUCK_ISSUE_LIMIT`, `scripts/dispatch/loop.mjs`), and five or more open
   `review-blocked` pull requests narrow what the runway lands (the circuit breaker,
-  `.github/workflows/land-approved.yml`). Neither counts a unit stopped for another reason, such
+  `scripts/land/runway.mjs`). Neither counts a unit stopped for another reason, such
   as red CI at its own bound, which `story.mjs` records as `blocked:` on a draft pull request,
   with no label and no issue.
 - **D2. Priority** ("What steward is for"). Probably the order in which work is started, since
@@ -1942,7 +1942,7 @@ shortened where it is long, so that it can be found there with its date.
     (`scripts/dispatch/land.mjs`: `landPullRequest`'s `once` option, and `landing` on its context).
   - Landing when the checks `landWhen` names are green, in the pilot and the runway, rather than
     on `mergeable_state` `clean` (`scripts/land/checks-green.mjs`, `scripts/dispatch/land.mjs`,
-    `.github/workflows/land-approved.yml`).
+    `scripts/land/runway.mjs`).
   - **Planned (ST-25):** the review-and-land pass, one command per pass, started by the dispatcher
     session for now.
   - A `Unit:` line in steward's pull request template (`.github/pull_request_template.md`), a path,
@@ -2371,7 +2371,7 @@ shortened where it is long, so that it can be found there with its date.
   machine of the kind ST-6 is to find how to keep from sessions, and of no use to a Codex reviewer,
   which has no network; and ATC fetching the pull requests and comments a body cites.
 - **Steward installs in another project as a review gate, through `init`** (decided 2026-10-19 by
-  the owner, with the planning session; **Planned (ST-42, ST-44)**). Steward
+  the owner, with the planning session; **Planned (ST-44)**). Steward
   is installed in another project as a review gate only: first in pinpoint, a private Node
   repository on GitHub Free, so with no branch protection, whose units are GitHub issues; then in
   tower-workshop-paths, which is public and keeps file stories with the prefix `OQ`, by its own
@@ -2395,19 +2395,20 @@ shortened where it is long, so that it can be found there with its date.
     and `loop.mjs` through the queue) reads the same file, a stopgap that the coder's stories own
     and will rework. `scripts/no-project-literals.test.mjs` guards steward's own `ST-` and
     `luplows/steward` in place of tower-workshop-paths'.
-  - **The gate's workflows run steward from the installed package** (ST-42). Their logic becomes
-    steward's commands, and the package carries the thin workflow files a project uses, which
-    install steward alone, at a pinned tag (`npx --yes --package=github:luplows/steward#v<version>
-    steward <command>`, or an equivalent), not the project's dependencies. Steward's own workflows
+  - **The gate's workflows run steward from the installed package.** Their logic is steward's
+    commands (`mark-pending`, `apply-verdict`, `apply-review-blocked`, `runway` and
+    `delete-merged-heads`), and the package carries the thin workflow files a project uses, in
+    `templates/workflows/`, which install steward alone, at a pinned tag (`npx --yes
+    --package=github:luplows/steward#v{{STEWARD_VERSION}} steward <command>`, `init` filling the
+    placeholder), not the project's dependencies. Steward's own workflows
     run the same commands from its checkout, so steward runs them on itself, and a test keeps
     steward's own files and the thin files in step except for how steward is started. Steward's own
     `pending` job, which runs on a pull request's event with a token that can post statuses, checks
     out the pull request's base rather than its merge tree, so that it runs no code the pull
     request changes. Its `mark-pending` step runs only when the base holds that command, and is
-    skipped otherwise, so ST-42's own pull request gets no pending post and no failed check, which
-    `"all-checks"` would never let land (owner, 2026-10-22, after #74's third review and #77's
-    first; not chosen: the merge tree, a `gh api` fallback, and keeping today's step until a
-    follow-up). Considered and
+    skipped otherwise, so the pull request that introduced the command got no pending post and no
+    failed check, which `"all-checks"` would never let land (owner, 2026-10-22; not chosen: the
+    merge tree, a `gh api` fallback, and keeping the earlier step until a follow-up). Considered and
     not chosen: the thin files running the project's `npm ci`, and steward from its `node_modules`.
     Steward alone was chosen for fewer Actions minutes on a private repository, and because it works
     for a project that is not Node. A project's `package.json` does not pin steward: the crew runs
@@ -2604,7 +2605,7 @@ Found 2026-10-08 while refining OQ-115. Each is built in steward, before OQ-115 
 - **A tag to pin**, and **the loop's worktree installing the pinned engine** after each update
   (OQ-123's Out of scope).
 - **`init` and the thin gate files** (R2), including OQ-124's after-sweep trigger.
-  **Planned (ST-42, ST-44)**, decided 2026-10-19 ("Decided so far"). Revised the same day: `init`
+  **Planned (ST-44)**, decided 2026-10-19 ("Decided so far"). Revised the same day: `init`
   writes no after-sweep trigger, since a project's CI is its own (R2).
 - **The prompts' `{{REPO}}` slot and project section** (R1), so this project's lines come back.
   The slot is built. The project section is in no story yet: tower-workshop-paths needs it only
@@ -2653,10 +2654,14 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   the checkout they are loaded from (`ENGINE_ROOT`), and those prompts are this repository's own
   `.claude/prompts/`.
 - The gate is this repository's own workflows. `ci.yml` runs `scripts/dispatch/story-containment.mjs`.
-  `land-approved.yml` runs `scripts/land/select-candidates.mjs`, `check-author.mjs` and
-  `delete-merged-heads.mjs`. `review-gate.yml` derives `review/agent`. **Planned (ST-42):** the
-  gate's and the runway's logic become steward's commands, which steward's own workflows run from
-  its checkout and a project's thin workflow files run from steward installed at a pinned tag.
+  `land-approved.yml` runs the commands `runway` (`scripts/land/runway.mjs`, which uses
+  `select-candidates.mjs`, `check-author.mjs` and `checks-green.mjs`) and `delete-merged-heads`.
+  `review-gate.yml` runs `mark-pending`, `apply-verdict` and `apply-review-blocked`, which derive
+  `review/agent`. Each of these workflows holds only its triggers, permissions, concurrency and
+  environment, and runs `node scripts/dispatch/cli.mjs <command>` from steward's checkout. The
+  package carries the same two workflows in thin form, in `templates/workflows/`, which start the
+  same commands from steward installed at a pinned tag and check out nothing, so
+  `runway` reads the project's `steward.config.json` `landWhen` from `main` through the API.
 - The rules the gate enforces mix the general with this project's own: `REVIEW.md`, `AGENTS.md`,
   `stories/README.md`, `stories/_TEMPLATE.md` and this document.
 
@@ -2796,7 +2801,7 @@ is still open.
     The files `init` writes include the after-sweep trigger and its skip condition (OQ-124's
     `workflow_run` on `Land approved PRs`; noted 2026-10-08 at the owner's decision, under
     "Decided so far"), so that a project's `main` is checked after each landing without spending
-    minutes on a sweep that landed nothing. **Planned (ST-42, ST-44):** each step installs steward
+    minutes on a sweep that landed nothing. **Planned (ST-44):** each step installs steward
     alone, at the tag `init` pins, and runs its command, not the project's `npm ci` (decided
     2026-10-19, "Decided so far"). **Revised 2026-10-19 by the owner:** `init` does not write the
     after-sweep trigger. A project's CI is its own ("Steward enforces nothing about CI",

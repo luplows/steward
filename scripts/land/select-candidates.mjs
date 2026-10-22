@@ -5,14 +5,15 @@
 // (`release-branch.mjs`, ST-45), in the order the sweep listed them (created, ascending). Given
 // one, only that pull request, and only if it is in that set: a run given a pull request never
 // goes on to another one. The per-pull-request checks (review-blocked, the circuit breaker,
-// mergeable_state, review/agent) stay in `land-approved.yml` and apply to whatever this returns.
+// the checks `landWhen` names, review/agent) are `runway.mjs`'s, which calls this and applies
+// them to whatever it returns.
 //
 // The input arrives through the environment, never interpolated into a shell script, and is
 // validated here: anything that is neither empty nor a positive integer without leading zeros
 // is refused, so the run fails having merged nothing.
 //
-// Usage (the workflow): the listing as JSON on stdin, PR_INPUT in the environment;
-// prints one number per line.
+// Usage (the command line): the listing as JSON on stdin, PR_INPUT in the environment;
+// prints one number per line. `runway.mjs` calls `selectCandidates` in process.
 
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

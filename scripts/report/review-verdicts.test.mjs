@@ -152,9 +152,12 @@ describe('OQ-47/AC-4: counting agrees with the pattern review-gate.yml matches',
     { id: 6, body: marker('maybe'), association: 'OWNER', expectWellFormed: false },
   ]
 
-  it('the transcription above has not drifted from review-gate.yml itself', async () => {
-    const workflow = await readFile(path.join(here, '..', '..', '.github', 'workflows', 'review-gate.yml'), 'utf8')
-    expect(workflow).toContain('agent-review[[:space:]]+head=[0-9a-f]{40}[[:space:]]+verdict=(pass-with-observations|pass|block|fail)')
+  it('the transcription above has not drifted from the pattern the gate reads markers with', async () => {
+    // The gate's command, apply-verdict.mjs, reads a marker with parseMarkerComment (github.mjs).
+    const gate = await readFile(path.join(here, '..', 'land', 'apply-verdict.mjs'), 'utf8')
+    expect(gate).toMatch(/import\s*\{[^}]*parseMarkerComment[^}]*\}\s*from\s*'\.\.\/dispatch\/github\.mjs'/)
+    const source = await readFile(path.join(here, '..', 'dispatch', 'github.mjs'), 'utf8')
+    expect(source).toContain('agent-review[^\\S\\n]+head=([0-9a-f]{40})[^\\S\\n]+verdict=(pass-with-observations|pass|block|fail)')
   })
 
   it('every fixture: the workflow pattern matching agrees with parseMarkerComment via actedOnVerdicts', async () => {

@@ -37,7 +37,7 @@ This file applies to every session. Each role has its own instructions as well:
 - The sweep lands one eligible pull request per run, only when triggered, so a merge-ready pull
   request waits. A run given a pull request (`land.mjs` always gives one) considers only that one;
   a run given none lands the oldest. Its eligibility rules and the `review-blocked` circuit
-  breaker are defined in `land-approved.yml`.
+  breaker are defined in `scripts/land/runway.mjs`, which `land-approved.yml` runs.
 
 ## Claims about this repository
 

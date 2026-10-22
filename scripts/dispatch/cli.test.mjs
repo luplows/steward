@@ -22,8 +22,17 @@ function run(args, cwd) {
 }
 
 describe('OQ-131/AC-1: cli.mjs dispatches to the module each command names', () => {
-  it('lists loop, story, coder, review, land, queue, lint, inspect and verdicts', () => {
-    expect(Object.keys(COMMANDS)).toEqual(['loop', 'story', 'coder', 'review', 'land', 'queue', 'lint', 'inspect', 'verdicts'])
+  it('lists loop, story, coder, review, land, queue, lint, inspect and verdicts, then the gate\'s and the runway\'s five (ST-42/AC-1)', () => {
+    expect(Object.keys(COMMANDS)).toEqual([
+      'loop', 'story', 'coder', 'review', 'land', 'queue', 'lint', 'inspect', 'verdicts',
+      'mark-pending', 'apply-verdict', 'apply-review-blocked', 'runway', 'delete-merged-heads',
+    ])
+  })
+
+  it('ST-42/AC-1: each of the gate\'s and the runway\'s commands runs the module of its own name under scripts/land', () => {
+    for (const name of ['mark-pending', 'apply-verdict', 'apply-review-blocked', 'runway', 'delete-merged-heads']) {
+      expect(COMMANDS[name].endsWith(path.join('scripts', 'land', `${name}.mjs`))).toBe(true)
+    }
   })
 
   it('runs lint-stories.mjs for `lint` and review-verdicts.mjs for `verdicts`, the other seven by their own module name', () => {

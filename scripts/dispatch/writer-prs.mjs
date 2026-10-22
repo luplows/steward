@@ -8,7 +8,7 @@
  * where the reviewer left it.
  *
  * A candidate is a pull request whose `author_association` is one the gate
- * honours (`review.mjs`'s `HONOURED_ASSOCIATIONS`, the set `review-gate.yml`
+ * honours (`review.mjs`'s `HONOURED_ASSOCIATIONS`, the set `apply-verdict.mjs`
  * reads). A draft, or a pull request from anyone else, is skipped before its
  * body is ever read -- no reviewer spend goes on it. A candidate that already
  * carries an honoured verdict at its current head was handled by an earlier

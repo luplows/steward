@@ -2,22 +2,22 @@
 /**
  * Reports the verdict mix recorded on gated pull requests (OQ-47): the
  * `<!-- agent-review head=... verdict=... -->` marker comments
- * `.github/workflows/review-gate.yml` already reads. Adds no instrumentation
+ * `.github/workflows/review-gate.yml` runs `apply-verdict` on. Adds no instrumentation
  * and stores nothing -- the record already exists twice, as this comment and
  * as the `review/agent` commit status (`docs/agent-workflow-design.md`, "What
  * the gate enforces"); this only reads the comment.
  *
  * Reuses `buildListComments`, `parseComments` and `parseMarkerComment` from
  * `../dispatch/github.mjs` unchanged, so a verdict this counts is, by
- * construction, a verdict `review-gate.yml`'s own marker pattern matches
+ * construction, a verdict the gate's own marker parser (`apply-verdict.mjs`) reads
  * (AC-4) -- there is only the one transcription of that pattern, in
  * `github.mjs`, and this module never re-derives it.
  *
  * A marker also counts only from an account the gate itself would honour
- * (`OWNER`, `MEMBER`, `COLLABORATOR` -- see review-gate.yml's `ASSOC` check).
- * It does *not* filter by the pull request's current head sha. review-gate.yml
+ * (`OWNER`, `MEMBER`, `COLLABORATOR` -- see `scripts/land/check-author.mjs`)
+ * It does *not* filter by the pull request's current head sha. The gate's `apply-verdict.mjs`
  * compares a marker's `head=` against the head *at the moment that comment's
- * event fires* (`head="$(gh pr view ...headRefOid)"`, run inside the
+ * event fires* (a lookup of the pull request's head through the REST API, run inside the
  * `issue_comment` job) -- not against wherever the pull request ends up. A
  * reviewer only ever posts a marker naming the commit it just reviewed, which
  * is the head at that moment, so the gate acts on it and sets `review/agent`
@@ -49,7 +49,7 @@ import { readSettings } from '../dispatch/settings.mjs'
 const API = 'https://api.github.com'
 export const DEFAULT_LIMIT = 60
 
-// The associations review-gate.yml honours a marker from (its `ASSOC` case).
+// The associations the gate honours a marker from (`scripts/land/check-author.mjs`'s set).
 export const PRIVILEGED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR']
 
 function repoPath(repo) {

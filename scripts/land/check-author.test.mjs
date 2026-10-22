@@ -4,6 +4,8 @@ import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { HONOURED_ASSOCIATIONS, isHonouredAuthor } from './check-author.mjs'
+import { fakeGitHub, pull, REPO, SHA_OF } from './runway-fake.mjs'
+import { runRunway } from './runway.mjs'
 import { HONOURED_ASSOCIATIONS as REVIEW_HONOURED_ASSOCIATIONS } from '../dispatch/review.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -22,68 +24,73 @@ describe('OQ-81/AC-2: isHonouredAuthor', () => {
     expect(isHonouredAuthor('NONE')).toBe(false)
   })
 
-  it('the CLI (as land-approved.yml invokes it) exits non-zero for a CONTRIBUTOR association', () => {
+  it('the CLI exits non-zero for a CONTRIBUTOR association', () => {
     expect(() =>
       execFileSync(process.execPath, [CHECK_AUTHOR_SCRIPT], { env: { ...process.env, ASSOC: 'CONTRIBUTOR' } }),
     ).toThrow()
   })
 
-  it('the CLI (as land-approved.yml invokes it) exits zero for an OWNER association', () => {
+  it('the CLI exits zero for an OWNER association', () => {
     expect(() =>
       execFileSync(process.execPath, [CHECK_AUTHOR_SCRIPT], { env: { ...process.env, ASSOC: 'OWNER' } }),
     ).not.toThrow()
   })
 
-  it('a skipped pull request followed by an eligible one still lands: land-approved.yml continues the per-PR loop on failure, rather than exiting or breaking it', () => {
-    const landing = readFileSync(path.join(ROOT, '.github', 'workflows', 'land-approved.yml'), 'utf8')
-    // Pins the exact word land-approved.yml runs when check-author.mjs fails a candidate. If that
-    // word were `exit 0` or `break` instead of `continue`, a CONTRIBUTOR PR ahead of an eligible
-    // OWNER one would stop the sweep instead of moving on to it -- this fails in that case.
-    const match = landing.match(
-      /if ! ASSOC="\$\{association\}" node scripts\/land\/check-author\.mjs; then\s*\n\s*echo "PR #\$\{pr\}: opened by an account with association '\$\{association\}', not a writer, skipping"\s*\n\s*(\w+)\s*\n\s*fi/,
-    )
-    expect(match).not.toBeNull()
-    expect(match[1]).toBe('continue')
-
-    // That `continue` must be inside the same `for pr in ...; do ... done` loop that tries every
-    // candidate, or it would do nothing to reach a later PR.
-    const loopStart = landing.indexOf('for pr in ${candidates}; do')
-    const loopEnd = landing.indexOf('\n          done', loopStart)
-    expect(loopStart).toBeGreaterThan(-1)
-    expect(landing.indexOf('check-author.mjs')).toBeGreaterThan(loopStart)
-    expect(landing.indexOf('check-author.mjs')).toBeLessThan(loopEnd)
+  it('a skipped pull request followed by an eligible one still lands: runway goes on to the next candidate rather than ending the run', () => {
+    const { deps, logs, merges } = fakeGitHub({
+      pulls: [pull(1, { association: 'CONTRIBUTOR' }), pull(2, { association: 'OWNER' })],
+    })
+    expect(runRunway({ repo: REPO }, deps)).toEqual({ landed: 2 })
+    expect(logs).toContain("PR #1: opened by an account with association 'CONTRIBUTOR', not a writer, skipping")
+    expect(merges).toEqual([['2', '--repo', REPO, '--squash', '--match-head-commit', SHA_OF(2)]])
   })
 
   it('AC-4: the author check runs before the review-blocked check, so an outside review-blocked PR is still reported as an outside PR', () => {
-    const landing = readFileSync(path.join(ROOT, '.github', 'workflows', 'land-approved.yml'), 'utf8')
-    const authorAt = landing.indexOf('check-author.mjs')
-    const blockedAt = landing.indexOf("index(\"review-blocked\")", authorAt)
-    expect(authorAt).toBeGreaterThan(-1)
-    expect(blockedAt).toBeGreaterThan(authorAt)
+    const { deps, logs } = fakeGitHub({ pulls: [pull(1, { association: 'NONE', labels: ['review-blocked'] })] })
+    runRunway({ repo: REPO }, deps)
+    expect(logs).toContain("PR #1: opened by an account with association 'NONE', not a writer, skipping")
+    expect(logs.some((line) => line.includes('review-blocked, skipping'))).toBe(false)
+  })
+
+  it('AC-4: an outside pull request carrying breaker-override is still skipped, with the breaker tripped', () => {
+    const { deps, logs, merges } = fakeGitHub({
+      pulls: [pull(1, { association: 'NONE', labels: ['breaker-override'] })],
+      blockedCount: 5,
+    })
+    runRunway({ repo: REPO }, deps)
+    expect(merges).toEqual([])
+    expect(logs).toContain("PR #1: opened by an account with association 'NONE', not a writer, skipping")
   })
 })
 
 describe('OQ-81/AC-3: the same set of associations everywhere', () => {
-  const gate = readFileSync(path.join(ROOT, '.github', 'workflows', 'review-gate.yml'), 'utf8')
-  const gateStep = gate.slice(gate.indexOf('name: Apply verdict from marker'))
-  const gateHonoured = gateStep.match(/case "\$\{ASSOC\}" in\s+([A-Z|]+)\)/)[1].split('|')
+  const read = (...parts) => readFileSync(path.join(ROOT, ...parts), 'utf8')
+  const importsIsHonouredAuthor = /import\s*\{[^}]*\bisHonouredAuthor\b[^}]*\}\s*from\s*'\.\/check-author\.mjs'/
 
-  const landing = readFileSync(path.join(ROOT, '.github', 'workflows', 'land-approved.yml'), 'utf8')
-  const landingHonoured = landing.match(/Honoured associations \(must match review-gate\.yml's ASSOC case\): ([A-Z|]+)/)[1].split('|')
-
-  it('land-approved.yml names the same set review-gate.yml honours', () => {
-    expect([...landingHonoured].sort()).toEqual([...gateHonoured].sort())
+  it('apply-verdict.mjs (the gate) and runway.mjs (the runway) read check-author.mjs\'s set, and define none of their own', () => {
+    for (const file of ['apply-verdict.mjs', 'runway.mjs']) {
+      const source = read('scripts', 'land', file)
+      expect(source).toMatch(importsIsHonouredAuthor)
+      expect(source).not.toMatch(/OWNER|MEMBER|COLLABORATOR/)
+    }
   })
 
-  it('check-author.mjs honours the same set review-gate.yml honours', () => {
-    expect([...HONOURED_ASSOCIATIONS].sort()).toEqual([...gateHonoured].sort())
+  it('neither workflow file carries a set of associations', () => {
+    for (const file of ['review-gate.yml', 'land-approved.yml']) {
+      expect(read('.github', 'workflows', file)).not.toMatch(/OWNER|MEMBER|COLLABORATOR/)
+    }
+  })
+
+  it('check-author.mjs honours owners, members and collaborators', () => {
+    expect([...HONOURED_ASSOCIATIONS].sort()).toEqual(['COLLABORATOR', 'MEMBER', 'OWNER'])
   })
 
   it('review.mjs (OQ-78/AC-3) agrees with check-author.mjs, so all three agree', () => {
     expect([...REVIEW_HONOURED_ASSOCIATIONS].sort()).toEqual([...HONOURED_ASSOCIATIONS].sort())
   })
 
-  it('land-approved.yml actually calls check-author.mjs', () => {
-    expect(landing).toContain('scripts/land/check-author.mjs')
+  it('the runway\'s workflow actually runs runway, which calls check-author.mjs', () => {
+    expect(read('.github', 'workflows', 'land-approved.yml')).toContain('node scripts/dispatch/cli.mjs runway')
+    expect(read('scripts', 'land', 'runway.mjs')).toContain('isHonouredAuthor(association)')
   })
 })

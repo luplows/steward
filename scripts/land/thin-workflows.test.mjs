@@ -1,0 +1,222 @@
+import { describe, expect, it } from 'vitest'
+import { existsSync, readFileSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { COMMANDS } from '../dispatch/cli.mjs'
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
+const read = (...parts) => readFileSync(path.join(ROOT, ...parts), 'utf8')
+
+const FILES = ['review-gate.yml', 'land-approved.yml']
+const OWN = (file) => read('.github', 'workflows', file)
+const THIN = (file) => read('templates', 'workflows', file)
+
+// A checkout step of steward's own file: optional comment lines, the step (with an optional `with:`
+// block), and the blank line after it.
+const CHECKOUT_STEP =
+  /(?: {6}#[^\n]*\n)*      - name: Check out steward[^\n]*\n        uses: actions\/checkout@v4\n(?: {8}with:\n(?: {10}[^\n]*\n)+)?\n/g
+// The condition on the `pending` job's step running `mark-pending`, with its comment lines: it runs
+// only when the base holds the command's module, which is part of how steward's own file starts it.
+const GUARD = /(?: {8}#[^\n]*\n)* {8}if: hashFiles\([^\n]*\n/g
+const OWN_START = 'node scripts/dispatch/cli.mjs '
+const THIN_START = 'npx --yes --package=github:luplows/steward#v{{STEWARD_VERSION}} steward '
+
+/**
+ * Both files with the lines that start steward made the same: the checkout step that steward's
+ * own file starts from, and the command prefix that each file puts before a command.
+ */
+function withoutStart(text, start) {
+  return text.replaceAll(CHECKOUT_STEP, () => '').replaceAll(GUARD, () => '').replaceAll(start, () => 'STEWARD ')
+}
+
+/** The first line at which the two texts differ, as `{ line, own, thin }`, or null. */
+function firstDifference(own, thin) {
+  const a = withoutStart(own, OWN_START).split('\n')
+  const b = withoutStart(thin, THIN_START).split('\n')
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if (a[i] !== b[i]) return { line: i + 1, own: a[i], thin: b[i] }
+  }
+  return null
+}
+
+const commandsIn = (text, start) => [...text.matchAll(new RegExp(`run: ${start.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\S+)$`, 'gm'))].map((m) => m[1])
+
+describe('ST-42/AC-3: steward\'s own workflow files run steward\'s commands from its checkout, and hold no other logic', () => {
+  it('ST-42/AC-3: keep their file names and workflow names', () => {
+    expect(OWN('review-gate.yml')).toMatch(/^name: Review gate$/m)
+    expect(OWN('land-approved.yml')).toMatch(/^name: Land approved PRs$/m)
+  })
+
+  it('ST-42/AC-3: every run: line is `node scripts/dispatch/cli.mjs <command>` for a command in COMMANDS', () => {
+    for (const file of FILES) {
+      const runs = [...OWN(file).matchAll(/^\s*run:(.*)$/gm)].map((m) => m[1].trim())
+      expect(runs.length).toBeGreaterThan(0)
+      for (const run of runs) {
+        expect(run.startsWith(OWN_START)).toBe(true)
+        expect(Object.keys(COMMANDS)).toContain(run.slice(OWN_START.length))
+      }
+    }
+  })
+
+  it('ST-42/AC-3: no step is a multi-line script', () => {
+    for (const file of FILES) expect(OWN(file)).not.toMatch(/run: [|>]/)
+  })
+
+  it('ST-42/AC-3: the commands are the gate\'s and the runway\'s, in the jobs that ran them before', () => {
+    expect(commandsIn(OWN('review-gate.yml'), OWN_START)).toEqual(['mark-pending', 'apply-verdict', 'apply-review-blocked'])
+    expect(commandsIn(OWN('land-approved.yml'), OWN_START)).toEqual(['runway', 'delete-merged-heads'])
+  })
+
+  it('ST-42/AC-3: each job starts steward from a checkout of the repository', () => {
+    for (const file of FILES) {
+      const text = OWN(file)
+      const jobs = text.slice(text.indexOf('\njobs:\n')).split(/^ {2}(?=[a-z][\w-]*:\s*$)/m).slice(1)
+      expect(jobs.length).toBeGreaterThan(0)
+      for (const job of jobs) expect(job).toContain('uses: actions/checkout@v4')
+    }
+  })
+
+  it('ST-42/AC-3: the pull_request `pending` job checks out the pull request\'s base, never its merge tree', () => {
+    const text = OWN('review-gate.yml')
+    const pending = text.slice(text.indexOf('\n  pending:\n'), text.indexOf('\n  verdict:\n'))
+    expect(pending).toContain('if: github.event_name == \'pull_request\'')
+    expect(pending).toMatch(/uses: actions\/checkout@v4\n {8}with:\n {10}ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}\n/)
+    // The step running mark-pending runs only when the base holds the module (the real path).
+    const guard = "if: hashFiles('scripts/land/mark-pending.mjs') != ''"
+    const step = pending.slice(pending.indexOf('- name: Mark review pending'))
+    expect(step).toContain(guard)
+    expect(step.indexOf(guard)).toBeLessThan(step.indexOf('run: node scripts/dispatch/cli.mjs mark-pending'))
+    expect(existsSync(path.join(ROOT, 'scripts', 'land', 'mark-pending.mjs'))).toBe(true)
+    // The thin file has neither the checkout nor the condition.
+    expect(THIN('review-gate.yml')).not.toContain('hashFiles')
+    // No checkout in the file may name the pull request's head or merge ref.
+    expect(text).not.toMatch(/ref: .*(head|merge)/)
+  })
+})
+
+describe('ST-42/AC-4: the package carries the thin files a project uses', () => {
+  it('ST-42/AC-4: a review-gate.yml and a land-approved.yml, with the same names as steward\'s own', () => {
+    expect(THIN('review-gate.yml')).toMatch(/^name: Review gate$/m)
+    expect(THIN('land-approved.yml')).toMatch(/^name: Land approved PRs$/m)
+  })
+
+  it('ST-42/AC-4: every run: line starts steward from the package at the pinned tag, and runs the same commands', () => {
+    for (const file of FILES) {
+      const runs = [...THIN(file).matchAll(/^\s*run:(.*)$/gm)].map((m) => m[1].trim())
+      expect(runs.length).toBeGreaterThan(0)
+      for (const run of runs) {
+        expect(run.startsWith(THIN_START)).toBe(true)
+        expect(Object.keys(COMMANDS)).toContain(run.slice(THIN_START.length))
+      }
+      expect(commandsIn(THIN(file), THIN_START)).toEqual(commandsIn(OWN(file), OWN_START))
+    }
+  })
+
+  it('ST-42/AC-4: the tag is one placeholder, only in the lines that start steward', () => {
+    for (const file of FILES) {
+      const text = THIN(file)
+      expect(text.match(/\{\{[A-Z_]+\}\}/g).every((placeholder) => placeholder === '{{STEWARD_VERSION}}')).toBe(true)
+      const lines = text.split('\n').filter((line) => line.includes('{{STEWARD_VERSION}}'))
+      expect(lines.length).toBeGreaterThan(0)
+      for (const line of lines) expect(line).toContain(`run: ${THIN_START}`)
+    }
+  })
+
+  it('ST-42/AC-4: neither file checks out the project, installs its dependencies or sets up Node', () => {
+    for (const file of FILES) {
+      const text = THIN(file)
+      expect(text).not.toMatch(/actions\/checkout/)
+      expect(text).not.toMatch(/npm ci|npm install|setup-node/)
+    }
+  })
+
+  it('ST-42/AC-4: its placeholder is a valid YAML plain scalar: the line is `run:` then text with no ": " or " #"', () => {
+    for (const file of FILES) {
+      for (const line of THIN(file).split('\n').filter((l) => l.includes('{{STEWARD_VERSION}}'))) {
+        expect(line.slice(line.indexOf('run:') + 4)).not.toMatch(/: | #/)
+      }
+    }
+  })
+})
+
+describe('ST-42/AC-5: steward\'s own files and the thin files differ only in how steward is started', () => {
+  it.each(FILES)('ST-42/AC-5: %s', (file) => {
+    expect(firstDifference(OWN(file), THIN(file))).toBeNull()
+  })
+
+  it('ST-42/AC-5: fails on a thin file with a changed permission', () => {
+    const changed = THIN('review-gate.yml').replace('statuses: write', () => 'statuses: read')
+    expect(changed).not.toBe(THIN('review-gate.yml'))
+    expect(firstDifference(OWN('review-gate.yml'), changed)).toMatchObject({ own: '  statuses: write', thin: '  statuses: read' })
+  })
+
+  it('ST-42/AC-5: fails on a thin file with a changed trigger', () => {
+    const changed = THIN('review-gate.yml').replace('types: [created, edited]', () => 'types: [created]')
+    expect(changed).not.toBe(THIN('review-gate.yml'))
+    expect(firstDifference(OWN('review-gate.yml'), changed)).not.toBeNull()
+    const landing = THIN('land-approved.yml').replace('workflow_dispatch:', () => 'workflow_dispatch:\n  schedule:')
+    expect(firstDifference(OWN('land-approved.yml'), landing)).not.toBeNull()
+  })
+
+  it('ST-42/AC-5: fails on a thin file that runs a different command, or whose job is missing a step', () => {
+    const other = THIN('land-approved.yml').replace(`${THIN_START}runway`, () => `${THIN_START}land`)
+    expect(firstDifference(OWN('land-approved.yml'), other)).not.toBeNull()
+    const lost = THIN('land-approved.yml').replace(/ {6}- name: Delete head branches[\s\S]*$/, () => '')
+    expect(firstDifference(OWN('land-approved.yml'), lost)).not.toBeNull()
+  })
+
+  it('ST-42/AC-5: fails on an own file that carries a step the thin file lacks, besides the checkout', () => {
+    const extra = OWN('land-approved.yml').replace('        run: node scripts/dispatch/cli.mjs runway', () => '        run: node scripts/dispatch/cli.mjs runway\n      - run: echo hi')
+    expect(firstDifference(extra, THIN('land-approved.yml'))).not.toBeNull()
+  })
+})
+
+describe('ST-42/AC-6: no comment makes a statement particular to steward\'s repository', () => {
+  const ALL = FILES.flatMap((file) => [OWN(file), THIN(file)])
+
+  it('ST-42/AC-6: no mention of a file steward\'s repository has and another project does not', () => {
+    for (const text of ALL) {
+      expect(text).not.toMatch(/Open-Questions\.md|Completed-Questions\.md/)
+      expect(text).not.toMatch(/\bOQ-\d+/)
+      expect(text).not.toMatch(/\bST-\d+/)
+      expect(text).not.toMatch(/tower-workshop-paths/)
+    }
+  })
+
+  it('ST-42/AC-6: no comment narrates this repository\'s history: a past state, a date, an issue number or a measured rate', () => {
+    const history = [
+      /\bused to\b/i, /\bformerly\b/i, /\bno longer\b/i, /\bwidened\b/i, /\bwas `/,
+      /\bdelivered roughly\b/i, /\bone run every\b/i, /\d{4}-\d{2}-\d{2}/, /(?:^|\s)#\d+\b/, /\d+% of\b/,
+    ]
+    for (const text of ALL) {
+      const comments = text.split('\n').filter((line) => line.trimStart().startsWith('#'))
+      expect(comments.length).toBeGreaterThan(10)
+      for (const line of comments) {
+        const hit = history.find((pattern) => pattern.test(line))
+        expect({ line, hit }).toEqual({ line, hit: undefined })
+      }
+    }
+  })
+
+  it('ST-42/AC-6: no claim that the repository is public', () => {
+    for (const text of ALL) {
+      expect(text).not.toMatch(/repository is public|forking is allowed/i)
+    }
+  })
+
+  it('ST-42/AC-6: the only repository file a comment points at is one the package carries', () => {
+    for (const text of ALL) {
+      for (const [, ref] of text.matchAll(/(?:^|[\s`(])((?:scripts|docs|templates)\/[\w./-]+\.(?:mjs|md))/gm)) {
+        const exists = (() => {
+          try {
+            readFileSync(path.join(ROOT, ref))
+            return true
+          } catch {
+            return false
+          }
+        })()
+        expect({ ref, exists }).toEqual({ ref, exists: true })
+      }
+    }
+  })
+})
