@@ -38,7 +38,11 @@ nothing of its own to run the gate.
       these commands from steward's checkout (`node scripts/dispatch/cli.mjs <command>`), and hold
       no other logic. Their file names and their `name:`s ("Review gate", "Land approved PRs") are
       unchanged, since `land.mjs` dispatches `land-approved.yml` by file name (`WORKFLOW`) and
-      `ci.yml`'s `workflow_run` names "Land approved PRs".
+      `ci.yml`'s `workflow_run` names "Land approved PRs". The `pending` job, which runs on the
+      pull request's own event with a token that can post statuses, checks out the pull request's
+      base, not its merge tree, so that it runs no code the pull request changes. The base has the
+      command only once this story has landed, so this story's own pull request gets no pending
+      post, and every later one does (owner, 2026-10-22; Context).
 - [ ] **AC-4** — The package carries the thin workflow files a project uses: a `review-gate.yml` and
       a `land-approved.yml`, in one directory of the package, which ST-44's `init` copies from. Each
       has the same triggers, permissions, concurrency, jobs and environment as steward's own, and
@@ -114,6 +118,18 @@ nothing of its own to run the gate.
   numbers this story will move. This story depends on both, as on ST-24, so the logic it moves
   includes their changes. It also depends on ST-45, which changes `select-candidates.mjs` to take
   pull requests into a release branch.
+- **Revised on 2026-10-22 by the owner**, after #74's second and third reviews (comments 6334578130
+  and 6334852619). The `pending` job runs on the pull request's own event with `statuses: write`;
+  given the default checkout, the merge tree, it would run the pull request's own `cli.mjs`, which
+  could post `review/agent` success with no review. Today's step runs no checked-out code: it
+  posts a literal pending status with `gh api`. So steward's own `pending` job checks out the
+  base. The base has no `mark-pending` until this story lands, so this story's own pull request
+  gets no pending post; that costs nothing, since landing waits for `review/agent` success, which
+  the `verdict` job posts from `main`. Considered and not chosen: the merge tree, arguing that on a
+  pull request's event GitHub also takes the workflow file from the pull request, so a pull
+  request could already rewrite the job, which makes forging the status easier to miss in review;
+  and falling back to `gh api` when the command is missing, which AC-3 forbids as logic in the
+  workflow file. The thin files check out nothing and start steward at a pinned tag (AC-4).
 
 ## Open questions
 
