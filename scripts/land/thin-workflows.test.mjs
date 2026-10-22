@@ -160,6 +160,21 @@ describe('ST-42/AC-6: no comment makes a statement particular to steward\'s repo
     }
   })
 
+  it('ST-42/AC-6: no comment narrates this repository\'s history: a past state, a date, an issue number or a measured rate', () => {
+    const history = [
+      /\bused to\b/i, /\bformerly\b/i, /\bno longer\b/i, /\bwidened\b/i, /\bwas `/,
+      /\bdelivered roughly\b/i, /\bone run every\b/i, /\d{4}-\d{2}-\d{2}/, /(?:^|\s)#\d+\b/, /\d+% of\b/,
+    ]
+    for (const text of ALL) {
+      const comments = text.split('\n').filter((line) => line.trimStart().startsWith('#'))
+      expect(comments.length).toBeGreaterThan(10)
+      for (const line of comments) {
+        const hit = history.find((pattern) => pattern.test(line))
+        expect({ line, hit }).toEqual({ line, hit: undefined })
+      }
+    }
+  })
+
   it('ST-42/AC-6: no claim that the repository is public', () => {
     for (const text of ALL) {
       expect(text).not.toMatch(/repository is public|forking is allowed/i)

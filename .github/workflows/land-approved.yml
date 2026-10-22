@@ -5,10 +5,8 @@ name: Land approved PRs
 # already established by CI and by an independent reviewer -- this only notices
 # that they hold, and acts.
 #
-# It exists because landing used to be the author's job, and a worker session
-# finishes long before its verdict arrives. That assigned the work to something
-# which no longer existed: one PR sat merge-ready with nobody responsible for
-# noticing, and the next only landed because someone happened to ask. Whatever runs
+# Landing is a job of its own, not the author's: a worker session usually finishes long before its
+# verdict arrives, so a merge-ready PR would otherwise wait for someone to notice it. Whatever runs
 # this must therefore not depend on any session being alive.
 #
 # This file holds the trigger, permissions, concurrency and environment, and runs steward's
@@ -23,11 +21,9 @@ name: Land approved PRs
 # Stopping after one costs a few minutes and removes that whole class of mistake. Oldest first, for
 # a run given no PR, so a PR cannot be starved by newer ones.
 #
-# There is deliberately no `schedule:` trigger. It was `*/15`, and GitHub
-# delivered roughly one run every five hours -- about 5% of the configured
-# rate. That is the worst of both: too slow to rely on, yet automatic enough
-# that nobody notices when it stops. Landing is explicit until a trigger that
-# actually fires is chosen: `gh workflow run land-approved.yml`.
+# There is deliberately no `schedule:` trigger. GitHub delivers scheduled runs late and unevenly,
+# which is the worst of both: too slow to rely on, yet automatic enough that nobody notices when
+# it stops. Landing is explicit: `gh workflow run land-approved.yml`.
 
 on:
   workflow_dispatch:
