@@ -22,8 +22,10 @@ belongs to the story convention, so it lives in a file of that convention's own.
       as an unknown key, naming it, as for any other unknown key, and returns no `storyPrefix`.
       `STORY_PREFIX_RE` goes from `settings.mjs`. Tests in `settings.test.mjs`: a file with every
       other key and no `storyPrefix` is read; one with `storyPrefix` is refused, naming it.
-- [x] **AC-2** — A new file, `stories/stories.json`, holds steward's prefix:
-      `{ "prefix": "ST" }`. One reader, in steward's story tooling, reads it from a project root:
+- [x] **AC-2** — `stories/stories.json` holds steward's prefix, `{ "prefix": "ST" }`. The planning
+      session's pull request adds it before this story's, which changes nothing under `stories/`
+      but its own move and ticks (Context). One reader, in steward's story tooling, reads it from
+      a project root:
       it refuses, naming the file and the problem, a missing file, invalid JSON, a key other than
       `prefix`, or a `prefix` that is not 1 to 8 capital letters. Tests show each.
 - [x] **AC-3** — Steward's story tooling takes the prefix from that reader and reads no settings
@@ -45,8 +47,7 @@ belongs to the story convention, so it lives in a file of that convention's own.
       settings file except AC-1's, which shows it refused; a test that needs another prefix writes a
       `stories/stories.json`. `docs/settings.md` loses its `storyPrefix` row, and its copy of this
       repository's file and its sentence on which keys steward's scripts use no longer name it.
-- [x] **AC-7** — `stories/README.md` says the prefix is `stories/stories.json`'s `prefix`, and
-      that a project with no story files has no such file.
+- [x] **AC-7** — This story's pull request leaves `stories/README.md` unchanged (Context).
 - [x] **AC-8** — Every **Planned** marker naming ST-41 in `docs/agent-workflow-design.md` is
       resolved, as its "Reading this document" note says.
 
@@ -90,6 +91,16 @@ belongs to the story convention, so it lives in a file of that convention's own.
   `review.mjs`, `story.mjs` and `scripts/report/review-verdicts.mjs` for
   `luplows/tower-workshop-paths`, outside a comment.
 - `stories/README.md`, lines 5 to 7: "The prefix is `steward.config.json`'s `storyPrefix`".
+- **Revised on 2026-10-22 by the planning session**, after this story's coder found CI's story
+  containment refusing its pull request: `scripts/dispatch/story-containment.mjs` allows a story's
+  own pull request no change under `stories/` but its own move, its ticks and its `blocked:` line
+  (a spike's may also add drafts), so it refused both the added `stories/stories.json` and the
+  changed `stories/README.md`. A pull request that implements no story is not restricted, as for
+  #66. So the planning session adds `stories/stories.json` before this story lands, when nothing
+  reads it yet, since this story's own CI needs it on `main` (the story lint reads the prefix
+  from it), and corrects `stories/README.md` after, when it is true. Considered and not chosen:
+  widening containment to allow those two files in a story's pull request, a change to the gate
+  left to the crew.
 
 ## Open questions
 
