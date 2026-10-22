@@ -2436,7 +2436,7 @@ shortened where it is long, so that it can be found there with its date.
   The first release, `v0.1.0`, is cut by a release review session, whose instructions are a
   separate pull request.
 - **The crew validates review installation in two existing projects** (crew, 2026-10-21;
-  **Planned (ST-48)**). After ST-25, ST-42 and ST-44 are delivered, the crew manually installs
+  **Planned (ST-48)**). After ST-25, ST-42, ST-44 and ST-47 are delivered, the crew manually installs
   the review gate first in pinpoint and then in tower-workshop-paths, preserving their existing
   issue and file-story conventions. Each installation uses steward's package and thin workflows,
   with no copied implementation scripts. Each project supplies a real review verdict on the

@@ -3,7 +3,7 @@ id: ST-48
 title: Validate review installation manually in two existing projects
 tier: next
 kind: workflow
-depends_on: [ST-25, ST-42, ST-44]
+depends_on: [ST-25, ST-42, ST-44, ST-47]
 model: null
 blocked: "Crew-only manual validation in two client projects; no coder may take this story."
 ---
@@ -69,7 +69,7 @@ implementation scripts.
 
 ## Out of scope
 
-- Implementing ST-25, ST-42 or ST-44, or repairing defects found during validation: separate work.
+- Implementing ST-25, ST-42, ST-44 or ST-47, or repairing validation defects: separate work.
 - Automated coding, dispatching client stories, or changing either project's planning process.
 - New unit conventions, new tracker integrations, and moving units into steward's story schema.
 - Cutting a release, changing release policy, or replacing the release review's scratch-project
@@ -100,6 +100,8 @@ implementation scripts.
   workflow files, with no project copy of steward's implementation.
 - ST-44, `stories/ST-44-init.md`: installation, project settings, existing-file preservation,
   and reporting when branch protection cannot be set.
+- ST-47: merged-head deletion protection and the runway's status-pagination fix; the crew
+  requires these fixes before client validation (2026-10-21).
 - `stories/README.md`, "Status": crew-only manual work keeps a reason in `blocked:`.
 
 ## Open questions
