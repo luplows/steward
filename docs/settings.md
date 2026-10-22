@@ -18,9 +18,9 @@ decisions behind the keys are in [`outline.md`](outline.md), "Defining steward",
 
 ## Keys
 
-| Key | Form | What it is for | What `init` will write |
+| Key | Form | What it is for | What `init` writes |
 |---|---|---|---|
-| `repo` | `owner/name` | The project's GitHub repository. | The `origin` remote's repository. |
+| `repo` | `owner/name` | The project's GitHub repository. | The `origin` remote's repository, from an `https` or an `ssh` URL. With no `origin` that reads as a GitHub repository, no file is written. |
 | `setup` | `null`, or an object (below) | The command that prepares a worktree for a coder session. Nothing is run before a review. | `null`. |
 | `check` | `null`, or an object (below) | The command that checks a change, which the coder runs. | `null`. |
 | `landWhen` | `"all-checks"`, or a non-empty array of distinct, non-empty check names | Which checks must be green before steward lands a pull request. | `"all-checks"`. |
@@ -29,9 +29,10 @@ decisions behind the keys are in [`outline.md`](outline.md), "Defining steward",
 | `rulesFile` | A relative path with forward slashes, neither absolute nor containing a `..` segment, with no control character, backtick, `<` or `>` (`isRulesFilePath`, `scripts/dispatch/rules-file-path.mjs`) | The file of rules a pull request is reviewed against, read from `main`. | Asked; default `REVIEW.md`. `init` copies steward's example checklist there. |
 | `inspectAfterHours` | A positive integer | How many hours a pull request may stay pending or holding before inspection raises it. | Asked; default 24. |
 
-`init` is not built yet (**Planned (ST-44)**). The column says what it will write, as decided on
-2026-10-19 (`agent-workflow-design.md`, Part 3, "Decided so far"); steward's own file (below)
-shows values that work here.
+`steward init` (`scripts/dispatch/init.mjs`) writes the file, as the last column says: a question
+it asks at the terminal has a flag and, under `--yes`, its default (`QUESTIONS` there), and a file
+that is already there is left as it is. The decision is in `agent-workflow-design.md`, Part 3,
+"Decided so far". Steward's own file (below) shows values that work here.
 
 ## `setup` and `check`
 

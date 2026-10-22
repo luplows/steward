@@ -1050,9 +1050,9 @@ screen**, driving a deployment or a local dev server. That is the difference bet
 and reviewing a summary of work. Then: contributing stories, what the reviewer flagged but let
 through, and known gaps. For steward, putting it on screen means running what a project runs: `init`
 on a new scratch repository, then a review and a landing of a test pull request there.
-**Planned (ST-44):** `init --ref` pins that repository's workflow files to the release branch's
-last commit, since its tag does not exist yet, and each repeat of the walkthrough uses another
-new scratch repository.
+`init --ref <commit>` pins that repository's workflow files to the release branch's last commit,
+since its tag does not exist yet, and each repeat of the walkthrough uses another new scratch
+repository, since `init` leaves a file that is already there.
 
 ### Output
 
@@ -1305,7 +1305,7 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
   gate, failing without it, which would sit with "Steward enforces nothing about CI" ("Land").
 - **D5. The `unitLinks` value `init` writes** ("Review"). **Decided 2026-10-19 by the owner:**
   `init` asks, offering any combination of `file`, `issue` and `other`, or none, and defaults to
-  `["file", "issue"]` (Part 3, "Decided so far"; **Planned (ST-44)**).
+  `["file", "issue"]` (Part 3, "Decided so far"). Built.
 - **D6. A tool that compares a project's checklist with the example in the version it pins**
   ("Review"): a possibility, not decided (owner, 2026-10-09).
 - **D7. The checklist's parser as a command a project may run in its own CI** ("The checklist's
@@ -1317,7 +1317,7 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
   second sits with `init` as a deterministic script. **Added 2026-10-19 by the owner:** `init`
   takes a third shape, interactive, asking each question at the terminal, with a flag for
   each and `--yes` for every default, and refusing with no terminal and no answer (Part 3,
-  "Decided so far"; **Planned (ST-44)**). D9's two shapes stay open.
+  "Decided so far"). That shape is built; D9's two shapes stay open.
 - **D10. Whether a project must have CI at all** ("Land"). The owner leans against making CI a
   prerequisite, but every project of the owner's will have CI, so requiring it is possible
   (owner, 2026-10-10).
@@ -2371,7 +2371,7 @@ shortened where it is long, so that it can be found there with its date.
   machine of the kind ST-6 is to find how to keep from sessions, and of no use to a Codex reviewer,
   which has no network; and ATC fetching the pull requests and comments a body cites.
 - **Steward installs in another project as a review gate, through `init`** (decided 2026-10-19 by
-  the owner, with the planning session; **Planned (ST-44)**). Steward
+  the owner, with the planning session). Steward
   is installed in another project as a review gate only: first in pinpoint, a private Node
   repository on GitHub Free, so with no branch protection, whose units are GitHub issues; then in
   tower-workshop-paths, which is public and keeps file stories with the prefix `OQ`, by its own
@@ -2427,7 +2427,7 @@ shortened where it is long, so that it can be found there with its date.
     the checklist with them removed, so the reviewer never sees them. Considered and not chosen:
     telling the reviewer that comments are not rules, which relies on the model obeying, and a
     separate setup guide. The cost, accepted: a comment can carry nothing to the reviewer.
-  - **`init`, `steward init`, run in a project's checkout, with no AI, and interactive** (ST-44). By
+  - **`init`, `steward init`, run in a project's checkout, with no AI, and interactive**. By
     default it asks each question at the terminal; every question can also be answered by a
     command-line flag, and `--yes` accepts every default; with no terminal and no answer given for a
     question, it refuses rather than guess. This is a third way to set up, beside D9's two, which
@@ -2437,8 +2437,10 @@ shortened where it is long, so that it can be found there with its date.
     passed unread), or none, default `["file", "issue"]`, which settles D5; `rulesFile`, default
     `REVIEW.md`; `land`, default `true`; ST-29's `inspectAfterHours`, asked; and `setup` and `check`
     `null`, since only a coder uses them. It writes the thin workflow files, pinned to the tag of
-    the steward that ran it, read from its own `package.json`'s `version`, and offers inspection's
-    workflow, saying that its first run may raise the project's earlier merges as issues, which the
+    the steward that ran it, read from its own `package.json`'s `version` (or, with `--ref`, which
+    no question asks, to a commit's full SHA, for the release review's walkthrough), and offers
+    inspection's workflow, in the same thin form (it keeps a checkout of the project, which
+    `inspect` reads its settings from), saying that its first run may raise the project's earlier merges as issues, which the
     crew closes once (chosen over a first window starting at the install, and over a settings key
     holding the install's date); the example checklist, at the `rulesFile` path; a pull request
     template with nothing particular to steward, which the package carries, only when the project
@@ -2452,12 +2454,16 @@ shortened where it is long, so that it can be found there with its date.
     branch protection, with a default of no that `--yes` keeps; on a yes, the protection requires
     `review/agent`, with `enforce_admins` on, as steward's own `main` has it; the project's own CI
     checks are the crew's to add. Where GitHub offers none, as on a private repository on GitHub
-    Free, or the account cannot set it, it says so plainly and goes on. It does not write the
-    after-sweep CI trigger, since a project's CI is its own ("Steward enforces nothing about CI");
+    Free, or the account cannot set it, it says so plainly, says that nothing on GitHub then
+    enforces the gate, and goes on. Where `main` already has protection, it keeps the project's own:
+    it adds `review/agent` to the required status checks unless it is there, and turns
+    `enforce_admins` on unless it is on, changing nothing else, and says which it did; where it
+    requires no status checks at all, it rebuilds the protection with one PUT of every setting it
+    has plus those two, rather than rely on a request that switches them on alone. It does not write
+    the after-sweep CI trigger, since a project's CI is its own ("Steward enforces nothing about CI");
     it does not touch `package.json`; it neither reads nor writes the story prefix or anything about
     story files; and it commits nothing: the crew commits what it wrote through the project's own
-    pull request. Exploring the repository (D8) stays open. ST-44 depends on ST-29, which builds
-    inspection.
+    pull request. Exploring the repository (D8) stays open.
 
   The first release, `v0.1.0`, is cut by a release review session, whose instructions are a
   separate pull request.
@@ -2477,7 +2483,7 @@ shortened where it is long, so that it can be found there with its date.
   remains separate. Writing this story does not start either client installation.
 - **The release review cuts each release on a release branch, and a tag is never moved** (decided
   2026-10-19 by the owner, with the planning session, while planning how steward installs in another
-  project; **Planned (ST-44)**). A project pins steward by a tag, so the first tag, `v0.1.0`, needs
+  project). A project pins steward by a tag, so the first tag, `v0.1.0`, needs
   a way to be cut. A release review session cuts it, as the release review was always meant to end
   in a tag, with its instructions in `release-review.md`: the crew starts it when it wants a
   release, not on a schedule or a count of merged pull requests. It cuts the release on a branch of
@@ -2498,8 +2504,7 @@ shortened where it is long, so that it can be found there with its date.
   change a project must act on when it moves to the tag, which is where the update notes on the
   example checklist (`outline.md`, "Review") go. For steward, the walkthrough runs what a project
   runs, from the release branch: `init` on a scratch repository the crew provides, then a review and
-  a landing of a test pull request there; until `init` exists, it reads steward's own rotations
-  during the batch. `AGENTS.md` says that no other session pushes, moves or deletes a tag, or pushes
+  a landing of a test pull request there. `AGENTS.md` says that no other session pushes, moves or deletes a tag, or pushes
   to a release branch. CI, the reviewer, the pilot and the runway handle a pull request into a
   release branch as one into `main` (built in ST-45). **After #58's third review, on 2026-10-20**
   (owner, with the planning session): a capability deferred from a release stays on `main`, so the
@@ -2604,9 +2609,9 @@ Found 2026-10-08 while refining OQ-115. Each is built in steward, before OQ-115 
 
 - **A tag to pin**, and **the loop's worktree installing the pinned engine** after each update
   (OQ-123's Out of scope).
-- **`init` and the thin gate files** (R2), including OQ-124's after-sweep trigger.
-  **Planned (ST-44)**, decided 2026-10-19 ("Decided so far"). Revised the same day: `init`
-  writes no after-sweep trigger, since a project's CI is its own (R2).
+- **`init` and the thin gate files** (R2), including OQ-124's after-sweep trigger. Built, as
+  decided 2026-10-19 ("Decided so far"). Revised the same day: `init` writes no after-sweep
+  trigger, since a project's CI is its own (R2).
 - **The prompts' `{{REPO}}` slot and project section** (R1), so this project's lines come back.
   The slot is built. The project section is in no story yet: tower-workshop-paths needs it only
   once its coder runs (owner, 2026-10-19).
@@ -2659,9 +2664,11 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   `review-gate.yml` runs `mark-pending`, `apply-verdict` and `apply-review-blocked`, which derive
   `review/agent`. Each of these workflows holds only its triggers, permissions, concurrency and
   environment, and runs `node scripts/dispatch/cli.mjs <command>` from steward's checkout. The
-  package carries the same two workflows in thin form, in `templates/workflows/`, which start the
-  same commands from steward installed at a pinned tag and check out nothing, so
-  `runway` reads the project's `steward.config.json` `landWhen` from `main` through the API.
+  package carries the same two workflows in thin form, in `templates/workflows/`, which `init`
+  writes with the tag filled, and which start the same commands from steward installed at a pinned
+  tag and check out nothing, so `runway` reads the project's `steward.config.json` `landWhen` from
+  `main` through the API. Inspection's workflow is there in thin form too; it checks out the
+  project, for its settings.
 - The rules the gate enforces mix the general with this project's own: `REVIEW.md`, `AGENTS.md`,
   `stories/README.md`, `stories/_TEMPLATE.md` and this document.
 
@@ -2801,7 +2808,7 @@ is still open.
     The files `init` writes include the after-sweep trigger and its skip condition (OQ-124's
     `workflow_run` on `Land approved PRs`; noted 2026-10-08 at the owner's decision, under
     "Decided so far"), so that a project's `main` is checked after each landing without spending
-    minutes on a sweep that landed nothing. **Planned (ST-44):** each step installs steward
+    minutes on a sweep that landed nothing. Each step installs steward
     alone, at the tag `init` pins, and runs its command, not the project's `npm ci` (decided
     2026-10-19, "Decided so far"). **Revised 2026-10-19 by the owner:** `init` does not write the
     after-sweep trigger. A project's CI is its own ("Steward enforces nothing about CI",

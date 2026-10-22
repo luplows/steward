@@ -44,6 +44,8 @@ import { isLandingBase, isReleaseBranch } from '../land/release-branch.mjs'
 const API = 'https://api.github.com'
 const MAIN = 'main'
 const LABEL = 'inspection'
+// The label inspection applies, for `init` to create (`scripts/dispatch/init.mjs`, `LABELS`).
+export const INSPECTION_LABEL = LABEL
 const CONTEXT = 'review/agent'
 const GATE_ACCOUNT = 'github-actions[bot]'
 const PAGE = 100
@@ -396,7 +398,7 @@ export async function inspectStalls(ctx, { now, afterHours, branches }) {
 // ----------------------------------------------------------------- raising
 
 /** Whether a failed label creation is GitHub saying the label already exists. */
-function isLabelAlreadyExists(error) {
+export function isLabelAlreadyExists(error) {
   return (
     error.status === 422 &&
     Array.isArray(error.body?.errors) &&
