@@ -99,7 +99,7 @@ describe('OQ-80/AC-2: never removed, and not reapplied to a pull request that ca
   it('the workflow step itself runs unconditionally (if: always()), so a block on the triggering comment still lets the count through', () => {
     const stepAt = GATE.indexOf('name: Apply review-blocked at the round bound')
     expect(stepAt).toBeGreaterThan(-1)
-    const stepText = GATE.slice(stepAt, GATE.indexOf('run: node scripts/land/apply-review-blocked.mjs') + 60)
+    const stepText = GATE.slice(stepAt, GATE.indexOf('run: node scripts/dispatch/cli.mjs apply-review-blocked') + 60)
     expect(stepText).toMatch(/if: always\(\)/)
   })
 
@@ -142,15 +142,17 @@ describe('OQ-80/AC-3: only markers the gate itself honours are counted', () => {
     expect(countBlockingVerdicts(comments)).toBe(2)
   })
 
-  it('review-gate.yml greps with the marker pattern github.mjs parses', () => {
-    expect(GATE).toContain(
-      'agent-review[[:space:]]+head=[0-9a-f]{40}[[:space:]]+verdict=(pass-with-observations|pass|block|fail)',
-    )
+  it('the gate reads a marker with the parser github.mjs defines, in apply-verdict.mjs, which this module counts with', () => {
+    const applyVerdict = readFileSync(path.join(ROOT, 'scripts', 'land', 'apply-verdict.mjs'), 'utf8')
+    expect(applyVerdict).toMatch(/import\s*\{[^}]*parseMarkerComment[^}]*\}\s*from\s*'\.\.\/dispatch\/github\.mjs'/)
+    expect(GATE).toContain('run: node scripts/dispatch/cli.mjs apply-verdict')
     expect(countBlockingVerdicts([comment('block')])).toBe(1)
   })
 
-  it('the association set is check-author.mjs\'s, kept identical to review-gate.yml by its own test', () => {
-    expect(GATE).toContain('OWNER|MEMBER|COLLABORATOR')
+  it('the association set is check-author.mjs\'s, which apply-verdict.mjs also reads, and the gate has no set of its own', () => {
+    const applyVerdict = readFileSync(path.join(ROOT, 'scripts', 'land', 'apply-verdict.mjs'), 'utf8')
+    expect(applyVerdict).toMatch(/import\s*\{[^}]*isHonouredAuthor[^}]*\}\s*from\s*'\.\/check-author\.mjs'/)
+    expect(GATE).not.toContain('OWNER|MEMBER|COLLABORATOR')
   })
 })
 
@@ -186,7 +188,7 @@ describe('OQ-80: permissions widened and stated in the workflow', () => {
     const permsBlock = GATE.slice(permsAt, jobsAt)
     expect(permsBlock).toMatch(/pull-requests:\s*write/)
     expect(permsBlock).not.toMatch(/pull-requests:\s*read/)
-    expect(permsBlock).toMatch(/Widened from `read` to `write`/)
+    expect(permsBlock).toMatch(/`write` so that this workflow applies `review-blocked` itself/)
   })
 })
 
@@ -273,6 +275,6 @@ describe('ST-16/AC-4: review-gate.yml reads issue events', () => {
   it('permissions add issues: read, with a comment naming the events request', () => {
     const permsBlock = GATE.slice(GATE.indexOf('permissions:'), GATE.indexOf('jobs:'))
     expect(permsBlock).toMatch(/issues:\s*read/)
-    expect(permsBlock).toMatch(/issue events \(ST-16's AC-1\)/)
+    expect(permsBlock).toMatch(/pull request's issue events/)
   })
 })

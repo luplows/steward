@@ -9,12 +9,12 @@
  *
  * Reuses `buildListComments`, `parseComments` and `parseMarkerComment` from
  * `../dispatch/github.mjs` unchanged, so a verdict this counts is, by
- * construction, a verdict `review-gate.yml`'s own marker pattern matches
+ * construction, a verdict the gate's own marker parser (`apply-verdict.mjs`) reads
  * (AC-4) -- there is only the one transcription of that pattern, in
  * `github.mjs`, and this module never re-derives it.
  *
  * A marker also counts only from an account the gate itself would honour
- * (`OWNER`, `MEMBER`, `COLLABORATOR` -- see review-gate.yml's `ASSOC` check).
+ * (`OWNER`, `MEMBER`, `COLLABORATOR` -- see `scripts/land/check-author.mjs`)
  * It does *not* filter by the pull request's current head sha. review-gate.yml
  * compares a marker's `head=` against the head *at the moment that comment's
  * event fires* (`head="$(gh pr view ...headRefOid)"`, run inside the
@@ -49,7 +49,7 @@ import { readSettings } from '../dispatch/settings.mjs'
 const API = 'https://api.github.com'
 export const DEFAULT_LIMIT = 60
 
-// The associations review-gate.yml honours a marker from (its `ASSOC` case).
+// The associations the gate honours a marker from (`scripts/land/check-author.mjs`'s set).
 export const PRIVILEGED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR']
 
 function repoPath(repo) {

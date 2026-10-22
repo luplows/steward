@@ -95,9 +95,9 @@ const REMOTE = 'origin'
 // base. Both are written on `main`; the reviewer's checkout and diff are of the base itself.
 const UNIT_AND_RULES_BASE = 'main'
 
-// The author associations review-gate.yml's "Apply verdict from marker" step
-// honours. A restatement so the two read the same; a test compares it to the
-// workflow's `case` and fails on drift.
+// The author associations the gate honours a marker from: `scripts/land/check-author.mjs`'s, which
+// `apply-verdict.mjs` reads. A restatement so the two read the same; a test compares it to that
+// set and fails on drift.
 export const HONOURED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR']
 const SHA_RE = /^[0-9a-f]{40}$/
 

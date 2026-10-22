@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { selectCandidates } from './select-candidates.mjs'
+import { fakeGitHub, pull, REPO, SHA_OF } from './runway-fake.mjs'
+import { runRunway } from './runway.mjs'
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const pr = (number, extra = {}) => ({ number, draft: false, base: { ref: 'main' }, ...extra })
@@ -76,8 +78,25 @@ describe('OQ-93/AC-3: the input reaches the module only through env', () => {
     }
   })
 
-  it('passes the input as PR_INPUT and the landing step runs select-candidates.mjs', () => {
+  it('passes the input as PR_INPUT and the landing step runs runway, which reads PR_INPUT and selects with select-candidates.mjs', () => {
     expect(yml).toMatch(/PR_INPUT: \$\{\{ inputs\.pr \}\}/)
-    expect(runBlocks(yml).some((block) => block.includes('scripts/land/select-candidates.mjs'))).toBe(true)
+    expect(runBlocks(yml).some((block) => block.includes('node scripts/dispatch/cli.mjs runway'))).toBe(true)
+    const sweep = readFileSync(path.join(ROOT, 'scripts/land/runway.mjs'), 'utf8')
+    expect(sweep).toContain("prInput: process.env.PR_INPUT ?? ''")
+    expect(sweep).toMatch(/import \{ selectCandidates \} from '\.\/select-candidates\.mjs'/)
+  })
+
+  it('ST-42/AC-1: runway given a pull request lands only that one, and given an invalid value lands nothing', () => {
+    const named = fakeGitHub({ pulls: [pull(3), pull(7)] })
+    expect(runRunway({ repo: REPO, prInput: '7' }, named.deps)).toEqual({ landed: 7 })
+    expect(named.merges).toEqual([['7', '--repo', REPO, '--squash', '--match-head-commit', SHA_OF(7)]])
+
+    const unlisted = fakeGitHub({ pulls: [pull(3)] })
+    expect(runRunway({ repo: REPO, prInput: '7' }, unlisted.deps)).toEqual({ landed: null })
+    expect(unlisted.merges).toEqual([])
+
+    const invalid = fakeGitHub({ pulls: [pull(3)] })
+    expect(() => runRunway({ repo: REPO, prInput: '3;x' }, invalid.deps)).toThrow(/pr input/)
+    expect(invalid.merges).toEqual([])
   })
 })

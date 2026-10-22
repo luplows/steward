@@ -11,10 +11,10 @@
 // write-access author on any head, so a round can complete without the triggering comment
 // itself being the third.
 //
-// `isHonouredAuthor` comes from `check-author.mjs`, already kept identical to
-// review-gate.yml's `case` by a test there. Markers are read with `github.mjs`'s
-// `parseMarkerComment`, the parser `story.mjs` counts rounds with, so the two cannot disagree
-// about which comments are blocks; a test here checks the marker pattern against the workflow.
+// `isHonouredAuthor` comes from `check-author.mjs`, which `apply-verdict.mjs` also reads. Markers
+// are read with `github.mjs`'s `parseMarkerComment`, the parser `story.mjs` and `apply-verdict.mjs`
+// read them with, so the three cannot disagree about which comments are blocks; a test here
+// checks that `apply-verdict.mjs` reads a marker with it.
 //
 // This module never removes the label (OQ-80's AC-2): a pull request that already carries it
 // is left exactly as it is, and nothing here ever calls the labels-removal endpoint. A member
@@ -22,7 +22,7 @@
 // has been removed, only blocks recorded after the latest removal count towards applying it
 // again; the removals are read from the pull request's `unlabeled` events.
 //
-// Usage: node scripts/land/apply-review-blocked.mjs
+// Usage: steward apply-review-blocked
 // Reads GH_TOKEN, REPO (owner/name) and PR (number) from the environment, as
 // review-gate.yml sets them.
 

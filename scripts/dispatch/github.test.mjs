@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import * as github from './github.mjs'
+import { applyVerdict } from '../land/apply-verdict.mjs'
 import {
   buildConvertPullRequestToDraft,
   buildCreateIssue,
@@ -250,13 +251,22 @@ describe('OQ-68/AC-3b: composing a marker comment', () => {
     expect(composeMarkerComment({ headSha: SHA, verdict: null, findings: 'x' })).toBeNull()
   })
 
-  it('OQ-68/AC-3b: a composed comment matches the pattern review-gate.yml greps for', async () => {
+  it('OQ-68/AC-3b: a composed comment matches the pattern the gate reads markers with, and the gate acts on it', async () => {
     const comment = composeMarkerComment({ headSha: SHA, verdict: 'pass-with-observations', findings: 'ok' })
     expect(comment).toMatch(WORKFLOW_MARKER_RE)
 
-    // Guard the transcription above against drifting from the workflow itself.
-    const workflow = await readFile(path.join(here, '..', '..', '.github', 'workflows', 'review-gate.yml'), 'utf8')
-    expect(workflow).toContain('agent-review[[:space:]]+head=[0-9a-f]{40}[[:space:]]+verdict=(pass-with-observations|pass|block|fail)')
+    // The gate's command, apply-verdict.mjs, reads a marker with parseMarkerComment, whose pattern
+    // is this module's: guard the transcription above against drifting from it.
+    const source = await readFile(path.join(here, 'github.mjs'), 'utf8')
+    expect(source).toContain('agent-review[^\\S\\n]+head=([0-9a-f]{40})[^\\S\\n]+verdict=(pass-with-observations|pass|block|fail)')
+    const gate = await readFile(path.join(here, '..', 'land', 'apply-verdict.mjs'), 'utf8')
+    expect(gate).toMatch(/import\s*\{[^}]*parseMarkerComment[^}]*\}\s*from\s*'\.\.\/dispatch\/github\.mjs'/)
+
+    const posted = []
+    const api = (args) => (args[0].startsWith('repos/') && args[1] === '--jq' ? `${SHA}\n` : posted.push(args) && '')
+    const result = applyVerdict({ repo: REPO, pr: '7', body: comment, assoc: 'OWNER', commentUrl: 'https://example.test/c' }, api)
+    expect(result).toMatchObject({ outcome: 'posted', state: 'success', head: SHA })
+    expect(posted[0]).toContain('state=success')
   })
 
   it('OQ-68/AC-3b: rejects a short sha, an unknown verdict, or findings carrying a marker', () => {

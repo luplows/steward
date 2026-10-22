@@ -28,10 +28,11 @@
  *    means (OQ-48). It creates an issue with labels (OQ-112), never applies one.
  *  - Spawn sessions, render prompts, or read stories (AC-7).
  *
- * The marker grammar mirrors the grep in review-gate.yml, which works line by
- * line: a marker counts only when it lies on one line, so the patterns below use
- * horizontal whitespace and never `\s`. A test checks a composed comment against
- * a transcription of the workflow's pattern, and that a split marker is no verdict.
+ * The marker grammar is the gate's: `scripts/land/apply-verdict.mjs` reads a marker with
+ * `parseMarkerComment`, which works line by line: a marker counts only when it lies on one
+ * line, so the patterns below use horizontal whitespace and never `\s`. A test checks a composed
+ * comment against a transcription of the well-formed pattern, and that a split marker is no
+ * verdict.
  */
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -58,7 +59,8 @@ const DEPRECATED_VERDICTS = { fail: 'block' }
 // malformed rather than skipped.
 const ANY_MARKER_RE = /<!--[^\S\n]*agent-review\b[^\n]*?(?:-->|$)/gm
 const FIELDS_RE = /^<!--[^\S\n]*agent-review[^\S\n]+head=(\S+)[^\S\n]+verdict=(\S+)[^\S\n]*-->$/
-// Transcribes the pattern review-gate.yml greps for, line by line.
+// The pattern the gate reads a marker with (apply-verdict.mjs, through parseMarkerComment), line
+// by line.
 const WELL_FORMED_RE =
   /<!--[^\S\n]*agent-review[^\S\n]+head=([0-9a-f]{40})[^\S\n]+verdict=(pass-with-observations|pass|block|fail)[^\S\n]*-->/g
 const SHA_RE = /^[0-9a-f]{40}$/

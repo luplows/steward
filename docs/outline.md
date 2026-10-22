@@ -48,7 +48,7 @@ Three things steward must never do. Each says how it is held today; this restate
 readability and must not drift from the files named.
 
 1. **Never merge without a verdict.** Only the runway merges, and it re-checks that `review/agent`
-   is `success` on the head itself before merging (`.github/workflows/land-approved.yml`, "Belt
+   is `success` on the head itself before merging (`scripts/land/runway.mjs`, "Belt
    and braces"), rather than trusting branch protection.
 2. **Never push directly to main.** Every push ATC makes is built by `pushArgs` or
    `claimPushArgs` in `scripts/dispatch/coder.mjs`, and both refuse `main`
@@ -308,7 +308,7 @@ design doc, "The outline's reasoning", under the same headings.
     2026-10-15).
   - Where GitHub offers no branch protection, as on a private repository on GitHub Free, it says
     plainly that nothing on GitHub enforces the gate. Steward's own runway still checks the verdict
-    on the head before each merge it makes (`land-approved.yml`, "Belt and braces").
+    on the head before each merge it makes (`scripts/land/runway.mjs`, "Belt and braces").
 
 ### Settings
 

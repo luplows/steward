@@ -892,11 +892,13 @@ describe('ST-33/AC-2: nothing is installed in the review checkout', () => {
 })
 
 describe('OQ-78/AC-3: only the gate\'s author associations make a marker a verdict', () => {
-  it('OQ-78/AC-3: review.mjs honours the same associations as review-gate.yml\'s case', () => {
+  it('OQ-78/AC-3: review.mjs honours the same associations as the gate, whose apply-verdict.mjs reads check-author.mjs\'s set', async () => {
+    const { HONOURED_ASSOCIATIONS: gateHonoured } = await import('../land/check-author.mjs')
+    expect([...HONOURED_ASSOCIATIONS].sort()).toEqual([...gateHonoured].sort())
+    const source = readFileSync(path.join(here, '..', 'land', 'apply-verdict.mjs'), 'utf8')
+    expect(source).toMatch(/import\s*\{[^}]*\bisHonouredAuthor\b[^}]*\}\s*from\s*'\.\/check-author\.mjs'/)
     const workflow = readFileSync(path.join(here, '..', '..', '.github', 'workflows', 'review-gate.yml'), 'utf8')
-    const step = workflow.slice(workflow.indexOf('name: Apply verdict from marker'))
-    const honoured = step.match(/case "\$\{ASSOC\}" in\s+([A-Z|]+)\)/)[1].split('|')
-    expect([...HONOURED_ASSOCIATIONS].sort()).toEqual([...honoured].sort())
+    expect(workflow).toContain('run: node scripts/dispatch/cli.mjs apply-verdict')
   })
 
   it('OQ-83/AC-5: writer-prs.mjs reads the same HONOURED_ASSOCIATIONS binding, not a restatement of its own', () => {

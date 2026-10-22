@@ -17,7 +17,7 @@ nothing of its own to run the gate.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — Everything `review-gate.yml` and `land-approved.yml` do beyond triggers,
+- [x] **AC-1** — Everything `review-gate.yml` and `land-approved.yml` do beyond triggers,
       permissions, concurrency and environment is a steward command in `cli.mjs`'s `COMMANDS`: one
       for each script they run today (`scripts/land/apply-review-blocked.mjs`,
       `select-candidates.mjs`, `check-author.mjs` and `delete-merged-heads.mjs`), and one for each
@@ -29,17 +29,17 @@ nothing of its own to run the gate.
       `landWhen` names, in place of `mergeable_state` `clean`), the direct re-check of
       `review/agent`, `--squash` and `--match-head-commit`, and deleting merged heads without
       failing the run. `cli.test.mjs` shows each new command is in `COMMANDS`.
-- [ ] **AC-2** — Each test that reads `review-gate.yml` or `land-approved.yml` to check that
+- [x] **AC-2** — Each test that reads `review-gate.yml` or `land-approved.yml` to check that
       logic (in `ci.test.mjs`, `github.test.mjs`, `review.test.mjs`,
       `scripts/land/*.test.mjs` and `scripts/report/review-verdicts.test.mjs`) checks the same
       property where the logic now lives, with the same expectations, or checks the workflow
       file for the command that runs it.
-- [ ] **AC-3** — Steward's own `.github/workflows/review-gate.yml` and `land-approved.yml` run
+- [x] **AC-3** — Steward's own `.github/workflows/review-gate.yml` and `land-approved.yml` run
       these commands from steward's checkout (`node scripts/dispatch/cli.mjs <command>`), and hold
       no other logic. Their file names and their `name:`s ("Review gate", "Land approved PRs") are
       unchanged, since `land.mjs` dispatches `land-approved.yml` by file name (`WORKFLOW`) and
       `ci.yml`'s `workflow_run` names "Land approved PRs".
-- [ ] **AC-4** — The package carries the thin workflow files a project uses: a `review-gate.yml` and
+- [x] **AC-4** — The package carries the thin workflow files a project uses: a `review-gate.yml` and
       a `land-approved.yml`, in one directory of the package, which ST-44's `init` copies from. Each
       has the same triggers, permissions, concurrency, jobs and environment as steward's own, and
       runs the same commands, starting steward from the package installed alone at a pinned tag
@@ -47,16 +47,16 @@ nothing of its own to run the gate.
       that installs steward and nothing of the project's). The tag is a placeholder in the file,
       which `init` fills (ST-44). Neither file checks out the project to install its dependencies or
       runs the project's `npm ci`.
-- [ ] **AC-5** — A test fails when steward's own workflow files and the thin files differ in
+- [x] **AC-5** — A test fails when steward's own workflow files and the thin files differ in
       anything but how steward is started: the steps or lines that start it from the checkout in
       one and from the pinned package in the other. It reads the four files from the repository,
       and a case shows it failing on a thin file with a changed permission or trigger.
-- [ ] **AC-6** — No comment in the four files makes a statement particular to steward's own
+- [x] **AC-6** — No comment in the four files makes a statement particular to steward's own
       repository that is false for another project: in particular, `review-gate.yml`'s reference
       to `Open-Questions.md` and `land-approved.yml`'s to `Completed-Questions.md`, files this
       repository does not have, and `land-approved.yml`'s "The repository is public and forking
       is allowed".
-- [ ] **AC-7** — `docs/agent-workflow-design.md`, Part 3, "What ties the workflow to this
+- [x] **AC-7** — `docs/agent-workflow-design.md`, Part 3, "What ties the workflow to this
       repository today", says what the gate's workflows run after this story, and every
       **Planned** marker naming ST-42 there is resolved, as its "Reading this document" note
       says. `README.md`'s description of the three workflows is corrected wherever this story

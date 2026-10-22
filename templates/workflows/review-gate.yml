@@ -1,0 +1,118 @@
+name: Review gate
+
+# A merge gate for agent review, built so that no part of it calls Claude. The reviewer agent
+# supplies judgement and posts a marker comment; this workflow supplies enforcement by setting a
+# commit status that branch protection can require. That split exists because commit statuses --
+# unlike PR reviews -- carry no self-approval restriction, so a single-account project can still
+# gate itself.
+#
+# This file holds the triggers, permissions and environment, and runs steward's commands. What each
+# one decides is in its module under scripts/land/ in steward's package, and steward's design
+# document (docs/agent-workflow-design.md in steward's repository), "What the gate enforces", says
+# why.
+#
+# Flow:
+#   1. A PR opens or gets a new commit -> `mark-pending` sets `review/agent` pending, which
+#      blocks the merge once that context is required in branch protection.
+#   2. A reviewer agent reviews the head commit, and whoever ran it comments
+#      with a marker carrying the verdict:
+#        <!-- agent-review head=<full-40-char-sha> verdict=pass -->
+#        <!-- agent-review head=<full-40-char-sha> verdict=pass-with-observations -->
+#        <!-- agent-review head=<full-40-char-sha> verdict=block -->
+#   3. `apply-verdict` reads that marker and sets the status accordingly, whether
+#      the marker arrived with the comment or was edited into it later.
+#
+# `pass` and `pass-with-observations` both map to a `success` status -- the
+# distinction is what the review found, not whether it blocks -- and only
+# `block` maps to `failure`. See that document, "Reviewer", for
+# why the middle state exists. `fail` is still honoured as a deprecated spelling of
+# `block`, because a marker this workflow does not recognise is *ignored*,
+# which would leave a PR pending forever with a valid-looking verdict on it.
+#
+# Forgetting to run the reviewer leaves the status pending, so the PR simply
+# cannot merge. That is deliberate: the gate fails safe rather than silently
+# passing.
+#
+# A fourth step: after applying the verdict, `apply-review-blocked` recounts the
+# well-formed `block` (or deprecated `fail`) markers from write-access authors on the whole
+# pull request -- not only the comment that triggered this run -- and applies
+# `review-blocked` once their number reaches the round bound (`ROUND_BOUND` in
+# steward's scripts/land/apply-review-blocked.mjs). This workflow sees every pull
+# request, including ones no dispatcher ran, so it is where that label can be produced
+# reliably rather than applied by hand. Nothing here removes the label. Once it has been removed
+# by hand, only blocks recorded after the latest removal count towards applying it again.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    # `edited` as well as `created`: a reviewer that posts its review and then
+    # edits the marker in afterwards would otherwise be ignored silently, and
+    # the PR would sit pending forever with a valid verdict visible on it. That
+    # reads as a broken gate rather than a missed marker, which is the worse of
+    # the two failure modes. It costs nothing in safety -- the write-access
+    # check and the current-head check in `apply-verdict` both still apply, and anyone who
+    # passes the first could already post a fresh comment saying anything.
+    types: [created, edited]
+
+permissions:
+  contents: read
+  statuses: write
+  # `write` so that this workflow applies `review-blocked` itself once a pull request reaches the
+  # round bound. Nothing here removes a label.
+  pull-requests: write
+  # For the pull request's issue events, which tell `apply-review-blocked` when the label was last
+  # removed by hand. GitHub lists that endpoint under both Issues and Pull requests read;
+  # `issues: read` settles it whichever the endpoint needs.
+  issues: read
+
+jobs:
+  # A new head commit always returns the gate to pending. That is what makes
+  # "no dismissal mechanism" a platform guarantee rather than a convention:
+  # a verdict cannot outlive the commit it was about.
+  pending:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark review pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: npx --yes --package=github:luplows/steward#v{{STEWARD_VERSION}} steward mark-pending
+
+  verdict:
+    # issue_comment fires for issues as well as PRs, so the pull_request
+    # check is load bearing, not decorative.
+    if: >-
+      github.event_name == 'issue_comment'
+      && github.event.issue.pull_request
+      && contains(github.event.comment.body, '<!-- agent-review')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply verdict from marker
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.issue.number }}
+          # Comment fields are passed as env and never interpolated into the
+          # script body. On a public repo a comment is attacker-controlled,
+          # and `${{ }}` inside run: would be a script-injection hole.
+          BODY: ${{ github.event.comment.body }}
+          ASSOC: ${{ github.event.comment.author_association }}
+          COMMENT_URL: ${{ github.event.comment.html_url }}
+        run: npx --yes --package=github:luplows/steward#v{{STEWARD_VERSION}} steward apply-verdict
+
+      # Runs whether or not the step above found a block, and whatever that step did with
+      # ASSOC or the marker on *this* comment: the round bound is counted across every
+      # comment on the pull request, not only the one that triggered this run, so a round can
+      # complete on a comment that is not itself a block -- for instance a corrected marker
+      # posted after one that already was. See that document, "What the gate
+      # enforces": "the block still counts toward the round bound like any other".
+      - name: Apply review-blocked at the round bound
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.issue.number }}
+        run: npx --yes --package=github:luplows/steward#v{{STEWARD_VERSION}} steward apply-review-blocked

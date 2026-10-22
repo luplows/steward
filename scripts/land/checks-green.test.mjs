@@ -5,10 +5,13 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { assertLandWhen, checksGreen, mergeableOutcome, runwayDecision } from './checks-green.mjs'
 import { readSettings } from '../dispatch/settings.mjs'
+import { fakeGitHub, pull, REPO, SHA_OF } from './runway-fake.mjs'
+import { runRunway } from './runway.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const SCRIPT = path.join(ROOT, 'scripts', 'land', 'checks-green.mjs')
 const WORKFLOW = readFileSync(path.join(ROOT, '.github', 'workflows', 'land-approved.yml'), 'utf8')
+const SWEEP = readFileSync(path.join(ROOT, 'scripts', 'land', 'runway.mjs'), 'utf8')
 
 const run = (name, conclusion, id = 1) => ({
   id,
@@ -172,35 +175,68 @@ describe('ST-24/AC-3: the runway decides with the same function', () => {
   })
 })
 
-describe('ST-24/AC-3: land-approved.yml calls it in place of the mergeable_state test', () => {
-  it('ST-24/AC-3: it no longer requires mergeable_state to be clean, and calls checks-green.mjs', () => {
-    expect(WORKFLOW).not.toMatch(/\[ "\$\{mergeable_state\}" != "clean" \]/)
-    expect(WORKFLOW).toContain('node scripts/land/checks-green.mjs')
+describe('ST-24/AC-3: the runway decides with it in place of the mergeable_state test', () => {
+  it('ST-24/AC-3: it no longer requires mergeable_state to be clean, and decides with checks-green.mjs', () => {
+    expect(WORKFLOW).not.toContain('"${mergeable_state}"')
+    expect(SWEEP).toMatch(/import \{ runwayDecision \} from '\.\/checks-green\.mjs'/)
+    // GitHub's `unstable` (a check no rule requires is not green) is landable once the named checks are.
+    const { deps } = fakeGitHub({ pulls: [pull(1, { mergeableState: 'unstable' })] })
+    expect(runRunway({ repo: REPO }, deps)).toEqual({ landed: 1 })
   })
 
   it('ST-24/AC-3: it reads the head check runs and statuses with gh api, and landWhen from steward.config.json', () => {
-    expect(WORKFLOW).toContain('commits/${sha}/check-runs')
-    expect(WORKFLOW).toContain('commits/${sha}/status?per_page=100')
-    expect(WORKFLOW).toContain("jq -c '.landWhen' steward.config.json")
+    const { deps, calls } = fakeGitHub({ pulls: [pull(1)] })
+    runRunway({ repo: REPO }, deps)
+    const urls = calls.map((args) => args.find((arg) => arg.startsWith('repos/')))
+    expect(urls).toContain(`repos/${REPO}/commits/${SHA_OF(1)}/check-runs?per_page=100`)
+    expect(urls).toContain(`repos/${REPO}/commits/${SHA_OF(1)}/status?per_page=100`)
+    expect(urls).toContain(`repos/${REPO}/contents/steward.config.json?ref=main`)
   })
 
-  it('ST-24/AC-3: a pull request that is not landable is skipped with continue, in the per-pull-request loop', () => {
-    const at = WORKFLOW.indexOf('node scripts/land/checks-green.mjs')
-    const after = WORKFLOW.slice(at, WORKFLOW.indexOf('fi', at) + 2)
-    expect(after).toMatch(/then\s*\n\s*echo "PR #\$\{pr\}: not landable[^\n]*\n\s*continue\s*\n\s*fi$/)
-    const loopStart = WORKFLOW.indexOf('for pr in ${candidates}; do')
-    expect(loopStart).toBeGreaterThan(-1)
-    expect(at).toBeGreaterThan(loopStart)
+  it('ST-24/AC-3: landWhen as the project names it decides which checks count', () => {
+    const failing = { name: 'lint', status: 'completed', conclusion: 'failure', id: 5 }
+    const named = fakeGitHub({ pulls: [pull(1, { checkRuns: [failing] })], landWhen: ['test'] })
+    expect(runRunway({ repo: REPO }, named.deps)).toEqual({ landed: null })
+    expect(named.logs.some((line) => line.includes('waiting [test]'))).toBe(true)
+    const all = fakeGitHub({ pulls: [pull(1, { checkRuns: [failing] })] })
+    expect(runRunway({ repo: REPO }, all.deps)).toEqual({ landed: null })
+    expect(all.logs.some((line) => line.includes('failing [lint]'))).toBe(true)
+  })
+
+  it('ST-24/AC-3: a pull request that is not landable is skipped, and the loop goes on to the next', () => {
+    const { deps, logs, merges } = fakeGitHub({
+      pulls: [pull(1, { mergeableState: 'dirty' }), pull(2, { mergeableState: 'unknown' }), pull(3)],
+    })
+    expect(runRunway({ repo: REPO }, deps)).toEqual({ landed: 3 })
+    expect(logs.some((line) => line.startsWith(`PR #1: not landable on ${SHA_OF(1)}`))).toBe(true)
+    expect(logs.some((line) => line.startsWith(`PR #2: not landable on ${SHA_OF(2)}`))).toBe(true)
+    expect(merges).toHaveLength(1)
   })
 
   it('ST-24/AC-3: the belt-and-braces check of review/agent and the merge by head are unchanged, and in order', () => {
-    const checks = WORKFLOW.indexOf('node scripts/land/checks-green.mjs')
-    const verdict = WORKFLOW.indexOf('select(.context == "review/agent") | .state')
-    const merge = WORKFLOW.indexOf('gh pr merge "${pr}" --repo "${REPO}" --squash --match-head-commit "${sha}"')
-    expect(WORKFLOW).toContain('if [ "${verdict}" != "success" ]; then')
-    expect(checks).toBeGreaterThan(-1)
-    expect(verdict).toBeGreaterThan(checks)
-    expect(merge).toBeGreaterThan(verdict)
+    const { deps, merges } = fakeGitHub({ pulls: [pull(1)] })
+    const order = []
+    deps.api = ((api) => (args) => {
+      order.push(args.some((arg) => arg.includes('/check-runs')) ? 'checks' : args.at(-1).endsWith('/status') ? 'review' : 'other')
+      return api(args)
+    })(deps.api)
+    const merge = deps.merge
+    deps.merge = (args) => {
+      order.push('merge')
+      merge(args)
+    }
+    runRunway({ repo: REPO }, deps)
+    expect(order.indexOf('checks')).toBeGreaterThan(-1)
+    expect(order.indexOf('review')).toBeGreaterThan(order.indexOf('checks'))
+    expect(order.indexOf('merge')).toBeGreaterThan(order.indexOf('review'))
+    expect(merges).toEqual([['1', '--repo', REPO, '--squash', '--match-head-commit', SHA_OF(1)]])
+
+    for (const statuses of [[], [{ context: 'review/agent', state: 'pending', id: 3 }], [{ context: 'review/agent', state: 'failure', id: 3 }]]) {
+      const skipped = fakeGitHub({ pulls: [pull(1, { statuses })] })
+      expect(runRunway({ repo: REPO }, skipped.deps)).toEqual({ landed: null })
+      expect(skipped.merges).toEqual([])
+      expect(skipped.logs.some((line) => line.startsWith('PR #1: review/agent='))).toBe(true)
+    }
   })
 
   it('ST-24/AC-3a: its permissions are the three it had and checks: read, with a comment saying why', () => {
