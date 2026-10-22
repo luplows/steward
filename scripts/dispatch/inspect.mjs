@@ -7,16 +7,19 @@
  * repository with no branch protection it is the only thing that would notice a merge around the
  * gate.
  *
- * Two checks:
- *  - Merges. Each commit on `main` committed within the last `--since-days` days leads back to the
- *    merged pull requests GitHub associates with it. A commit with none is a finding. A merge is
- *    passing when the latest `review/agent` status on its head created at or before `merged_at`
- *    is `success` and was created by `github-actions[bot]`, the account `review-gate.yml` posts
- *    as, so a status any other account posts does not count. Any other merge is a finding.
- *  - Stalls. An open pull request against `main`, not a draft, whose author the gate honours
- *    (`HONOURED_ASSOCIATIONS`), is a finding when its latest `review/agent` status is `pending`
- *    (it is pending at that head), or `success` posted by the gate (it is holding at that head),
- *    and was created more than the settings' `inspectAfterHours` ago.
+ * Two checks, each made on `main` and on every release branch (`isReleaseBranch`,
+ * `scripts/land/release-branch.mjs`), as a release branch changes only through the gate:
+ *  - Merges. Each commit on `main` or a release branch committed within the last `--since-days`
+ *    days leads back to the merged pull requests GitHub associates with it, into `main` or into
+ *    that release branch. A commit with none is a finding. A commit on both is judged once. A merge
+ *    is passing when the latest `review/agent` status on its head created at or before
+ *    `merged_at` is `success` and was created by `github-actions[bot]`, the account
+ *    `review-gate.yml` posts as, so a status any other account posts does not count. Any other
+ *    merge is a finding.
+ *  - Stalls. An open pull request against `main` or a release branch, not a draft, whose author
+ *    the gate honours (`HONOURED_ASSOCIATIONS`), is a finding when its latest `review/agent`
+ *    status is `pending` (it is pending at that head), or `success` posted by the gate (it is
+ *    holding at that head), and was created more than the settings' `inspectAfterHours` ago.
  *
  * Each finding is one issue whose title names the finding and nothing that changes between runs.
  * An issue is opened only when no issue labelled `inspection`, open or closed, has that title, so
@@ -36,6 +39,7 @@ import { fileURLToPath } from 'node:url'
 import { ghAuthToken } from './github.mjs'
 import { readSettings } from './settings.mjs'
 import { HONOURED_ASSOCIATIONS } from '../land/check-author.mjs'
+import { isLandingBase, isReleaseBranch } from '../land/release-branch.mjs'
 
 const API = 'https://api.github.com'
 const MAIN = 'main'
@@ -61,12 +65,28 @@ function requireSha(sha) {
   return sha
 }
 
-/** Request to list `main`'s commits committed at or after `since` (an ISO time). */
-export function buildListMainCommits(repo, since, page = 1) {
+/** `branch`, percent-encoded, if it is one inspection reads: `main` or a release branch. */
+function requireBranch(branch) {
+  if (!isLandingBase(branch)) throw new Error(`branch must be main or a release branch, got: ${branch}`)
+  return encodeURIComponent(branch)
+}
+
+/** Request to list the commits of `branch` committed at or after `since` (an ISO time). */
+export function buildListBranchCommits(repo, branch, since, page = 1) {
   return {
     method: 'GET',
-    url: `${repoPath(repo)}/commits?sha=${MAIN}&since=${encodeURIComponent(since)}&per_page=${PAGE}&page=${page}`,
+    url: `${repoPath(repo)}/commits?sha=${requireBranch(branch)}&since=${encodeURIComponent(since)}&per_page=${PAGE}&page=${page}`,
   }
+}
+
+/** Request to list `main`'s commits committed at or after `since` (an ISO time). */
+export function buildListMainCommits(repo, since, page = 1) {
+  return buildListBranchCommits(repo, MAIN, since, page)
+}
+
+/** Request to list the branches whose names start `release/v`; the caller keeps the release branches. */
+export function buildListReleaseBranchRefs(repo, page = 1) {
+  return { method: 'GET', url: `${repoPath(repo)}/git/matching-refs/heads/release/v?per_page=${PAGE}&page=${page}` }
 }
 
 /** Request to list the pull requests GitHub associates with a commit. */
@@ -79,9 +99,9 @@ export function buildListCommitStatuses(repo, sha, page = 1) {
   return { method: 'GET', url: `${repoPath(repo)}/commits/${requireSha(sha)}/statuses?per_page=${PAGE}&page=${page}` }
 }
 
-/** Request to list the open pull requests against `main`. */
-export function buildListOpenPullRequests(repo, page = 1) {
-  return { method: 'GET', url: `${repoPath(repo)}/pulls?base=${MAIN}&state=open&per_page=${PAGE}&page=${page}` }
+/** Request to list the open pull requests against `base`: `main`, or a release branch. */
+export function buildListOpenPullRequests(repo, page = 1, base = MAIN) {
+  return { method: 'GET', url: `${repoPath(repo)}/pulls?base=${requireBranch(base)}&state=open&per_page=${PAGE}&page=${page}` }
 }
 
 /** Request to list the issues labelled `inspection`, open or closed. */
@@ -106,13 +126,23 @@ export function buildCreateInspectionLabel(repo) {
 
 const N = '[1-9][0-9]*'
 const SHA_PATH = '[0-9a-f]{40}'
-// [method, path after the repo, check of the body]: the requests the `build*` functions above
-// produce, and nothing else.
+const landingBase = (encoded) => {
+  try {
+    return isLandingBase(decodeURIComponent(encoded))
+  } catch {
+    return false
+  }
+}
+// [method, path after the repo, check of the body, check of the branch name the path captures]:
+// the requests the `build*` functions above produce, and nothing else. A rule with a branch check
+// captures the branch name, percent-encoded, as its first group; only `main` and a release
+// branch pass.
 const ALLOWED = [
-  ['GET', new RegExp(`^/commits\\?sha=${MAIN}&since=[^&=]+&per_page=${PAGE}&page=${N}$`), null],
+  ['GET', new RegExp(`^/commits\\?sha=([^&=]+)&since=[^&=]+&per_page=${PAGE}&page=${N}$`), null, landingBase],
+  ['GET', new RegExp(`^/git/matching-refs/heads/release/v\\?per_page=${PAGE}&page=${N}$`), null],
   ['GET', new RegExp(`^/commits/${SHA_PATH}/pulls\\?per_page=${PAGE}&page=${N}$`), null],
   ['GET', new RegExp(`^/commits/${SHA_PATH}/statuses\\?per_page=${PAGE}&page=${N}$`), null],
-  ['GET', new RegExp(`^/pulls\\?base=${MAIN}&state=open&per_page=${PAGE}&page=${N}$`), null],
+  ['GET', new RegExp(`^/pulls\\?base=([^&=]+)&state=open&per_page=${PAGE}&page=${N}$`), null, landingBase],
   ['GET', new RegExp(`^/issues\\?labels=${LABEL}&state=all&per_page=${PAGE}&page=${N}$`), null],
   [
     'POST',
@@ -140,7 +170,13 @@ export function assertAllowedRequest(repo, request) {
   const prefix = repoPath(repo)
   const url = typeof request?.url === 'string' ? request.url : ''
   const rest = url.startsWith(`${prefix}/`) ? url.slice(prefix.length) : null
-  const rule = rest && ALLOWED.find(([method, re]) => method === request.method && re.test(rest))
+  const rule =
+    rest &&
+    ALLOWED.find(([method, re, , branchOk]) => {
+      if (method !== request.method) return false
+      const match = re.exec(rest)
+      return match !== null && (branchOk === undefined || branchOk(match[1]))
+    })
   if (!rule) {
     throw new Error(`refusing a request outside the operations inspect.mjs performs: ${request?.method} ${url}`)
   }
@@ -238,63 +274,94 @@ const postedByGate = (status) => status.creator === GATE_ACCOUNT
 // ------------------------------------------------------------- the checks
 
 /**
- * Findings among the merges to `main` in the window. A finding is
- * `{ kind, title, body }`; the titles name the finding and nothing that changes between runs.
+ * The release branches of the repository, sorted: the branches whose names start `release/v` that
+ * `isReleaseBranch` accepts. `isReleaseBranch` is the only definition of a release branch's name;
+ * the prefix in the request only narrows the listing.
  */
-export async function inspectMerges(ctx, { now, sinceDays }) {
+export async function listReleaseBranches(ctx) {
+  const refs = await listAll(ctx, (page) => buildListReleaseBranchRefs(ctx.repo, page))
+  const prefix = 'refs/heads/'
+  return refs
+    .map((r) => (typeof r?.ref === 'string' && r.ref.startsWith(prefix) ? r.ref.slice(prefix.length) : null))
+    .filter((name) => isReleaseBranch(name))
+    .sort()
+}
+
+/**
+ * Findings among the merges to `main` and to each release branch in the window. A finding is
+ * `{ kind, title, body }`; the titles name the finding and nothing that changes between runs.
+ * `branches` is the release branches; it is read when not given.
+ */
+export async function inspectMerges(ctx, { now, sinceDays, branches }) {
   const since = new Date(now - sinceDays * DAY_MS)
-  const commits = (await listAll(ctx, (page) => buildListMainCommits(ctx.repo, since.toISOString(), page))).filter(
-    (c) => Date.parse(c.commit?.committer?.date) >= since.getTime(),
-  )
+  const releaseBranches = branches ?? (await listReleaseBranches(ctx))
   const statusesBySha = new Map()
   const judged = new Set()
+  const seenCommits = new Set()
   const findings = []
-  for (const { sha } of commits) {
-    const merged = (await listAll(ctx, (page) => buildListCommitPullRequests(ctx.repo, sha, page))).filter(
-      (pr) => pr.merged_at && pr.base?.ref === MAIN,
-    )
-    if (merged.length === 0) {
-      findings.push({
-        kind: 'no-pull-request',
-        title: `Inspection: ${shortSha(sha)} on main without a pull request`,
-        body:
-          `Commit [${shortSha(sha)}](${commitUrl(ctx.repo, sha)}) is on \`main\`, committed within the last ` +
-          `${sinceDays} days, and GitHub associates no merged pull request against \`main\` with it. ` +
-          'It reached `main` without going through the gate.',
-      })
-      continue
-    }
-    for (const pr of merged) {
-      if (judged.has(pr.number)) continue
-      judged.add(pr.number)
-      const head = pr.head.sha
-      if (!statusesBySha.has(head)) {
-        statusesBySha.set(head, await listAll(ctx, (page) => buildListCommitStatuses(ctx.repo, head, page)))
+  for (const branch of [MAIN, ...releaseBranches]) {
+    const commits = (
+      await listAll(ctx, (page) => buildListBranchCommits(ctx.repo, branch, since.toISOString(), page))
+    ).filter((c) => Date.parse(c.commit?.committer?.date) >= since.getTime())
+    for (const { sha } of commits) {
+      // A commit on `main` and on a release branch is judged once, as a commit of `main`.
+      if (seenCommits.has(sha)) continue
+      seenCommits.add(sha)
+      const merged = (await listAll(ctx, (page) => buildListCommitPullRequests(ctx.repo, sha, page))).filter(
+        (pr) => pr.merged_at && (pr.base?.ref === MAIN || pr.base?.ref === branch),
+      )
+      if (merged.length === 0) {
+        const where = branch === MAIN ? '`main`' : `\`main\` or \`${branch}\``
+        findings.push({
+          kind: 'no-pull-request',
+          title: `Inspection: ${shortSha(sha)} on ${branch} without a pull request`,
+          body:
+            `Commit [${shortSha(sha)}](${commitUrl(ctx.repo, sha)}) is on \`${branch}\`, committed within the ` +
+            `last ${sinceDays} days, and GitHub associates no merged pull request against ${where} with it. ` +
+            `It reached \`${branch}\` without going through the gate.`,
+        })
+        continue
       }
-      const verdict = latestReviewStatus(statusesBySha.get(head), Date.parse(pr.merged_at))
-      if (verdict !== null && verdict.state === 'success' && postedByGate(verdict)) continue
-      const seen =
-        verdict === null
-          ? 'no `review/agent` status'
-          : `a \`review/agent\` status \`${verdict.state}\` created by ${verdict.creator}`
-      findings.push({
-        kind: 'merged-without-verdict',
-        title: `Inspection: #${pr.number} merged without a passing verdict`,
-        body:
-          `[#${pr.number}](${pullUrl(ctx.repo, pr.number)}) merged into \`main\` at ${pr.merged_at}, and its head ` +
-          `\`${shortSha(head)}\` had no passing verdict by then: the latest read was ${seen} ` +
-          `(a passing verdict is a \`success\` created by \`${GATE_ACCOUNT}\` at or before the merge).`,
-      })
+      for (const pr of merged) {
+        if (judged.has(pr.number)) continue
+        judged.add(pr.number)
+        const head = pr.head.sha
+        if (!statusesBySha.has(head)) {
+          statusesBySha.set(head, await listAll(ctx, (page) => buildListCommitStatuses(ctx.repo, head, page)))
+        }
+        const verdict = latestReviewStatus(statusesBySha.get(head), Date.parse(pr.merged_at))
+        if (verdict !== null && verdict.state === 'success' && postedByGate(verdict)) continue
+        const seen =
+          verdict === null
+            ? 'no `review/agent` status'
+            : `a \`review/agent\` status \`${verdict.state}\` created by ${verdict.creator}`
+        findings.push({
+          kind: 'merged-without-verdict',
+          title: `Inspection: #${pr.number} merged without a passing verdict`,
+          body:
+            `[#${pr.number}](${pullUrl(ctx.repo, pr.number)}) merged into \`${pr.base.ref}\` at ${pr.merged_at}, ` +
+            `and its head \`${shortSha(head)}\` had no passing verdict by then: the latest read was ${seen} ` +
+            `(a passing verdict is a \`success\` created by \`${GATE_ACCOUNT}\` at or before the merge).`,
+        })
+      }
     }
   }
   return findings
 }
 
-/** Findings among the open pull requests the review side has stopped moving on. */
-export async function inspectStalls(ctx, { now, afterHours }) {
-  const open = await listAll(ctx, (page) => buildListOpenPullRequests(ctx.repo, page))
+/**
+ * Findings among the open pull requests, into `main` or a release branch, that the review side has
+ * stopped moving on. `branches` is the release branches; it is read when not given.
+ */
+export async function inspectStalls(ctx, { now, afterHours, branches }) {
+  const releaseBranches = branches ?? (await listReleaseBranches(ctx))
+  const open = []
+  for (const base of [MAIN, ...releaseBranches]) {
+    const pulls = await listAll(ctx, (page) => buildListOpenPullRequests(ctx.repo, page, base))
+    open.push(...pulls.map((pr) => ({ pr, base })))
+  }
   const findings = []
-  for (const pr of open) {
+  for (const { pr, base } of open) {
     if (pr.draft === true || !HONOURED_ASSOCIATIONS.includes(pr.author_association)) continue
     const head = pr.head.sha
     const status = latestReviewStatus(await listAll(ctx, (page) => buildListCommitStatuses(ctx.repo, head, page)))
@@ -309,11 +376,11 @@ export async function inspectStalls(ctx, { now, afterHours }) {
       title: `Inspection: #${pr.number} ${kind} at ${shortSha(head)}`,
       body:
         kind === 'pending'
-          ? `[#${pr.number}](${pullUrl(ctx.repo, pr.number)}) has been waiting for a verdict at \`${shortSha(head)}\` ` +
-            `since ${since}, longer than ${afterHours} hours (the settings' \`inspectAfterHours\`): ` +
+          ? `[#${pr.number}](${pullUrl(ctx.repo, pr.number)}) into \`${base}\` has been waiting for a verdict ` +
+            `at \`${shortSha(head)}\` since ${since}, longer than ${afterHours} hours (the settings' \`inspectAfterHours\`): ` +
             '`review/agent` is still `pending`.'
-          : `[#${pr.number}](${pullUrl(ctx.repo, pr.number)}) has held a passing verdict at \`${shortSha(head)}\` ` +
-            `since ${since}, longer than ${afterHours} hours (the settings' \`inspectAfterHours\`), and is ` +
+          : `[#${pr.number}](${pullUrl(ctx.repo, pr.number)}) into \`${base}\` has held a passing verdict ` +
+            `at \`${shortSha(head)}\` since ${since}, longer than ${afterHours} hours (the settings' \`inspectAfterHours\`), and is ` +
             'still open: `review/agent` is `success` and nothing has landed it.',
     })
   }
@@ -373,9 +440,10 @@ export async function raiseFindings(ctx, findings, onResult = () => {}) {
  * line of counts last. Returns the results and the exit code the counts give.
  */
 export async function inspect(ctx, { now, sinceDays, afterHours }, out = () => {}) {
+  const branches = await listReleaseBranches(ctx)
   const findings = [
-    ...(await inspectMerges(ctx, { now, sinceDays })),
-    ...(await inspectStalls(ctx, { now, afterHours })),
+    ...(await inspectMerges(ctx, { now, sinceDays, branches })),
+    ...(await inspectStalls(ctx, { now, afterHours, branches })),
   ]
   const results = await raiseFindings(ctx, findings, (r) =>
     out(r.opened ? `opened #${r.number}: ${r.finding.title}` : `already raised: ${r.finding.title}`),

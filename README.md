@@ -39,7 +39,7 @@ Then, from a checkout of the repository:
 ```sh
 node scripts/dispatch/cli.mjs review <pr-number>   # review the pull request at its head
 node scripts/dispatch/cli.mjs land <pr-number>     # land it, once it has passed and is green
-node scripts/dispatch/cli.mjs inspect              # raise a merge without a passing verdict, or a stall
+node scripts/dispatch/cli.mjs inspect              # raise a merge without a passing verdict, or a stall, on main or a release branch
 ```
 
 What the review side reads:

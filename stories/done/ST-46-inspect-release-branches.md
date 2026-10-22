@@ -18,12 +18,12 @@ branch changes only through pull requests reviewed and landed through the gate
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — **Which branches.** Inspection reads the repository's branches whose names
+- [x] **AC-1** — **Which branches.** Inspection reads the repository's branches whose names
       `isReleaseBranch` (`scripts/land/release-branch.mjs`) accepts, and checks each of them as
       well as `main`. It holds no other definition of a release branch's name. A repository with
       no release branch is inspected exactly as before. Tests: no release branch; two release
       branches; a branch named `release/v1.2` or `release/next`, which is not inspected.
-- [ ] **AC-2** — **Merges.** `inspectMerges` checks each commit on a release branch committed
+- [x] **AC-2** — **Merges.** `inspectMerges` checks each commit on a release branch committed
       within the last `--since-days` days, as it checks those on `main`: a commit with which GitHub
       associates no merged pull request into `main` or into that release branch is a
       `no-pull-request` finding, and such a pull request whose head had no passing verdict at or
@@ -35,27 +35,27 @@ branch changes only through pull requests reviewed and landed through the gate
       it passed, raised nothing; one with no pull request; one whose pull request into it had no
       passing verdict; a commit of `main`'s within the window that is also on a release branch,
       raised once at most.
-- [ ] **AC-3** — **Stalls.** `inspectStalls` checks every open pull request into `main` or a
+- [x] **AC-3** — **Stalls.** `inspectStalls` checks every open pull request into `main` or a
       release branch (`isLandingBase`, `scripts/land/release-branch.mjs`), with today's rules: not
       a draft, an honoured author, `pending` or `holding` longer than `inspectAfterHours`. A pull
       request into any other branch is not checked. Tests: a pull request into a release branch
       left pending, raised; one holding, raised; one into `release/next`, not checked.
-- [ ] **AC-4** — **Titles and bodies.** A finding on `main` keeps today's title, so that an issue
+- [x] **AC-4** — **Titles and bodies.** A finding on `main` keeps today's title, so that an issue
       already raised is not raised again. A `no-pull-request` finding on a release branch names
       the branch in its title, in place of `main`; every finding's body names the branch it is
       about. Tests show each title on a release branch, and today's titles unchanged.
-- [ ] **AC-5** — **Requests.** Every request inspection sends is still built by a `build*`
+- [x] **AC-5** — **Requests.** Every request inspection sends is still built by a `build*`
       function and checked by `assertAllowedRequest` before it is sent. The allowlist admits the
       requests this story adds, for a release branch's name only, and still refuses anything else:
       tests show a listing of a branch that is not `main` or a release branch refused, and every
       request a run makes in AC-1's to AC-3's tests allowed. `inspection.yml`'s `permissions:`
       are unchanged, or a test or the pull request's body shows that the new requests need the
       added permission.
-- [ ] **AC-6** — **Words.** `inspect.mjs`'s header, `inspection.yml`'s comment, the glossary's
+- [x] **AC-6** — **Words.** `inspect.mjs`'s header, `inspection.yml`'s comment, the glossary's
       **inspection** entry, `docs/outline.md`'s description of inspection under "What installing
       steward sets up", and `README.md` wherever it describes what `inspect` raises, say that
       inspection checks release branches as it checks `main`.
-- [ ] **AC-7** — Every **Planned** marker naming ST-46 in `docs/agent-workflow-design.md` is
+- [x] **AC-7** — Every **Planned** marker naming ST-46 in `docs/agent-workflow-design.md` is
       resolved, as its "Reading this document" note says.
 
 ## Out of scope
