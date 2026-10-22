@@ -82,6 +82,8 @@ jobs:
           ref: ${{ github.event.pull_request.base.sha }}
 
       - name: Mark review pending
+        # Runs only when the base holds the command, as the base's own code is what runs here.
+        if: hashFiles('scripts/land/mark-pending.mjs') != ''
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}

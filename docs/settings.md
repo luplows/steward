@@ -21,7 +21,6 @@ decisions behind the keys are in [`outline.md`](outline.md), "Defining steward",
 | Key | Form | What it is for | What `init` will write |
 |---|---|---|---|
 | `repo` | `owner/name` | The project's GitHub repository. | The `origin` remote's repository. |
-| `storyPrefix` | 1 to 8 capital letters | The prefix of a story id, such as `ST` for `ST-18`. | Nothing: the key leaves the settings for `stories/stories.json` (ST-41). |
 | `setup` | `null`, or an object (below) | The command that prepares a worktree for a coder session. Nothing is run before a review. | `null`. |
 | `check` | `null`, or an object (below) | The command that checks a change, which the coder runs. | `null`. |
 | `landWhen` | `"all-checks"`, or a non-empty array of distinct, non-empty check names | Which checks must be green before steward lands a pull request. | `"all-checks"`. |
@@ -60,7 +59,6 @@ body and the rules.
 ```json
 {
   "repo": "luplows/steward",
-  "storyPrefix": "ST",
   "setup": { "command": "npm ci", "timeoutMinutes": 5 },
   "check": { "command": "npm run check", "timeoutMinutes": 10 },
   "landWhen": "all-checks",
@@ -71,7 +69,7 @@ body and the rules.
 }
 ```
 
-Steward's scripts use `repo`, `storyPrefix`, `rulesFile`, `unitLinks`, `land`, `landWhen` and
+Steward's scripts use `repo`, `rulesFile`, `unitLinks`, `land`, `landWhen` and
 `inspectAfterHours` today: the pilot and the runway land on the checks `landWhen` names, and
 inspection raises a pull request pending or holding longer than `inspectAfterHours`. The other keys
 are read and validated, and each is taken into use by the story that builds it (see

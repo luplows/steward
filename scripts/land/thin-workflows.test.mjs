@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { COMMANDS } from '../dispatch/cli.mjs'
@@ -15,6 +15,9 @@ const THIN = (file) => read('templates', 'workflows', file)
 // block), and the blank line after it.
 const CHECKOUT_STEP =
   /(?: {6}#[^\n]*\n)*      - name: Check out steward[^\n]*\n        uses: actions\/checkout@v4\n(?: {8}with:\n(?: {10}[^\n]*\n)+)?\n/g
+// The condition on the `pending` job's step running `mark-pending`, with its comment lines: it runs
+// only when the base holds the command's module, which is part of how steward's own file starts it.
+const GUARD = /(?: {8}#[^\n]*\n)* {8}if: hashFiles\([^\n]*\n/g
 const OWN_START = 'node scripts/dispatch/cli.mjs '
 const THIN_START = 'npx --yes --package=github:luplows/steward#v{{STEWARD_VERSION}} steward '
 
@@ -23,7 +26,7 @@ const THIN_START = 'npx --yes --package=github:luplows/steward#v{{STEWARD_VERSIO
  * own file starts from, and the command prefix that each file puts before a command.
  */
 function withoutStart(text, start) {
-  return text.replaceAll(CHECKOUT_STEP, () => '').replaceAll(start, () => 'STEWARD ')
+  return text.replaceAll(CHECKOUT_STEP, () => '').replaceAll(GUARD, () => '').replaceAll(start, () => 'STEWARD ')
 }
 
 /** The first line at which the two texts differ, as `{ line, own, thin }`, or null. */
@@ -78,6 +81,14 @@ describe('ST-42/AC-3: steward\'s own workflow files run steward\'s commands from
     const pending = text.slice(text.indexOf('\n  pending:\n'), text.indexOf('\n  verdict:\n'))
     expect(pending).toContain('if: github.event_name == \'pull_request\'')
     expect(pending).toMatch(/uses: actions\/checkout@v4\n {8}with:\n {10}ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}\n/)
+    // The step running mark-pending runs only when the base holds the module (the real path).
+    const guard = "if: hashFiles('scripts/land/mark-pending.mjs') != ''"
+    const step = pending.slice(pending.indexOf('- name: Mark review pending'))
+    expect(step).toContain(guard)
+    expect(step.indexOf(guard)).toBeLessThan(step.indexOf('run: node scripts/dispatch/cli.mjs mark-pending'))
+    expect(existsSync(path.join(ROOT, 'scripts', 'land', 'mark-pending.mjs'))).toBe(true)
+    // The thin file has neither the checkout nor the condition.
+    expect(THIN('review-gate.yml')).not.toContain('hashFiles')
     // No checkout in the file may name the pull request's head or merge ref.
     expect(text).not.toMatch(/ref: .*(head|merge)/)
   })

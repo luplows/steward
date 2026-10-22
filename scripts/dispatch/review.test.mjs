@@ -117,7 +117,7 @@ beforeAll(() => {
   git(root, 'init', '-q', '--bare', '-b', 'main', originDir)
   git(root, 'clone', '-q', originDir, seedDir)
   git(seedDir, 'checkout', '-q', '-b', 'main')
-  writeFileSync(path.join(seedDir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO, storyPrefix: 'OQ' })))
+  writeFileSync(path.join(seedDir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO })))
   writeFileSync(path.join(seedDir, 'REVIEW.md'), RULES_TEXT)
   mkdirSync(path.join(seedDir, 'stories'))
   writeFileSync(path.join(seedDir, 'stories', 'OQ-99-thing.md'), STORY('sonnet'))
@@ -1166,7 +1166,7 @@ describe('ST-21: review against the checklist from main, in sections', () => {
   const verdict = (over = {}) => JSON.stringify({ head, verdict: 'pass', findings: [], summary: 's', sections: SECTIONS, ...over })
   const withRulesFile = (rulesFile) => {
     const dir = dirtyClone()
-    writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO, storyPrefix: 'OQ', rulesFile })))
+    writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO, rulesFile })))
     return dir
   }
 
@@ -1336,7 +1336,7 @@ describe('OQ-123: the project root is the working directory, not the engine root
     const dir = mkdtempSync(path.join(root, 'project-'))
     try {
       git(dir, 'init', '-q', '-b', 'main')
-      writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: 'owner/other', storyPrefix: 'ST' })))
+      writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: 'owner/other' })))
       let threw
       try {
         execFileSync('node', [path.join(here, 'review.mjs'), '7'], { cwd: dir, encoding: 'utf8' })
