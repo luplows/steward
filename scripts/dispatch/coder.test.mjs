@@ -1559,7 +1559,7 @@ describe("OQ-112/AC-2: a claim's age", () => {
   })
 })
 
-// --------------------------------------------------- OQ-128: id prefix from settings
+// --------------------------------------------------- OQ-128: id prefix from stories/stories.json
 
 /** A directory holding a `steward.config.json` and a `stories/stories.json` with the given `prefix`. */
 function withSettings(storyPrefix, fn) {

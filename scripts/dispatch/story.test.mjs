@@ -620,7 +620,7 @@ describe('OQ-48/AC-9: resuming an existing pull request', () => {
   })
 })
 
-// --------------------------------------------------- OQ-128: id prefix from settings
+// --------------------------------------------------- OQ-128: id prefix from stories/stories.json
 
 /** A directory holding a `steward.config.json` and a `stories/stories.json` with the given `prefix`. */
 function withSettings(storyPrefix, fn) {

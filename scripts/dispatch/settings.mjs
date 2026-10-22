@@ -6,7 +6,7 @@
  * scripts. The story-id prefix is not a setting (ST-41): it is the `prefix` of
  * `stories/stories.json` (`story-prefix.mjs`).
  *
- * Its callers are the dispatch scripts, the story lint and the verdict
+ * Its callers are the dispatch scripts and the verdict
  * report, each passing the project root it works on.
  */
 import { readFile } from 'node:fs/promises'

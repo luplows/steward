@@ -357,7 +357,7 @@ describe('OQ-69/AC-6: the story comes from the file the diff moves into stories/
   })
 })
 
-describe('OQ-126/AC-3: resolveStory takes the story-id prefix from settings, not a hardcoded OQ-', () => {
+describe('OQ-126/AC-3: resolveStory takes the story-id prefix it is given, not a hardcoded OQ-', () => {
   it('reads ST-3 from a moved stories/done/ST-3-thing.md, and finds no story when the moved file is OQ-3', () => {
     const stNameStatus = 'D\tstories/ST-3-thing.md\nA\tstories/done/ST-3-thing.md\n'
     expect(resolveStory({ nameStatus: stNameStatus, branch: 'chore/x', prefix: 'ST' })).toEqual({
