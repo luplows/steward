@@ -3,8 +3,11 @@
 Steward's own units of work, one file per story. A story is any file matching
 `stories/ST-<n>-<slug>.md`, and nothing else in this directory is one, which is
 what keeps this README and `_TEMPLATE.md` out of the queue without needing an
-exclusion list. The prefix is `steward.config.json`'s `storyPrefix`, which the
-queue reader builds its filename pattern from (`scripts/dispatch/queue.mjs`).
+exclusion list. The prefix is [`stories.json`](stories.json)'s `prefix`, read by
+`readStoryPrefix` (`scripts/dispatch/story-prefix.mjs`), which the queue reader
+builds its filename pattern from (`scripts/dispatch/queue.mjs`). It belongs to
+this story convention, not to steward's settings, so a project with no story
+files has no such file.
 
 Copy [`_TEMPLATE.md`](_TEMPLATE.md) to start one.
 
