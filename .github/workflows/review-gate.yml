@@ -74,8 +74,12 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - name: Check out steward
+      # The base commit, not the default checkout of a pull_request event, which is the pull
+      # request's own unreviewed merge tree: no code from the pull request runs with this token.
+      - name: Check out steward at the pull request's base
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
 
       - name: Mark review pending
         env:

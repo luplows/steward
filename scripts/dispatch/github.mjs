@@ -53,7 +53,7 @@ export const WRITABLE_VERDICTS = ['pass', 'pass-with-observations', 'block']
 // `fail` is the deprecated spelling of `block`; accepted when reading only.
 const DEPRECATED_VERDICTS = { fail: 'block' }
 
-// Horizontal whitespace only: the gate greps line by line, so `\s` (which matches
+// Horizontal whitespace only: the gate reads markers line by line, so `\s` (which matches
 // a newline) would accept markers the gate ignores. A candidate runs to `-->` or
 // to the end of its line, so an unterminated or split marker is classified as
 // malformed rather than skipped.

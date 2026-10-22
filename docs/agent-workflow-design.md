@@ -378,7 +378,7 @@ it:
   one, so nothing starves. The rotation decides which pull request is ready, and a runway that
   landed a different one would spend the pilot's requests and land pull requests nobody asked it
   to (decided 2026-09-28). The candidate choice is made in `scripts/land/select-candidates.mjs`,
-  which is tested without running the workflow.
+  which `runway.mjs` calls and which is tested without running the workflow.
 - **Re-checks `review/agent` directly** rather than trusting branch protection to require it,
   because a required check vanished from protection once. Prevention, not detection.
 - **`--match-head-commit`**, which refuses the merge if anything was pushed between the check and
@@ -1287,7 +1287,7 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
   build up. Two separate limits come closest today: two or more open `loop-stuck` issues stop
   the loop (`STUCK_ISSUE_LIMIT`, `scripts/dispatch/loop.mjs`), and five or more open
   `review-blocked` pull requests narrow what the runway lands (the circuit breaker,
-  `.github/workflows/land-approved.yml`). Neither counts a unit stopped for another reason, such
+  `scripts/land/runway.mjs`). Neither counts a unit stopped for another reason, such
   as red CI at its own bound, which `story.mjs` records as `blocked:` on a draft pull request,
   with no label and no issue.
 - **D2. Priority** ("What steward is for"). Probably the order in which work is started, since
@@ -1943,7 +1943,7 @@ shortened where it is long, so that it can be found there with its date.
     (`scripts/dispatch/land.mjs`: `landPullRequest`'s `once` option, and `landing` on its context).
   - Landing when the checks `landWhen` names are green, in the pilot and the runway, rather than
     on `mergeable_state` `clean` (`scripts/land/checks-green.mjs`, `scripts/dispatch/land.mjs`,
-    `.github/workflows/land-approved.yml`).
+    `scripts/land/runway.mjs`).
   - **Planned (ST-25):** the review-and-land pass, one command per pass, started by the dispatcher
     session for now.
   - A `Unit:` line in steward's pull request template (`.github/pull_request_template.md`), a path,

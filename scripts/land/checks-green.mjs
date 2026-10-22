@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Whether the checks a project's `landWhen` setting names are green on a head (ST-24). The pilot,
- * `scripts/dispatch/land.mjs`, and the runway, `.github/workflows/land-approved.yml`, both decide
+ * `scripts/dispatch/land.mjs`, and the runway, `scripts/land/runway.mjs`, both decide
  * this with `checksGreen`, so they cannot differ. GitHub's `mergeable_state` is no help on a
  * repository without branch protection, where it says nothing about which checks are required.
  *
@@ -9,10 +9,10 @@
  * the runway each check it themselves, and it is `pending` while the review that this gate
  * follows is still running.
  *
- * CLI, as the runway calls it: reads one JSON object from standard input,
- * `{ checkRuns, statuses, landWhen, mergeableState }`, and exits 0 printing `ok` when the pull
- * request may be landed on these checks, or exits 1 printing why not. Anything it cannot read exits
- * 2, which the runway also treats as not landable.
+ * CLI, for running it by hand (the runway calls `runwayDecision` in process): reads one JSON object
+ * from standard input, `{ checkRuns, statuses, landWhen, mergeableState }`, and exits 0 printing
+ * `ok` when the pull request may be landed on these checks, or exits 1 printing why not. Anything
+ * it cannot read exits 2.
  */
 import { existsSync, realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'

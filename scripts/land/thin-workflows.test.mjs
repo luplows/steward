@@ -11,7 +11,10 @@ const FILES = ['review-gate.yml', 'land-approved.yml']
 const OWN = (file) => read('.github', 'workflows', file)
 const THIN = (file) => read('templates', 'workflows', file)
 
-const CHECKOUT_STEP = '      - name: Check out steward\n        uses: actions/checkout@v4\n\n'
+// A checkout step of steward's own file: optional comment lines, the step (with an optional `with:`
+// block), and the blank line after it.
+const CHECKOUT_STEP =
+  /(?: {6}#[^\n]*\n)*      - name: Check out steward[^\n]*\n        uses: actions\/checkout@v4\n(?: {8}with:\n(?: {10}[^\n]*\n)+)?\n/g
 const OWN_START = 'node scripts/dispatch/cli.mjs '
 const THIN_START = 'npx --yes --package=github:luplows/steward#v{{STEWARD_VERSION}} steward '
 
@@ -66,8 +69,17 @@ describe('ST-42/AC-3: steward\'s own workflow files run steward\'s commands from
       const text = OWN(file)
       const jobs = text.slice(text.indexOf('\njobs:\n')).split(/^ {2}(?=[a-z][\w-]*:\s*$)/m).slice(1)
       expect(jobs.length).toBeGreaterThan(0)
-      for (const job of jobs) expect(job).toContain(CHECKOUT_STEP.trimEnd())
+      for (const job of jobs) expect(job).toContain('uses: actions/checkout@v4')
     }
+  })
+
+  it('ST-42/AC-3: the pull_request `pending` job checks out the pull request\'s base, never its merge tree', () => {
+    const text = OWN('review-gate.yml')
+    const pending = text.slice(text.indexOf('\n  pending:\n'), text.indexOf('\n  verdict:\n'))
+    expect(pending).toContain('if: github.event_name == \'pull_request\'')
+    expect(pending).toMatch(/uses: actions\/checkout@v4\n {8}with:\n {10}ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}\n/)
+    // No checkout in the file may name the pull request's head or merge ref.
+    expect(text).not.toMatch(/ref: .*(head|merge)/)
   })
 })
 
