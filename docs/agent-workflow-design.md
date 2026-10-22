@@ -742,6 +742,23 @@ since a reviewer's `node -e` can write there and the pilot runs from there (owne
 check itself. Neither notices a write outside the worktree, or to a file git ignores; that is
 ST-6's.
 
+How a rotation meets three other outcomes was decided on 2026-10-21 by the owner, with the planning
+session; the controller works this way (`docs/controller.md`), and **Planned (ST-25):** the
+rotation's command does too. A pull request labelled `review-blocked` is not reviewed until the
+crew removes the label, which saves a session each rotation; considered and not chosen: reviewing
+its new head, as #68's was, while the label still stopped it landing. A refusal from the reviewer
+that holds for every pull request (`rules-unreadable`, since the checklist is read from `main`, or
+`choice-unavailable`, a choice the crew named that is not one, each before a session starts) ends
+the rotation's reviewing, and the pilot still runs for what is cleared, since landing needs no
+reviewer; considered and not chosen: trying each pull request in turn, and stopping the whole
+rotation. `over-usage`, `usage-unknown` and `reviewer-unavailable` are each one pull request's
+outcome, since the choices that may review it depend on the models its coder ran (owner,
+2026-10-22, after #71's first review); considered and not chosen: ending the reviewing on them
+too, as a rule rather than because every later pull request would be refused. Every
+result of the pilot is that pull request's outcome, and landing goes on, `sweep-pending` included,
+which leaves that pull request to a later rotation; considered and not chosen: landing nothing
+more once one is `sweep-pending`.
+
 The crew can tell the controller to hold a pull request back. That is an instruction to the
 session, not part of this design: a pull request whose head passed review lands without a
 go-ahead of its own (owner, 2026-10-12).
