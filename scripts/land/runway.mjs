@@ -148,9 +148,11 @@ export function runRunway({ repo, prInput = '' }, deps = {}) {
       continue
     }
 
-    // Belt and braces: check `review/agent` directly, in case branch protection has lapsed.
-    const verdicts = JSON.parse(api([`repos/${repo}/commits/${sha}/status`]))
-      .statuses.filter((status) => status.context === REVIEW_CONTEXT)
+    // Belt and braces: check `review/agent` directly, in case branch protection has lapsed. It is
+    // read from `statuses` above, which has every page of the head's statuses: a read of the
+    // first page only would miss a `review/agent` on a later one.
+    const verdicts = statuses
+      .filter((status) => status.context === REVIEW_CONTEXT)
       .map((status) => status.state)
       .join('\n')
     if (verdicts !== 'success') {

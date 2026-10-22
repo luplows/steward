@@ -67,7 +67,12 @@ export function fakeGitHub({ pulls = [], blockedCount = null, landWhen = 'all-ch
     match = path.match(/^commits\/([0-9a-f]{40})\/status$/)
     if (match) {
       const p = bySha(match[1])
-      return args.includes('--paginate') ? lines(p.statuses) : JSON.stringify({ statuses: p.statuses })
+      // As GitHub does: a read without `--paginate` gets one page of `per_page` statuses, 30 when
+      // the request names none.
+      const perPage = Number(/per_page=(\d+)/.exec(url)?.[1] ?? 30)
+      return args.includes('--paginate')
+        ? lines(p.statuses)
+        : JSON.stringify({ statuses: p.statuses.slice(0, perPage) })
     }
     throw new Error(`unexpected gh api call: ${args.join(' ')}`)
   }

@@ -102,8 +102,34 @@ describe('deleteMergedHeads', () => {
     const results = deleteMergedHeads(REPO, api)
     expect(deleted).toEqual([])
     expect(results).toEqual([
+      { pr: 3, ref: 'main', outcome: 'kept: main and release branches are never deleted' },
       { pr: 4, ref: 'story/reused', outcome: 'kept: branch has moved since the merge' },
     ])
+  })
+
+  it('ST-47/AC-1 - a merged pull request from main into a release branch deletes nothing and reports main kept', () => {
+    const { api, deleted } = fakeApi([pr(7, 'main', 'm1', { base: { ref: 'release/v0.1.0' } })], { main: 'm1' })
+    expect(deleteMergedHeads(REPO, api)).toEqual([
+      { pr: 7, ref: 'main', outcome: 'kept: main and release branches are never deleted' },
+    ])
+    expect(deleted).toEqual([])
+  })
+
+  it('ST-47/AC-1 - a merged pull request from a release branch into main deletes nothing and reports it kept', () => {
+    const { api, deleted } = fakeApi([pr(8, 'release/v0.1.0', 'r1')], { 'release/v0.1.0': 'r1' })
+    expect(deleteMergedHeads(REPO, api)).toEqual([
+      { pr: 8, ref: 'release/v0.1.0', outcome: 'kept: main and release branches are never deleted' },
+    ])
+    expect(deleted).toEqual([])
+  })
+
+  it('ST-47/AC-1 - a merged story head is still deleted when a release branch is kept beside it', () => {
+    const { api, deleted } = fakeApi(
+      [pr(8, 'release/v0.1.0', 'r1'), pr(9, 'story/ST-47-x', 's1', { base: { ref: 'release/v0.1.0' } })],
+      { 'release/v0.1.0': 'r1', 'story/ST-47-x': 's1' },
+    )
+    deleteMergedHeads(REPO, api)
+    expect(deleted).toEqual(['story/ST-47-x'])
   })
 
   it('OQ-52/AC-1 - ghApi survives a response larger than the 1 MiB default buffer', () => {

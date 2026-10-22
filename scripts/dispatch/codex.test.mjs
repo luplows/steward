@@ -49,14 +49,35 @@ function fakeAppServer({ answer, silent = false }) {
     })
     setInterval(() => {}, 1000)
   `)
-  // The executable is node running the stand-in, given the arguments the real one gets.
-  return (_executable, args, options) => spawn(process.execPath, [script, ...args], options)
+  // The executable is node running the stand-in, given the arguments the real one gets. `first`
+  // is the process the first call starts, the app server: on Windows `killTree` calls it again
+  // to run `taskkill`, and that one is not the process under test.
+  const fake = (_executable, args, options) => {
+    const child = spawn(process.execPath, [script, ...args], options)
+    fake.first ??= child
+    return child
+  }
+  return fake
+}
+
+/** Resolves once `child` has exited, or rejects after `ms`: the stand-in never exits by itself. */
+function exitsWithin(child, ms) {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve()
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL') // so that a failing test leaves no process running
+      reject(new Error(`the process had not exited after ${ms} ms`))
+    }, ms)
+    child.once('exit', () => { clearTimeout(timer); resolve() })
+  })
 }
 
 describe('ST-32/AC-3: Codex usage, read with no model call', () => {
   it('ST-32/AC-3: the app-server exchange sends initialize, then account/rateLimits/read, and stops the process', async () => {
-    const answer = await rateLimitsRpc({ executable: 'codex', cwd: dir, timeoutMs: 20_000, spawnFn: fakeAppServer({ answer: PLUS }) })
+    const spawnFn = fakeAppServer({ answer: PLUS })
+    const answer = await rateLimitsRpc({ executable: 'codex', cwd: dir, timeoutMs: 20_000, spawnFn })
     expect(answer).toEqual({ ok: true, result: PLUS })
+    await expect(exitsWithin(spawnFn.first, 5000)).resolves.toBeUndefined()
   }, 30_000)
 
   it('ST-32/AC-3: a Plus-shaped answer gives the 300-minute window as session and the 10080-minute one as weekly', async () => {
@@ -88,12 +109,14 @@ describe('ST-32/AC-3: Codex usage, read with no model call', () => {
 
   it('ST-32/AC-3: no answer within the time limit is unreadable, and the process is stopped', async () => {
     const started = Date.now()
+    const spawnFn = fakeAppServer({ silent: true })
     const usage = await readCodexUsage({
       executable: 'codex', cwd: dir, timeoutMs: 1500,
-      rpc: (o) => rateLimitsRpc({ ...o, spawnFn: fakeAppServer({ silent: true }) }),
+      rpc: (o) => rateLimitsRpc({ ...o, spawnFn }),
     })
     expect(usage).toEqual({ ok: false, reason: 'codex app-server gave no rate limits within 1.5 seconds' })
     expect(Date.now() - started).toBeLessThan(15_000)
+    await expect(exitsWithin(spawnFn.first, 5000)).resolves.toBeUndefined()
   }, 30_000)
 
   it('ST-32/AC-3: a process that cannot start is unreadable', async () => {

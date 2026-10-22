@@ -213,11 +213,11 @@ describe('ST-24/AC-3: the runway decides with it in place of the mergeable_state
     expect(merges).toHaveLength(1)
   })
 
-  it('ST-24/AC-3: the belt-and-braces check of review/agent and the merge by head are unchanged, and in order', () => {
+  it('ST-24/AC-3: the review/agent check reads the statuses after the check runs, and the merge by head follows, unchanged', () => {
     const { deps, merges } = fakeGitHub({ pulls: [pull(1)] })
     const order = []
     deps.api = ((api) => (args) => {
-      order.push(args.some((arg) => arg.includes('/check-runs')) ? 'checks' : args.at(-1).endsWith('/status') ? 'review' : 'other')
+      order.push(args.some((arg) => arg.includes('/check-runs')) ? 'checks' : args.some((arg) => arg.includes('/status?')) ? 'review' : 'other')
       return api(args)
     })(deps.api)
     const merge = deps.merge

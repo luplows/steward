@@ -18,27 +18,27 @@ into steward commands, so that they are fixed where the code then lives.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — **Merged heads.** Deleting merged heads (today
+- [x] **AC-1** — **Merged heads.** Deleting merged heads (today
       `scripts/land/delete-merged-heads.mjs`; after ST-42, wherever ST-42 puts it) never deletes
       `main` or a branch `isLandingBase` (`scripts/land/release-branch.mjs`) accepts, whatever the
       merged pull request's base, and reports each it kept as kept, naming the reason. Tests: a
       merged pull request from `main` into `release/v0.1.0`, and one from `release/v0.1.0` into
       `main`, each with the branch still at the merged head, delete nothing and report the branch
       kept; a merged `story/` head is still deleted as before.
-- [ ] **AC-2** — **The runway's re-check of `review/agent`.** The runway's direct re-check of
+- [x] **AC-2** — **The runway's re-check of `review/agent`.** The runway's direct re-check of
       `review/agent` on the head before it merges (today `land-approved.yml`, the lines under the
       comment "Belt and braces"; after ST-42, the command that runs it) reads every page of the
       head's statuses, so that a `review/agent` status on a later page is found. A test gives it a
       first page full of other contexts and `review/agent` `success` on the second, and shows it
       found; with no `review/agent` on any page, it still skips the pull request.
-- [ ] **AC-3** — **Codex's process is stopped.** In `scripts/dispatch/codex.test.mjs`, the two
+- [x] **AC-3** — **Codex's process is stopped.** In `scripts/dispatch/codex.test.mjs`, the two
       ST-32/AC-3 tests named for stopping the process ("…, and stops the process" and "no answer
       within the time limit is unreadable, and the process is stopped") each assert that the
       process the fake app server runs in exits after the result is returned, waiting for its exit
       for at most 5 seconds; the stand-in never exits by itself. The pull request's body shows each
       failing with the call that stops the process removed from `rateLimitsRpc`
       (`scripts/dispatch/codex.mjs`).
-- [ ] **AC-4** — **A test named for what it checks.** The test in
+- [x] **AC-4** — **A test named for what it checks.** The test in
       `scripts/land/apply-review-blocked.test.mjs` titled "applyReviewBlocked makes no labels
       request at all when the label is already there" is retitled to say what it checks: that no
       request changes a label when the label is already there. Its expectations are unchanged.
