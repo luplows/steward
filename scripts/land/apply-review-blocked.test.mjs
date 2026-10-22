@@ -72,7 +72,7 @@ describe('OQ-80/AC-2: never removed, and not reapplied to a pull request that ca
     })
   })
 
-  it('applyReviewBlocked makes no labels request at all when the label is already there', () => {
+  it('applyReviewBlocked sends no request that changes a label when the label is already there', () => {
     const calls = []
     const api = (args) => {
       calls.push(args)

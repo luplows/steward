@@ -54,6 +54,22 @@ describe('ST-42/AC-1: runway lands the oldest ready pull request, once', () => {
     expect(logs).toContain(`PR #1: review/agent=absent on ${SHA_OF(1)}, skipping`)
   })
 
+  it('ST-47/AC-2: a review/agent success on the second page of statuses is found, and the pull request lands', () => {
+    const others = Array.from({ length: 100 }, (_, i) => ({ context: `other/${i}`, state: 'success', id: 10 + i }))
+    const review = { context: 'review/agent', state: 'success', id: 2 }
+    const { deps, merges } = fakeGitHub({ pulls: [pull(1, { statuses: [...others, review] })] })
+    expect(runRunway({ repo: REPO }, deps)).toEqual({ landed: 1 })
+    expect(merges).toEqual([mergeArgs(1)])
+  })
+
+  it('ST-47/AC-2: with no review/agent on any page, the pull request is still skipped', () => {
+    const others = Array.from({ length: 101 }, (_, i) => ({ context: `other/${i}`, state: 'success', id: 10 + i }))
+    const { deps, merges, logs } = fakeGitHub({ pulls: [pull(1, { statuses: others })] })
+    expect(runRunway({ repo: REPO }, deps)).toEqual({ landed: null })
+    expect(merges).toEqual([])
+    expect(logs).toContain(`PR #1: review/agent=absent on ${SHA_OF(1)}, skipping`)
+  })
+
   it('ST-42/AC-1: an unreadable landWhen skips the pull request rather than landing it', () => {
     const { deps, merges, logs } = fakeGitHub({ pulls: [pull(1)], landWhen: 'some' })
     expect(runRunway({ repo: REPO }, deps)).toEqual({ landed: null })
