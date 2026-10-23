@@ -109,12 +109,12 @@ not always the intended one. Every gate is designed against that, not merely aga
 
 ## The shape
 
-Two sides, run separately (`outline.md`, "The two sides"). The **review side** reviews any open
-pull request from an author the gate honours, whoever wrote it, and lands what passes. It is
-built, and the controller runs it by hand, one rotation at a time (**Planned (ST-25):** one
-command per rotation). The **coding side** takes ready units, and pull requests on a go-around. It
-is decided but not built (**The coding side**, below). Until it is, steward's pull requests are
-written in the crew's own sessions.
+Two sides, run separately (`outline.md`, "The two sides"). The **review side** reviews any open pull
+request from an author the gate honours, whoever wrote it, and lands what passes. It is built, and
+the controller starts one rotation at a time with one command, `node scripts/dispatch/cli.mjs
+rotation`. The **coding side** takes ready units, and pull requests on a go-around. It is decided
+but not built (**The coding side**, below). Until it is, steward's pull requests are written in the
+crew's own sessions.
 
 ```
   ┌─ PLANNING (the crew, with the planning session) ───────────┐
@@ -700,28 +700,32 @@ reviewer limits.
 ### The controller
 
 Decided 2026-09-28 by the owner, in tower-workshop-paths, as the dispatcher session; named the
-controller on 2026-10-12 (`glossary.md`). Until ATC runs rotations on a trigger of its own, the
-dispatch scripts are run by hand from an agent session a member of the crew has asked to act as
-controller, which relays what they return. It is ATC's hands, not a coder or a reviewer: it changes
-nothing itself and decides no verdict. On steward it runs `review.mjs` and `land.mjs`, the pilot
-("Portability", "Decided so far"); in tower-workshop-paths it also ran `coder.mjs` and `story.mjs`.
-It works as a rotation will: one pull request's outcome does not stop the others, and only a
-failure of the rotation itself stops it (owner, 2026-10-12; `docs/controller.md`).
+controller on 2026-10-12 (`glossary.md`). Until ATC runs rotations on a trigger of its own, they
+are started by hand from an agent session a member of the crew has asked to act as controller,
+which relays what the command prints. It is ATC's hands, not a coder or a reviewer: it changes
+nothing itself and decides no verdict. On steward it runs one command, `node
+scripts/dispatch/cli.mjs rotation` (`scripts/dispatch/rotation.mjs`), and `review.mjs --rereview`
+when asked ("Portability", "Decided so far"); in tower-workshop-paths it also ran `coder.mjs` and
+`story.mjs`. The command works as the controller did by hand: one pull request's outcome does not
+stop the others, and only a failure of the rotation itself stops it (owner, 2026-10-12;
+`docs/controller.md`).
 
-It runs them from a worktree of its own at a detached `origin/main`, never from the repository's
-main checkout (decided 2026-10-06 by the owner, replacing the main checkout). Before each rotation
-it fetches `origin` and checks out `origin/main`, detached, as the loop's `updateCheckout` does.
-The scripts take the project from the working directory and their prompts from the checkout they
-are loaded from (`ENGINE_ROOT`, `coder.mjs`; OQ-123, OQ-130), and the session runs them in that
-worktree, so both are what has landed, and the main checkout is left free for whoever else is
-working. This is a rule, not a mechanism: only the loop's `main` refuses a checkout with a branch
-checked out (`requireOwnWorktree`, `scripts/dispatch/loop.mjs`).
+It runs the command from a worktree of its own, never from the repository's main checkout (decided
+2026-10-06 by the owner, replacing the main checkout). The command refuses a checkout with a branch
+checked out (`requireOwnWorktree`, `scripts/dispatch/loop.mjs`), then fetches `origin` and checks
+out `origin/main`, detached, as the loop's `updateCheckout` does, and stops if the worktree has
+anything uncommitted. The scripts take the project from the working directory and their prompts from
+the checkout they are loaded from (`ENGINE_ROOT`, `coder.mjs`; OQ-123, OQ-130), so those are what
+has landed, and the main checkout is left free for whoever else is working. The modules of the
+command itself are loaded before the worktree is updated, so a change to the dispatch scripts that
+landed since the worktree was last updated takes effect from the next rotation.
 
-**It may land, and only through the pilot.** It runs `land.mjs` for a pull request whose head has
-an honoured `pass` or `pass-with-observations` verdict and green CI, with no further go-ahead
-(owner, 2026-10-12). It never runs `gh workflow run land-approved.yml`, and never merges through
-the API or any other way. No other agent session starts the runway. `AGENTS.md`, "Every
-session", and `docs/controller.md` state the rule; this section is its rationale.
+**It may land, and only through the pilot.** The rotation runs `land.mjs`, with `once`, for a pull
+request whose head has an honoured `pass` or `pass-with-observations` verdict, with no further
+go-ahead (owner, 2026-10-12); the pilot itself looks for green CI. The controller never runs
+`gh workflow run land-approved.yml`, and never merges through the API or any other way. No other
+agent session starts the runway. `AGENTS.md`, "Every session", and `docs/controller.md` state the
+rule; this section is its rationale.
 
 Why this is safe enough:
 
@@ -735,29 +739,27 @@ Why this is safe enough:
   runway some other way. The rule names `land.mjs` because that module's own allowlist permits the
   one dispatch and no other write.
 
-It also stops if a review changes its worktree: after each review, before the next review or the
-pilot, it checks that `HEAD` is the commit it checked out and that `git status` shows nothing,
-since a reviewer's `node -e` can write there and the pilot runs from there (owner, 2026-10-15;
-`docs/controller.md`, "Reporting and stopping"). **Planned (ST-25):** the rotation makes the same
-check itself. Neither notices a write outside the worktree, or to a file git ignores; that is
-ST-6's.
+The rotation also stops if a review changes its worktree: after each review, before the next review
+or the pilot, it checks that `HEAD` is the commit it checked out and that `git status` shows
+nothing, since a reviewer's `node -e` can write there and the pilot runs from there (owner,
+2026-10-15; `scripts/dispatch/rotation.mjs`). The check does not notice a write outside the
+worktree, or to a file git ignores; that is ST-6's.
 
 How a rotation meets three other outcomes was decided on 2026-10-21 by the owner, with the planning
-session; the controller works this way (`docs/controller.md`), and **Planned (ST-25):** the
-rotation's command does too. A pull request labelled `review-blocked` is not reviewed until the
-crew removes the label, which saves a session each rotation; considered and not chosen: reviewing
-its new head, as #68's was, while the label still stopped it landing. A refusal from the reviewer
-that holds for every pull request (`rules-unreadable`, since the checklist is read from `main`, or
-`choice-unavailable`, a choice the crew named that is not one, each before a session starts) ends
-the rotation's reviewing, and the pilot still runs for what is cleared, since landing needs no
-reviewer; considered and not chosen: trying each pull request in turn, and stopping the whole
-rotation. `over-usage`, `usage-unknown` and `reviewer-unavailable` are each one pull request's
-outcome, since the choices that may review it depend on the models its coder ran (owner,
-2026-10-22, after #71's first review); considered and not chosen: ending the reviewing on them
-too, as a rule rather than because every later pull request would be refused. Every
-result of the pilot is that pull request's outcome, and landing goes on, `sweep-pending` included,
-which leaves that pull request to a later rotation; considered and not chosen: landing nothing
-more once one is `sweep-pending`.
+session; the rotation's command works this way (`scripts/dispatch/rotation.mjs`). A pull request
+labelled `review-blocked` is not reviewed until the crew removes the label, which saves a session
+each rotation; considered and not chosen: reviewing its new head, as #68's was, while the label
+still stopped it landing. A refusal from the reviewer that holds for every pull request
+(`rules-unreadable`, since the checklist is read from `main`, or `choice-unavailable`, a choice the
+crew named that is not one, each before a session starts) ends the rotation's reviewing, and the
+pilot still runs for what is cleared, since landing needs no reviewer; considered and not chosen:
+trying each pull request in turn, and stopping the whole rotation. `over-usage`, `usage-unknown` and
+`reviewer-unavailable` are each one pull request's outcome, since the choices that may review it
+depend on the models its coder ran (owner, 2026-10-22, after #71's first review); considered and not
+chosen: ending the reviewing on them too, as a rule rather than because every later pull request
+would be refused. Every result of the pilot is that pull request's outcome, and landing goes on,
+`sweep-pending` included, which leaves that pull request to a later rotation; considered and not
+chosen: landing nothing more once one is `sweep-pending`.
 
 The crew can tell the controller to hold a pull request back. That is an instruction to the
 session, not part of this design: a pull request whose head passed review lands without a
@@ -1943,8 +1945,8 @@ shortened where it is long, so that it can be found there with its date.
   - Landing when the checks `landWhen` names are green, in the pilot and the runway, rather than
     on `mergeable_state` `clean` (`scripts/land/checks-green.mjs`, `scripts/dispatch/land.mjs`,
     `scripts/land/runway.mjs`).
-  - **Planned (ST-25):** the review-and-land pass, one command per pass, started by the dispatcher
-    session for now.
+  - A rotation of the review side as one command, `node scripts/dispatch/cli.mjs rotation`
+    (`scripts/dispatch/rotation.mjs`), started by the controller for now.
   - A `Unit:` line in steward's pull request template (`.github/pull_request_template.md`), a path,
     `#<n>` or `none`.
 - **Agents' instructions are split by who needs them, and written for any tool** (decided
@@ -2164,9 +2166,8 @@ shortened where it is long, so that it can be found there with its date.
   written, with the environment scrubbed, which would make the guarantee look stronger than it
   is; and a separate spike for the reviewer beside ST-6. **Also decided the same day by the
   owner: a review that changes the controller's worktree stops the rotation**, checked after each
-  review (`docs/controller.md`, "Reporting and stopping"; **Planned (ST-25)** for the rotation's
-  own check). It is a cheap check until containment exists. Considered and not chosen: leaving
-  detection to the stories ST-6 recommends.
+  review (`scripts/dispatch/rotation.mjs`). It is a cheap check until containment exists.
+  Considered and not chosen: leaving detection to the stories ST-6 recommends.
 - **A body that says `Unit: none` and also links a unit is a contradiction** (decided 2026-10-15
   by the owner, when ST-19's coder found the story silent on it). ATC
   reads neither, and tells the reviewer it found several links, with `Unit: none` among them, as it
@@ -2337,8 +2338,8 @@ shortened where it is long, so that it can be found there with its date.
   what ran; and leaving the coder's side to ST-15, which builds a Codex coder. Until ST-15 is built,
   every coder choice runs on Claude Code, so the coder's move finds no other choice in practice.
 - **A reviewer that returns no verdict on an unchanged head could not review** (decided 2026-10-16
-  by the owner, with the planning session, after the first rotation on the Codex reviewer;
-  **Planned (ST-25)**). On #48, Codex's command tool would not start, because a helper was
+  by the owner, with the planning session, after the first rotation on the Codex reviewer).
+  On #48, Codex's command tool would not start, because a helper was
   missing beside `codex.exe`, so the reviewer returned a `null` verdict, and ATC reported
   `no-verdict` with exit 0, as it does for a head that moved. Of the reasons `reviewer.md` gives
   for a `null` verdict, only a moved head is ordinary; the others are faults in the machine or the
@@ -2346,7 +2347,7 @@ shortened where it is long, so that it can be found there with its date.
   head again: a `null` verdict on a head that moved stays `no-verdict`, and one on an unchanged
   head is `cannot-review`, a failure (ST-37). `cannot-review` stops the rotation, as a script
   error does, since a reviewer that cannot work on this machine would fail every pull request the
-  same way (`docs/controller.md`, ST-37; the rotation's command, ST-25). ATC does not move the
+  same way (`scripts/dispatch/rotation.mjs`, ST-37). ATC does not move the
   review to another choice: a broken tool needs someone to fix it, and moving on would hide the
   fault. Considered and not chosen: a reason field in the reviewer's `null` verdict, which would
   change `reviewer.md` and rest on the reviewer classifying its own failure; going on to the next

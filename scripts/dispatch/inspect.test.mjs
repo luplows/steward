@@ -732,13 +732,16 @@ describe('ST-29/AC-8: the workflow', () => {
 describe('ST-29/AC-10 and AC-11: the documents', () => {
   const read = (...p) => readFileSync(path.join(ROOT, ...p), 'utf8')
 
-  it('ST-29/AC-10: the controller runs inspect once after the rotation, and the exit code does not stop it', () => {
+  // ST-25/AC-8: the rotation command runs inspect itself, so the controller no longer runs it by hand.
+  it('ST-29/AC-10: the controller reports inspect\'s output and exit code, which does not stop the rotation', () => {
     const controller = read('docs', 'controller.md')
     const rotation = controller.slice(controller.indexOf('## A rotation'), controller.indexOf('## Reporting and stopping'))
-    expect(rotation).toMatch(/run `node scripts\/dispatch\/cli\.mjs inspect` once/)
-    expect(rotation).toMatch(/does not stop the rotation/)
+    expect(rotation).toMatch(/and runs\s+`inspect`/)
+    const reporting = controller.slice(controller.indexOf('## Reporting and stopping'), controller.indexOf('## Re-review'))
+    expect(reporting).toMatch(/output of inspection with\s+its\s+exit\s+code/)
+    expect(reporting).toMatch(/does not stop the rotation/)
     const what = controller.slice(controller.indexOf('## What you are'), controller.indexOf('## Where you run'))
-    expect(what).toMatch(/`review\.mjs`, `land\.mjs` and `inspect`/)
+    expect(what).toMatch(/`inspect\.mjs`/)
   })
 
   it('ST-29/AC-11: no marker names ST-29, and the glossary and outline no longer call inspection planned or unbuilt', () => {
