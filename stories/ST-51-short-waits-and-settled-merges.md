@@ -36,18 +36,16 @@ rotation prints about the state of the repository is false.
       `landPullRequest` (`scripts/dispatch/land.mjs`) with `once: true`, when `passedAt` is the
       pull request's current head and `review/agent` on it is not `success` (pending, absent,
       `failure` or `error`), the pilot reads it again every `POLL_INTERVAL_MS` for up to
-      `GATE_LAG_BOUND_MS`. Once it reads `success`, the look goes on as today (a conflict, the
-      checks `landWhen` names, then the one trigger). If it has not read `success` by the bound,
-      it returns `not-landable` with the reason `gate-lag`. Without `passedAt`, or with a
-      `passedAt` that is not the current head, `once` returns `not-landable` with the reason
-      `review-pending` at once, as today. Nothing else `once` returns waits: checks still running,
-      a conflict, `github-blocked` and the other statuses are returned at once, as today. Without
-      `once`, nothing changes. Tests, with `sleep`, `now` and GitHub injected: a status pending at
-      the first read and `success` at the second lands, with one `sleep` of `POLL_INTERVAL_MS`
-      between; a status that stays pending returns `not-landable` with `gate-lag` once
-      `GATE_LAG_BOUND_MS` has passed, having triggered nothing; a pending status without
-      `passedAt` returns `review-pending` with no `sleep`; and, with `success` read after the
-      wait, checks still running return `not-landable` at once.
+      `GATE_LAG_BOUND_MS`. Once it reads `success`, the look goes on. If it has not read
+      `success` by the bound, it returns `not-landable` with the reason `gate-lag`, having
+      triggered nothing. In every other case, `once` returns what it returns today (`assess` and
+      `landPullRequest`), without waiting; without `once`, nothing changes. Tests, with `sleep`,
+      `now` and GitHub injected: a status pending at the first read and `success` at the second
+      lands, with one `sleep` of `POLL_INTERVAL_MS` between; a status that stays pending returns
+      `not-landable` with `gate-lag` once `GATE_LAG_BOUND_MS` has passed, having triggered
+      nothing; and, for a pending status and for a `failure` status, each with no `passedAt` and
+      with a `passedAt` that is not the head, the result is the one the code before this change
+      returns, with no `sleep`.
 - [ ] **AC-4** — **The rule is written where the waits are.** `land.mjs`'s header says, in place
       of "look once instead of waiting": a rotation waits only for an event that finishes on its
       own within a known bound, the gate's status after a verdict (`GATE_LAG_BOUND_MS`) and the
@@ -110,10 +108,10 @@ rotation prints about the state of the repository is false.
   request", 21 seconds after the merge (07:58:19Z merged, 07:58:40Z opened); GitHub's
   `commits/23caaf0/pulls` returned #83 when read afterwards. The rotation printed inspection's
   output before the pull request lines, though the landing came first.
-- `scripts/dispatch/land.mjs`: `assess` (a `failure` at `passedAt` is waited through as
-  `gate-lag` without `once`, OQ-104; anything not `success` is otherwise `review-pending`), the
-  `once` branch of `landPullRequest`, `POLL_INTERVAL_MS` (15 seconds), `GATE_LAG_BOUND_MS`
-  (2 minutes), `SWEEP_RUN_BOUND_MS` (3 minutes) and `REVIEW_PENDING_BOUND_MS` (30 minutes).
+- `scripts/dispatch/land.mjs`: `assess`, where `passedAt` already lets a call without `once` wait
+  through the gate's lag (OQ-104); the `once` branch of `landPullRequest`; `POLL_INTERVAL_MS`
+  (15 seconds), `GATE_LAG_BOUND_MS` (2 minutes), `SWEEP_RUN_BOUND_MS` (3 minutes) and
+  `REVIEW_PENDING_BOUND_MS` (30 minutes).
 - `scripts/dispatch/rotation.mjs`: step 4 calls `landPullRequest` with `passedAt` set to the head
   and `once: true`; `printRecords` prints every pull request's line at the end.
 - `scripts/dispatch/inspect.mjs`: `inspectMerges` reads each commit's pull requests

@@ -343,9 +343,10 @@ it:
   landable one has the runway requested once and is polled for its merge for at most
   `SWEEP_RUN_BOUND_MS`, returning `merged` or `sweep-pending`. **Planned (ST-51):** with `once`,
   it also waits up to `GATE_LAG_BOUND_MS` for `review/agent` when it holds a pass at the current
-  head, and returns `gate-lag` if the gate has not caught up by then. With the settings' `land`
-  false it sends nothing and returns `landing-off`. The runway was a `*/15` schedule until
-  2026-09-18, which GitHub delivered at roughly 5% of that rate (**Watchdog**, below).
+  head, and returns `not-landable` with the reason `gate-lag` if the gate has not caught up by
+  then. With the settings' `land` false it sends nothing and returns `landing-off`. The runway was
+  a `*/15` schedule until 2026-09-18, which GitHub delivered at roughly 5% of that rate
+  (**Watchdog**, below).
 - **It lands when the checks the settings' `landWhen` names are green on the head**, as well as
   `review/agent`, in the pilot and in the runway alike, rather than on `mergeable_state` `clean`,
   which on a repository without branch protection says nothing about which checks are required
