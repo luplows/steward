@@ -96,7 +96,7 @@ implementation scripts.
   installation in two existing projects" records the decision and alternatives.
 - Design doc, "Steward installs in another project as a review gate, through `init`": the
   adoption order and the two projects' unit conventions, already recorded there.
-- ST-25, `stories/ST-25-review-pass.md`: the review-and-land rotation.
+- ST-25, `stories/done/ST-25-review-pass.md`: the review-and-land rotation.
 - ST-42, `stories/done/ST-42-gate-runs-installed-steward.md`: installed gate commands and thin
   workflow files, with no project copy of steward's implementation.
 - ST-44, `stories/done/ST-44-init.md`: installation, project settings and existing-file
