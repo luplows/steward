@@ -2416,7 +2416,10 @@ shortened where it is long, so that it can be found there with its date.
     commands the crew types. Whether that hurts adoption is to be revisited later (owner). A tag in
     steward's repository is never moved once cut (owner), so a pinned tag names one version for
     good. Considered and not chosen: pinning the commit the tag points at, which is safer against a
-    moved tag but harder to read.
+    moved tag but harder to read. Since then, each job of these files, and of steward's own, that
+    runs `node` or `npx` sets up Node 24 before its first such step, which the words above leave
+    out; see "One Node version for all of steward, and protection apart from `init`",
+    below.
   - **A basic example checklist ships in the package**, applicable to any project running steward,
     with obvious placeholders for a project's own additions: `templates/review-checklist.md`. It
     starts from steward's `REVIEW.md`, less the claims item, the Docs check on named files, the rule
@@ -2565,6 +2568,33 @@ shortened where it is long, so that it can be found there with its date.
   request into it left pending or holding. A finding on `main` keeps its title, so nothing already
   raised is raised again. Considered and not chosen: the stall check alone, leaving merges on a
   release branch to branch protection.
+- **One Node version for all of steward, and protection apart from `init`** (decided 2026-10-23 by
+  the owner, with the planning session, from the release review of `v0.1.0`). The release review's
+  walkthrough ran `init --ref <commit>` on a scratch repository and found two defects that block
+  the release. Each is a `tier: fix` story, and each reaches `release/v0.1.0` as the release
+  review's cherry-pick pull request, after it lands on `main` (`release-review.md`, "The
+  walkthrough").
+  - **Steward uses Node 24 everywhere, and the workflows set it up.** The thin workflow files ran
+    `npx --yes --package=github:luplows/steward#v{{STEWARD_VERSION}} steward <command>` on the
+    runner's default Node and npm, since no thin template had an `actions/setup-node` step. On npm
+    10.x the install fails with `GitFetcher requires an Arborist constructor to pack a tarball`, so
+    every thin step failed: the gate, landing and inspection. Node 22 ships npm 10 and Node 24 ships
+    npm 11, and `README.md` and `ci.yml` named Node 22 when this was decided. The owner's goal is
+    one Node version for all of steward, its workflows and running it locally. So: `package.json`
+    has `engines.node`, `"24.x"`, as the one place the version is declared (owner; not chosen:
+    `>=24`, which lets a machine run a major CI never tested, and an exact release, which every
+    patch would have to move); every job that runs
+    `node` or `npx`, in steward's own `.github/workflows/*.yml` and in the thin templates, has an
+    `actions/setup-node` step with Node 24 before its first such step, CI moving from Node 22 to
+    24, and only CI's step keeping npm's cache, since only CI runs `npm ci` (owner); a test checks
+    it mechanically for both sets of files, the thin templates naming 24 literally since they run
+    in a project and cannot read steward's `package.json`; and `README.md` asks for Node 24 (npm
+    11 or newer).
+    Considered and not chosen: Node 22 with the install switched to GitHub's tarball URL, which
+    works on npm 10 but leaves Node 22 sooner and makes the command less readable;
+    `npx --yes npm@11 exec …` in every step, which is odd and fragile; and publishing to the npm
+    registry, a bigger decision. Out of scope: steward refusing at start-up on a Node it does not
+    support.
 
 ### The move, in order
 
@@ -2662,13 +2692,14 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   `land-approved.yml` runs the commands `runway` (`scripts/land/runway.mjs`, which uses
   `select-candidates.mjs`, `check-author.mjs` and `checks-green.mjs`) and `delete-merged-heads`.
   `review-gate.yml` runs `mark-pending`, `apply-verdict` and `apply-review-blocked`, which derive
-  `review/agent`. Each of these workflows holds only its triggers, permissions, concurrency and
-  environment, and runs `node scripts/dispatch/cli.mjs <command>` from steward's checkout. The
-  package carries the same two workflows in thin form, in `templates/workflows/`, which `init`
-  writes with the tag filled, and which start the same commands from steward installed at a pinned
-  tag and check out nothing, so `runway` reads the project's `steward.config.json` `landWhen` from
-  `main` through the API. Inspection's workflow is there in thin form too; it checks out the
-  project, for its settings.
+  `review/agent`. Each of these workflows holds only its triggers, permissions, concurrency,
+  environment and the set-up of Node, and runs `node scripts/dispatch/cli.mjs <command>` from
+  steward's checkout. The package carries the same two workflows in thin form, in
+  `templates/workflows/`, which `init` writes with the tag filled, and which start the same commands
+  from steward installed at a pinned tag and check out nothing, so `runway` reads the project's
+  `steward.config.json` `landWhen` from `main` through the API. Inspection's workflow is there in
+  thin form too; it checks out the project, for its settings. Each job of these files, steward's own
+  and the thin ones, sets up Node 24 before its first `node` or `npx` step.
 - The rules the gate enforces mix the general with this project's own: `REVIEW.md`, `AGENTS.md`,
   `stories/README.md`, `stories/_TEMPLATE.md` and this document.
 

@@ -6,6 +6,9 @@
   "bin": {
     "steward": "scripts/dispatch/cli.mjs"
   },
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "lint": "oxlint",
     "check": "npm run lint && npm test",
