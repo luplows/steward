@@ -66,7 +66,7 @@ Provisional, until the Open questions are settled.
 - **Where the lock lives.** In the rotation's own worktree (under its git directory, so that
   `git status` never shows it), or machine-wide for the project, beside the machine's settings
   (`~/.steward/`, named for the repository), so that two worktrees of one project on one machine
-  are covered too. The planning session suggests machine-wide, named for the repository.
+  are covered too. Left open, to be refined later (owner, 2026-10-24).
 - **A lock left behind.** A rotation that crashed, or a machine that restarted, leaves its lock.
   Options: the lock records the process id and its start, and a later rotation takes it over when
   that process is no longer running, saying so; or a lock older than a bound is taken over; or the
