@@ -122,11 +122,11 @@ describe('ST-42/AC-4: the package carries the thin files a project uses', () => 
     }
   })
 
-  it('ST-42/AC-4: neither file checks out the project, installs its dependencies or sets up Node', () => {
+  it('ST-42/AC-4: neither file checks out the project or installs its dependencies', () => {
     for (const file of FILES) {
       const text = THIN(file)
       expect(text).not.toMatch(/actions\/checkout/)
-      expect(text).not.toMatch(/npm ci|npm install|setup-node/)
+      expect(text).not.toMatch(/npm ci|npm install/)
     }
   })
 
@@ -163,6 +163,17 @@ describe('ST-42/AC-5: steward\'s own files and the thin files differ only in how
     expect(firstDifference(OWN('land-approved.yml'), other)).not.toBeNull()
     const lost = THIN('land-approved.yml').replace(/ {6}- name: Delete head branches[\s\S]*$/, () => '')
     expect(firstDifference(OWN('land-approved.yml'), lost)).not.toBeNull()
+  })
+
+  it('ST-49/AC-5: fails on a thin file that lacks the Node set-up step, or sets up another version', () => {
+    const setup = / {6}- name: Set up Node\n(?: {8}[^\n]*\n)+\n/
+    for (const file of FILES) {
+      const lost = THIN(file).replace(setup, () => '')
+      expect(lost).not.toBe(THIN(file))
+      expect(firstDifference(OWN(file), lost)).not.toBeNull()
+      const other = THIN(file).replace('node-version: 24', () => 'node-version: 22')
+      expect(firstDifference(OWN(file), other)).not.toBeNull()
+    }
   })
 
   it('ST-42/AC-5: fails on an own file that carries a step the thin file lacks, besides the checkout', () => {
@@ -258,7 +269,7 @@ describe('ST-44/AC-6: the thin inspection workflow the package carries stays in 
     expect(Object.keys(COMMANDS)).toContain('inspect')
     expect(text.match(/\{\{[A-Z_]+\}\}/g)).toEqual(['{{STEWARD_VERSION}}'])
     expect(text).toContain('uses: actions/checkout@v4')
-    expect(text).not.toMatch(/npm ci|npm install|setup-node/)
+    expect(text).not.toMatch(/npm ci|npm install/)
   })
 
   it('ST-44/AC-6: no comment in either file makes a statement particular to steward\'s repository', () => {

@@ -6,10 +6,10 @@ name: Review gate
 # unlike PR reviews -- carry no self-approval restriction, so a single-account project can still
 # gate itself.
 #
-# This file holds the triggers, permissions and environment, and runs steward's commands. What each
-# one decides is in its module under scripts/land/ in steward's package, and steward's design
-# document (docs/agent-workflow-design.md in steward's repository), "What the gate enforces", says
-# why.
+# This file holds the triggers, permissions and environment, sets up Node, and runs steward's
+# commands. What each one decides is in its module under scripts/land/ in steward's package, and
+# steward's design document (docs/agent-workflow-design.md in steward's repository), "What the
+# gate enforces", says why.
 #
 # Flow:
 #   1. A PR opens or gets a new commit -> `mark-pending` sets `review/agent` pending, which
@@ -74,6 +74,12 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
+      - name: Set up Node
+        # Node 24 ships npm 11; the runner's default npm cannot install steward from GitHub.
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Mark review pending
         env:
           GH_TOKEN: ${{ github.token }}
@@ -90,6 +96,12 @@ jobs:
       && contains(github.event.comment.body, '<!-- agent-review')
     runs-on: ubuntu-latest
     steps:
+      - name: Set up Node
+        # Node 24 ships npm 11; the runner's default npm cannot install steward from GitHub.
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Apply verdict from marker
         env:
           GH_TOKEN: ${{ github.token }}

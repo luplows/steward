@@ -36,6 +36,12 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v4
 
+      - name: Set up Node
+        # Node 24 ships npm 11; the runner's default npm cannot install steward from GitHub.
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Inspect
         env:
           GH_TOKEN: ${{ github.token }}
