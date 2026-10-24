@@ -395,12 +395,20 @@ settles it.
 - **Landing never waits** (owner, 2026-10-11). A rotation checks once whether each passed pull
   request is safe to merge, and leaves one that is not for a later rotation. Landing can be retried
   freely, by any later rotation, for as long as the pull request is reported safe to merge.
+  - **Revised 2026-10-24 by the owner: not waiting does not mean moving past as fast as
+    possible.** A rotation waits for an event that finishes on its own within a known bound, such
+    as two minutes for the gate to post `review/agent` after a verdict, so that a pull request
+    passed in the rotation lands in it, and for nothing else: anything of unknown length, such as
+    checks still running, is left for a later rotation. What a rotation reports must not be false
+    about the state of things (ST-51).
 - **A rotation reviews at most a set number of pull requests** (owner, 2026-10-11), so that a
   whole rotation, not only each session, has a ceiling on what it spends. The planning session
   suggested 5, set on the command line. The owner expects rarely to have more than a couple of
   pull requests in flight.
 - **One machine runs the review side, for now** (owner, 2026-10-11). Several machines are wanted
-  later, and the rotation is built so that adding them is small. Ideas kept for then, none decided:
+  later, and the rotation is built so that adding them is small. On one machine, while a rotation
+  is running, any later rotation is locked out (owner, 2026-10-24; ST-52); several machines, and
+  several reviewers at once, are still to be solved. Ideas kept for then, none decided:
   - landing is already safe across machines: each trigger names its pull request, and the runway
     re-checks it before merging;
   - reviewing is the exposure, since two machines could review the same head and both pay, though
