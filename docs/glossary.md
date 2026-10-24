@@ -65,8 +65,8 @@ Where a file defines the thing, the entry names it, and the file is the authorit
   `stories/README.md`. A project need not use stories.
 - **flight plan** — the unit a flight links to, with a `Unit:` line in its body, or `Unit: none`.
 - **rotation** — one run of the review side: it reviews open flights that need a verdict, up to a
-  cap, then has the pilot request landing for each that is cleared, and exits (planned: ST-25;
-  run by hand by the controller until then). *Formerly: a pass.*
+  cap, then has the pilot request landing for each that is cleared, runs inspection, and exits. The
+  command is `node scripts/dispatch/cli.mjs rotation`. *Formerly: a pass.*
 - **clearance** — what a flight needs before the pilot requests landing: a passing verdict at its
   head, and green on the checks the settings name.
 - **landing** — the runway merging a flight. The pilot **requests landing**; only the runway
