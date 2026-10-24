@@ -17,13 +17,13 @@ default npm.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `package.json` has `engines.node` set to `"24.x"`: any Node 24 release, one
+- [x] **AC-1** — `package.json` has `engines.node` set to `"24.x"`: any Node 24 release, one
       major version everywhere (owner, 2026-10-23; not chosen: `>=24`, which lets a machine run a
       major CI never tested, and an exact release, which every patch would have to move). It is
       where the version is declared, and AC-4 holds the workflow files to it.
       `package-lock.json`'s root entry (`packages[""]`) carries the same `engines`, as npm
       writes it.
-- [ ] **AC-2** — Each job in steward's own `.github/workflows/*.yml` that has a step running
+- [x] **AC-2** — Each job in steward's own `.github/workflows/*.yml` that has a step running
       `node` or `npx` has an `actions/setup-node@v4` step with `node-version: 24` before its first
       such step: `ci.yml`'s `test`, `review-gate.yml`'s `pending` and `verdict`,
       `land-approved.yml`'s `land` and `inspection.yml`'s `inspect`. `ci.yml`'s existing
@@ -32,11 +32,11 @@ default npm.
       steward's own lock file, while the other jobs only fetch steward, which has no runtime
       dependencies, and a cache would fail in a project with no lock file. The version of
       `actions/setup-node` is the one `ci.yml` uses today.
-- [ ] **AC-3** — Each job in the thin templates `templates/workflows/*.yml` has the same step,
+- [x] **AC-3** — Each job in the thin templates `templates/workflows/*.yml` has the same step,
       with `node-version: 24` written literally, before its first step running `node` or `npx`.
       The step carries no `{{STEWARD_VERSION}}` placeholder and no `cache`, and is the same step
       as in the matching job of steward's own file.
-- [ ] **AC-4** — A test checks AC-2 and AC-3 mechanically. It reads every
+- [x] **AC-4** — A test checks AC-2 and AC-3 mechanically. It reads every
       `.github/workflows/*.yml` and every `templates/workflows/*.yml` that exist (not a fixed
       list), and fails when it finds none of either. For each job with a step whose command is
       `node` or `npx` (a folded `run: >-` command included), it requires an earlier
@@ -44,7 +44,7 @@ default npm.
       `package.json`'s `engines.node` names, and with no `cache` outside `ci.yml`. Cases show it
       failing on a job with no setup step, on one whose setup step comes after the first `node`
       step, on one whose version is 22, and on a thin template's step with `cache: npm`.
-- [ ] **AC-5** — The existing sync tests keep passing and still test what they tested: steward's
+- [x] **AC-5** — The existing sync tests keep passing and still test what they tested: steward's
       own files and the thin files differ only in how steward is started (ST-42/AC-5 and
       ST-44/AC-6 in `scripts/land/thin-workflows.test.mjs`), so the setup step is in both, in the
       same place. The two assertions there that the thin files contain no `setup-node` (the test
@@ -53,7 +53,7 @@ default npm.
       to match the story: they keep their other assertions (the gate's and the runway's thin files
       check out nothing, inspection's keeps its checkout, and none runs `npm ci` or `npm install`)
       and no longer assert there is no `setup-node`.
-- [ ] **AC-6** — `README.md` asks for Node 24 (npm 11 or newer), for working on steward and for
+- [x] **AC-6** — `README.md` asks for Node 24 (npm 11 or newer), for working on steward and for
       running it from the package: in "Setup" (today "**Node 22**, which is what CI runs") and in
       "Setting up another project" (today "and Node 22"). Where `README.md` says what
       `review-gate.yml` and `land-approved.yml` hold ("hold only their triggers, permissions and
@@ -61,7 +61,7 @@ default npm.
       `grep -rn "Node 22" README.md docs AGENTS.md CLAUDE.md` finds only
       `docs/steward-bootstrap.md`'s B6, a dated record of what `ci.yml` was extracted with, and
       the lines of the design document's entry for this decision that say what Node 22 was.
-- [ ] **AC-7** — Every **Planned** marker naming ST-49 in `docs/agent-workflow-design.md` is
+- [x] **AC-7** — Every **Planned** marker naming ST-49 in `docs/agent-workflow-design.md` is
       resolved, as its "Reading this document" note says: the id taken out of each marker (three
       today: in the `init` entry of "Decided so far", in the entry added with this story, and in
       "What ties the workflow to this repository today"), the new entry's passage made a plain
