@@ -122,8 +122,7 @@ default npm.
   comes to `release/v0.1.0` as a cherry-pick pull request that changes nothing under `stories/`
   (`docs/release-review.md`, "The walkthrough", "A blocker is fixed or deferred").
 - ST-50, written with this story, edits `README.md`'s "Setting up another project" opening
-  sentence, which also names Node 22 (`README.md` line 83 today). Whichever lands second keeps
-  both changes.
+  sentence, which also names Node 22. Whichever lands second keeps both changes.
 
 ## Open questions
 
