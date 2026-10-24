@@ -3,7 +3,7 @@ id: ST-48
 title: Validate review installation manually in two existing projects
 tier: next
 kind: workflow
-depends_on: [ST-25, ST-42, ST-44, ST-47]
+depends_on: [ST-25, ST-42, ST-44, ST-47, ST-49, ST-50]
 model: null
 blocked: "Crew-only manual validation in two client projects; no coder may take this story."
 ---
@@ -27,8 +27,9 @@ implementation scripts.
       commands and answers, their outcomes, the installation pull request and resulting commit,
       the workflow pin, and the settings and checklist paths. The installation diff contains
       no copied steward implementation scripts or prompts. The record identifies files left
-      alone by `init`, any manual configuration, and the branch-protection outcome, including
-      when protection is unavailable. No coder is enabled or dispatched.
+      alone by `init`, any manual configuration, and the branch-protection outcome of `steward
+      protect` (ST-50), including when protection is unavailable. No coder is enabled or
+      dispatched.
 - [ ] **AC-3** — Each project's record compares its unit convention before and after
       installation, with links to the relevant units and pull requests. Pinpoint continues to
       use GitHub issues; tower-workshop-paths continues to use its file stories and `OQ` prefix.
@@ -69,7 +70,8 @@ implementation scripts.
 
 ## Out of scope
 
-- Implementing ST-25, ST-42, ST-44 or ST-47, or repairing validation defects: separate work.
+- Implementing ST-25, ST-42, ST-44, ST-47, ST-49 or ST-50, or repairing validation defects:
+  separate work.
 - Automated coding, dispatching client stories, or changing either project's planning process.
 - New unit conventions, new tracker integrations, and moving units into steward's story schema.
 - Cutting a release, changing release policy, or replacing the release review's scratch-project
@@ -95,13 +97,17 @@ implementation scripts.
   installation in two existing projects" records the decision and alternatives.
 - Design doc, "Steward installs in another project as a review gate, through `init`": the
   adoption order and the two projects' unit conventions, already recorded there.
-- ST-25, `stories/ST-25-review-pass.md`: the review-and-land rotation.
-- ST-42, `stories/ST-42-gate-runs-installed-steward.md`: installed gate commands and thin
+- ST-25, `stories/done/ST-25-review-pass.md`: the review-and-land rotation.
+- ST-42, `stories/done/ST-42-gate-runs-installed-steward.md`: installed gate commands and thin
   workflow files, with no project copy of steward's implementation.
-- ST-44, `stories/ST-44-init.md`: installation, project settings, existing-file preservation,
-  and reporting when branch protection cannot be set.
+- ST-44, `stories/done/ST-44-init.md`: installation, project settings and existing-file
+  preservation. ST-50, `stories/ST-50-protect-apart-from-init.md`: `steward protect`, which
+  sets branch protection apart from `init` and reports when it cannot be set.
 - ST-47: merged-head deletion protection and the runway's status-pagination fix; the crew
   requires these fixes before client validation (2026-10-21).
+- ST-49, `stories/ST-49-node-24-everywhere.md`: the workflows set up Node 24, without which the
+  thin workflows' install fails on GitHub's runner. The owner requires ST-49 and ST-50 before
+  client validation (2026-10-23).
 - `stories/README.md`, "Status": crew-only manual work keeps a reason in `blocked:`.
 
 ## Open questions

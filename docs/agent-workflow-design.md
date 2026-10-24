@@ -1054,7 +1054,10 @@ through, and known gaps. For steward, putting it on screen means running what a 
 on a new scratch repository, then a review and a landing of a test pull request there.
 `init --ref <commit>` pins that repository's workflow files to the release branch's last commit,
 since its tag does not exist yet, and each repeat of the walkthrough uses another new scratch
-repository, since `init` leaves a file that is already there.
+repository, since `init` leaves a file that is already there. **Planned (ST-50):** between `init`
+and the test pull request, the pull request `init` leaves is merged by hand, since nothing can
+review it, and `steward protect` is run from steward at the same commit, so that the test pull
+request is reviewed and landed with protection set.
 
 ### Output
 
@@ -2417,7 +2420,10 @@ shortened where it is long, so that it can be found there with its date.
     commands the crew types. Whether that hurts adoption is to be revisited later (owner). A tag in
     steward's repository is never moved once cut (owner), so a pinned tag names one version for
     good. Considered and not chosen: pinning the commit the tag points at, which is safer against a
-    moved tag but harder to read.
+    moved tag but harder to read. **Planned (ST-49):** each job of these files, and of steward's
+    own, that runs `node` or `npx` sets up Node 24 before its first such step, which the words
+    above leave out; see "One Node version for all of steward, and protection apart from `init`",
+    below.
   - **A basic example checklist ships in the package**, applicable to any project running steward,
     with obvious placeholders for a project's own additions: `templates/review-checklist.md`. It
     starts from steward's `REVIEW.md`, less the claims item, the Docs check on named files, the rule
@@ -2465,11 +2471,16 @@ shortened where it is long, so that it can be found there with its date.
     it does not touch `package.json`; it neither reads nor writes the story prefix or anything about
     story files; and it commits nothing: the crew commits what it wrote through the project's own
     pull request. Exploring the repository (D8) stays open.
+    **Planned (ST-50):** `init` does nothing about branch protection, from "It asks before it sets
+    branch protection" to "switches them on alone" above: the command `steward protect` does it,
+    once the gate is on `main`; see "One Node version for all of steward, and protection apart
+    from `init`", below.
 
   The first release, `v0.1.0`, is cut by a release review session, whose instructions are a
   separate pull request.
 - **The crew validates review installation in two existing projects** (crew, 2026-10-21;
-  **Planned (ST-48)**). After ST-25, ST-42, ST-44 and ST-47 are delivered, the crew manually installs
+  **Planned (ST-48)**). After ST-25, ST-42, ST-44 and ST-47 are delivered (and ST-49 and ST-50,
+  owner, 2026-10-23, in the entry below), the crew manually installs
   the review gate first in pinpoint and then in tower-workshop-paths, preserving their existing
   issue and file-story conventions. Each installation uses steward's package and thin workflows,
   with no copied implementation scripts. Each project supplies a real review verdict on the
@@ -2566,6 +2577,64 @@ shortened where it is long, so that it can be found there with its date.
   request into it left pending or holding. A finding on `main` keeps its title, so nothing already
   raised is raised again. Considered and not chosen: the stall check alone, leaving merges on a
   release branch to branch protection.
+- **One Node version for all of steward, and protection apart from `init`** (decided 2026-10-23 by
+  the owner, with the planning session, from the release review of `v0.1.0`). The release review's
+  walkthrough ran `init --ref <commit>` on a scratch repository and found two defects that block
+  the release. Each is a `tier: fix` story, and each reaches `release/v0.1.0` as the release
+  review's cherry-pick pull request, after it lands on `main` (`release-review.md`, "The
+  walkthrough").
+  - **Planned (ST-49):** **steward uses Node 24 everywhere, and the workflows set it up.** The thin
+    workflow files run `npx --yes --package=github:luplows/steward#v{{STEWARD_VERSION}} steward
+    <command>` on the runner's default Node and npm, since no thin template has an
+    `actions/setup-node` step. On npm 10.x the install fails with `GitFetcher requires an Arborist
+    constructor to pack a tarball`, so every thin step fails: the gate, landing and inspection.
+    Node 22 ships npm 10 and Node 24 ships npm 11, and `README.md` and `ci.yml` named Node 22 when
+    this was decided. The owner's goal is one Node version for all of steward, its workflows and
+    running it locally. So: `package.json` gains `engines.node`, `"24.x"`, as the one place the
+    version is declared (owner; not chosen: `>=24`, which lets a machine run a major CI never
+    tested, and an exact release, which every patch would have to move); every job that runs
+    `node` or `npx`, in steward's own `.github/workflows/*.yml` and in the thin templates, has an
+    `actions/setup-node` step with Node 24 before its first such step, CI moving from Node 22 to
+    24, and only CI's step keeping npm's cache, since only CI runs `npm ci` (owner); a test checks
+    it mechanically for both sets of files, the thin templates naming 24 literally since they run
+    in a project and cannot read steward's `package.json`; and `README.md` asks for Node 24 (npm
+    11 or newer).
+    Considered and not chosen: Node 22 with the install switched to GitHub's tarball URL, which
+    works on npm 10 but leaves Node 22 sooner and makes the command less readable;
+    `npx --yes npm@11 exec …` in every step, which is odd and fragile; and publishing to the npm
+    registry, a bigger decision. Out of scope: steward refusing at start-up on a Node it does not
+    support.
+  - **Planned (ST-50):** **protection is an optional command of its own, `steward protect`, and
+    `init` no longer touches it.** With `review/agent` required and `enforce_admins` on, the pull
+    request that installs the gate can never get `review/agent`: the gate's `verdict` job and the
+    runway run from the default branch, where the gate is not yet installed, and the checklist is
+    read from `main`. The owner: the gate not running on the pull request that installs it is "a
+    feature rather than a bug", since a pull request must not install the rules it is judged by;
+    what is wrong is offering protection in the same run. The owner's framing is that a project set
+    up by `init` without protection is a complete way to use steward, which a person or a group on
+    a larger project may use alone, and that protection is an optional step taken later, not the
+    end of a trial. So: `init` loses its protection question and its `--protect-main` flag, and
+    makes no protection request (which also ends its failure on a repository with no `main`);
+    its closing message says to commit what it wrote and open a pull request, to merge it as the
+    project normally merges, and recommends running `steward protect` once it has merged, which is
+    the only place its output names protection. What `init` and `protect` print is written for
+    the person running them, in plain sentences, naming no story, function or file of steward's
+    own (owner). `steward protect`
+    reads `main` on GitHub first, and refuses, naming what is missing and setting nothing, unless
+    `main` holds `steward.config.json`, the checklist its `rulesFile` names,
+    `.github/workflows/review-gate.yml` and `.github/workflows/land-approved.yml`; once they are
+    there it does what `init`'s protection did (the passage above), and asks nothing, since running
+    it is the crew's yes. Unlike `init`, it exits 1 when it refuses or GitHub refuses protection,
+    since protection is its only job (owner). The release review's walkthrough gains `protect`
+    between `init` and its test pull request, so that the release review exercises it. ST-48's
+    validation waits for both fixes: it gains ST-49 and ST-50 in its `depends_on`, beside ST-25,
+    ST-42, ST-44 and ST-47 (owner). Considered and not chosen: only
+    documenting the order that works today, with the release accepting `init` with a follow-up;
+    `init` itself offering protection only once it finds the gate on `main`, run a second time,
+    which is one command but "run it again" is less clear, and `init` keeps both jobs; and a trial
+    mode with protection required but `enforce_admins` off. Out of scope: how a 404 "Not Found" for
+    an account without admin access is treated (`protect` keeps today's handling, until the owner
+    has seen it on GitHub), and GitHub rulesets.
 
 ### The move, in order
 
@@ -2669,7 +2738,9 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   writes with the tag filled, and which start the same commands from steward installed at a pinned
   tag and check out nothing, so `runway` reads the project's `steward.config.json` `landWhen` from
   `main` through the API. Inspection's workflow is there in thin form too; it checks out the
-  project, for its settings.
+  project, for its settings. **Planned (ST-49):** each job of these files, steward's own and the
+  thin ones, also sets up Node 24 before its first `node` or `npx` step, so the files hold that
+  step as well.
 - The rules the gate enforces mix the general with this project's own: `REVIEW.md`, `AGENTS.md`,
   `stories/README.md`, `stories/_TEMPLATE.md` and this document.
 
