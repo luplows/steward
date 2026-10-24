@@ -2668,6 +2668,12 @@ shortened where it is long, so that it can be found there with its date.
     looking again for a merged pull request whose merge commit is the commit, which relies on
     another GitHub listing not yet seen to be up to date at once; and inspection retrying a few
     seconds apart, which slows every rotation and guarantees nothing.
+  - **Planned (ST-53):** after ST-51 the name `once` no longer says what the option does, and only
+    the rotation passes it. `once` stays for the `v0.1.0` fix, and a later story gives the pilot
+    the bounded behaviour as its only one, retiring the long-wait mode, which serves `land` run by
+    hand and tower-workshop-paths' frozen loop, and the flag with it (owner). Considered and not
+    chosen: doing so in ST-51, which widens a fix the release waits on and changes the frozen
+    loop's callers; and only renaming the option.
   - **Planned (ST-52):** while a rotation is running on a machine, any later rotation of the same
     project on that machine is refused, saying so, rather than reviewing the same head again or
     requesting the same landing. Within one rotation reviews never overlap; two rotations can
