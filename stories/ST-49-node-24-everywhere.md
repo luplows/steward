@@ -17,10 +17,12 @@ default npm.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `package.json` has `engines.node`, a range whose lowest version is Node 24
-      (`24`, `24.x` and `>=24` all qualify). It is where the version is declared, and AC-4 holds
-      the workflow files to it. `package-lock.json`'s root entry (`packages[""]`) carries the
-      same `engines`, as npm writes it.
+- [ ] **AC-1** — `package.json` has `engines.node` set to `"24.x"`: any Node 24 release, one
+      major version everywhere (owner, 2026-10-23; not chosen: `>=24`, which lets a machine run a
+      major CI never tested, and an exact release, which every patch would have to move). It is
+      where the version is declared, and AC-4 holds the workflow files to it.
+      `package-lock.json`'s root entry (`packages[""]`) carries the same `engines`, as npm
+      writes it.
 - [ ] **AC-2** — Each job in steward's own `.github/workflows/*.yml` that has a step running
       `node` or `npx` has an `actions/setup-node@v4` step with `node-version: 24` before its first
       such step: `ci.yml`'s `test`, `review-gate.yml`'s `pending` and `verdict`,

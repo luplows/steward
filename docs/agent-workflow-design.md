@@ -2590,11 +2590,12 @@ shortened where it is long, so that it can be found there with its date.
     constructor to pack a tarball`, so every thin step fails: the gate, landing and inspection.
     Node 22 ships npm 10 and Node 24 ships npm 11, and `README.md` and `ci.yml` named Node 22 when
     this was decided. The owner's goal is one Node version for all of steward, its workflows and
-    running it locally. So: `package.json` gains `engines.node`, naming Node 24, as the one place
-    the version is declared; every job that runs `node` or `npx`, in steward's own
-    `.github/workflows/*.yml` and in the thin templates, has an `actions/setup-node` step with Node
-    24 before its first such step, CI moving from Node 22 to 24; a test checks it mechanically for
-    both sets of files, the thin templates naming 24 literally since they run in a project and
+    running it locally. So: `package.json` gains `engines.node`, `"24.x"`, as the one place the
+    version is declared (owner; not chosen: `>=24`, which lets a machine run a major CI never
+    tested, and an exact release, which every patch would have to move); every job that runs
+    `node` or `npx`, in steward's own `.github/workflows/*.yml` and in the thin templates, has an
+    `actions/setup-node` step with Node 24 before its first such step, CI moving from Node 22 to
+    24; a test checks it mechanically for both sets of files, the thin templates naming 24 literally since they run in a project and
     cannot read steward's `package.json`; and `README.md` asks for Node 24 (npm 11 or newer).
     Considered and not chosen: Node 22 with the install switched to GitHub's tarball URL, which
     works on npm 10 but leaves Node 22 sooner and makes the command less readable;
@@ -2613,7 +2614,10 @@ shortened where it is long, so that it can be found there with its date.
     end of a trial. So: `init` loses its protection question and its `--protect-main` flag, and
     makes no protection request (which also ends its failure on a repository with no `main`);
     its closing message says to commit what it wrote and open a pull request, to merge it as the
-    project normally merges, and then, optionally, to run `steward protect`. `steward protect`
+    project normally merges, and recommends running `steward protect` once it has merged, which is
+    the only place its output names protection. What `init` and `protect` print is written for
+    the person running them, in plain sentences, naming no story, function or file of steward's
+    own (owner). `steward protect`
     reads `main` on GitHub first, and refuses, naming what is missing and setting nothing, unless
     `main` holds `steward.config.json`, the checklist its `rulesFile` names,
     `.github/workflows/review-gate.yml` and `.github/workflows/land-approved.yml`; once they are

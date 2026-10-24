@@ -21,18 +21,20 @@ one, can use steward without protection and add it later.
       its `--protect-main` flag are gone from `QUESTIONS`, so that `init --protect-main yes` is
       refused as an unknown flag, as any other is (`parseFlags`): exit 2, nothing written. A run
       makes no request to any `/branches/main/protection` URL: its request allowlist
-      (`assertAllowedRequest`) refuses one, and `grep -n -i protect scripts/dispatch/init.mjs`
-      finds only its closing message (AC-2). Tests with GitHub injected: a run with every question
-      answered, and a `--yes` run, record no protection request; a run where GitHub answers every
-      protection request `404 Branch not found` (a repository with no `main`) exits 0 after
-      writing its files and creating its labels.
+      (`assertAllowedRequest`) refuses one, and no question, flag, request builder or allowlist
+      entry about protection remains in `init.mjs`. Tests with GitHub injected: a run with every
+      question answered, and a `--yes` run, record no protection request; a run where GitHub
+      answers every protection request `404 Branch not found` (a repository with no `main`)
+      exits 0 after writing its files and creating its labels.
 - [ ] **AC-2** — **`init`'s closing message** says, in its last lines: that the crew commits what
       it wrote and opens a pull request; that the pull request is merged as the project normally
-      merges, since the gate cannot review the pull request that installs it; and that the crew
-      may then, optionally, run `steward protect`. It presents this as a complete set-up with one
-      optional step, not as a trial or an unfinished one. A test finds each of the three
-      statements in the output of a run, and finds `steward protect` named as optional. ST-44's
-      requirement that its last lines say the crew commits what it wrote still holds.
+      merges, since the gate cannot review the pull request that installs it; and a
+      recommendation to run `steward protect` once it has merged. It presents this as a complete
+      set-up, with protection recommended, not as a trial or an unfinished one. That
+      recommendation is the only place `init`'s output names protection or `protect`. A test
+      finds each of the three statements in the output of a run, and finds protection named
+      nowhere else in it. ST-44's requirement that its last lines say the crew commits what it
+      wrote still holds.
 - [ ] **AC-3** — **`steward protect` is a command.** `cli.mjs`'s `COMMANDS` gains `protect`,
       which runs `scripts/dispatch/protect.mjs`, and `cli.test.mjs`'s list of commands gains it.
       It takes the repository as the other commands do: the settings' `repo` read from the working
@@ -115,6 +117,11 @@ one, can use steward without protection and add it later.
       `docs/glossary.md`, `docs/settings.md` and `AGENTS.md` say nothing about what `init` does
       about protection (`grep -n -i protect` on each finds only `AGENTS.md`'s "It is protected"
       about `main`), so they need no change.
+- [ ] **AC-11** — **What `init` and `protect` print is written for the person running them**
+      (owner, 2026-10-23): plain sentences in the glossary's words, saying what was done, what
+      was left as it was, and what to do next. It names no story or acceptance-criterion id, no
+      function, module or source file of steward's own. A test runs each case of AC-1 to AC-5 and
+      finds no `ST-<n>`, `AC-<n>`, `scripts/` or `.mjs` in what either command printed.
 
 ## Out of scope
 
