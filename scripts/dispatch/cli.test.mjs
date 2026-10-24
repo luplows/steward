@@ -22,9 +22,9 @@ function run(args, cwd) {
 }
 
 describe('OQ-131/AC-1: cli.mjs dispatches to the module each command names', () => {
-  it('lists loop, story, coder, review, land, rotation (ST-25/AC-1), queue, lint, inspect, init (ST-44/AC-1) and verdicts, then the gate\'s and the runway\'s five (ST-42/AC-1)', () => {
+  it('lists loop, story, coder, review, land, rotation (ST-25/AC-1), queue, lint, inspect, init (ST-44/AC-1), protect (ST-50/AC-3) and verdicts, then the gate\'s and the runway\'s five (ST-42/AC-1)', () => {
     expect(Object.keys(COMMANDS)).toEqual([
-      'loop', 'story', 'coder', 'review', 'land', 'rotation', 'queue', 'lint', 'inspect', 'init', 'verdicts',
+      'loop', 'story', 'coder', 'review', 'land', 'rotation', 'queue', 'lint', 'inspect', 'init', 'protect', 'verdicts',
       'mark-pending', 'apply-verdict', 'apply-review-blocked', 'runway', 'delete-merged-heads',
     ])
   })
@@ -35,10 +35,10 @@ describe('OQ-131/AC-1: cli.mjs dispatches to the module each command names', () 
     }
   })
 
-  it('runs lint-stories.mjs for `lint` and review-verdicts.mjs for `verdicts`, the other nine by their own module name', () => {
+  it('runs lint-stories.mjs for `lint` and review-verdicts.mjs for `verdicts`, the other ten by their own module name', () => {
     expect(COMMANDS.lint.endsWith(path.join('scripts', 'lint-stories.mjs'))).toBe(true)
     expect(COMMANDS.verdicts.endsWith(path.join('scripts', 'report', 'review-verdicts.mjs'))).toBe(true)
-    for (const name of ['loop', 'story', 'coder', 'review', 'land', 'rotation', 'queue', 'inspect', 'init']) {
+    for (const name of ['loop', 'story', 'coder', 'review', 'land', 'rotation', 'queue', 'inspect', 'init', 'protect']) {
       expect(COMMANDS[name].endsWith(path.join('scripts', 'dispatch', `${name}.mjs`))).toBe(true)
     }
   })

@@ -80,8 +80,7 @@ What the review side reads:
 
 ## Setting up another project
 
-In the project's checkout, with `gh` signed in as an account that can administer the repository
-(for branch protection) and Node 22:
+In the project's checkout, with `gh` signed in and Node 22:
 
 ```sh
 npx --yes --package=github:luplows/steward#v<version> steward init
@@ -99,14 +98,32 @@ a file: one already there is named and left. It writes:
   commit's full SHA instead);
 - a pull request template, only when the project has none;
 - the labels steward reads and applies, `review-blocked`, `breaker-override` and `inspection`;
-- the machine's settings (`~/.steward/settings.json`), only when that file is missing;
-- branch protection on `main`, requiring `review/agent` with `enforce_admins` on, only on a yes (the
-  default is no); protection already there is kept, and only those two are added to it (where it
-  requires no status checks, it is rebuilt with every setting it had, plus those two). Where
-  GitHub offers none, as on a private repository on GitHub Free, it says so and goes on.
+- the machine's settings (`~/.steward/settings.json`), only when that file is missing.
 
 It commits, stages and pushes nothing, and does not touch the project's `package.json`, its CI or
-its stories. The crew commits what it wrote through a pull request of the project's own.
+its stories, and it does nothing about branch protection. Set up this way, a project uses steward
+as it is: this is a complete set-up, which a person or a group within a larger project may use
+alone. The order is:
+
+1. Run `init`.
+2. Commit what it wrote, and open a pull request of the project's own.
+3. Merge that pull request as the project normally merges. The gate cannot review the pull request
+   that installs it, since the gate runs from `main`, where it is not yet installed, and reads the
+   checklist from `main`.
+4. Optionally, run `steward protect`, once that pull request has merged.
+
+`steward protect` sets branch protection on `main` so that GitHub stops a merge that has not passed
+review. It asks no question, takes no flag but `--repo owner/name` (the repository is otherwise the
+`repo` of the working directory's `steward.config.json`), and runs with `gh` signed in as an
+account that can administer the repository. Before it sets anything it reads `main` on GitHub, and
+refuses, naming what is missing and exiting 1, unless `main` holds `steward.config.json`, the
+checklist that file names, `.github/workflows/review-gate.yml` and
+`.github/workflows/land-approved.yml`. Once they are there it makes `main` require `review/agent`
+with `enforce_admins` on. Protection already there is kept, and only those two are added to it
+(where it requires no status checks, it is rebuilt with every setting it had, plus those two); the
+project's own CI checks are the crew's to add. Where GitHub offers none, as on a private repository
+on GitHub Free, or the account cannot set it, it says so plainly, says that nothing on GitHub then
+enforces the gate, and exits 1.
 
 ## Contributing
 

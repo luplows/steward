@@ -17,7 +17,7 @@ one, can use steward without protection and add it later.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — **`init` no longer touches branch protection.** Its `protectMain` question and
+- [x] **AC-1** — **`init` no longer touches branch protection.** Its `protectMain` question and
       its `--protect-main` flag are gone from `QUESTIONS`, so that `init --protect-main yes` is
       refused as an unknown flag, as any other is (`parseFlags`): exit 2, nothing written. A run
       makes no request to any `/branches/main/protection` URL: its request allowlist
@@ -26,7 +26,7 @@ one, can use steward without protection and add it later.
       question answered, and a `--yes` run, record no protection request; a run where GitHub
       answers every protection request `404 Branch not found` (a repository with no `main`)
       exits 0 after writing its files and creating its labels.
-- [ ] **AC-2** — **`init`'s closing message** says, in its last lines: that the crew commits what
+- [x] **AC-2** — **`init`'s closing message** says, in its last lines: that the crew commits what
       it wrote and opens a pull request; that the pull request is merged as the project normally
       merges, since the gate cannot review the pull request that installs it; and a
       recommendation to run `steward protect` once it has merged. It presents this as a complete
@@ -35,7 +35,7 @@ one, can use steward without protection and add it later.
       finds each of the three statements in the output of a run, and finds protection named
       nowhere else in it. ST-44's requirement that its last lines say the crew commits what it
       wrote still holds.
-- [ ] **AC-3** — **`steward protect` is a command.** `cli.mjs`'s `COMMANDS` gains `protect`,
+- [x] **AC-3** — **`steward protect` is a command.** `cli.mjs`'s `COMMANDS` gains `protect`,
       which runs `scripts/dispatch/protect.mjs`, and `cli.test.mjs`'s list of commands gains it.
       It takes the repository as the other commands do: the settings' `repo` read from the working
       directory's `steward.config.json`, or `--repo owner/name`, which wins (`review.mjs`,
@@ -44,7 +44,7 @@ one, can use steward without protection and add it later.
       allowlist before any network call, as `init`'s does. It asks no question and takes no flag
       but `--repo`: any other is refused, as `init` refuses one. Running it is the crew's yes.
       A test shows it runs with no terminal and nothing else but `--repo` given.
-- [ ] **AC-4** — **It reads `main` before it sets anything.** From GitHub, not from the working
+- [x] **AC-4** — **It reads `main` before it sets anything.** From GitHub, not from the working
       directory, it reads whether `main` exists and holds `steward.config.json`, the checklist
       that file's `rulesFile` names, `.github/workflows/review-gate.yml` and
       `.github/workflows/land-approved.yml`. It refuses, setting nothing (it sends no request but
@@ -57,7 +57,7 @@ one, can use steward without protection and add it later.
       injected: all four present, and protection is set; each of the four missing alone, and all
       missing, and no `main`: refused with exit 1, naming exactly what is missing, with no write
       request; a 500 on a read: stops with exit 1, no write request.
-- [ ] **AC-5** — **What it sets, once those are on `main`, is what `init`'s protection set.**
+- [x] **AC-5** — **What it sets, once those are on `main`, is what `init`'s protection set.**
       Protection requiring `review/agent` with `enforce_admins` on (`PROTECTION_BODY`). Where
       `main` already has protection, it keeps the project's own and adds only those two: it adds
       `review/agent` to the required status checks unless it is there and turns `enforce_admins`
@@ -70,7 +70,7 @@ one, can use steward without protection and add it later.
       exited 0 there). Any other failed request also exits 1. A run with no terminal and nothing
       wrong exits 0. Tests: a refusal for the plan and one for admin access each exit 1, with
       the message.
-- [ ] **AC-6** — **The code and tests move; they are not rewritten.** From `init.mjs` to
+- [x] **AC-6** — **The code and tests move; they are not rewritten.** From `init.mjs` to
       `protect.mjs`: `PROTECTION_BODY`, the protection request builders, `isProtectionPut`,
       `rebuildProtectionBody`, `protectionRefusal`, `protectMain` (named for what it does) with
       `keepProtection` and `refused`, and the protection operations in the allowlist. From
@@ -84,7 +84,7 @@ one, can use steward without protection and add it later.
       except where AC-1, AC-3 and AC-5 change them, and each name carries the `ST-50/AC-<n>` it
       tests in place of `ST-44/AC-10`, `AC-7` or `AC-12`. The `init` tests that counted or
       indexed its questions are updated for one fewer.
-- [ ] **AC-7** — **`README.md`.** "Setting up another project" describes the set-up as complete
+- [x] **AC-7** — **`README.md`.** "Setting up another project" describes the set-up as complete
       without protection, then `steward protect` as an optional later step: the order is `init`,
       commit and open a pull request, merge it as the project normally merges (the gate cannot
       review the pull request that installs it), and optionally `steward protect`. Its list of what
@@ -94,20 +94,20 @@ one, can use steward without protection and add it later.
       said of `protect`, in place of `init`'s opening sentence ("with `gh` signed in as an account
       that can administer the repository (for branch protection)"). `grep -n -i protect README.md`
       shows nothing else that says `init` sets protection.
-- [ ] **AC-8** — **`docs/release-review.md`.** In "The walkthrough", the step that runs `init
+- [x] **AC-8** — **`docs/release-review.md`.** In "The walkthrough", the step that runs `init
       --ref <commit>` on a scratch repository and then opens a test pull request gains, between
       them: merging the pull request `init` leaves by hand, as nothing has reviewed it, and running
       `steward protect` from steward installed at the same `<commit>`. The test pull request is
       then reviewed and landed with protection set. The report of each command and its result
       covers `protect` too.
-- [ ] **AC-9** — **`docs/outline.md`.** Its statements in "What installing steward sets up" that
+- [x] **AC-9** — **`docs/outline.md`.** Its statements in "What installing steward sets up" that
       installing offers or asks about branch protection (found with
       `grep -n -i protection docs/outline.md`; lines 302, 304 and 309 today) say instead that
       installing sets none, and that a separate, optional command, `steward protect`, sets it
       once the gate is on `main`, asks nothing, and says plainly where GitHub offers none that
       nothing on GitHub then enforces the gate. Each revised statement says it was revised on
       2026-10-23 by the owner, as the outline's other revisions do.
-- [ ] **AC-10** — Every **Planned** marker naming ST-50 in `docs/agent-workflow-design.md` is
+- [x] **AC-10** — Every **Planned** marker naming ST-50 in `docs/agent-workflow-design.md` is
       resolved, as its "Reading this document" note says: the id taken out of each marker (three
       today: in the `init` entry of "Decided so far", in the entry added with this story, and in
       "The release review", "The walkthrough"), the new entry's passage made a plain statement and
@@ -117,7 +117,7 @@ one, can use steward without protection and add it later.
       `docs/glossary.md`, `docs/settings.md` and `AGENTS.md` say nothing about what `init` does
       about protection (`grep -n -i protect` on each finds only `AGENTS.md`'s "It is protected"
       about `main`), so they need no change.
-- [ ] **AC-11** — **What `init` and `protect` print is written for the person running them**
+- [x] **AC-11** — **What `init` and `protect` print is written for the person running them**
       (owner, 2026-10-23): plain sentences in the glossary's words, saying what was done, what
       was left as it was, and what to do next. It names no story or acceptance-criterion id, no
       function, module or source file of steward's own. A test runs each case of AC-1 to AC-5 and
