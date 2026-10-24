@@ -1054,10 +1054,10 @@ through, and known gaps. For steward, putting it on screen means running what a 
 on a new scratch repository, then a review and a landing of a test pull request there.
 `init --ref <commit>` pins that repository's workflow files to the release branch's last commit,
 since its tag does not exist yet, and each repeat of the walkthrough uses another new scratch
-repository, since `init` leaves a file that is already there. **Planned (ST-50):** between `init`
-and the test pull request, the pull request `init` leaves is merged by hand, since nothing can
-review it, and `steward protect` is run from steward at the same commit, so that the test pull
-request is reviewed and landed with protection set.
+repository, since `init` leaves a file that is already there. Between `init` and the test pull
+request, the pull request `init` leaves is merged by hand, since nothing can review it, and
+`steward protect` is run from steward at the same commit, so that the test pull request is
+reviewed and landed with protection set.
 
 ### Output
 
@@ -2471,7 +2471,7 @@ shortened where it is long, so that it can be found there with its date.
     it does not touch `package.json`; it neither reads nor writes the story prefix or anything about
     story files; and it commits nothing: the crew commits what it wrote through the project's own
     pull request. Exploring the repository (D8) stays open.
-    **Planned (ST-50):** `init` does nothing about branch protection, from "It asks before it sets
+    **Since 2026-10-23:** `init` does nothing about branch protection, from "It asks before it sets
     branch protection" to "switches them on alone" above: the command `steward protect` does it,
     once the gate is on `main`; see "One Node version for all of steward, and protection apart
     from `init`", below.
@@ -2604,10 +2604,10 @@ shortened where it is long, so that it can be found there with its date.
     `npx --yes npm@11 exec …` in every step, which is odd and fragile; and publishing to the npm
     registry, a bigger decision. Out of scope: steward refusing at start-up on a Node it does not
     support.
-  - **Planned (ST-50):** **protection is an optional command of its own, `steward protect`, and
-    `init` no longer touches it.** With `review/agent` required and `enforce_admins` on, the pull
-    request that installs the gate can never get `review/agent`: the gate's `verdict` job and the
-    runway run from the default branch, where the gate is not yet installed, and the checklist is
+  - **Protection is an optional command of its own, `steward protect`, and `init` no longer touches
+    it.** With `review/agent` required and `enforce_admins` on, the pull request that installs the
+    gate can never get `review/agent`: the gate's `verdict` job and the runway run from the default
+    branch, where the gate is not yet installed, and the checklist is
     read from `main`. The owner: the gate not running on the pull request that installs it is "a
     feature rather than a bug", since a pull request must not install the rules it is judged by;
     what is wrong is offering protection in the same run. The owner's framing is that a project set
@@ -2622,11 +2622,13 @@ shortened where it is long, so that it can be found there with its date.
     own (owner). `steward protect`
     reads `main` on GitHub first, and refuses, naming what is missing and setting nothing, unless
     `main` holds `steward.config.json`, the checklist its `rulesFile` names,
-    `.github/workflows/review-gate.yml` and `.github/workflows/land-approved.yml`; once they are
-    there it does what `init`'s protection did (the passage above), and asks nothing, since running
-    it is the crew's yes. Unlike `init`, it exits 1 when it refuses or GitHub refuses protection,
-    since protection is its only job (owner). The release review's walkthrough gains `protect`
-    between `init` and its test pull request, so that the release review exercises it. ST-48's
+    `.github/workflows/review-gate.yml` and `.github/workflows/land-approved.yml` (it reads that
+    they are there, and the `rulesFile` value, nothing more of their contents); once they are
+    there it does what `init`'s protection did (the passage above), and asks nothing and takes no
+    flag but `--repo`, since running it is the crew's yes. Unlike `init`, it exits 1 whenever it sets
+    no protection, whether it or GitHub refuses, since protection is its only job (owner). The
+    release review's walkthrough gains `protect` between `init` and its test pull request, so that
+    the release review exercises it. ST-48's
     validation waits for both fixes: it gains ST-49 and ST-50 in its `depends_on`, beside ST-25,
     ST-42, ST-44 and ST-47 (owner). Considered and not chosen: only
     documenting the order that works today, with the release accepting `init` with a follow-up;

@@ -65,9 +65,13 @@ A release is cut from `main`, or, as a patch release, from the newest release's 
 - **Run it as a project would**, from the release branch. On a new, empty scratch repository the
   crew provides: run `init --ref <commit>`, where `<commit>` is the release branch's last commit
   (`git rev-parse origin/release/vX.Y.Z` once fetched), so that the workflow files it writes install
-  steward at that commit, since the tag does not exist yet (ST-44). Then open a test pull request
-  there, and have it reviewed and landed with the commands the release documents. Report each
-  command and its result. Run it again at the new last commit whenever a fix or a revert lands into
+  steward at that commit, since the tag does not exist yet (ST-44). Then merge by hand the pull
+  request `init` leaves, as nothing has reviewed it (the gate cannot review the pull request that
+  installs it), and run `steward protect` in the scratch repository's checkout, from steward
+  installed at the same `<commit>`
+  (`npx --yes --package=github:luplows/steward#<commit> steward protect`). Then open a test pull
+  request there, and have it reviewed and landed, with protection set, with the commands the
+  release documents. Report each command and its result, `protect`'s included. Run it again at the new last commit whenever a fix or a revert lands into
   the release branch, on another new scratch repository: `init` leaves a file that already exists as
   it is, so it would not repin the first one's workflows (ST-44). The tag's commit differs from the
   last one walked through only by the notes and the version.

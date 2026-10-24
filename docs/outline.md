@@ -299,15 +299,19 @@ design doc, "The outline's reasoning", under the same headings.
   - It always writes the gate's workflow files (the one that turns the reviewer's verdict into the
     `review/agent` status, and the runway), the labels the runway reads, the project's steward
     settings with the default landing rule, and the example checklist.
-  - Where GitHub offers branch protection, it offers to set it, and asks first: it changes the
-    repository's settings.
-  - It offers inspection, never forces it, as it offers branch protection: a check that opens an
+  - **Revised 2026-10-23 by the owner:** installing sets no branch protection, and asks nothing
+    about it. A separate, optional command, `steward protect`, sets it once the gate is on `main`,
+    and asks nothing either, since running it is the crew's yes: it is what changes the
+    repository's settings. A project set up without protection is a complete way to use steward.
+  - It offers inspection, never forces it (**revised 2026-10-23 by the owner:** no longer compared
+    with an offer of branch protection, which installing no longer makes): a check that opens an
     issue for any merge to `main` without a passing verdict (design doc, "Watchdog"). Inspection
     checks each release branch as it checks `main`. It also raises a pull request left pending or
     holding longer than the project's settings allow, runs after each rotation, and runs on a
     schedule only if the project keeps its workflow (owner, 2026-10-15).
-  - Where GitHub offers no branch protection, as on a private repository on GitHub Free, it says
-    plainly that nothing on GitHub enforces the gate. Steward's own runway still checks the verdict
+  - Where GitHub offers no branch protection, as on a private repository on GitHub Free,
+    `steward protect` says plainly that nothing on GitHub then enforces the gate (**revised
+    2026-10-23 by the owner:** installing no longer says so). Steward's own runway still checks the verdict
     on the head before each merge it makes (`scripts/land/runway.mjs`, "Belt and braces").
 
 ### Settings

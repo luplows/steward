@@ -15,10 +15,12 @@
  * Every question has a flag, `--yes` takes the default of every question no flag answers, and with
  * no terminal a question with neither is refused, before anything is written (`QUESTIONS`).
  *
- * Exit code: 0 when it finished, whatever it left alone or could not set; 1 when a write or a
- * request to GitHub failed (other than branch protection's refusals, which it reports and goes
- * on from), nothing more being written; 2 when it refused: a checkout that is not a git
- * repository, a flag or answer that is wrong, or a question with no answer and no terminal.
+ * It does nothing about branch protection: `steward protect` (`protect.mjs`) sets it, as a step of
+ * its own once the gate is on `main`, and `init`'s closing message recommends it.
+ *
+ * Exit code: 0 when it finished, whatever it left alone; 1 when a write or a request to GitHub
+ * failed, nothing more being written; 2 when it refused: a checkout that is not a git repository, a
+ * flag or answer that is wrong, or a question with no answer and no terminal.
  *
  * Usage:
  *   steward init [--yes] [--ref <40-hex commit>] [--<question flag> <answer>]...
@@ -38,8 +40,6 @@ import { BREAKER_OVERRIDE_LABEL, REVIEW_BLOCKED_LABEL } from '../land/runway.mjs
 
 const API = 'https://api.github.com'
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-const MAIN = 'main'
-const GATE_CONTEXT = 'review/agent'
 const VERSION_PLACEHOLDER = 'v{{STEWARD_VERSION}}'
 const SHA_RE = /^[0-9a-fA-F]{40}$/
 const VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
@@ -59,14 +59,6 @@ export const LABELS = [
   { name: BREAKER_OVERRIDE_LABEL, color: '0e8a16', description: "The crew's word that steward may land past its circuit breaker" },
   { name: INSPECTION_LABEL, color: 'fbca04', description: "Raised by steward's inspection" },
 ]
-
-/** The branch protection `init` sets on `main`, on a yes: `review/agent` required, admins included. */
-export const PROTECTION_BODY = {
-  required_status_checks: { strict: false, contexts: [GATE_CONTEXT] },
-  enforce_admins: true,
-  required_pull_request_reviews: null,
-  restrictions: null,
-}
 
 // ------------------------------------------------------------------ the questions
 
@@ -169,13 +161,6 @@ export const QUESTIONS = [
     flag: '--inspection',
     prompt: "Add inspection's workflow, which raises a merge without a passing verdict, or a stalled review, as an issue?",
     default: 'yes',
-    parse: parseYesNo,
-  },
-  {
-    id: 'protectMain',
-    flag: '--protect-main',
-    prompt: 'Set branch protection on main, requiring the review/agent check?',
-    default: 'no',
     parse: parseYesNo,
   },
   {
@@ -440,119 +425,16 @@ const labelNames = () => LABELS.map((l) => l.name)
 
 export const buildGetLabel = (repo, name) => ({ method: 'GET', url: `${repoPath(repo)}/labels/${encodeURIComponent(name)}` })
 export const buildCreateLabel = (repo, label) => ({ method: 'POST', url: `${repoPath(repo)}/labels`, body: { ...label } })
-export const buildGetProtection = (repo) => ({ method: 'GET', url: `${repoPath(repo)}/branches/${MAIN}/protection` })
-export const buildSetProtection = (repo) => ({ method: 'PUT', url: `${repoPath(repo)}/branches/${MAIN}/protection`, body: PROTECTION_BODY })
-export const buildAddRequiredCheck = (repo) => ({
-  method: 'POST',
-  url: `${repoPath(repo)}/branches/${MAIN}/protection/required_status_checks/contexts`,
-  body: [GATE_CONTEXT],
-})
-export const buildEnableEnforceAdmins = (repo) => ({ method: 'POST', url: `${repoPath(repo)}/branches/${MAIN}/protection/enforce_admins` })
-
-export const buildRebuildProtection = (repo, body) => ({ method: 'PUT', url: `${repoPath(repo)}/branches/${MAIN}/protection`, body })
-export const buildEnableRequiredSignatures = (repo) => ({
-  method: 'POST',
-  url: `${repoPath(repo)}/branches/${MAIN}/protection/required_signatures`,
-})
-
-const GATE_CHECKS = { strict: false, contexts: [GATE_CONTEXT] }
-// The PUT's optional booleans, each read from the GET's `{ enabled }`.
-const PROTECTION_FLAGS = [
-  'required_linear_history',
-  'allow_force_pushes',
-  'allow_deletions',
-  'block_creations',
-  'required_conversation_resolution',
-  'lock_branch',
-  'allow_fork_syncing',
-]
-const REVIEW_BOOLEANS = ['dismiss_stale_reviews', 'require_code_owner_reviews', 'require_last_push_approval']
-const ACTORS = ['users', 'teams', 'apps']
-const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
-const isStrings = (v) => Array.isArray(v) && v.every((s) => typeof s === 'string' && s !== '')
-const onlyKeys = (o, keys) => isObj(o) && Object.keys(o).every((k) => keys.includes(k))
-const actorsOk = (o) => onlyKeys(o, ACTORS) && ACTORS.every((k) => o[k] === undefined || isStrings(o[k]))
-
-/**
- * Whether `body` is a protection PUT `init` may send: `PROTECTION_BODY`, or a rebuild
- * (`rebuildProtectionBody`): `review/agent` required with strict off, `enforce_admins` true, the
- * reviews and restrictions null or of the PUT's shape, and no key beyond the PUT's.
- */
-export function isProtectionPut(body) {
-  if (!onlyKeys(body, ['required_status_checks', 'enforce_admins', 'required_pull_request_reviews', 'restrictions', ...PROTECTION_FLAGS])) return false
-  if (!sameJson(body.required_status_checks, GATE_CHECKS) || body.enforce_admins !== true) return false
-  if (!('required_pull_request_reviews' in body) || !('restrictions' in body)) return false
-  const reviews = body.required_pull_request_reviews
-  if (reviews !== null) {
-    const keys = ['dismissal_restrictions', 'bypass_pull_request_allowances', 'required_approving_review_count', ...REVIEW_BOOLEANS]
-    if (!onlyKeys(reviews, keys)) return false
-    if (reviews.dismissal_restrictions !== undefined && !actorsOk(reviews.dismissal_restrictions)) return false
-    if (reviews.bypass_pull_request_allowances !== undefined && !actorsOk(reviews.bypass_pull_request_allowances)) return false
-    if (reviews.required_approving_review_count !== undefined && !Number.isInteger(reviews.required_approving_review_count)) return false
-    if (REVIEW_BOOLEANS.some((k) => reviews[k] !== undefined && typeof reviews[k] !== 'boolean')) return false
-  }
-  const { restrictions } = body
-  if (restrictions !== null && !(onlyKeys(restrictions, ACTORS) && ACTORS.every((k) => isStrings(restrictions[k])))) return false
-  return PROTECTION_FLAGS.every((k) => body[k] === undefined || typeof body[k] === 'boolean')
-}
-
-/** GitHub's actors, `{ users: [{ login }], teams: [{ slug }], apps: [{ slug }] }`, as the PUT's login and slug arrays. */
-function actorsForPut(actors) {
-  const out = {}
-  for (const [kind, field] of [['users', 'login'], ['teams', 'slug'], ['apps', 'slug']]) {
-    if (Array.isArray(actors?.[kind])) out[kind] = actors[kind].map((a) => a[field])
-  }
-  return out
-}
-
-/**
- * The PUT that rebuilds protection read as `protection` (GitHub's GET shape) with `review/agent`
- * required and `enforce_admins` on, keeping every other setting the PUT carries: the pull request
- * reviews with each of their fields, the restrictions, and each of `PROTECTION_FLAGS` the GET
- * reports (an `{ enabled }` object in the GET, a boolean in the PUT). The status checks the project
- * had are not kept, since it had none. `required_signatures` is not a field of the PUT; see
- * `keepProtection`.
- */
-export function rebuildProtectionBody(protection) {
-  const reviews = protection?.required_pull_request_reviews
-  const body = {
-    required_status_checks: { ...GATE_CHECKS },
-    enforce_admins: true,
-    required_pull_request_reviews: null,
-    restrictions: null,
-  }
-  if (isObj(reviews)) {
-    const kept = {}
-    if (isObj(reviews.dismissal_restrictions)) kept.dismissal_restrictions = actorsForPut(reviews.dismissal_restrictions)
-    if (isObj(reviews.bypass_pull_request_allowances)) kept.bypass_pull_request_allowances = actorsForPut(reviews.bypass_pull_request_allowances)
-    if (Number.isInteger(reviews.required_approving_review_count)) kept.required_approving_review_count = reviews.required_approving_review_count
-    for (const k of REVIEW_BOOLEANS) if (typeof reviews[k] === 'boolean') kept[k] = reviews[k]
-    body.required_pull_request_reviews = kept
-  }
-  if (isObj(protection?.restrictions)) {
-    const actors = actorsForPut(protection.restrictions)
-    body.restrictions = { users: actors.users ?? [], teams: actors.teams ?? [], apps: actors.apps ?? [] }
-  }
-  for (const k of PROTECTION_FLAGS) if (typeof protection?.[k]?.enabled === 'boolean') body[k] = protection[k].enabled
-  return body
-}
-
 /** Throws unless `request` is one of the operations `init` performs; runs before any network call. */
 export function assertAllowedRequest(repo, request) {
   const prefix = repoPath(repo)
   const url = typeof request?.url === 'string' ? request.url : ''
   const rest = url.startsWith(`${prefix}/`) ? url.slice(prefix.length) : null
   const refuse = () => {
-    throw new Error(`refusing a request outside the operations init.mjs performs: ${request?.method} ${url}`)
+    throw new Error(`refusing a request outside the operations init performs: ${request?.method} ${url}`)
   }
   if (rest === null) refuse()
   const { method, body } = request
-  const protection = `/branches/${MAIN}/protection`
-  if (method === 'GET' && rest === protection && body === undefined) return
-  if (method === 'PUT' && rest === protection && isProtectionPut(body)) return
-  if (method === 'POST' && rest === `${protection}/required_signatures` && body === undefined) return
-  if (method === 'POST' && rest === `${protection}/required_status_checks/contexts` && sameJson(body, [GATE_CONTEXT])) return
-  if (method === 'POST' && rest === `${protection}/enforce_admins` && body === undefined) return
   const labelGet = /^\/labels\/([^/?#]+)$/.exec(rest)
   if (method === 'GET' && labelGet && body === undefined && labelNames().includes(decodeURIComponent(labelGet[1]))) return
   if (method === 'POST' && rest === '/labels' && LABELS.some((l) => sameJson(body, l))) return
@@ -611,107 +493,6 @@ export async function ensureLabels(ctx, out) {
     if (created.status < 200 || created.status >= 300) throw new HttpError(request, created.status, created.body)
     out(`label ${label.name}: created`)
   }
-}
-
-// What GitHub's error messages say, for the two refusals AC-10 lets init go on from. Transcribed from
-// GitHub's documentation and reports, not checked against a live response: a message that matches
-// neither stops init, so a wrong match here stops it rather than letting it go on.
-const PLAN_RE = /upgrade to github pro|make this repository public/i
-const ADMIN_RE = /must have admin rights|resource not accessible by (?:integration|personal access token)/i
-
-/**
- * `'plan'` (GitHub offers no protection on the plan) or `'admin'` (the account lacks admin access),
- * read from a 403 or 404's message and not from the status alone; `null` for any other failure,
- * such as a rate limit's 403, which stops init.
- */
-function protectionRefusal({ status, body }) {
-  if (status !== 403 && status !== 404) return null
-  const message = body?.message ?? ''
-  if (PLAN_RE.test(message)) return 'plan'
-  if (ADMIN_RE.test(message)) return 'admin'
-  return null
-}
-
-const ok = (response) => response.status >= 200 && response.status < 300
-
-/**
- * Makes `main` require `review/agent` with `enforce_admins` on, keeping the project's own protection.
- * With none there, it sets `PROTECTION_BODY`. With some there, it adds `review/agent` to the required
- * status checks unless it is required, and turns `enforce_admins` on unless it is on, and changes
- * nothing else. Where GitHub offers none (the plan) or the account cannot set it (admin access), it
- * says so plainly and returns; any other failure throws.
- */
-export async function protectMain(ctx, out) {
-  const read = buildGetProtection(ctx.repo)
-  const existing = await ctx.send(read)
-  if (ok(existing)) return keepProtection(ctx, existing.body, out)
-  const notProtected = existing.status === 404 && /branch not protected/i.test(existing.body?.message ?? '')
-  if (!notProtected) {
-    const kind = protectionRefusal(existing)
-    if (kind === null) throw new HttpError(read, existing.status, existing.body)
-    return refused(kind, out)
-  }
-  const request = buildSetProtection(ctx.repo)
-  const set = await ctx.send(request)
-  if (ok(set)) {
-    out(`branch protection on ${MAIN}: set. It requires ${GATE_CONTEXT}, with enforce_admins on.`)
-    out("  The project's own CI checks are the crew's to add to it.")
-    return
-  }
-  const kind = protectionRefusal(set)
-  if (kind === null) throw new HttpError(request, set.status, set.body)
-  return refused(kind, out)
-}
-
-/**
- * The protection `main` already has: adds what the gate needs of it and keeps the rest. With status
- * checks on, `review/agent` is added through the contexts endpoint and `enforce_admins` through its
- * own. With none on, init does not rely on a request that switches them on alone, so the protection is
- * rebuilt by one PUT of every setting it has (`rebuildProtectionBody`) plus `review/agent` and
- * `enforce_admins`; `required_signatures`, which that PUT does not carry, is turned on again after
- * it when it was on.
- */
-async function keepProtection(ctx, protection, out) {
-  const checks = protection?.required_status_checks
-  const required = [...(checks?.contexts ?? []), ...(checks?.checks ?? []).map((c) => c.context)]
-  const adminsOn = protection?.enforce_admins?.enabled === true
-  out(`branch protection on ${MAIN}: already there, so the project's own is kept`)
-  // Each step is sent and judged alone: a refusal (plan, admin) ends init's work on protection, and
-  // any other failure throws.
-  const steps = []
-  if (!isObj(checks)) {
-    steps.push([
-      buildRebuildProtection(ctx.repo, rebuildProtectionBody(protection)),
-      `required no status checks, so rebuilt it with every setting it had, adding ${GATE_CONTEXT} as a required status check and enforce_admins on`,
-    ])
-    if (protection?.required_signatures?.enabled === true) {
-      steps.push([buildEnableRequiredSignatures(ctx.repo), 'turned required signatures on again, which the rebuild does not carry'])
-    }
-  } else {
-    if (required.includes(GATE_CONTEXT)) out(`  ${GATE_CONTEXT} is already required`)
-    else steps.push([buildAddRequiredCheck(ctx.repo), `added ${GATE_CONTEXT} to its required status checks`])
-    if (adminsOn) out('  enforce_admins is already on')
-    else steps.push([buildEnableEnforceAdmins(ctx.repo), 'turned enforce_admins on'])
-  }
-  for (const [request, said] of steps) {
-    const response = await ctx.send(request)
-    if (!ok(response)) {
-      const kind = protectionRefusal(response)
-      if (kind === null) throw new HttpError(request, response.status, response.body)
-      return refused(kind, out)
-    }
-    out(`  ${said}`)
-  }
-  out("  Everything else in it is as it was. The project's own CI checks are the crew's to add.")
-}
-
-function refused(kind, out) {
-  out(
-    kind === 'plan'
-      ? `branch protection on ${MAIN}: not set. GitHub offers none for this repository on its plan (a private repository on GitHub Free has none).`
-      : `branch protection on ${MAIN}: not set. This account cannot set it on this repository (it needs admin access).`,
-  )
-  out('  Nothing on GitHub then enforces the gate: a merge without a passing review is not stopped. Inspection, if added, raises one after the fact.')
 }
 
 // ------------------------------------------------------------------ the files' content
@@ -908,15 +689,11 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
     }
   }
 
-  // GitHub: the labels, and branch protection on a yes.
+  // GitHub: the labels.
   if (repo === null) {
     out('labels: not created, since there is no GitHub repository to create them in')
-    if (answers.protectMain) out(`branch protection on ${MAIN}: not set, since there is no GitHub repository to set it on`)
   } else {
-    const ctx = createInitContext({ repo, fetch, getToken })
-    await ensureLabels(ctx, out)
-    if (answers.protectMain) await protectMain(ctx, out)
-    else out(`branch protection on ${MAIN}: not asked to set it, left as it is`)
+    await ensureLabels(createInitContext({ repo, fetch, getToken }), out)
   }
 
   // The machine's settings, only when the file is missing.
@@ -933,7 +710,9 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
     out(`left ${machinePath}: the machine's settings are already there, not read`)
   }
 
-  out('Nothing was committed, staged or pushed. Commit what was written through a pull request of the project\'s own.')
+  out("Nothing was committed, staged or pushed. Commit what was written, and open a pull request of the project's own for it.")
+  out('Merge that pull request as the project normally merges: the gate cannot review the pull request that installs it.')
+  out('Steward is then set up. To have GitHub stop a merge that has not passed review, run `steward protect` once it has merged.')
   return 0
 }
 
