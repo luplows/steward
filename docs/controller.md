@@ -28,6 +28,9 @@ enough, are in [`agent-workflow-design.md`](agent-workflow-design.md), "The cont
   `steward.worktrees/controller`, as [`AGENTS.md`](../AGENTS.md), "Opening a pull request", places
   worktrees. Start the command from the root of that worktree. It refuses to run from a checkout
   with a branch checked out, and brings the worktree to `origin/main`, detached, itself.
+- Before each rotation, fetch `origin` and check out `origin/main`, detached, in that worktree, so
+  that the scripts you run are what has landed. The command loads its own modules before it
+  updates the worktree, so its update alone would leave the scripts as they were.
 
 ## A rotation
 
@@ -41,12 +44,13 @@ node scripts/dispatch/cli.mjs rotation
 - Add `--max-reviews N`, a positive integer, only when the crew gives a number. Without it a
   rotation starts at most five reviews. Add `--repo owner/name` only when the crew names a
   repository other than the one in `steward.config.json`.
-- The command takes no pull request numbers. It considers each open pull request against `main` or
-  a release branch (`release/vX.Y.Z`; `docs/release-review.md`), whichever one a request names.
-- It does the rest itself, in this order, and you do none of it by hand: it updates the worktree,
-  reviews the pull requests that need a verdict, has the pilot request landing for each that is
-  cleared, and runs `inspect` ([`outline.md`](outline.md), "The two sides"; the header of
-  [`scripts/dispatch/rotation.mjs`](../scripts/dispatch/rotation.mjs) defines each step).
+- The command takes no pull request numbers, and a request names none. It considers each open pull
+  request against `main` or a release branch (`release/vX.Y.Z`; `docs/release-review.md`). When
+  order matters, the crew holds pull requests back as drafts or with `review-blocked`.
+- It does the rest itself, in this order, and you do none of it by hand: it checks the worktree and
+  updates it again, reviews the pull requests that need a verdict, has the pilot request landing for
+  each that is cleared, and runs `inspect` ([`outline.md`](outline.md), "The two sides"; the header
+  of [`scripts/dispatch/rotation.mjs`](../scripts/dispatch/rotation.mjs) defines each step).
 - It prints one line per pull request, then `rotation stopped` and the reason if it stopped, and it
   exits 0 unless it stopped. Run it once per request.
 - A draft is not ready for you. The runway never lands one

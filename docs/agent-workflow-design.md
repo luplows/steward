@@ -711,21 +711,20 @@ stop the others, and only a failure of the rotation itself stops it (owner, 2026
 `docs/controller.md`).
 
 It runs the command from a worktree of its own, never from the repository's main checkout (decided
-2026-10-06 by the owner, replacing the main checkout). The command refuses a checkout with a branch
-checked out (`requireOwnWorktree`, `scripts/dispatch/loop.mjs`), then fetches `origin` and checks
-out `origin/main`, detached, as the loop's `updateCheckout` does, and stops if the worktree has
-anything uncommitted. The scripts take the project from the working directory and their prompts from
-the checkout they are loaded from (`ENGINE_ROOT`, `coder.mjs`; OQ-123, OQ-130), so those are what
-has landed, and the main checkout is left free for whoever else is working. The modules of the
-command itself are loaded before the worktree is updated, so a change to the dispatch scripts that
-landed since the worktree was last updated takes effect from the next rotation.
-
-**It may land, and only through the pilot.** The rotation runs `land.mjs`, with `once`, for a pull
+2026-10-06 by the owner, replacing the main checkout). Before each rotation it fetches `origin` and
+checks out `origin/main`, detached, in that worktree, because the command's own modules are loaded
+before its update, so the update alone would leave the scripts as they were. The command refuses a
+checkout with a branch checked out (`requireOwnWorktree`, `scripts/dispatch/loop.mjs`), then fetches
+`origin` and checks out `origin/main`, detached, as the loop's `updateCheckout` does, and stops if
+the worktree has anything uncommitted. The scripts take the project from the working directory and
+their prompts from the checkout they are loaded from (`ENGINE_ROOT`, `coder.mjs`; OQ-123, OQ-130),
+so those are what has landed, and the main checkout is left free for whoever else is working. **It
+may land, and only through the pilot.** The rotation runs `land.mjs`, with `once`, for a pull
 request whose head has an honoured `pass` or `pass-with-observations` verdict, with no further
-go-ahead (owner, 2026-10-12); the pilot itself looks for green CI. The controller never runs
-`gh workflow run land-approved.yml`, and never merges through the API or any other way. No other
-agent session starts the runway. `AGENTS.md`, "Every session", and `docs/controller.md` state the
-rule; this section is its rationale.
+go-ahead (owner, 2026-10-12); the pilot itself looks for green CI. The controller never runs `gh
+workflow run land-approved.yml`, and never merges through the API or any other way. No other agent
+session starts the runway. `AGENTS.md`, "Every session", and `docs/controller.md` state the rule;
+this section is its rationale.
 
 Why this is safe enough:
 

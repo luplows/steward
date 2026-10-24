@@ -49,8 +49,9 @@ Decided by the owner on 2026-09-28.
   pull request ready is the crew's go-ahead for it to be reviewed and landed. The landing sweep
   never lands a draft (`scripts/land/select-candidates.mjs`).
 - The controller reviews and lands it once it is ready ([`docs/controller.md`](controller.md)).
-  When the crew asks you to have a pull request reviewed, ask the controller for a rotation for
-  it. It reports the result back to you.
+  When the crew asks you to have a pull request reviewed, ask the controller for a rotation. It
+  takes every open pull request, not one you name, so a pull request that is not ready stays a
+  draft. It reports the result back to you.
 - If its review blocks, fix the story on the same branch. Its new head is reviewed afresh. A block
   on the pull request's description alone is fixed by editing the description, then asking the
   controller for a `--rereview`, naming the finding (`docs/controller.md`, "Re-review").
