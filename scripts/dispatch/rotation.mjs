@@ -17,7 +17,9 @@
  *   3. Oldest first (lowest number), reviews each that is not a draft, whose author the gate
  *      honours (`HONOURED_ASSOCIATIONS`), that is not labelled `review-blocked`, and that has no
  *      honoured verdict at its current head, until `--max-reviews` reviews have been started.
- *   4. When the settings' `land` is true, reads the list again and, one at a time, has the pilot
+ *   4. When the settings' `land` is true, reads each pull request step 2 listed again (a second
+ *      listing, filtered to step 2's numbers; one opened since waits for the next rotation, and one
+ *      no longer open is printed as not landed) and, one at a time, has the pilot
  *      request landing for each pull request whose current head has an honoured `pass` or
  *      `pass-with-observations` verdict, whoever opened it and whenever it passed.
  *   4a. Runs inspection once. What it prints is printed, and its exit code, or an error in it, is
@@ -313,8 +315,14 @@ export async function runRotation({ repoDir, maxReviews = DEFAULT_MAX_REVIEWS, r
       printRecords()
       return finish()
     }
-    for (const pr of again) {
-      const rec = record(pr.number)
+    const current = new Map(again.map((p) => [p.number, p]))
+    for (const { number } of prs) {
+      const rec = record(number)
+      const pr = current.get(number)
+      if (pr === undefined) {
+        rec.landing = 'not landed: no longer open'
+        continue
+      }
       let passing
       try {
         const found = verdictAtHead(await d.listPullRequestComments(ctx, pr.number), pr.headSha)

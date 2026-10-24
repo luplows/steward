@@ -271,7 +271,7 @@ describe('ST-25/AC-4: step 4, landing', () => {
     expect(result.exitCode).toBe(0)
   })
 
-  it('ST-25/AC-4: the pull requests are read again for step 4, so a verdict at the current head is the one that counts', async () => {
+  it('ST-25/AC-4: each pull request step 2 listed is read again for step 4, so a verdict at the current head is the one that counts', async () => {
     const h = harness({
       lists: [[pr(1)], [pr(1, { headSha: SHA('b') })]],
       comments: { 1: [marker(SHA('a'), 'pass')] },
@@ -279,6 +279,29 @@ describe('ST-25/AC-4: step 4, landing', () => {
     await h.run()
     expect(h.calls.filter((c) => c === 'list')).toHaveLength(2)
     expect(landsOf(h.calls)).toEqual([])
+  })
+
+  it('ST-25/AC-4: a pull request that appears after step 2, even with a passing verdict, is not landed in this rotation', async () => {
+    const h = harness({
+      lists: [[pr(1)], [pr(1), pr(2)]],
+      comments: { 1: [marker(SHA('a'), 'pass')], 2: [marker(SHA('a'), 'pass')] },
+    })
+    const result = await h.run()
+    expect(landsOf(h.calls)).toEqual(['land:1'])
+    expect(h.lines.join('\n')).not.toMatch(/#2 /)
+    expect(result).toMatchObject({ status: 'finished', exitCode: 0 })
+  })
+
+  it('ST-25/AC-4: a pull request step 2 listed that has since closed is printed as not landed, and the rotation goes on', async () => {
+    const h = harness({
+      lists: [[pr(1), pr(2)], [pr(2)]],
+      comments: { 1: [marker(SHA('a'), 'pass')], 2: [marker(SHA('a'), 'pass')] },
+    })
+    const result = await h.run()
+    expect(landsOf(h.calls)).toEqual(['land:2'])
+    expect(h.lines).toContain('#1 skipped: a verdict is already at its head; not landed: no longer open')
+    expect(h.calls).toContain('inspection')
+    expect(result).toMatchObject({ status: 'finished', exitCode: 0 })
   })
 
   it('ST-25/AC-4: a pull request reviewed and passed in this rotation is landed in it', async () => {
