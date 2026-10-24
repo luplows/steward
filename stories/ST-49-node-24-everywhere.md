@@ -27,19 +27,23 @@ default npm.
       `node` or `npx` has an `actions/setup-node@v4` step with `node-version: 24` before its first
       such step: `ci.yml`'s `test`, `review-gate.yml`'s `pending` and `verdict`,
       `land-approved.yml`'s `land` and `inspection.yml`'s `inspect`. `ci.yml`'s existing
-      `Setup: Node` step moves from Node 22 to 24 and keeps its name and `cache: npm`. The version
-      of `actions/setup-node` is the one `ci.yml` uses today.
+      `Setup: Node` step moves from Node 22 to 24 and keeps its name and `cache: npm`. It is the
+      only setup step with a `cache` (owner, 2026-10-24): `ci.yml` alone runs `npm ci`, against
+      steward's own lock file, while the other jobs only fetch steward, which has no runtime
+      dependencies, and a cache would fail in a project with no lock file. The version of
+      `actions/setup-node` is the one `ci.yml` uses today.
 - [ ] **AC-3** — Each job in the thin templates `templates/workflows/*.yml` has the same step,
       with `node-version: 24` written literally, before its first step running `node` or `npx`.
-      The step carries no `{{STEWARD_VERSION}}` placeholder, and is the same step as in the
-      matching job of steward's own file.
+      The step carries no `{{STEWARD_VERSION}}` placeholder and no `cache`, and is the same step
+      as in the matching job of steward's own file.
 - [ ] **AC-4** — A test checks AC-2 and AC-3 mechanically. It reads every
       `.github/workflows/*.yml` and every `templates/workflows/*.yml` that exist (not a fixed
       list), and fails when it finds none of either. For each job with a step whose command is
       `node` or `npx` (a folded `run: >-` command included), it requires an earlier
       `actions/setup-node` step in the same job whose `node-version` has the major version that
-      `package.json`'s `engines.node` names. Cases show it failing on a job with no setup step, on
-      one whose setup step comes after the first `node` step, and on one whose version is 22.
+      `package.json`'s `engines.node` names, and with no `cache` outside `ci.yml`. Cases show it
+      failing on a job with no setup step, on one whose setup step comes after the first `node`
+      step, on one whose version is 22, and on a thin template's step with `cache: npm`.
 - [ ] **AC-5** — The existing sync tests keep passing and still test what they tested: steward's
       own files and the thin files differ only in how steward is started (ST-42/AC-5 and
       ST-44/AC-6 in `scripts/land/thin-workflows.test.mjs`), so the setup step is in both, in the

@@ -2595,8 +2595,10 @@ shortened where it is long, so that it can be found there with its date.
     tested, and an exact release, which every patch would have to move); every job that runs
     `node` or `npx`, in steward's own `.github/workflows/*.yml` and in the thin templates, has an
     `actions/setup-node` step with Node 24 before its first such step, CI moving from Node 22 to
-    24; a test checks it mechanically for both sets of files, the thin templates naming 24 literally since they run in a project and
-    cannot read steward's `package.json`; and `README.md` asks for Node 24 (npm 11 or newer).
+    24, and only CI's step keeping npm's cache, since only CI runs `npm ci` (owner); a test checks
+    it mechanically for both sets of files, the thin templates naming 24 literally since they run
+    in a project and cannot read steward's `package.json`; and `README.md` asks for Node 24 (npm
+    11 or newer).
     Considered and not chosen: Node 22 with the install switched to GitHub's tarball URL, which
     works on npm 10 but leaves Node 22 sooner and makes the command less readable;
     `npx --yes npm@11 exec …` in every step, which is odd and fragile; and publishing to the npm
