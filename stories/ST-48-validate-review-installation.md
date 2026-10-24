@@ -3,7 +3,7 @@ id: ST-48
 title: Validate review installation manually in two existing projects
 tier: next
 kind: workflow
-depends_on: [ST-25, ST-42, ST-44, ST-47]
+depends_on: [ST-25, ST-42, ST-44, ST-47, ST-49, ST-50]
 model: null
 blocked: "Crew-only manual validation in two client projects; no coder may take this story."
 ---
@@ -70,7 +70,8 @@ implementation scripts.
 
 ## Out of scope
 
-- Implementing ST-25, ST-42, ST-44 or ST-47, or repairing validation defects: separate work.
+- Implementing ST-25, ST-42, ST-44, ST-47, ST-49 or ST-50, or repairing validation defects:
+  separate work.
 - Automated coding, dispatching client stories, or changing either project's planning process.
 - New unit conventions, new tracker integrations, and moving units into steward's story schema.
 - Cutting a release, changing release policy, or replacing the release review's scratch-project
@@ -104,6 +105,9 @@ implementation scripts.
   sets branch protection apart from `init` and reports when it cannot be set.
 - ST-47: merged-head deletion protection and the runway's status-pagination fix; the crew
   requires these fixes before client validation (2026-10-21).
+- ST-49, `stories/ST-49-node-24-everywhere.md`: the workflows set up Node 24, without which the
+  thin workflows' install fails on GitHub's runner. The owner requires ST-49 and ST-50 before
+  client validation (2026-10-23).
 - `stories/README.md`, "Status": crew-only manual work keeps a reason in `blocked:`.
 
 ## Open questions

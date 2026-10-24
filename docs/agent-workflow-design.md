@@ -2479,7 +2479,8 @@ shortened where it is long, so that it can be found there with its date.
   The first release, `v0.1.0`, is cut by a release review session, whose instructions are a
   separate pull request.
 - **The crew validates review installation in two existing projects** (crew, 2026-10-21;
-  **Planned (ST-48)**). After ST-25, ST-42, ST-44 and ST-47 are delivered, the crew manually installs
+  **Planned (ST-48)**). After ST-25, ST-42, ST-44 and ST-47 are delivered (and ST-49 and ST-50,
+  owner, 2026-10-23, in the entry below), the crew manually installs
   the review gate first in pinpoint and then in tower-workshop-paths, preserving their existing
   issue and file-story conventions. Each installation uses steward's package and thin workflows,
   with no copied implementation scripts. Each project supplies a real review verdict on the
@@ -2617,8 +2618,11 @@ shortened where it is long, so that it can be found there with its date.
     `main` holds `steward.config.json`, the checklist its `rulesFile` names,
     `.github/workflows/review-gate.yml` and `.github/workflows/land-approved.yml`; once they are
     there it does what `init`'s protection did (the passage above), and asks nothing, since running
-    it is the crew's yes. The release review's walkthrough gains `protect` between `init` and its
-    test pull request, so that the release review exercises it. Considered and not chosen: only
+    it is the crew's yes. Unlike `init`, it exits 1 when it refuses or GitHub refuses protection,
+    since protection is its only job (owner). The release review's walkthrough gains `protect`
+    between `init` and its test pull request, so that the release review exercises it. ST-48's
+    validation waits for both fixes: it gains ST-49 and ST-50 in its `depends_on`, beside ST-25,
+    ST-42, ST-44 and ST-47 (owner). Considered and not chosen: only
     documenting the order that works today, with the release accepting `init` with a follow-up;
     `init` itself offering protection only once it finds the gate on `main`, run a second time,
     which is one command but "run it again" is less clear, and `init` keeps both jobs; and a trial

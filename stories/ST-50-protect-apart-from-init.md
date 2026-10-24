@@ -49,12 +49,12 @@ one, can use steward without protection and add it later.
       reads), when any is missing: its message names each one missing, and, when
       `steward.config.json` is missing or its `rulesFile` is not a path (`isRulesFilePath`), says
       that the checklist cannot be named. With no `main` it refuses, saying that it found no
-      `main` on the repository. A read that fails any other way (not a 404 for a missing file or
-      branch) stops it with a non-zero exit, setting nothing. It does not read the files'
-      contents beyond the `rulesFile` value. Tests with GitHub injected: all four present, and
-      protection is set; each of the four missing alone, and all missing, and no `main`: refused,
-      naming exactly what is missing, with no write request; a 500 on a read: stops, no write
-      request.
+      `main` on the repository. Each such refusal exits 1, as AC-5's do. A read that fails any
+      other way (not a 404 for a missing file or branch) stops it with exit 1, setting nothing.
+      It does not read the files' contents beyond the `rulesFile` value. Tests with GitHub
+      injected: all four present, and protection is set; each of the four missing alone, and all
+      missing, and no `main`: refused with exit 1, naming exactly what is missing, with no write
+      request; a 500 on a read: stops with exit 1, no write request.
 - [ ] **AC-5** — **What it sets, once those are on `main`, is what `init`'s protection set.**
       Protection requiring `review/agent` with `enforce_admins` on (`PROTECTION_BODY`). Where
       `main` already has protection, it keeps the project's own and adds only those two: it adds
@@ -64,8 +64,10 @@ one, can use steward without protection and add it later.
       signatures on again when they were on. It says which it did, and that the project's own CI
       checks are the crew's to add. Where GitHub offers none (the plan) or the account cannot set
       it (admin access), it reports so plainly, says that nothing on GitHub then enforces the
-      gate, and exits 0 as `init` did; any other failed request exits non-zero. A run with no
-      terminal and nothing wrong exits 0.
+      gate, and exits 1, since protection, its only job, was not set (owner, 2026-10-23; `init`
+      exited 0 there). Any other failed request also exits 1. A run with no terminal and nothing
+      wrong exits 0. Tests: a refusal for the plan and one for admin access each exit 1, with
+      the message.
 - [ ] **AC-6** — **The code and tests move; they are not rewritten.** From `init.mjs` to
       `protect.mjs`: `PROTECTION_BODY`, the protection request builders, `isProtectionPut`,
       `rebuildProtectionBody`, `protectionRefusal`, `protectMain` (named for what it does) with
