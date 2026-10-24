@@ -10,7 +10,7 @@ build, and what is fit to release.
 
 - **The review side works.** Steward's scripts (ATC) start a reviewer for a pull request, post its
   verdict, and land the pull request once it passes. Steward's own pull requests land this way.
-  For now a member of the crew starts each run by hand.
+  For now a member of the crew starts each run by hand, with one command for the whole review side.
 - **The coding side is designed but not built.** Until it is, pull requests are written by people,
   or in their own agent sessions.
 - **Another project can use the review side.** Run `steward init` in the project's checkout (see
@@ -40,6 +40,7 @@ Then, from a checkout of the repository:
 ```sh
 node scripts/dispatch/cli.mjs review <pr-number>   # review the pull request at its head
 node scripts/dispatch/cli.mjs land <pr-number>     # land it, once it has passed and is green
+node scripts/dispatch/cli.mjs rotation             # one run of the review side: review what needs it, land what has passed, then inspect
 node scripts/dispatch/cli.mjs inspect              # raise a merge without a passing verdict, or a stall, on main or a release branch
 ```
 
