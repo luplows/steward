@@ -51,8 +51,10 @@ node scripts/dispatch/cli.mjs rotation
   updates it again, reviews the pull requests that need a verdict, has the pilot request landing for
   each that is cleared, and runs `inspect` ([`outline.md`](outline.md), "The two sides"; the header
   of [`scripts/dispatch/rotation.mjs`](../scripts/dispatch/rotation.mjs) defines each step).
-- It prints one line per pull request, then `rotation stopped` and the reason if it stopped, and it
-  exits 0 unless it stopped. Run it once per request.
+- It prints in the order things happen: a line for each pull request when its review, or its skip,
+  is decided, then a line for each when its landing, or the reason it is not landed, is decided,
+  then inspection's output and exit code, and, if it stopped, `rotation stopped` and the reason,
+  last. It exits 0 unless it stopped. Run it once per request.
 - A draft is not ready for you. The runway never lands one
   ([`scripts/land/select-candidates.mjs`](../scripts/land/select-candidates.mjs)). Marking a pull
   request ready is its author's hand-over, and for the planning session's pull requests it is the

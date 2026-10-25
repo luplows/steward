@@ -18,7 +18,7 @@ rotation prints about the state of the repository is false.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — **Inspection leaves fresh commits for the next run.** In `inspectMerges`
+- [x] **AC-1** — **Inspection leaves fresh commits for the next run.** In `inspectMerges`
       (`scripts/dispatch/inspect.mjs`), a commit on `main` or a release branch whose committer
       date is less than 10 minutes before `now` is not judged: it is neither a finding nor
       checked for a passing verdict. The 10 minutes are a named constant in `inspect.mjs`, not a
@@ -27,12 +27,12 @@ rotation prints about the state of the repository is false.
       no issue; the same commit 11 minutes old raises the "without a pull request" finding; a
       commit 9 minutes old whose pull request merged without a passing verdict raises no finding;
       and the same holds on a release branch.
-- [ ] **AC-2** — **Inspection names what it left.** For each commit AC-1 leaves, inspection prints
+- [x] **AC-2** — **Inspection names what it left.** For each commit AC-1 leaves, inspection prints
       one line naming its short SHA and branch and saying it was left for the next run, being
       committed less than 10 minutes ago. Such a commit changes neither the count of findings it
       prints nor its exit code. A test shows the line, and an exit code of 0 when the only commit
       in the window is one it left.
-- [ ] **AC-3** — **The pilot waits through the gate's lag, even when it looks once.** In
+- [x] **AC-3** — **The pilot waits through the gate's lag, even when it looks once.** In
       `landPullRequest` (`scripts/dispatch/land.mjs`) with `once: true`, when `passedAt` is the
       pull request's current head and `review/agent` on it is not `success` (pending, absent,
       `failure` or `error`), the pilot reads it again every `POLL_INTERVAL_MS` for up to
@@ -46,7 +46,7 @@ rotation prints about the state of the repository is false.
       nothing; and, for a pending status and for a `failure` status, each with no `passedAt` and
       with a `passedAt` that is not the head, the result is the one the code before this change
       returns, with no `sleep`.
-- [ ] **AC-4** — **The rule is written where the waits are.** `land.mjs`'s header says, in place
+- [x] **AC-4** — **The rule is written where the waits are.** `land.mjs`'s header says, in place
       of "look once instead of waiting": a rotation waits only for an event that finishes on its
       own within a known bound, the gate's status after a verdict (`GATE_LAG_BOUND_MS`) and the
       runway's merge after a trigger (`SWEEP_RUN_BOUND_MS`), and for nothing else, leaving
@@ -54,7 +54,7 @@ rotation prints about the state of the repository is false.
       comment and test title in `land.mjs`, `land.test.mjs`, `rotation.mjs` and
       `rotation.test.mjs` that says `once` never waits, or looks once without waiting, is
       corrected.
-- [ ] **AC-5** — **The rotation prints in the order things happen.** `runRotation`
+- [x] **AC-5** — **The rotation prints in the order things happen.** `runRotation`
       (`scripts/dispatch/rotation.mjs`) prints each pull request's line for step 3 when its
       review, or its skip, is decided, and its line for step 4 when its landing, or the reason it
       is not landed, is decided, rather than all of them at the end: step 3's lines, oldest pull
@@ -65,7 +65,7 @@ rotation prints about the state of the repository is false.
       line for what was not done. Tests, with the review, land and inspection functions injected
       and each writing to the same record as `out`: the lines appear between the calls they
       report, in that order; and a stop in step 3 prints the finished lines, then the stop line.
-- [ ] **AC-6** — **The docs say what was built.** The rotation's header (`rotation.mjs`, step 5)
+- [x] **AC-6** — **The docs say what was built.** The rotation's header (`rotation.mjs`, step 5)
       and `docs/controller.md`, "A rotation", describe the output as AC-5 does, in place of "one
       line per pull request". `docs/agent-workflow-design.md`: every **Planned** marker naming
       ST-51 is resolved, as its "Reading this document" note says: the id taken out of each

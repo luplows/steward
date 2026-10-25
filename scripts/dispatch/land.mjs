@@ -18,8 +18,11 @@
  * it is waited through, and the sweep is re-triggered while the pull request is
  * still open after a triggered run (#123/#125, 2026-09-24).
  *
- * Called with `once`, it looks once instead (ST-23): see `landPullRequest`. With the settings'
- * `land` false it sends nothing at all.
+ * A rotation waits only for an event that finishes on its own within a known bound: the gate's
+ * status after a verdict (`GATE_LAG_BOUND_MS`) and the runway's merge after a trigger
+ * (`SWEEP_RUN_BOUND_MS`). It waits for nothing else, leaving anything of unknown length, such as
+ * checks still running, to a later rotation. Called with `once` (ST-23, ST-51) it waits for those
+ * two and no other: see `landPullRequest`. With the settings' `land` false it sends nothing at all.
  *
  * Latency bound (AC-5): a pull request is polled every `POLL_INTERVAL_MS`, and
  * the first trigger is sent in the same iteration that first sees it landable.
@@ -267,12 +270,17 @@ function assessChecks(pr, checks) {
  * `GATE_LAG_BOUND_MS` (returning `gate-lag` if it has not cleared by then)
  * instead of ending the call at once with `review-failed` (OQ-104).
  *
- * `once`, optional (ST-23): look once instead of waiting. A pull request that is not
- * landable yet is returned at once as `not-landable`, with its `reason` (the wait that
- * `assess` names), and nothing is triggered; one GitHub reports `blocked` though the checks
- * `landWhen` names are green is returned as `github-blocked` instead (ST-24). A landable one has
- * the sweep triggered once and is polled for its merge for at most `SWEEP_RUN_BOUND_MS`:
- * `merged`, or `sweep-pending` if it has not merged by then. It is never triggered a second time.
+ * `once`, optional (ST-23): wait only for the two events that finish on their own within a known
+ * bound, and for nothing else. A pull request that is not landable yet is returned at once as
+ * `not-landable`, with its `reason` (the wait that `assess` names), and nothing is triggered; one
+ * GitHub reports `blocked` though the checks `landWhen` names are green is returned as
+ * `github-blocked` instead (ST-24). The one case that is not returned at once (ST-51): `passedAt`
+ * is the head and `review/agent` is not `success`, which is the gate's status not having caught up
+ * with the verdict, so it is read again every `POLL_INTERVAL_MS` for up to `GATE_LAG_BOUND_MS`;
+ * once it reads `success` the look goes on, and if it has not by the bound the result is
+ * `not-landable` with the reason `gate-lag`. A landable one has the sweep triggered once and is
+ * polled for its merge for at most `SWEEP_RUN_BOUND_MS`: `merged`, or `sweep-pending` if it has
+ * not merged by then. It is never triggered a second time.
  *
  * With `ctx.landing` false, either mode returns `landing-off` before any request is sent.
  */
@@ -292,6 +300,7 @@ export async function landPullRequest({
   let lastTriggerAt = null
   let headSha = null
   let waiting = null // { reason, since }
+  let gateLagSince = null // `once` only: when the gate's status was first read as not `success`
 
   const finish = async (status, extra = {}) => {
     const result = { status, pr: number, headSha, triggers, ...extra }
@@ -345,6 +354,14 @@ export async function landPullRequest({
     if (verdict?.final) return finish(verdict.final, verdict.failing ? { failing: verdict.failing } : {})
 
     if (once) {
+      // The gate's status after a verdict is the one wait `once` makes before the look goes on
+      // (ST-51): bounded by `GATE_LAG_BOUND_MS`, and only when `passedAt` is the head.
+      if (gateLag && review !== 'success') {
+        gateLagSince ??= now()
+        if (now() - gateLagSince >= GATE_LAG_BOUND_MS) return finish('not-landable', { reason: 'gate-lag' })
+        await sleep(POLL_INTERVAL_MS)
+        continue
+      }
       // `github-blocked` is its own result rather than a wait that may clear: see `assessChecks`.
       if (verdict?.wait === 'github-blocked') return finish('github-blocked')
       if (verdict !== null) return finish('not-landable', { reason: verdict.wait, ...(verdict.waiting ? { waiting: verdict.waiting } : {}) })

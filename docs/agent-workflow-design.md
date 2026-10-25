@@ -339,12 +339,14 @@ it:
   the crew starts it by hand, or when the pilot, `land.mjs`, requests landing for one pull request
   (**The controller**, below). The pilot waits until the pull request is landable, requests
   landing, and requests again while it is still open; it never merges itself. Called with `once`
-  it looks once instead: a pull request not landable yet is returned as `not-landable`, and a
-  landable one has the runway requested once and is polled for its merge for at most
-  `SWEEP_RUN_BOUND_MS`, returning `merged` or `sweep-pending`. **Planned (ST-51):** with `once`,
-  it also waits up to `GATE_LAG_BOUND_MS` for `review/agent` when it holds a pass at the current
-  head, and returns `not-landable` with the reason `gate-lag` if the gate has not caught up by
-  then. With the settings' `land` false it sends nothing and returns `landing-off`. The runway was
+  it waits only for the two events that finish on their own within a known bound, and looks once at
+  everything else: a pull request not landable yet is returned as `not-landable`, and a landable
+  one has the runway requested once and is polled for its merge for at most
+  `SWEEP_RUN_BOUND_MS`, returning `merged` or `sweep-pending`. The other wait comes first: when it
+  holds a pass at the current head and `review/agent` on it is not `success`, it reads the status
+  every `POLL_INTERVAL_MS` for up to `GATE_LAG_BOUND_MS`, goes on once it reads `success`, and
+  returns `not-landable` with the reason `gate-lag` if the gate has not caught up by then. With the
+  settings' `land` false it sends nothing and returns `landing-off`. The runway was
   a `*/15` schedule until 2026-09-18, which GitHub delivered at roughly 5% of that rate
   (**Watchdog**, below).
 - **It lands when the checks the settings' `landWhen` names are green on the head**, as well as
@@ -725,9 +727,10 @@ so those are what has landed, and the main checkout is left free for whoever els
 
 **It may land, and only through the pilot.** The rotation runs `land.mjs`, with `once`, for a pull
 request whose head has an honoured `pass` or `pass-with-observations` verdict, with no further
-go-ahead (owner, 2026-10-12); the pilot itself looks for green CI. **Planned (ST-51):** a pull
-request that passed in the same rotation lands in it, the pilot waiting for the gate's status, and
-the rotation prints each line as its step is decided. The controller never runs
+go-ahead (owner, 2026-10-12); the pilot itself looks for green CI. A pull request that passed in
+the same rotation lands in it, the pilot waiting for the gate's status, and the rotation prints
+each pull request's line as its step is decided, step 3's lines, then step 4's, then inspection's
+output, and the stop line, if it stopped, last. The controller never runs
 `gh workflow run land-approved.yml`, and never merges through the API or any other way. No other
 agent session starts the runway. `AGENTS.md`, "Every session", and `docs/controller.md` state the
 rule; this section is its rationale.
@@ -960,9 +963,10 @@ opens no issue whose title is already on an issue labelled `inspection`, open or
 closing one is how the crew says it has seen it. Its exit code is 0 when it opened no issue, 1 when
 it opened at least one, and 2 when a request failed or the settings did not read. It checks each
 release branch as it checks `main`, for both merges and stalls (Part 3, "Decided so far",
-"Inspection checks release branches as it checks `main`"). **Planned (ST-51):** it judges no
-commit committed less than 10 minutes before it runs, before GitHub may have linked a merge to its
-pull request, and names each such commit as left for the next run.
+"Inspection checks release branches as it checks `main`"). It judges no commit committed less
+than 10 minutes before it runs (`SETTLE_MS`), before GitHub may have linked a merge to its pull
+request, and names each such commit as left for the next run; such a commit is not a finding, and
+changes neither the count of findings nor the exit code.
 
 **Scheduled workflows are best-effort, and here they proved far worse than that.** A `*/15` cron on
 `land-approved.yml` delivered about one run every five hours — roughly 5% of the configured rate,
@@ -2651,17 +2655,17 @@ shortened where it is long, so that it can be found there with its date.
   second rotation; and inspection, run seconds after #83 merged, raised issue #84, "23caaf0 on
   main without a pull request", before GitHub linked the commit to #83. The owner: what a rotation
   reports must not be false about the state of things, and this blocks `v0.1.0`.
-  - **Planned (ST-51):** a rotation that runs on a schedule does not wait, which does not mean
-    moving past everything as fast as possible: it waits for an event that finishes on its own
-    within a known bound, the gate's status after a verdict (`GATE_LAG_BOUND_MS`) and the
-    runway's merge after a trigger (`SWEEP_RUN_BOUND_MS`), and for nothing else, leaving anything
-    of unknown length, such as checks still running, to a later rotation. So the pilot, called
-    with `once`, waits through the gate's lag when it holds a pass at the current head. This
-    revises ST-23's look that never waited for the review; its reason stands, that one pull
-    request's slow checks hold up nothing. Inspection leaves a commit committed less than 10
-    minutes ago for the next run, and names it as left, rather than judge it before GitHub has
-    linked it to its pull request. The rotation prints each line when its step is decided, so its
-    output reads in the order things happened. Considered and not chosen: dropping `once`'s
+  - A rotation that runs on a schedule does not wait, which does not mean moving past everything
+    as fast as possible: it waits for an event that finishes on its own within a known bound, the
+    gate's status after a verdict (`GATE_LAG_BOUND_MS`) and the runway's merge after a trigger
+    (`SWEEP_RUN_BOUND_MS`), and for nothing else, leaving anything of unknown length, such as
+    checks still running, to a later rotation. So the pilot, called with `once`, waits through the
+    gate's lag when it holds a pass at the current head. This revises the earlier rule that `once`
+    never waited for the review; its reason stands, that one pull request's slow checks hold up
+    nothing. Inspection leaves a commit committed less than 10 minutes ago for the next run, and
+    names it as left, rather than judge it before GitHub has linked it to its pull request. The
+    rotation prints each line when its step is decided, so its output reads in the order things
+    happened. Considered and not chosen: dropping `once`'s
     no-waiting rule altogether, so that one pull request's checks hold up the rotation for up to
     `REVIEW_PENDING_BOUND_MS`; a "sequential" rotation, which waits for one review before
     starting another, since one rotation already reviews one pull request at a time; inspection

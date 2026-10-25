@@ -15,7 +15,8 @@
  *    is passing when the latest `review/agent` status on its head created at or before
  *    `merged_at` is `success` and was created by `github-actions[bot]`, the account
  *    `review-gate.yml` posts as, so a status any other account posts does not count. Any other
- *    merge is a finding.
+ *    merge is a finding. A commit committed less than `SETTLE_MS` (10 minutes) ago is not judged at
+ *    all and is not a finding: it is named in the output as left for the next run (ST-51).
  *  - Stalls. An open pull request against `main` or a release branch, not a draft, whose author
  *    the gate honours (`HONOURED_ASSOCIATIONS`), is a finding when its latest `review/agent`
  *    status is `pending` (it is pending at that head), or `success` posted by the gate (it is
@@ -27,9 +28,10 @@
  * the `inspection` label: it never comments on, labels or changes a pull request, and starts no
  * workflow. Its request allowlist (`assertAllowedRequest`) is checked before any network call.
  *
- * Output: one line per finding, saying whether an issue was opened or one was already there, and a
- * last line with the counts. Exit code: 0 when no issue was opened, 1 when at least one was, 2 when
- * a request fails, the settings do not read or the arguments are wrong (nothing more is opened).
+ * Output: one line per commit left for the next run (ST-51), one line per finding, saying whether an
+ * issue was opened or one was already there, and a last line with the counts, which count findings
+ * only. Exit code: 0 when no issue was opened, 1 when at least one was, 2 when a request fails, the
+ * settings do not read or the arguments are wrong (nothing more is opened).
  *
  * Usage:
  *   node scripts/dispatch/inspect.mjs [--repo owner/name] [--since-days N]
@@ -51,6 +53,10 @@ const GATE_ACCOUNT = 'github-actions[bot]'
 const PAGE = 100
 const DAY_MS = 24 * 60 * 60 * 1000
 const HOUR_MS = 60 * 60 * 1000
+const MINUTE_MS = 60 * 1000
+// A commit committed less than this long ago is not judged: GitHub has not yet linked a fresh merge
+// to its pull request, so judging it would raise an issue about a merge that is fine (ST-51).
+export const SETTLE_MS = 10 * MINUTE_MS
 export const DEFAULT_SINCE_DAYS = 7
 const LABEL_COLOR = 'fbca04'
 const LABEL_DESCRIPTION = "Raised by steward's inspection (scripts/dispatch/inspect.mjs)"
@@ -293,9 +299,11 @@ export async function listReleaseBranches(ctx) {
 /**
  * Findings among the merges to `main` and to each release branch in the window. A finding is
  * `{ kind, title, body }`; the titles name the finding and nothing that changes between runs.
- * `branches` is the release branches; it is read when not given.
+ * `branches` is the release branches; it is read when not given. A commit committed less than
+ * `SETTLE_MS` before `now` is neither judged nor a finding (ST-51); it is passed to `onLeft` as
+ * `{ sha, branch }`, once, on the branch it would have been judged on.
  */
-export async function inspectMerges(ctx, { now, sinceDays, branches }) {
+export async function inspectMerges(ctx, { now, sinceDays, branches, onLeft = () => {} }) {
   const since = new Date(now - sinceDays * DAY_MS)
   const releaseBranches = branches ?? (await listReleaseBranches(ctx))
   const statusesBySha = new Map()
@@ -307,11 +315,15 @@ export async function inspectMerges(ctx, { now, sinceDays, branches }) {
     const commits = (
       await listAll(ctx, (page) => buildListBranchCommits(ctx.repo, branch, since.toISOString(), page))
     ).filter((c) => Date.parse(c.commit?.committer?.date) >= since.getTime())
-    for (const { sha } of commits) {
+    for (const { sha, commit } of commits) {
       // A commit on `main` and on a release branch is judged once, as a commit of `main`. A
       // commit not on `main` is judged on each release branch it is on, whatever another said.
       if (branch === MAIN) judgedOnMain.add(sha)
       else if (judgedOnMain.has(sha)) continue
+      if (now - Date.parse(commit.committer.date) < SETTLE_MS) {
+        onLeft({ sha, branch })
+        continue
+      }
       if (!pullsBySha.has(sha)) {
         pullsBySha.set(sha, await listAll(ctx, (page) => buildListCommitPullRequests(ctx.repo, sha, page)))
       }
@@ -449,10 +461,14 @@ export async function raiseFindings(ctx, findings, onResult = () => {}) {
  */
 export async function inspect(ctx, { now, sinceDays, afterHours }, out = () => {}) {
   const branches = await listReleaseBranches(ctx)
+  const left = []
   const findings = [
-    ...(await inspectMerges(ctx, { now, sinceDays, branches })),
+    ...(await inspectMerges(ctx, { now, sinceDays, branches, onLeft: (commit) => left.push(commit) })),
     ...(await inspectStalls(ctx, { now, afterHours, branches })),
   ]
+  for (const { sha, branch } of left) {
+    out(`left for the next run: ${shortSha(sha)} on ${branch}, committed less than ${SETTLE_MS / MINUTE_MS} minutes ago`)
+  }
   const results = await raiseFindings(ctx, findings, (r) =>
     out(r.opened ? `opened #${r.number}: ${r.finding.title}` : `already raised: ${r.finding.title}`),
   )

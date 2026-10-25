@@ -218,7 +218,7 @@ describe('ST-25/AC-3: steps 2 and 3, the listing and the reviews', () => {
     await h.run()
     expect(reviewsOf(h.calls)).toEqual([])
     expect(landsOf(h.calls)).toEqual(['land:3'])
-    expect(h.lines.join('\n')).toMatch(/#3 skipped: labelled review-blocked; landing: review-blocked/)
+    expect(h.lines).toEqual(expect.arrayContaining(['#3 skipped: labelled review-blocked', '#3 landing: review-blocked']))
   })
 
   it('ST-25/AC-3: a listing that fails stops the rotation', async () => {
@@ -267,7 +267,9 @@ describe('ST-25/AC-4: step 4, landing', () => {
     expect(reviewsOf(h.calls)).toEqual([])
     expect(landsOf(h.calls)).toEqual(['land:1', 'land:2'])
     expect(seen.map((a) => [a.once, a.passedAt, a.ctx.landing])).toEqual([[true, SHA('a'), true], [true, SHA('b'), true]])
-    expect(h.lines.join('\n')).toMatch(/#3 skipped: a verdict is already at its head; not landed: no passing verdict at its head/)
+    expect(h.lines).toEqual(expect.arrayContaining([
+      '#3 skipped: a verdict is already at its head', '#3 not landed: no passing verdict at its head',
+    ]))
     expect(result.exitCode).toBe(0)
   })
 
@@ -299,7 +301,8 @@ describe('ST-25/AC-4: step 4, landing', () => {
     })
     const result = await h.run()
     expect(landsOf(h.calls)).toEqual(['land:2'])
-    expect(h.lines).toContain('#1 skipped: a verdict is already at its head; not landed: no longer open')
+    expect(h.lines).toContain('#1 skipped: a verdict is already at its head')
+    expect(h.lines).toContain('#1 not landed: no longer open')
     expect(h.calls).toContain('inspection')
     expect(result).toMatchObject({ status: 'finished', exitCode: 0 })
   })
@@ -325,7 +328,9 @@ describe('ST-25/AC-4: step 4, landing', () => {
     const result = await h.run()
     expect(landsOf(h.calls)).toEqual([])
     expect(h.calls.filter((c) => c === 'list')).toHaveLength(1)
-    expect(h.lines.join('\n')).toMatch(/#1 skipped: a verdict is already at its head; not landed: landing is off/)
+    expect(h.lines).toEqual(expect.arrayContaining([
+      '#1 skipped: a verdict is already at its head', '#1 not landed: landing is off in the settings',
+    ]))
     expect(result.exitCode).toBe(0)
   })
 
@@ -389,7 +394,7 @@ describe('ST-25/AC-4a: inspection', () => {
 })
 
 describe('ST-25/AC-5: step 5, the lines and the exit code', () => {
-  it('ST-25/AC-5: prints one line per pull request considered, with its number and outcome, and exits 0', async () => {
+  it('ST-25/AC-5: prints a line for each pull request and step, with its number and outcome, step 3 lines before step 4 lines, and exits 0', async () => {
     const h = harness({
       lists: [[pr(1, { draft: true }), pr(2), pr(3)]],
       comments: { 3: [marker(SHA('a'), 'pass')] },
@@ -398,9 +403,12 @@ describe('ST-25/AC-5: step 5, the lines and the exit code', () => {
     const result = await h.run()
     const perPullRequest = h.lines.filter((line) => /^#\d+ /.test(line))
     expect(perPullRequest).toEqual([
-      '#1 skipped: a draft; not landed: no passing verdict at its head',
-      '#2 reviewed: recorded (block); not landed: no passing verdict at its head',
-      '#3 skipped: a verdict is already at its head; landing: merged',
+      '#1 skipped: a draft',
+      '#2 reviewed: recorded (block)',
+      '#3 skipped: a verdict is already at its head',
+      '#1 not landed: no passing verdict at its head',
+      '#2 not landed: no passing verdict at its head',
+      '#3 landing: merged',
     ])
     expect(result).toEqual({ status: 'finished', exitCode: 0, lines: h.lines })
   })
@@ -582,8 +590,8 @@ describe('ST-25/AC-5e: every result of the pilot is printed, and landing goes on
       })
       const final = await h.run()
       expect(landsOf(h.calls)).toEqual(['land:1', 'land:2'])
-      expect(h.lines).toContain(`#1 skipped: a verdict is already at its head; landing: ${printed}`)
-      expect(h.lines).toContain('#2 skipped: a verdict is already at its head; landing: merged')
+      expect(h.lines).toContain(`#1 landing: ${printed}`)
+      expect(h.lines).toContain('#2 landing: merged')
       expect(final).toMatchObject({ status: 'finished', exitCode: 0 })
     })
   }
@@ -596,7 +604,8 @@ describe('ST-25/AC-6: the rest of the behaviour', () => {
     })
     const result = await h.run()
     expect(landsOf(h.calls)).toEqual([])
-    expect(h.lines.join('\n')).toContain('#1 reviewed: no-verdict (head moved); not landed: no passing verdict at its head')
+    expect(h.lines).toContain('#1 reviewed: no-verdict (head moved)')
+    expect(h.lines).toContain('#1 not landed: no passing verdict at its head')
     expect(result.exitCode).toBe(0)
   })
 
@@ -607,5 +616,121 @@ describe('ST-25/AC-6: the rest of the behaviour', () => {
     await a.run()
     await b.run()
     expect(a.lines).toEqual(b.lines)
+  })
+})
+
+describe('ST-51/AC-5: the rotation prints in the order things happen', () => {
+  /**
+   * A harness whose review, land and inspection functions write to the same record as `out`, so
+   * that the record shows each line between the calls it reports.
+   */
+  function ordered({ review, land, ...options } = {}) {
+    const record = []
+    let posted = false
+    const h = harness({
+      ...options,
+      comments: options.comments ?? { 1: () => (posted ? [marker(SHA('a'), 'pass')] : []) },
+      review: async (args) => {
+        record.push(`call review:${args.number}`)
+        posted = true
+        return review ? review(args) : { status: 'recorded', verdict: 'pass' }
+      },
+      land: async (args) => {
+        record.push(`call land:${args.number}`)
+        return land ? land(args) : { status: 'merged' }
+      },
+      inspection: async ({ out }) => {
+        record.push('call inspection')
+        out('0 findings: 0 opened, 0 already raised')
+        return 0
+      },
+    })
+    const run = () => runRotation({ repoDir: '/wt', maxReviews: options.maxReviews, deps: h.deps, out: (line) => record.push(line) })
+    return { ...h, record, run }
+  }
+
+  it('ST-51/AC-5: each line appears between the calls it reports: step 3, then step 4, then inspection', async () => {
+    const h = ordered({ lists: [[pr(1), pr(2, { draft: true })]] })
+    const result = await h.run()
+    expect(h.record).toEqual([
+      'call review:1',
+      '#1 reviewed: recorded (pass)',
+      '#2 skipped: a draft',
+      'call land:1',
+      '#1 landing: merged',
+      '#2 not landed: no passing verdict at its head',
+      'inspection:',
+      'call inspection',
+      '0 findings: 0 opened, 0 already raised',
+      'inspection exit code: 0',
+    ])
+    expect(result).toMatchObject({ status: 'finished', exitCode: 0, lines: h.record.filter((line) => !line.startsWith('call ')) })
+  })
+
+  it('ST-51/AC-5: step 3 lines come oldest pull request first, all before any step 4 line', async () => {
+    const h = ordered({ lists: [[pr(3, { draft: true }), pr(1, { draft: true }), pr(2, { draft: true })]] })
+    await h.run()
+    expect(h.record.slice(0, 6)).toEqual([
+      '#1 skipped: a draft',
+      '#2 skipped: a draft',
+      '#3 skipped: a draft',
+      '#1 not landed: no passing verdict at its head',
+      '#2 not landed: no passing verdict at its head',
+      '#3 not landed: no passing verdict at its head',
+    ])
+  })
+
+  it('ST-51/AC-5: a stop in step 3 prints the finished lines, then the stop line, and no line for what was not done', async () => {
+    const h = ordered({
+      lists: [[pr(1), pr(2), pr(3)]],
+      comments: {},
+      review: async ({ number }) => (number === 2 ? { status: 'cannot-review', summary: 'no verdict printed' } : { status: 'recorded', verdict: 'block' }),
+    })
+    const result = await h.run()
+    expect(h.record).toEqual([
+      'call review:1',
+      '#1 reviewed: recorded (block)',
+      'call review:2',
+      '#2 reviewed: cannot-review (no verdict printed)',
+      'rotation stopped (cannot-review): the reviewer could not review #2: no verdict printed',
+    ])
+    expect(result).toMatchObject({ status: 'cannot-review', exitCode: 1 })
+  })
+
+  it('ST-51/AC-5: a stop in step 4 prints step 3 lines and the landing lines already decided, then the stop line, with no inspection', async () => {
+    const h = ordered({
+      lists: [[pr(1), pr(2)]],
+      comments: { 1: [marker(SHA('a'), 'pass')], 2: [marker(SHA('a'), 'pass')] },
+      land: async ({ number }) => {
+        if (number === 2) throw new Error('send failed')
+        return { status: 'merged' }
+      },
+    })
+    const result = await h.run()
+    expect(h.record).toEqual([
+      '#1 skipped: a verdict is already at its head',
+      '#2 skipped: a verdict is already at its head',
+      'call land:1',
+      '#1 landing: merged',
+      'call land:2',
+      '#2 landing threw: send failed',
+      'rotation stopped (script-error): step 4, landing #2 threw: send failed',
+    ])
+    expect(result).toMatchObject({ status: 'script-error', exitCode: 1 })
+  })
+
+  it('ST-51/AC-5: with landing off, each pull request gets its step 4 line after all step 3 lines, then inspection', async () => {
+    const h = ordered({ lists: [[pr(1, { draft: true }), pr(2, { draft: true })]], settings: { land: false } })
+    await h.run()
+    expect(h.record).toEqual([
+      '#1 skipped: a draft',
+      '#2 skipped: a draft',
+      '#1 not landed: landing is off in the settings',
+      '#2 not landed: landing is off in the settings',
+      'inspection:',
+      'call inspection',
+      '0 findings: 0 opened, 0 already raised',
+      'inspection exit code: 0',
+    ])
   })
 })
