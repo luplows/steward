@@ -21,7 +21,7 @@ build, and what is fit to release.
 
 To run the review side, you need:
 
-- **Node 22**, which is what CI runs, and **git**.
+- **Node 24** (npm 11 or newer), which is what CI runs and `package.json` declares, and **git**.
 - **The GitHub CLI, `gh`**, signed in with `gh auth login` as an account with write access to the
   repository. The scripts take its token from `gh auth token`.
 - **The Claude Code CLI, `claude`**, on your `PATH`, or its path in `CLAUDE_EXECUTABLE`. Coder
@@ -70,8 +70,8 @@ What the review side reads:
   turns a posted verdict into the `review/agent` status, `land-approved.yml`, the runway, does the
   merge, and `inspection.yml` runs `inspect` once a day (a project keeps it or drops it). Here,
   `main` is protected and requires `test` and `review/agent`. `review-gate.yml` and
-  `land-approved.yml` hold only their triggers, permissions and environment, and run steward's
-  commands (`mark-pending`, `apply-verdict`, `apply-review-blocked`, `runway` and
+  `land-approved.yml` hold only their triggers, permissions and environment, the set-up of Node,
+  and run steward's commands (`mark-pending`, `apply-verdict`, `apply-review-blocked`, `runway` and
   `delete-merged-heads`) from this checkout. The package carries the same two files in thin form,
   and `inspection.yml` too, in [`templates/workflows/`](templates/workflows/): they run those
   commands from steward installed alone at a pinned tag, with a placeholder for the tag, which
@@ -80,7 +80,7 @@ What the review side reads:
 ## Setting up another project
 
 In the project's checkout, with `gh` signed in as an account that can administer the repository
-(for branch protection) and Node 22:
+(for branch protection) and Node 24 (npm 11 or newer):
 
 ```sh
 npx --yes --package=github:luplows/steward#v<version> steward init

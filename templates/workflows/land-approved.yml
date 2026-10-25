@@ -9,8 +9,8 @@ name: Land approved PRs
 # verdict arrives, so a merge-ready PR would otherwise wait for someone to notice it. Whatever runs
 # this must therefore not depend on any session being alive.
 #
-# This file holds the trigger, permissions, concurrency and environment, and runs steward's
-# commands. What `runway` decides is in scripts/land/runway.mjs in steward's package, and
+# This file holds the trigger, permissions, concurrency and environment, sets up Node, and runs
+# steward's commands. What `runway` decides is in scripts/land/runway.mjs in steward's package, and
 # steward's design document (docs/agent-workflow-design.md in steward's repository), "What the gate
 # enforces", says why.
 #
@@ -50,6 +50,12 @@ jobs:
   land:
     runs-on: ubuntu-latest
     steps:
+      - name: Set up Node
+        # Node 24 ships npm 11; the runner's default npm cannot install steward from GitHub.
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
       - name: Land the oldest ready PR, or the one named
         env:
           GH_TOKEN: ${{ github.token }}
