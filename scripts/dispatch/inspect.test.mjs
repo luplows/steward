@@ -1035,3 +1035,110 @@ describe('ST-46: release branches', () => {
     expect(text.replace(/\s+/g, ' ')).not.toMatch(/Planned \([^)]*ST-46/)
   })
 })
+
+describe('ST-51: a fresh commit is left for the next run', () => {
+  const R1 = 'release/v1.2.3'
+  const MINUTE = 60 * 1000
+  const minutesAgo = (m) => iso(NOW - m * MINUTE)
+  const into = (ref, over = {}) => ({ base: { ref }, ...over })
+  const mainTitle = (c) => `Inspection: ${sha(c).slice(0, 7)} on main without a pull request`
+  const relTitle = (c) => `Inspection: ${sha(c).slice(0, 7)} on ${R1} without a pull request`
+  const pullRequestListings = (w) => w.requests.filter((r) => /\/commits\/[0-9a-f]{40}\/pulls\?/.test(r.url))
+
+  it('ST-51/AC-1: a commit 9 minutes old with no pull request raises no finding and opens no issue; at 11 minutes it does', async () => {
+    const fresh = world({ commits: [commit(sha('a'), minutesAgo(9))] })
+    const { results } = await fresh.run()
+    expect(results).toEqual([])
+    expect(fresh.posts).toEqual([])
+    expect(pullRequestListings(fresh)).toEqual([])
+
+    const settled = world({ commits: [commit(sha('a'), minutesAgo(11))] })
+    await settled.run()
+    expect(titlesOpened(settled)).toEqual([mainTitle('a')])
+  })
+
+  it('ST-51/AC-1: a commit at 10 minutes is judged, as one past it is', async () => {
+    const w = world({ commits: [commit(sha('a'), minutesAgo(10))] })
+    await w.run()
+    expect(titlesOpened(w)).toEqual([mainTitle('a')])
+  })
+
+  it('ST-51/AC-1: a commit 9 minutes old whose pull request merged without a passing verdict raises no finding; at 11 minutes it does', async () => {
+    const head = sha('b')
+    const build = (age) => world({
+      commits: [commit(sha('a'), minutesAgo(age))],
+      pulls: { [sha('a')]: [mergedPull(7, head, minutesAgo(age))] },
+      statuses: { [head]: [reviewStatus('failure', minutesAgo(age + 30))] },
+    })
+    const fresh = build(9)
+    expect((await fresh.run()).results).toEqual([])
+    expect(fresh.posts).toEqual([])
+    expect(fresh.requests.some((r) => r.url.includes('/statuses?'))).toBe(false)
+
+    const settled = build(11)
+    await settled.run()
+    expect(titlesOpened(settled)).toEqual(['Inspection: #7 merged without a passing verdict'])
+  })
+
+  it('ST-51/AC-1: the same holds on a release branch', async () => {
+    const head = sha('b')
+    const noPull = world({ branches: { [R1]: [commit(sha('c'), minutesAgo(9))] } })
+    expect((await noPull.run()).results).toEqual([])
+    expect(noPull.posts).toEqual([])
+
+    const noPullSettled = world({ branches: { [R1]: [commit(sha('c'), minutesAgo(11))] } })
+    await noPullSettled.run()
+    expect(titlesOpened(noPullSettled)).toEqual([relTitle('c')])
+
+    const build = (age) => world({
+      branches: { [R1]: [commit(sha('a'), minutesAgo(age))] },
+      pulls: { [sha('a')]: [mergedPull(7, head, minutesAgo(age), into(R1))] },
+      statuses: { [head]: [reviewStatus('failure', minutesAgo(age + 30))] },
+    })
+    const fresh = build(9)
+    expect((await fresh.run()).results).toEqual([])
+    expect(fresh.posts).toEqual([])
+    const settled = build(11)
+    await settled.run()
+    expect(titlesOpened(settled)).toEqual(['Inspection: #7 merged without a passing verdict'])
+  })
+
+  it('ST-51/AC-1: a fresh commit on main and on a release branch is left once, as main\'s', async () => {
+    const w = world({ commits: [commit(sha('a'), minutesAgo(9))], branches: { [R1]: [commit(sha('a'), minutesAgo(9))] } })
+    await w.run()
+    expect(w.lines).toEqual([
+      'left for the next run: aaaaaaa on main, committed less than 10 minutes ago',
+      '0 findings: 0 opened, 0 already raised',
+    ])
+    expect(w.posts).toEqual([])
+  })
+
+  it('ST-51/AC-2: a commit left is named by its short SHA and branch, and changes neither the counts nor the exit code', async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'inspect-test-'))
+    try {
+      writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings()))
+      const w = world({ commits: [commit(sha('a'), minutesAgo(9))], branches: { [R1]: [commit(sha('c'), minutesAgo(1))] } })
+      const lines = []
+      const code = await main([], { cwd: dir, fetch: w.fetch, now: NOW, getToken: async () => 'tok', out: (l) => lines.push(l), err: () => {} })
+      expect(lines).toEqual([
+        'left for the next run: aaaaaaa on main, committed less than 10 minutes ago',
+        `left for the next run: ccccccc on ${R1}, committed less than 10 minutes ago`,
+        '0 findings: 0 opened, 0 already raised',
+      ])
+      expect(code).toBe(0)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('ST-51/AC-2: with a finding beside a commit left, the count is of findings only, and the exit code is 1', async () => {
+    const w = world({ commits: [commit(sha('a'), minutesAgo(9)), commit(sha('d'), minutesAgo(30))] })
+    const { opened, exitCode } = await w.run()
+    expect(w.lines).toEqual([
+      'left for the next run: aaaaaaa on main, committed less than 10 minutes ago',
+      `opened #1000: ${mainTitle('d')}`,
+      '1 findings: 1 opened, 0 already raised',
+    ])
+    expect([opened, exitCode]).toEqual([1, 1])
+  })
+})

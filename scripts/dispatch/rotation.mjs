@@ -16,15 +16,20 @@
  *   2. Lists the open pull requests against `main` or a release branch (`isLandingBase`), once.
  *   3. Oldest first (lowest number), reviews each that is not a draft, whose author the gate
  *      honours (`HONOURED_ASSOCIATIONS`), that is not labelled `review-blocked`, and that has no
- *      honoured verdict at its current head, until `--max-reviews` reviews have been started.
+ *      honoured verdict at its current head, until `--max-reviews` reviews have been started. Each
+ *      pull request's line is printed when its review, or its skip, is decided.
  *   4. When the settings' `land` is true, reads each pull request step 2 listed again (a second
  *      listing, filtered to step 2's numbers; one opened since waits for the next rotation, and one
  *      no longer open is printed as not landed) and, one at a time, has the pilot
  *      request landing for each pull request whose current head has an honoured `pass` or
- *      `pass-with-observations` verdict, whoever opened it and whenever it passed.
+ *      `pass-with-observations` verdict, whoever opened it and whenever it passed. Each pull
+ *      request's line is printed when its landing, or the reason it is not landed, is decided.
  *   4a. Runs inspection once. What it prints is printed, and its exit code, or an error in it, is
  *      printed and changes neither what the rotation has done nor its own exit code.
- *   5. Prints one line per pull request considered, and exits 0.
+ *   5. Exits 0, or as below if it stopped. What it printed, in the order things happened: step 3's
+ *      lines, oldest pull request first, then step 4's, then inspection's output and exit code,
+ *      and, if the rotation stopped, `rotation stopped` and the reason, last. A stop prints the
+ *      lines of the steps already finished, then the stop line, and no line for what was not done.
  *
  * It exits non-zero only when the rotation itself could not run or go on: a checkout with a
  * branch (`branch-checked-out`), a worktree that cannot be brought to `origin/main`
@@ -146,8 +151,8 @@ function describeReview(result) {
 
 /**
  * Runs one rotation and resolves `{ status, exitCode, lines }`: `status` is `finished`, or the
- * reason the rotation stopped (see the header); `lines` is what step 5 printed (and the stop, last).
- * Everything printed goes through `out`.
+ * reason the rotation stopped (see the header); `lines` is everything it printed, in order, with
+ * the stop line last. Everything printed goes through `out`.
  *
  *   repoDir      the rotation's own worktree
  *   maxReviews   the cap on reviews started
@@ -160,11 +165,6 @@ function describeReview(result) {
  */
 export async function runRotation({ repoDir, maxReviews = DEFAULT_MAX_REVIEWS, repo, deps = {}, out = console.log }) {
   const d = { ...defaultDeps, ...deps }
-  const records = new Map() // number -> { number, review, landing }
-  const record = (number) => {
-    if (!records.has(number)) records.set(number, { number, review: null, landing: null })
-    return records.get(number)
-  }
   const printed = []
   const print = (line) => {
     printed.push(line)
@@ -179,11 +179,8 @@ export async function runRotation({ repoDir, maxReviews = DEFAULT_MAX_REVIEWS, r
     print(`rotation stopped (${stopped.status}): ${stopped.text}`)
     return { status: stopped.status, exitCode: 1, lines: printed }
   }
-  const printRecords = () => {
-    for (const r of [...records.values()].sort(byNumber)) {
-      print(`#${r.number} ${[r.review, r.landing].filter((part) => part !== null).join('; ')}`)
-    }
-  }
+  // A pull request's line for a step, printed when that step has decided it.
+  const say = (number, text) => print(`#${number} ${text}`)
 
   // Step 1.
   try {
@@ -230,30 +227,29 @@ export async function runRotation({ repoDir, maxReviews = DEFAULT_MAX_REVIEWS, r
   let reviewing = true
   let reviewingEnded = null
   for (const pr of prs) {
-    const rec = record(pr.number)
     if (!reviewing) {
-      rec.review = reviewingEnded
+      say(pr.number, reviewingEnded)
       continue
     }
     if (pr.draft) {
-      rec.review = 'skipped: a draft'
+      say(pr.number, 'skipped: a draft')
       continue
     }
     if (!HONOURED_ASSOCIATIONS.includes(pr.authorAssociation)) {
-      rec.review = `skipped: outsider (${pr.authorAssociation})`
+      say(pr.number, `skipped: outsider (${pr.authorAssociation})`)
       continue
     }
     if (reviews >= maxReviews) {
-      rec.review = `not reviewed: the cap of ${maxReviews} reviews was reached`
+      say(pr.number, `not reviewed: the cap of ${maxReviews} reviews was reached`)
       continue
     }
     try {
       if ((await d.getPullRequestLabels(ctx, pr.number)).includes(REVIEW_BLOCKED)) {
-        rec.review = 'skipped: labelled review-blocked'
+        say(pr.number, 'skipped: labelled review-blocked')
         continue
       }
       if (verdictAtHead(await d.listPullRequestComments(ctx, pr.number), pr.headSha)) {
-        rec.review = 'skipped: a verdict is already at its head'
+        say(pr.number, 'skipped: a verdict is already at its head')
         continue
       }
     } catch (error) {
@@ -266,11 +262,11 @@ export async function runRotation({ repoDir, maxReviews = DEFAULT_MAX_REVIEWS, r
     try {
       result = await d.reviewPullRequest({ number: pr.number, ctx, repoDir })
     } catch (error) {
-      rec.review = `review threw: ${error.message}`
+      say(pr.number, `review threw: ${error.message}`)
       stop('script-error', `step 3, the review of #${pr.number} threw: ${error.message}`)
       break
     }
-    rec.review = `reviewed: ${describeReview(result)}`
+    say(pr.number, `reviewed: ${describeReview(result)}`)
 
     // The review must not have changed the files the pilot runs from.
     let head
@@ -298,29 +294,24 @@ export async function runRotation({ repoDir, maxReviews = DEFAULT_MAX_REVIEWS, r
       reviewingEnded = `not reviewed: reviewing ended at #${pr.number} (${result.status})`
     }
   }
-  if (stopped !== null) {
-    printRecords()
-    return finish()
-  }
+  if (stopped !== null) return finish()
 
   // Step 4.
   if (!settings.land) {
-    for (const rec of records.values()) rec.landing = 'not landed: landing is off in the settings'
+    for (const { number } of prs) say(number, 'not landed: landing is off in the settings')
   } else {
     let again
     try {
       again = (await d.listPullRequests({ ctx, inspectCtx })).sort(byNumber)
     } catch (error) {
       stop('listing-failed', `step 4, listing the open pull requests: ${error.message}`)
-      printRecords()
       return finish()
     }
     const current = new Map(again.map((p) => [p.number, p]))
     for (const { number } of prs) {
-      const rec = record(number)
       const pr = current.get(number)
       if (pr === undefined) {
-        rec.landing = 'not landed: no longer open'
+        say(number, 'not landed: no longer open')
         continue
       }
       let passing
@@ -332,22 +323,19 @@ export async function runRotation({ repoDir, maxReviews = DEFAULT_MAX_REVIEWS, r
         break
       }
       if (!passing) {
-        rec.landing = 'not landed: no passing verdict at its head'
+        say(number, 'not landed: no passing verdict at its head')
         continue
       }
       try {
         const result = await d.landPullRequest({ number: pr.number, ctx: landCtx, passedAt: pr.headSha, once: true })
-        rec.landing = `landing: ${describeLanding(result)}`
+        say(number, `landing: ${describeLanding(result)}`)
       } catch (error) {
-        rec.landing = `landing threw: ${error.message}`
+        say(number, `landing threw: ${error.message}`)
         stop('script-error', `step 4, landing #${pr.number} threw: ${error.message}`)
         break
       }
     }
-    if (stopped !== null) {
-      printRecords()
-      return finish()
-    }
+    if (stopped !== null) return finish()
   }
 
   // Step 4a.
@@ -359,8 +347,7 @@ export async function runRotation({ repoDir, maxReviews = DEFAULT_MAX_REVIEWS, r
     print(`inspection error: ${error.message}`)
   }
 
-  // Step 5.
-  printRecords()
+  // Step 5: the stop line, if the rotation stopped, is last.
   return finish()
 }
 

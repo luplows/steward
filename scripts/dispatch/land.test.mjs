@@ -416,14 +416,97 @@ describe('OQ-123: the project root is the working directory, not the engine root
   })
 })
 
-describe('ST-23: land in one look, and not at all when landing is off', () => {
+describe('ST-51/AC-3: with once, the pilot waits through the gate\'s lag, and for nothing else', () => {
+  // A `sleep` that records each wait it is asked for and moves the clock, as `world` does.
+  const recording = (w) => {
+    const slept = []
+    return { slept, sleep: async (ms) => { slept.push(ms); w.t += ms } }
+  }
+
+  it('ST-51/AC-3: a status pending at the first read and success at the second lands, with one sleep of POLL_INTERVAL_MS between', async () => {
+    const w = world({
+      reviewAt: (t) => (t < POLL_INTERVAL_MS ? 'pending' : 'success'),
+      pullAt: (t, d) => pull({ merged: d > 0 && t >= w.dispatchTimes[0] + POLL_INTERVAL_MS }),
+    })
+    const { slept, sleep } = recording(w)
+    const result = await w.run({ once: true, passedAt: SHA, sleep })
+    expect(result).toMatchObject({ status: 'merged', triggers: 1 })
+    expect(slept).toEqual([POLL_INTERVAL_MS, POLL_INTERVAL_MS])
+    expect(w.dispatchTimes).toEqual([POLL_INTERVAL_MS])
+    w.cleanup()
+  })
+
+  it('ST-51/AC-3: a status that stays pending returns not-landable with gate-lag once GATE_LAG_BOUND_MS has passed, having triggered nothing', async () => {
+    for (const state of ['pending', 'absent', 'failure', 'error']) {
+      const w = world({ reviewAt: () => state, pullAt: () => pull() })
+      const { slept, sleep } = recording(w)
+      const result = await w.run({ once: true, passedAt: SHA, sleep })
+      expect(result, state).toMatchObject({ status: 'not-landable', reason: 'gate-lag', pr: 7, triggers: 0 })
+      expect(w.t, state).toBe(GATE_LAG_BOUND_MS)
+      expect(new Set(slept), state).toEqual(new Set([POLL_INTERVAL_MS]))
+      expect(w.dispatches, state).toEqual([])
+      expect(w.requests.some((r) => r.url.includes('/check-runs')), state).toBe(false)
+      w.cleanup()
+    }
+  })
+
+  it('ST-51/AC-3: once the status reads success the look goes on as before (a conflict, a check still running)', async () => {
+    const conflict = world({
+      reviewAt: (t) => (t < POLL_INTERVAL_MS ? 'pending' : 'success'),
+      pullAt: () => pull({ mergeable_state: 'dirty' }),
+    })
+    expect(await conflict.run({ once: true, passedAt: SHA })).toMatchObject({ status: 'conflict', triggers: 0 })
+    const running = world({
+      reviewAt: (t) => (t < POLL_INTERVAL_MS ? 'pending' : 'success'),
+      pullAt: () => pull(),
+      checksAt: () => [run('test', null)],
+    })
+    expect(await running.run({ once: true, passedAt: SHA })).toMatchObject({
+      status: 'not-landable', reason: 'checks-pending', waiting: ['test'], triggers: 0,
+    })
+    expect(running.t).toBe(POLL_INTERVAL_MS)
+    for (const w of [conflict, running]) {
+      expect(w.dispatches).toEqual([])
+      w.cleanup()
+    }
+  })
+
+  it('ST-51/AC-3: a pending or failure status, with no passedAt or a passedAt that is not the head, returns what it did before, with no sleep', async () => {
+    const cases = [
+      ['pending', 'review-pending', 'not-landable'],
+      ['failure', 'review-failed', 'review-failed'],
+    ]
+    for (const [state, reason, expectedStatus] of cases) {
+      for (const extra of [{}, { passedAt: SHA2 }]) {
+        const w = world({ reviewAt: () => state, pullAt: () => pull() })
+        const { slept, sleep } = recording(w)
+        const result = await w.run({ once: true, sleep, ...extra })
+        expect(result.status, `${state} ${JSON.stringify(extra)}`).toBe(expectedStatus)
+        if (expectedStatus === 'not-landable') expect(result.reason).toBe(reason)
+        expect(slept).toEqual([])
+        expect(w.t).toBe(0)
+        expect(w.dispatches).toEqual([])
+        w.cleanup()
+      }
+    }
+  })
+
+  it('ST-51/AC-3: without once, a pending status with passedAt keeps its wait (review-pending at its own bound)', async () => {
+    const w = world({ reviewAt: () => 'pending', pullAt: () => pull() })
+    const result = await w.run({ passedAt: SHA })
+    expect(result.status).toBe('review-pending')
+    expect(w.t).toBeGreaterThanOrEqual(REVIEW_PENDING_BOUND_MS)
+    w.cleanup()
+  })
+})
+
+describe('ST-23: land without waiting for anything of unknown length, and not at all when landing is off', () => {
   const merges = (afterTriggerMs) => (t, d, w) => d > 0 && t >= w.dispatchTimes[0] + afterTriggerMs
 
-  it('ST-23/AC-1: each state that is not landable yet returns not-landable at once, with its reason and no trigger', async () => {
+  it('ST-23/AC-1: each state that is not landable yet, other than the gate\'s lag (ST-51/AC-3), returns not-landable at once, with its reason and no trigger', async () => {
     const cases = [
       ['review-pending', () => pull(), () => 'pending'],
       ['review-pending', () => pull(), () => 'absent'],
-      ['gate-lag', () => pull(), () => 'failure', { passedAt: SHA }],
       ['unknown', () => pull({ mergeable_state: 'unknown' })],
     ]
     for (const [reason, pullAt, reviewAt, extra] of cases) {
