@@ -28,10 +28,10 @@
  * the `inspection` label: it never comments on, labels or changes a pull request, and starts no
  * workflow. Its request allowlist (`assertAllowedRequest`) is checked before any network call.
  *
- * Output: one line per commit left for the next run (ST-51), one line per finding, saying whether an
- * issue was opened or one was already there, and a last line with the counts, which count findings
- * only. Exit code: 0 when no issue was opened, 1 when at least one was, 2 when a request fails, the
- * settings do not read or the arguments are wrong (nothing more is opened).
+ * Output: one line per commit left for the next run (ST-51), one line per finding, saying whether
+ * an issue was opened or one was already there, and a last line with the counts, which count
+ * findings only. Exit code: 0 when no issue was opened, 1 when at least one was, 2 when a request
+ * fails, the settings do not read or the arguments are wrong (nothing more is opened).
  *
  * Usage:
  *   node scripts/dispatch/inspect.mjs [--repo owner/name] [--since-days N]

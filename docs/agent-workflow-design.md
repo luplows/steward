@@ -2655,23 +2655,22 @@ shortened where it is long, so that it can be found there with its date.
   second rotation; and inspection, run seconds after #83 merged, raised issue #84, "23caaf0 on
   main without a pull request", before GitHub linked the commit to #83. The owner: what a rotation
   reports must not be false about the state of things, and this blocks `v0.1.0`.
-  - A rotation that runs on a schedule does not wait, which does not mean moving past everything
-    as fast as possible: it waits for an event that finishes on its own within a known bound, the
+  - A rotation that runs on a schedule does not wait, which does not mean moving past everything as
+    fast as possible: it waits for an event that finishes on its own within a known bound, the
     gate's status after a verdict (`GATE_LAG_BOUND_MS`) and the runway's merge after a trigger
-    (`SWEEP_RUN_BOUND_MS`), and for nothing else, leaving anything of unknown length, such as
-    checks still running, to a later rotation. So the pilot, called with `once`, waits through the
-    gate's lag when it holds a pass at the current head. This revises the earlier rule that `once`
-    never waited for the review; its reason stands, that one pull request's slow checks hold up
-    nothing. Inspection leaves a commit committed less than 10 minutes ago for the next run, and
-    names it as left, rather than judge it before GitHub has linked it to its pull request. The
-    rotation prints each line when its step is decided, so its output reads in the order things
-    happened. Considered and not chosen: dropping `once`'s
-    no-waiting rule altogether, so that one pull request's checks hold up the rotation for up to
-    `REVIEW_PENDING_BOUND_MS`; a "sequential" rotation, which waits for one review before
-    starting another, since one rotation already reviews one pull request at a time; inspection
-    looking again for a merged pull request whose merge commit is the commit, which relies on
-    another GitHub listing not yet seen to be up to date at once; and inspection retrying a few
-    seconds apart, which slows every rotation and guarantees nothing.
+    (`SWEEP_RUN_BOUND_MS`), and for nothing else, leaving anything of unknown length, such as checks
+    still running, to a later rotation. So the pilot, called with `once`, waits through the gate's
+    lag when it holds a pass at the current head. This revises the earlier rule that `once` never
+    waited for the review; its reason stands, that one pull request's slow checks hold up nothing.
+    Inspection leaves a commit committed less than 10 minutes ago for the next run, and names it as
+    left, rather than judge it before GitHub has linked it to its pull request. The rotation prints
+    each line when its step is decided, so its output reads in the order things happened. Considered
+    and not chosen: dropping `once`'s no-waiting rule altogether, so that one pull request's checks
+    hold up the rotation for up to `REVIEW_PENDING_BOUND_MS`; a "sequential" rotation, which waits
+    for one review before starting another, since one rotation already reviews one pull request at a
+    time; inspection looking again for a merged pull request whose merge commit is the commit, which
+    relies on another GitHub listing not yet seen to be up to date at once; and inspection retrying
+    a few seconds apart, which slows every rotation and guarantees nothing.
   - **Planned (ST-53):** after ST-51 the name `once` no longer says what the option does, and only
     the rotation passes it. `once` stays for the `v0.1.0` fix, and a later story gives the pilot
     the bounded behaviour as its only one, retiring the long-wait mode, which serves `land` run by
