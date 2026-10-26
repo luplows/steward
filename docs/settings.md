@@ -24,7 +24,7 @@ decisions behind the keys are in [`outline.md`](outline.md), "Defining steward",
 | `setup` | `null`, or an object (below) | The command that prepares a worktree for a coder session. Nothing is run before a review. | `null`. |
 | `check` | `null`, or an object (below) | The command that checks a change, which the coder runs. | `null`. |
 | `landWhen` | `"all-checks"`, or a non-empty array of distinct, non-empty check names | Which checks must be green before steward lands a pull request. | `"all-checks"`. |
-| `land` | `true` or `false` | Whether steward lands pull requests. `false`: steward still reviews, and the project merges. | Asked; default `true`. |
+| `land` | `true` or `false` | Currently disables even the pilot's manual landing when false. **Planned (ST-54):** standing unattended permission; explicit scoped manual landing remains possible when false. | Currently asked; default `true`. **Planned (ST-55):** default `false`, with explicit opt-in and existing files preserved. |
 | `unitLinks` | An array, possibly empty, of distinct values from `"issue"`, `"file"` and `"other"` | The kinds of link steward reads from a pull request's body to find its unit. | Asked; default `["file", "issue"]`. |
 | `rulesFile` | A relative path with forward slashes, neither absolute nor containing a `..` segment, with no control character, backtick, `<` or `>` (`isRulesFilePath`, `scripts/dispatch/rules-file-path.mjs`) | The file of rules a pull request is reviewed against, read from `main`. | Asked; default `REVIEW.md`. `init` copies steward's example checklist there. |
 | `inspectAfterHours` | A positive integer | How many hours a pull request may stay pending or holding before inspection raises it. | Asked; default 24. |

@@ -1,5 +1,9 @@
 # Migration plan — getting the designed loop running
 
+For the crew's current version targets, see [`outline.md`, Product roadmap](outline.md#product-roadmap)
+(2026-10-26). This file preserves the older migration plan and its execution history; it is not
+the release roadmap and its phases are not prerequisites for the newly defined milestones.
+
 > **OQ numbers.** This document was written in tower-workshop-paths, and moved to steward with its
 > history. An `OQ-<n>` in it means a tower-workshop-paths story, found in that repository's
 > `stories/done/` or `Completed-Questions.md`. Steward's own stories are numbered `ST-<n>`.

@@ -8,6 +8,9 @@ build, and what is fit to release.
 
 ## Where it stands
 
+The crew's [product roadmap](docs/outline.md#product-roadmap) describes the planned milestones
+from 0.1 through 1.0. Those targets are distinct from the implemented behaviour described here.
+
 - **The review side works.** Steward's scripts (ATC) start a reviewer for a pull request, post its
   verdict, and land the pull request once it passes. Steward's own pull requests land this way.
   For now a member of the crew starts each run by hand, with one command for the whole review side.
