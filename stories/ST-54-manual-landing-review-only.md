@@ -23,8 +23,9 @@ landing does not force me to merge outside steward's review gate.
       Tests invoke the CLI entry point with `land: false` and `land: true` and show the same
       eligible PR dispatched through the pilot in manual mode.
 - [ ] **AC-2** — **Automatic callers stay automatic.** `landPullRequest`'s programmatic mode
-      defaults to unattended; only the standalone `land` command selects manual mode. A rotation,
-      and the existing frozen-loop callers, do not request manual mode. With `land: false` a
+      defaults to unattended; among pilot callers, only the standalone `land` command selects
+      manual mode. Direct workflow dispatch has the separate explicitly authorized path in AC-4.
+      A rotation and the existing frozen-loop callers do not request manual mode. With `land: false` a
       rotation still reviews and inspects but sends no landing dispatch; a programmatic pilot
       call returns `landing-off`. Tests cover both, and show unattended landing with `land: true`
       still working. A true local setting cannot override a false setting read by the runway

@@ -2721,8 +2721,9 @@ shortened where it is long, so that it can be found there with its date.
 - **Manual landing and review-only installation defaults** (crew, 2026-10-26).
   - **Planned (ST-54):** standing permission for unattended landing differs from the crew
     explicitly requesting one gated landing. The existing boolean `land` becomes unattended
-    permission. The standalone `steward land <pr-number>` command selects manual mode;
-    programmatic pilot calls default to unattended, and rotations and frozen-loop callers never
+    permission. Among pilot callers, only the standalone `steward land <pr-number>` command
+    selects manual mode; direct workflow dispatch has the separate authorized path below.
+    Programmatic pilot calls default to unattended, and rotations and frozen-loop callers never
     select manual mode. A manual request binds to the first head it reads and ends if that head
     changes, including while waiting or after dispatch. It grants no future permission and
     changes no project setting. Existing wait bounds and ST-53's separate refinement remain.
