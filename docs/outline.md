@@ -100,6 +100,100 @@ After the MVP, in order:
 2. **Parallel work**, on one machine or several.
 3. **Looking back**: a walkthrough of the product, if that is steward's at all.
 
+## Product roadmap
+
+Agreed by the crew on 2026-10-26. These are release outcomes, not claims that the capabilities
+already exist, fixed release dates, or another backlog. `stories/` remains the backlog and its
+readiness rules still apply. The design of record records decisions and implementation markers;
+this section is the authority for milestone scope. It refines the older MVP ordering above.
+
+### 0.1.0 — Install and automatic review
+
+A developer installs steward into an existing GitHub project through a reviewable installation
+PR, explicitly activates that project on their machine, and receives independent automated reviews
+without starting rotations by hand. Installing files and enabling a project locally are separate
+acts: finding a checkout or merging an installation PR does not authorize machine execution.
+
+The milestone includes review-only installation defaults (ST-55), explicit manual gated landing
+(ST-54), and one authoritative local coordinator managing only explicitly enabled projects. The
+coordinator needs local start, graceful stop, emergency stop and status controls, unattended review
+scheduling, duplicate-work prevention, resource limits and safe restart handling. Those coordinator
+contracts still need implementation-ready stories; this PR does not claim to define or deliver
+their commands, storage or scheduling policy. Essential safety and restart reliability ship when
+the affected capability first becomes available.
+
+Validate on two existing client projects with different unit conventions, preserving their native
+planning practices (ST-48). Review and every landing still use the existing gate. **Unattended
+landing is not required for 0.1.0.** ST-54 precedes ST-55 so review-only installation retains an
+explicit manual landing path without changing its standing authorization.
+
+### 0.1.5 — Optional unattended landing
+
+An optional checkpoint for project-authorized automatic landing of eligible PRs after all required
+review and CI checks pass. Landing remains opt-in, independently of automatic review and local
+activation. The crew may combine or adjust this checkpoint if implementation evidence justifies
+it; the version is a planning checkpoint, not a release promise.
+
+### 0.2.0 — Automated coding vertical slice
+
+The crew explicitly hands steward an existing work item. Steward durably records that
+authorization, schedules handed-over work in approval order, runs a bounded coder, and creates a
+linked PR. File-based units and GitHub Issues are supported without imposing steward's own story
+schema, priorities or completion convention on clients. Durable authorization is a crew decision;
+execution status remains derived where possible. Resource bounds, duplicate-work prevention and
+recovery after restart belong in this first slice, not in a later hardening release. The legacy
+tier/id queue is not automatically the authorization or scheduling mechanism for this slice.
+
+### 0.3.0 — Automated fixing
+
+Respond to blocking reviews and qualifying failed checks through bounded correction attempts on
+the existing work, followed by fresh independent review of each changed head. Persist or derive
+retry bounds across restarts, and escalate when progress stops or the bound is reached. Failed
+setup, cancelled checks and unrelated infrastructure failures must not cause indefinite retries.
+Which failed checks qualify and the retry/recovery contracts require story refinement.
+
+### 0.4.0 — Credential isolation
+
+Investigate and implement stronger isolation of coding and reviewing agents from machine
+credentials and unrelated files. ST-6 remains the investigation; its findings must lead to
+implementation and validation work. The crew deliberately deferred this from 0.2/0.3 because of
+technical complexity and potential impact on usability. It is not an early-release dependency.
+Earlier releases must accurately document their security limitations; no credential or filesystem
+isolation may be claimed until implemented and validated. Existing tool restrictions, timeouts,
+usage limits and review safeguards still apply before isolation.
+
+### Toward 1.0
+
+Automated coding and automated fixing are both essential before 1.0, together with demonstrated
+reliability, recovery, resource safety and use across projects. A graphical board, distributed
+execution, universal backlog integrations and sophisticated per-handoff cancellation are not
+prerequisites for the early milestones. They remain future options, not implicit release gates.
+
+### Follow-up planning and existing work
+
+Existing stories retain their IDs, status and ACs in this planning PR. No story is retired or
+silently replaced. The following reconciliation must happen before dispatching overlapping work:
+
+| Existing work | Relationship to the roadmap and next planning action |
+|---|---|
+| ST-48 | Retains manual two-client installation and gate validation. Refine its dependencies to include ST-54/ST-55 and add or link evidence for unattended reviews and explicit local activation when coordinator stories exist. Its current ACs alone do not prove all of 0.1.0. |
+| ST-52 | Reuse and refine its per-project rotation exclusion before scheduled reviews. Settle lock location, stale-owner recovery, refusal result and interaction with manual commands as part of coordinator planning; do not build a second overlapping lock design. |
+| ST-6 | Schedule the owner-run investigation and the implementation it recommends for 0.4. Reconcile earlier coder/scheduler dependencies when those stories are refined; deferring isolation does not mean it already exists. |
+| ST-11 / ST-12 | Held stories address the old loop's scheduler and retry pause/resume. Reconcile their useful requirements with the new coordinator, resource bounds and restart contracts; do not start the frozen coder loop to satisfy automatic review. |
+| ST-2 | Starvation promotion conflicts with approval-order scheduling of explicit handoffs. Decide its disposition with the crew before refining the coding queue; do not dispatch it as the 0.2 scheduling rule. Steward's current story queue stays tier/id ordered until separately changed. |
+| ST-53 | Separately refines the pilot's wait behaviour and frozen-loop callers. ST-54 changes authorization, preserves existing wait bounds, and does not consume or resolve ST-53. |
+
+The coordinator, durable handoff and fixing contracts need further planning; these roadmap
+outcomes are not implementation-ready units. No additional story IDs are reserved here.
+
+### Release preparation
+
+The existing `release/v0.1.0` branch and draft PR #86 are older release preparation, not evidence
+that this redefined 0.1.0 target is delivered. This planning PR changes neither. Once the required
+work is delivered, the crew must reconcile that preparation through `docs/release-review.md`,
+without moving or deleting an existing release branch or tag. Steward's own release-review
+procedure remains specific to this repository; it is not a generic client feature.
+
 ## Defining steward
 
 Started 2026-10-09 by the owner with the planning session. The sections above say who steward is
@@ -362,6 +456,12 @@ settles it.
   should be optional for projects with other gating rules). Steward still reviews and posts
   `review/agent`, but does not merge; the project merges by its own rules. Steward then never
   merges without a verdict, because it never merges there (Never, above).
+  **Planned (ST-54): revised by the crew, 2026-10-26.** `land: false` disables unattended
+  landing; an explicit `steward land <pr-number>` request may still land that PR at its named
+  head through the same gate. A default workflow dispatch is not a manual override. The precise
+  authorization contract is in the design doc, "Manual landing and review-only installation
+  defaults". **Planned (ST-55):** new installations write false by default, with explicit opt-in
+  to unattended landing; existing configuration is preserved.
 - **`unitLinks` and `rulesFile`**: as decided under Review, above.
 - **Kept out of the settings:** the cap on reviews per rotation, a command-line option (The two
   sides, below); the machine label, which belongs to a machine, so stays `TW_MACHINE_LABEL`; and

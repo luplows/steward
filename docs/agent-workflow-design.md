@@ -77,6 +77,21 @@ are under "The outline's reasoning", in Part 3.
 
 ---
 
+## Milestone scope and current implementation
+
+The crew's product roadmap of 2026-10-26 is in `outline.md`, "Product roadmap", the authority
+for versions 0.1 through 1.0. It is a set of agreed outcomes awaiting refinement where stories
+do not yet exist. The implemented review rotation is still started by hand; the local coordinator,
+explicit activation and automatic scheduling are roadmap work, not delivered behaviour.
+`migration-plan.md` preserves the earlier migration plan and is not the version roadmap.
+
+The roadmap schedules the ST-6 isolation investigation and its resulting implementation for 0.4,
+deliberately after the first coding and fixing slices. Earlier releases retain their resource
+bounds and existing safeguards but must disclose that stronger credential/filesystem isolation
+has not been delivered. Approval-order scheduling in 0.2 applies to explicitly authorized
+handoffs; it does not silently change steward's current story queue or retire ST-2. The roadmap's
+follow-up table names the existing stories requiring reconciliation before overlapping work runs.
+
 ## Principles
 
 Resolve new situations against these rather than inventing mechanisms.
@@ -346,7 +361,11 @@ it:
   holds a pass at the current head and `review/agent` on it is not `success`, it reads the status
   every `POLL_INTERVAL_MS` for up to `GATE_LAG_BOUND_MS`, goes on once it reads `success`, and
   returns `not-landable` with the reason `gate-lag` if the gate has not caught up by then. With the
-  settings' `land` false it sends nothing and returns `landing-off`. The runway was
+  settings' `land` false it currently sends nothing and returns `landing-off`.
+  **Planned (ST-54):** that restriction applies to unattended calls; the crew's explicit manual
+  `land` request is scoped to one PR and head and goes through all the same gate checks. The
+  runway enforces the distinction as well; see "Manual landing and review-only installation
+  defaults", Part 3. The runway was
   a `*/15` schedule until 2026-09-18, which GitHub delivered at roughly 5% of that rate
   (**Watchdog**, below).
 - **It lands when the checks the settings' `landWhen` names are green on the head**, as well as
@@ -384,6 +403,9 @@ it:
   landed a different one would spend the pilot's requests and land pull requests nobody asked it
   to (decided 2026-09-28). The candidate choice is made in `scripts/land/select-candidates.mjs`,
   which `runway.mjs` calls and which is tested without running the workflow.
+  **Planned (ST-54):** an unscoped dispatch is unattended and requires the project's `land` to
+  be true on `main`. With landing off, manual mode must explicitly name one PR and full head
+  SHA and have an authorized workflow actor; it never picks the oldest PR as a fallback.
 - **Re-checks `review/agent` directly** rather than trusting branch protection to require it,
   because a required check vanished from protection once. Prevention, not detection.
 - **`--match-head-commit`**, which refuses the merge if anything was pushed between the check and
@@ -451,14 +473,15 @@ story by the file the diff moves. The prefix is the `prefix` of `stories/stories
 every story-id pattern the scripts use is built from it; `storyPrefix` is no longer a setting
 (`outline.md`, "Settings").
 
+Illustrative layout; the placeholders below allocate no story numbers:
+
 ```
 stories/
-  ST-49-queue-json.md              ← open
-  ST-50-lint-summary.md
+  ST-<n>-open-example.md           ← open
   done/
-    ST-42-review-gate.md           ← completed, moved by its own PR
+    ST-<n>-completed-example.md    ← completed, moved by its own PR
   retired/
-    ST-55-declare-story-mechanisms.md  ← dropped unbuilt, moved by the planning session
+    ST-<n>-retired-example.md      ← dropped unbuilt, moved by the planning session
 ```
 
 A story the crew decides not to build is retired, not deleted (decided 2026-10-07 by the owner).
@@ -574,6 +597,10 @@ request add those stories as drafts (`scripts/dispatch/story-containment.mjs`; P
 far", 2026-10-15).
 
 ### The starvation valve
+
+The 2026-10-26 roadmap's approval-order handoffs conflict with this earlier proposed valve.
+ST-2 remains held and unchanged pending an explicit crew decision on its disposition; this
+section records its proposal, not the future client coding queue's scheduling contract.
 
 Not built: ST-2 plans it. Tier-then-id does not starve stories *within* a tier, but a lower tier
 starves indefinitely while higher-tier work keeps arriving. *(An earlier version of this document
@@ -1310,6 +1337,9 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
   the order it finishes in is not deterministic (the owner's leaning, 2026-10-10, still to be
   thought through). Steward's own stories are ordered by `tier`, then lowest id
   (`stories/README.md`, "Status").
+  **Revised by the crew, 2026-10-26:** the 0.2 roadmap schedules explicitly handed-over work in
+  approval order. The handoff and durable-authorization contracts await refinement; the existing
+  story queue is unchanged. Reconcile ST-2 before implementing that client scheduling contract.
 - **D3. Looking back** ("What steward is for"). Ideally a walkthrough of the product (owner,
   2026-10-10). Open: whether it is steward's. The release review (above) is meant for it, a
   periodic walkthrough of `main` ending in a release tag, but it has not yet run, so its scope is
@@ -1345,6 +1375,9 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
 - **D13. Other triggers for a rotation** ("The two sides"), such as a scheduled task (ST-11) or a
   GitHub event, left by the owner for a later discussion (2026-10-11). To start with, the
   controller starts each rotation.
+  **Revised by the crew, 2026-10-26:** 0.1 targets unattended review under one authoritative
+  local coordinator for explicitly enabled projects. Its activation, control, recovery and
+  scheduling stories still need refinement; ST-11's old-loop scheduler is not that contract.
 
 ### Other companies' models (OQ-114)
 
@@ -2453,7 +2486,8 @@ shortened where it is long, so that it can be found there with its date.
     `steward.config.json`, with `repo` from the git remote and a value for every key: `unitLinks`,
     any combination of `file`, `issue` and `other` (which covers a tracker steward cannot read yet,
     passed unread), or none, default `["file", "issue"]`, which settles D5; `rulesFile`, default
-    `REVIEW.md`; `land`, default `true`; ST-29's `inspectAfterHours`, asked; and `setup` and `check`
+    `REVIEW.md`; `land`, default `true` (the original decision; **Planned (ST-55):** false under
+    the crew's 2026-10-26 revision below); ST-29's `inspectAfterHours`, asked; and `setup` and `check`
     `null`, since only a coder uses them. It writes the thin workflow files, pinned to the tag of
     the steward that ran it, read from its own `package.json`'s `version` (or, with `--ref`, which
     no question asks, to a commit's full SHA, for the release review's walkthrough), and offers
@@ -2683,6 +2717,58 @@ shortened where it is long, so that it can be found there with its date.
     overlap once something such as a schedule starts them. Rotations on several machines, and
     several reviewers at once, need a claim every machine can see, and are to be solved later
     (owner).
+
+- **Manual landing and review-only installation defaults** (crew, 2026-10-26).
+  - **Planned (ST-54):** standing permission for unattended landing differs from the crew
+    explicitly requesting one gated landing. The existing boolean `land` becomes unattended
+    permission. Among pilot callers, only the standalone `steward land <pr-number>` command
+    selects manual mode; direct workflow dispatch has the separate authorized path below.
+    Programmatic pilot calls default to unattended, and rotations and frozen-loop callers never
+    select manual mode. A manual request binds to the first head it reads and ends if that head
+    changes, including while waiting or after dispatch. It grants no future permission and
+    changes no project setting. Existing wait bounds and ST-53's separate refinement remain.
+  - **Planned (ST-54):** the runway reads both `land` and `landWhen` from the project's `main`.
+    Missing, unreadable or invalid authorization fails closed. An unattended trigger requires
+    `land: true`, even if a caller's local settings say otherwise. The two runway workflow files
+    expose `mode` (default `unattended`), `pr` and `head`. A manual request explicitly selects
+    `manual`, one positive PR number and a full SHA; the current head must match. The workflow
+    supplies its real dispatch actor and event through trusted context, never actor input, and
+    the runway verifies the actor's write, maintain or admin permission through GitHub. An
+    ordinary direct trigger, including one naming only a PR, cannot bypass `land: false`.
+    A fully scoped manual workflow trigger by an authorized actor is itself an explicit request.
+  - **Planned (ST-54):** manual mode preserves supported bases, PR author eligibility, draft
+    refusal, `review-blocked`, circuit-breaker rules, `review/agent` on the current head,
+    `landWhen`, mergeability and the final status re-check and `--match-head-commit` merge.
+    The pilot still only dispatches; the runway alone merges, at most one PR per run. Logs name
+    mode, actor, PR, authorized head and outcome. A mode input is not proof that a human is at
+    the terminal: software holding the crew's write credential can intentionally request manual
+    mode too. This is scoped authorization within the existing trusted-credential model,
+    not credential isolation or protection from a malicious credential holder.
+  - **Planned (ST-55):** 0.1 installs review-only by default: the landing question defaults to
+    no and writes `land: false`, including under `--yes`. An explicit yes or `--land yes` opts
+    into unattended landing. Prompt, help and final output explain the choice and ST-54's manual
+    path. Existing files and their chosen authorization are preserved; no configuration is
+    silently migrated. Installing files starts no local coordinator or agent. ST-55 depends
+    on ST-54 so the default retains a gated manual path before it is introduced.
+  - Considered and not chosen: making `land: false` prohibit every gated landing; setting it
+    temporarily to true for a manual request, which grants a raceable standing permission;
+    allowing a bare direct workflow trigger to bypass it; changing the default before manual
+    landing works; and silently changing existing installations. This changes authorization
+    and installer defaults, not the whole landing subsystem.
+- **Milestone sequencing through 1.0** (crew, 2026-10-26). The roadmap lives in `outline.md`,
+  "Product roadmap". The first release targets install plus automatic review under one local
+  coordinator for explicitly enabled projects, with start/stop/emergency-stop/status controls,
+  resource bounds, duplicate prevention and restart safety. Optional unattended landing is a
+  later, adjustable 0.1.5 checkpoint. Coding from durable explicit handoffs in approval order
+  follows at 0.2, bounded fixing with fresh review at 0.3, and stronger isolation at 0.4. Coding
+  and fixing, recovery, resource safety and cross-project evidence are essential before 1.0.
+  These are roadmap targets pending story refinement, not implemented mechanisms. Considered
+  and not chosen: requiring unattended landing for 0.1; requiring isolation before 0.2/0.3
+  despite its complexity and usability cost; making a board, distributed execution, universal
+  trackers or sophisticated cancellation early prerequisites; and exporting this repository's
+  release-review procedure to clients. Existing ST-48, ST-52, ST-6, ST-11/ST-12, ST-2 and ST-53
+  require the explicit follow-up reconciliation in the roadmap; none is retired by this decision.
+  The older release branch and PR #86 are left for the crew's later release-review reconciliation.
 
 ### The move, in order
 
