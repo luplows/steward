@@ -9,7 +9,8 @@ import { describe, expect, it } from 'vitest'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
-import { assertAllowedRequest, buildCreatePull, buildListOpenPulls, GATE_WORKFLOWS, INSPECTION_WORKFLOW } from './init.mjs'
+import { assertAllowedRequest, buildCreatePull, buildListOpenPulls, GATE_WORKFLOWS, INSPECTION_WORKFLOW, writeWhole } from './init.mjs'
+import { gitEnvironment } from './init-install.mjs'
 import { composePullRequestBody } from './init-pr-body.mjs'
 import {
   bareRef,
@@ -23,6 +24,7 @@ import {
   failing,
   fresh,
   git,
+  GITHUB_URL,
   hasOn,
   hook,
   isGit,
@@ -39,6 +41,7 @@ import {
   ROOT,
   runInit,
   setUpInitFixture,
+  slashes,
   tree,
   tryGit,
   watchGit,
@@ -136,7 +139,7 @@ describe('ST-56/AC-1: the preflight, before anything is made', () => {
     expect(code).toBe(0)
     const inCheckout = watched.calls.filter((c) => !c.cwd.includes('.worktrees'))
     const kinds = new Set(inCheckout.map((c) => c.args[0]))
-    const allowed = ['rev-parse', 'config', 'remote', 'check-ref-format', 'fetch', 'ls-tree', 'cat-file', 'merge-base', 'diff', 'status', 'ls-files', 'show-ref', 'ls-remote', 'worktree']
+    const allowed = ['rev-parse', 'config', 'remote', 'var', 'check-ref-format', 'fetch', 'ls-tree', 'cat-file', 'merge-base', 'diff', 'status', 'ls-files', 'show-ref', 'ls-remote', 'worktree']
     expect([...kinds].filter((k) => !allowed.includes(k))).toEqual([])
     const worktreeCalls = inCheckout.filter((c) => c.args[0] === 'worktree').map((c) => c.args[1])
     expect([...new Set(worktreeCalls)].sort()).toEqual(['add', 'list', 'remove'])
@@ -675,7 +678,9 @@ describe('ST-56/AC-2: one isolated installation branch', () => {
     expect(git(remoteOf(cwd), 'ls-tree', '-r', '--name-only', 'refs/heads/steward/install')).not.toMatch(/steward\.config\.json/)
     const pushes = watched.calls.filter((c) => c.args[0] === 'push')
     expect(pushes).toHaveLength(1)
-    expect(pushes[0].args).toEqual(['push', 'origin', 'refs/heads/steward/install:refs/heads/steward/install', '--force-with-lease=refs/heads/steward/install:'])
+    expect(pushes[0].args.slice(0, 5)).toEqual(['push', '--no-follow-tags', '--no-signed', '--no-push-option', '--recurse-submodules=no'])
+    expect(path.resolve(pushes[0].args[5])).toBe(path.resolve(remoteOf(cwd)))
+    expect(pushes[0].args.slice(6)).toEqual(['refs/heads/steward/install:refs/heads/steward/install', '--force-with-lease=refs/heads/steward/install:'])
     expect(pushes[0].args.some((a) => a === '--force' || a === '-f' || a === '--delete' || a.startsWith('+'))).toBe(false)
     expect(writes(gh)).toEqual([])
     expect(existsSync(machine)).toBe(false)
@@ -1757,5 +1762,272 @@ describe('ST-56/AC-7 (review 1): what exists is asked of git after a failure', (
     const { code, err } = await runInit(['--yes'], { cwd, git: runner })
     expect(code).toBe(1)
     expect(err).toContain(`branch steward/install on origin at ${racer} (not this run's commit`)
+  })
+})
+
+describe('ST-56/AC-5 and AC-2 (review 2): what a push can add, and where it goes', () => {
+  it('ST-56/AC-5: the push sends the branch only: push.followTags, a remote.origin.push refspec for tags and remote.origin.mirror add nothing', async () => {
+    const cwd = makeRepo()
+    git(cwd, 'tag', '-a', 'v1', '-m', 'release')
+    git(cwd, 'config', 'push.followTags', 'true')
+    git(cwd, 'config', '--add', 'remote.origin.push', 'refs/tags/*:refs/tags/*')
+    git(cwd, 'config', 'remote.origin.mirror', 'true')
+    const watched = watchGit()
+    const { code, err } = await runInit(['--yes'], { cwd, git: watched })
+    expect(err).toBe('')
+    expect(code).toBe(0)
+    expect(git(remoteOf(cwd), 'tag', '--list')).toBe('')
+    expect(git(remoteOf(cwd), 'for-each-ref', '--format=%(refname)').split('\n').sort()).toEqual(['refs/heads/main', 'refs/heads/steward/install'])
+    const push = watched.calls.find((c) => c.args[0] === 'push').args
+    expect(push).toContain('--no-follow-tags')
+    expect(push).toContain('--no-signed')
+    expect(push).toContain('--no-push-option')
+    expect(push).toContain('--recurse-submodules=no')
+    expect(push).not.toContain('origin')
+  })
+
+  const setups = {
+    'a remote.origin.pushurl for another repository': (cwd) => git(cwd, 'config', 'remote.origin.pushurl', 'https://github.com/other/repo.git'),
+    'two push URLs': (cwd) => {
+      git(cwd, 'config', '--add', 'remote.origin.pushurl', 'https://github.com/acme/widgets.git')
+      git(cwd, 'config', '--add', 'remote.origin.pushurl', 'git@github.com:acme/widgets.git')
+    },
+    'a url.<base>.pushInsteadOf rewrite': (cwd) => git(cwd, 'config', `url.${slashes(fresh('elsewhere'))}.pushInsteadOf`, GITHUB_URL),
+  }
+  it.each(Object.keys(setups))('ST-56/AC-2: %s is refused before anything is made, naming what to clear', async (name) => {
+    const cwd = makeRepo()
+    setups[name](cwd)
+    const before = callerState(cwd)
+    const watched = watchGit()
+    const gh = fakeGitHub()
+    const { code, err } = await runInit(['--yes'], { cwd, gh, git: watched })
+    expect(code).toBe(2)
+    expect(err).toMatch(/a push to origin would go to|a push to origin would go to more than one place/)
+    expect(err).toMatch(/clear remote\.origin\.pushurl and any url\.<base>\.pushInsteadOf/)
+    expect(gh.requests).toEqual([])
+    expect(watched.calls.some((c) => c.args[0] === 'fetch' || isGit(c.args, 'worktree', 'add'))).toBe(false)
+    expect(callerState(cwd)).toEqual(before)
+    expect(existsSync(worktreeOf(cwd))).toBe(false)
+    expect(bareRef(cwd, 'refs/heads/steward/install')).toBe('')
+  })
+
+  it('ST-56/AC-2: a push destination that names the same GitHub repository is read before anything is made: main there must be the base that was fetched', async () => {
+    const cwd = makeRepo()
+    git(cwd, 'config', 'remote.origin.pushurl', 'git@github.com:acme/widgets.git')
+    const watched = watchGit()
+    const gh = fakeGitHub()
+    const { code, err } = await runInit(['--yes'], { cwd, gh, git: watched })
+    // The file transport only is allowed, so GitHub cannot be reached: reading the destination fails.
+    expect(code).toBe(1)
+    expect(err).toMatch(/could not read git@github\.com:acme\/widgets\.git, where the branch would be pushed/)
+    expect(gh.requests).toEqual([])
+    expect(watched.calls.some((c) => isGit(c.args, 'worktree', 'add'))).toBe(false)
+    expect(existsSync(worktreeOf(cwd))).toBe(false)
+  })
+
+  it('ST-56/AC-2: main at the push destination must be the commit that was fetched: if it is not, init refuses before anything is made', async () => {
+    const cwd = makeRepo()
+    const watched = watchGit({
+      before: (args) => {
+        if (args[0] === 'ls-remote' && args.at(-1) === 'refs/heads/main') pushToRemote(cwd, { 'moved.txt': 'moved' })
+        return undefined
+      },
+    })
+    const gh = fakeGitHub()
+    const { code, err } = await runInit(['--yes'], { cwd, gh, git: watched })
+    expect(code).toBe(2)
+    expect(err).toMatch(/the fetch and the push go to different places, or main moved just now; run init again/)
+    expect(gh.requests).toEqual([])
+    expect(watched.calls.some((c) => isGit(c.args, 'worktree', 'add'))).toBe(false)
+  })
+
+  it('ST-56/AC-2: the collision check and the push read and write the one destination, never "origin" by name', async () => {
+    const cwd = makeRepo()
+    const watched = watchGit()
+    expect((await runInit(['--yes'], { cwd, git: watched })).code).toBe(0)
+    const remoteReads = watched.calls.filter((c) => c.args[0] === 'ls-remote')
+    expect(remoteReads.length).toBeGreaterThan(0)
+    for (const call of remoteReads) {
+      expect(call.args).not.toContain('origin')
+      expect(path.resolve(call.args.at(-2))).toBe(path.resolve(remoteOf(cwd)))
+    }
+  })
+})
+
+describe('ST-56/AC-2 (review 2): the caller\'s repository environment', () => {
+  it('ST-56/AC-2: GIT_INDEX_FILE, GIT_DIR and GIT_WORK_TREE in the environment leave the caller\'s index byte for byte unchanged and stage in the installation\'s own', async () => {
+    const cwd = makeRepo({ files: BASE_FILES })
+    writeFileSync(path.join(cwd, 'src/staged.txt'), 's\n')
+    git(cwd, 'add', 'src/staged.txt')
+    const indexFile = path.join(cwd, '.git', 'index')
+    const before = readFileSync(indexFile)
+    const saved = { ...process.env }
+    process.env.GIT_INDEX_FILE = indexFile
+    process.env.GIT_DIR = path.join(cwd, '.git')
+    process.env.GIT_WORK_TREE = cwd
+    let result
+    try {
+      result = await runInit(['--yes'], { cwd })
+    } finally {
+      for (const key of ['GIT_INDEX_FILE', 'GIT_DIR', 'GIT_WORK_TREE']) {
+        if (saved[key] === undefined) delete process.env[key]
+        else process.env[key] = saved[key]
+      }
+    }
+    expect(result.err).toBe('')
+    expect(result.code).toBe(0)
+    expect(readFileSync(indexFile).equals(before)).toBe(true)
+    expect(branchFiles(cwd)).not.toContain('src/staged.txt')
+    expect(git(cwd, 'diff', '--cached', '--name-only')).toBe('src/staged.txt')
+  })
+
+  it('ST-56/AC-2: git runs without every repository-local variable, and keeps the caller\'s identity variables', () => {
+    const env = gitEnvironment({ PATH: 'p', GIT_DIR: 'x', GIT_INDEX_FILE: 'y', GIT_WORK_TREE: 'z', GIT_OBJECT_DIRECTORY: 'o', GIT_ALTERNATE_OBJECT_DIRECTORIES: 'a', GIT_COMMON_DIR: 'c', GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'user.name', GIT_CONFIG_VALUE_0: 'Eve', GIT_AUTHOR_NAME: 'Ann' })
+    for (const key of ['GIT_DIR', 'GIT_INDEX_FILE', 'GIT_WORK_TREE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_COMMON_DIR']) expect(env[key], key).toBeUndefined()
+    expect(env.GIT_AUTHOR_NAME).toBe('Ann')
+    expect(env.PATH).toBe('p')
+    expect(Object.entries(env).filter(([k]) => k.startsWith('GIT_CONFIG_VALUE_')).map(([, v]) => v)).not.toContain('Eve')
+  })
+
+  it('ST-56/AC-2: core.worktree in the configuration is refused before anything is made', async () => {
+    const cwd = makeRepo()
+    git(cwd, 'config', 'core.worktree', cwd)
+    const gh = fakeGitHub()
+    const { code, err } = await runInit(['--yes'], { cwd, gh })
+    expect(code).toBe(2)
+    expect(err).toMatch(/core\.worktree is set/)
+    expect(gh.requests).toEqual([])
+    expect(existsSync(worktreeOf(cwd))).toBe(false)
+  })
+})
+
+describe('ST-56/AC-5 (review 2): who commits and which hooks run in the new worktree', () => {
+  it.each([
+    ['user.name', ['user.name', 'Someone Else']],
+    ['user.email', ['user.email', 'else@example.com']],
+    ['core.hooksPath', ['core.hooksPath', 'elsewhere-hooks']],
+    ['commit.gpgSign', ['commit.gpgSign', 'false']],
+    ['user.signingKey', ['user.signingKey', 'ABCDEF']],
+  ])('ST-56/AC-5: %s in the checkout\'s own worktree configuration is refused before anything is made', async (key, [name, value]) => {
+    const cwd = makeRepo()
+    git(cwd, 'config', 'extensions.worktreeConfig', 'true')
+    git(cwd, 'config', '--worktree', name, value)
+    const gh = fakeGitHub()
+    const { code, err } = await runInit(['--yes'], { cwd, gh })
+    expect(code).toBe(2)
+    expect(err).toContain('config.worktree')
+    expect(err.toLowerCase()).toContain(key.toLowerCase())
+    expect(err).toContain('git config --worktree --unset')
+    expect(gh.requests).toEqual([])
+    expect(existsSync(worktreeOf(cwd))).toBe(false)
+    expect(bareRef(cwd, 'refs/heads/steward/install')).toBe('')
+  })
+
+  it('ST-56/AC-5: a worktree configuration with extensions.worktreeConfig off, or one that sets nothing of the kind, is accepted', async () => {
+    const cwd = makeRepo()
+    git(cwd, 'config', 'extensions.worktreeConfig', 'true')
+    git(cwd, 'config', '--worktree', 'core.abbrev', '12')
+    expect((await runInit(['--yes'], { cwd })).code).toBe(0)
+  })
+
+  it('ST-56/AC-5: a new worktree that would commit with another effective setting is refused before the commit, whatever made it differ', async () => {
+    // A per-worktree setting that appears only in the new worktree.
+    const cwd = makeRepo()
+    const watched = watchGit({
+      after: (args, _where, real) => {
+        if (isGit(args, 'worktree', 'add') && real.status === 0) {
+          git(args[5], 'config', 'extensions.worktreeConfig', 'true')
+          git(args[5], 'config', '--worktree', 'user.email', 'other@example.com')
+        }
+        return undefined
+      },
+    })
+    const gh = fakeGitHub()
+    const { code, err } = await runInit(['--yes'], { cwd, gh, git: watched })
+    expect(code).toBe(1)
+    expect(err).toMatch(/a commit in the new worktree would not be made as this checkout makes it: user\.email is other@example\.com there and crew@example\.com here/)
+    expect(err).toContain(`worktree ${worktreeOf(cwd)}`)
+    expect(watched.calls.some((c) => c.args[0] === 'commit')).toBe(false)
+    expect(writes(gh)).toEqual([])
+
+    // An includeIf on the branch name gives the installation branch another identity.
+    const other = makeRepo()
+    const included = path.join(fresh('include'), 'identity.gitconfig')
+    writeFileSync(included, '[user]\n\tname = Branch Person\n')
+    git(other, 'config', 'includeIf.onbranch:steward/**.path', slashes(included))
+    const watchedOther = watchGit()
+    const result = await runInit(['--yes'], { cwd: other, git: watchedOther })
+    expect(result.code).toBe(1)
+    expect(result.err).toMatch(/user\.name is Branch Person there and Crew here/)
+    expect(watchedOther.calls.some((c) => c.args[0] === 'commit')).toBe(false)
+  })
+
+  it('ST-56/AC-5: the caller\'s identity variables are kept: the commit is made as GIT_AUTHOR_* and GIT_COMMITTER_* say', async () => {
+    const cwd = makeRepo()
+    const saved = { ...process.env }
+    Object.assign(process.env, { GIT_AUTHOR_NAME: 'Env Author', GIT_AUTHOR_EMAIL: 'author@example.com', GIT_COMMITTER_NAME: 'Env Committer', GIT_COMMITTER_EMAIL: 'committer@example.com' })
+    let result
+    try {
+      result = await runInit(['--yes'], { cwd })
+    } finally {
+      for (const key of ['GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL']) {
+        if (saved[key] === undefined) delete process.env[key]
+        else process.env[key] = saved[key]
+      }
+    }
+    expect(result.code).toBe(0)
+    expect(git(cwd, 'log', '-1', '--format=%an <%ae>|%cn <%ce>', 'steward/install')).toBe('Env Author <author@example.com>|Env Committer <committer@example.com>')
+  })
+})
+
+describe('ST-56/AC-7 (review 2): the machine settings file', () => {
+  it('ST-56/AC-7: a write that fails and leaves a file is reported with its path, that a file is there, and what to do; the pull request and labels are reported too', async () => {
+    const home = fresh('home')
+    const machine = path.join(home, 'sub', 'settings.json')
+    const gh = fakeGitHub()
+    const { code, err } = await runInit(['--yes'], {
+      cwd: makeRepo(),
+      gh,
+      machine,
+      writeMachineSettings: async (file) => {
+        writeFileSync(file, '{ "usageLim')
+        throw Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' })
+      },
+    })
+    expect(code).toBe(1)
+    expect(err).toMatch(/It stopped while writing the machine's settings\./)
+    expect(err).toContain(`machine settings ${machine}: the write failed, and a file IS there now; inspect it or remove it before running init again`)
+    expect(err).toMatch(/folder .*home-\d+.sub\n/)
+    expect(err).toContain('draft pull request ')
+    expect(err).toContain('  label review-blocked')
+    expect(readFileSync(machine, 'utf8')).toBe('{ "usageLim')
+  })
+
+  it('ST-56/AC-7: a write that fails and leaves nothing says no file is there', async () => {
+    const machine = path.join(fresh('home'), 'settings.json')
+    const { code, err } = await runInit(['--yes'], {
+      cwd: makeRepo(),
+      machine,
+      writeMachineSettings: async () => {
+        throw Object.assign(new Error('EACCES'), { code: 'EACCES' })
+      },
+    })
+    expect(code).toBe(1)
+    expect(err).toContain(`machine settings ${machine}: the write failed, and no file is there now`)
+  })
+
+  it('ST-56/AC-7: the real writer is create-only and whole: it leaves no temporary file, and an existing file is kept', async () => {
+    const dir = fresh('whole')
+    const file = path.join(dir, 'settings.json')
+    await writeWhole(file, '{"a":1}\n')
+    expect(readFileSync(file, 'utf8')).toBe('{"a":1}\n')
+    await expect(writeWhole(file, 'other')).rejects.toMatchObject({ code: 'EEXIST' })
+    expect(readFileSync(file, 'utf8')).toBe('{"a":1}\n')
+    expect(readdirSync(dir)).toEqual(['settings.json'])
+    // A failure before the link leaves nothing under the final name.
+    const blocked = path.join(dir, 'no-such-folder', 'settings.json')
+    await expect(writeWhole(blocked, 'x')).rejects.toThrow()
+    expect(existsSync(blocked)).toBe(false)
+    expect(readdirSync(dir)).toEqual(['settings.json'])
   })
 })

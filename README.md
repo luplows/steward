@@ -129,8 +129,15 @@ the installation is made from the commit fetched from `origin/main` whatever the
 The one exception is a change of the checkout's own to a file the installation adds (or to a pull
 request template location, or a directory above them): `init` names each and stops, before it
 writes anything. It also refuses such a file that is marked `assume-unchanged` or `skip-worktree`,
-since `git status` would not show an edit to it, and says how to clear the mark. When a step fails
-after it has started, `init` exits 1, says which step and what it has made (found by asking git),
+since `git status` would not show an edit to it, and says how to clear the mark. Before anything is
+made it also refuses a push destination that is not the repository it installs into
+(`remote.origin.pushurl`, `url.<base>.pushInsteadOf`, more than one), a `core.worktree` setting,
+and, with `extensions.worktreeConfig`, an identity, signing or hooks setting in the checkout's own
+worktree configuration that the new worktree would not read. It pushes the branch alone (no tags,
+no signing, no push options), runs git without the caller's repository environment variables
+(`GIT_DIR`, `GIT_INDEX_FILE` and the rest), commits as the caller's configuration and
+`GIT_AUTHOR_*`/`GIT_COMMITTER_*` say, and writes the machine's settings whole or not at all. When a
+step fails after it has started, `init` exits 1, says which step and what it has made (found by asking git),
 leaves all of it in place, and says how to finish by hand. When `origin/main` already has every
 file, it says no installation pull request is needed and opens none.
 

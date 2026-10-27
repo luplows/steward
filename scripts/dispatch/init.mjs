@@ -43,7 +43,7 @@
  *   steward init --yes --land yes  `land: true`: unattended landing explicitly enabled
  */
 import { accessSync, constants, existsSync, realpathSync, statSync } from 'node:fs'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { link, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { homedir as osHomedir } from 'node:os'
 import path from 'node:path'
 import { createInterface } from 'node:readline/promises'
@@ -52,6 +52,9 @@ import { ghAuthToken } from './github.mjs'
 import { INSPECTION_LABEL, isLabelAlreadyExists } from './inspect.mjs'
 import {
   addWorktree,
+  assertConfigApplies,
+  assertSameCommitter,
+  assertSameMain,
   assertBranchName,
   assertParentsAreDirectories,
   branchCollisions,
@@ -67,6 +70,7 @@ import {
   inspectInstallation,
   openCheckout,
   parentDirectories,
+  pushDestination,
   pushNewBranch,
   readBaseSettings,
   Refusal,
@@ -417,6 +421,22 @@ export function findOnPath(name, env = process.env, platform = process.platform)
     }
   }
   return null
+}
+
+/**
+ * Creates the file `file` with `content` only when it is not there, and whole or not at all: the
+ * content goes to a temporary file beside it, which is then linked to the final name (a link fails
+ * if the name exists) and removed, so that a write that fails cannot leave a partial file under the
+ * final name. Rejects with `EEXIST` when the file is there.
+ */
+export async function writeWhole(file, content) {
+  const temporary = `${file}.${process.pid}.tmp`
+  try {
+    await writeFile(temporary, content, { flag: 'wx' })
+    await link(temporary, file)
+  } finally {
+    await rm(temporary, { force: true })
+  }
 }
 
 /** Creates `rel` under `root` with `content` only when it is not there. Resolves `'wrote'` or `'left'`. */
@@ -817,12 +837,13 @@ export async function main(
     exists = isFile,
     packageRoot = PACKAGE_ROOT,
     git = defaultGit,
+    writeMachineSettings = writeWhole,
     out = console.log,
     err = console.error,
   } = {},
 ) {
   try {
-    return await run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExecutable, exists, packageRoot, git, out })
+    return await run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExecutable, exists, packageRoot, git, writeMachineSettings, out })
   } catch (error) {
     if (error instanceof Refusal) {
       err(error.message)
@@ -842,7 +863,7 @@ export async function main(
 /** The question's prompt, with the choices it offers when it has them. */
 const promptOf = (q, state) => (q.choices ? `${q.prompt} (${q.choices(state).join(', ')})` : q.prompt)
 
-async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExecutable, exists, packageRoot, git: runGit, out }) {
+async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExecutable, exists, packageRoot, git: runGit, writeMachineSettings, out }) {
   const flags = parseFlags(argv)
 
   // Everything that can refuse comes before the first write.
@@ -863,6 +884,11 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   if (repo === null) {
     throw new Refusal(`${why}: init opens its pull request on the project's GitHub repository, so give this checkout an \`origin\` that names one`)
   }
+
+  // Where a push would write, and what in the caller's configuration would send a write or a commit
+  // elsewhere, are settled before anything is made.
+  const destination = pushDestination(runGit, root, (url) => repoFromRemoteUrl(url) === repo)
+  assertConfigApplies(runGit, root)
 
   const branch = flags.values['--branch'] ?? DEFAULT_BRANCH
   assertBranchName(runGit, root, branch)
@@ -910,6 +936,12 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   } catch (error) {
     if (error instanceof Refusal) throw error
     throw new Error(`could not read origin (${error.message})`)
+  }
+  try {
+    assertSameMain(runGit, root, destination, base)
+  } catch (error) {
+    if (error instanceof Refusal) throw error
+    throw new Error(`could not read ${destination}, where the branch would be pushed (${error.message})`)
   }
   const reader = createBaseReader(runGit, root, base)
   const baseSettings = readBaseSettings(reader, isRulesFilePath)
@@ -1030,7 +1062,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   if (worktree !== null) {
     let found
     try {
-      found = branchCollisions(runGit, root, branch, worktree)
+      found = branchCollisions(runGit, root, branch, worktree, destination)
     } catch (error) {
       throw new Error(`could not ask origin about the branch ${branch} (${error.message})`)
     }
@@ -1050,6 +1082,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   const created = []
   let phase = 'worktree'
   let pullUrl = null
+  let machineAttempted = false
   const settingsResult = baseSettings.present ? 'left' : 'wrote'
   const expected = new Map()
   const labelOut = (line) => {
@@ -1061,6 +1094,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
     if (worktree !== null) {
       out(`Installing into ${repo} from origin/main at ${base}, on the new branch ${branch}.`)
       addWorktree(runGit, root, branch, worktree, base)
+      assertSameCommitter(runGit, root, worktree)
       created.push(`worktree ${worktree}`, `local branch ${branch} (made from ${base})`)
     }
 
@@ -1116,7 +1150,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
       if (committed.length > 0) throw new Error(`the commit is not only the installation's additions (${committed.join('; ')})`)
 
       phase = 'push'
-      pushNewBranch(runGit, worktree, branch)
+      pushNewBranch(runGit, worktree, branch, destination)
       created.push(`branch ${branch} on origin`)
       out(`Pushed ${branch} to origin.`)
 
@@ -1167,9 +1201,11 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
     // The machine's settings, only when the file is missing.
     phase = 'machine'
     if (machineMissing) {
-      await mkdir(path.dirname(machinePath), { recursive: true })
+      const madeFolder = await mkdir(path.dirname(machinePath), { recursive: true })
+      if (madeFolder !== undefined) created.push(`folder ${madeFolder}`)
+      machineAttempted = true
       try {
-        await writeFile(machinePath, json(machineSettingsBody(answers, codexExecutable)), { flag: 'wx' })
+        await writeMachineSettings(machinePath, json(machineSettingsBody(answers, codexExecutable)))
         created.push(`machine settings ${machinePath}`)
         out(`wrote ${machinePath}: the machine's settings`)
       } catch (error) {
@@ -1202,8 +1238,14 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
     return 0
   } catch (error) {
     // What exists is asked of git, not assumed from the phase that failed.
-    const found = worktree === null ? { worktree: false, local: null, remote: null } : inspectInstallation(runGit, root, { dir: worktree, branch })
-    const kept = created.filter((c) => /^(label |machine settings |draft pull request |pull request )/.test(c))
+    const found = worktree === null ? { worktree: false, local: null, remote: null } : inspectInstallation(runGit, root, { dir: worktree, branch, destination })
+    const kept = created.filter((c) => /^(label |folder |machine settings |draft pull request |pull request )/.test(c))
+    if (phase === 'machine' && machineAttempted && !created.some((c) => c.startsWith('machine settings '))) {
+      kept.push(
+        `machine settings ${machinePath}: the write failed, and ${existsSync(machinePath) ? 'a file IS there now' : 'no file is there now'}; ` +
+          (existsSync(machinePath) ? 'inspect it or remove it before running init again, since init treats a file there as the machine\'s settings' : 'nothing to clean up'),
+      )
+    }
     const made = []
     if (found.worktree === true || (found.worktree === undefined && created.some((c) => c.startsWith('worktree ')))) made.push(`worktree ${worktree}`)
     if (typeof found.local === 'string') {

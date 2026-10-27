@@ -236,7 +236,7 @@ export function fakeTerminal(answers = null) {
  * being a folder holding the installation branch's files (made when first read). `git` replaces the
  * runner of every git command (see `watchGit`).
  */
-export async function runInit(args, { cwd, gh = fakeGitHub(), terminal = fakeTerminal(), pkg = makePackage(), machine = path.join(fresh('home'), 'settings.json'), codex = null, exists, git: runner, getToken = async () => 'token' } = {}) {
+export async function runInit(args, { cwd, gh = fakeGitHub(), terminal = fakeTerminal(), pkg = makePackage(), machine = path.join(fresh('home'), 'settings.json'), codex = null, exists, git: runner, writeMachineSettings, getToken = async () => 'token' } = {}) {
   const out = []
   const err = []
   const code = await main(args, {
@@ -249,6 +249,7 @@ export async function runInit(args, { cwd, gh = fakeGitHub(), terminal = fakeTer
     findExecutable: () => codex,
     ...(exists ? { exists } : {}),
     ...(runner ? { git: runner } : {}),
+    ...(writeMachineSettings ? { writeMachineSettings } : {}),
     packageRoot: pkg,
     out: (line) => out.push(line),
     err: (line) => err.push(line),

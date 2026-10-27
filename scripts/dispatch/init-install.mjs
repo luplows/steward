@@ -41,17 +41,48 @@ const FIXED_CONFIG = [
   ['core.untrackedCache', 'false'],
   ['status.showUntrackedFiles', 'normal'],
   ['diff.ignoreSubmodules', 'none'],
+  ['push.followTags', 'false'],
 ]
 
-/** The environment git runs in: `env`, with `FIXED_CONFIG` added and optional locks off. */
+/**
+ * The environment variables that name a repository, its index, its objects or its configuration
+ * (`git rev-parse --local-env-vars` lists them). One set in the caller's environment would point
+ * git at the caller's repository or index from the installation's own worktree, so every git
+ * command runs without them and finds its repository from the folder it runs in. The caller's
+ * identity variables (`GIT_AUTHOR_*`, `GIT_COMMITTER_*`) are not among them and are kept: the
+ * commit is the caller's.
+ */
+export const LOCAL_ENVIRONMENT = [
+  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_CONFIG',
+  'GIT_CONFIG_PARAMETERS',
+  'GIT_CONFIG_COUNT',
+  'GIT_OBJECT_DIRECTORY',
+  'GIT_DIR',
+  'GIT_WORK_TREE',
+  'GIT_IMPLICIT_WORK_TREE',
+  'GIT_GRAFT_FILE',
+  'GIT_INDEX_FILE',
+  'GIT_NO_REPLACE_OBJECTS',
+  'GIT_REPLACE_REF_BASE',
+  'GIT_PREFIX',
+  'GIT_SHALLOW_FILE',
+  'GIT_COMMON_DIR',
+  'GIT_NAMESPACE',
+]
+
+/** The environment git runs in: `env` without `LOCAL_ENVIRONMENT`, with `FIXED_CONFIG` added and optional locks off. */
 export function gitEnvironment(env) {
-  const have = Number.parseInt(env.GIT_CONFIG_COUNT ?? '0', 10) || 0
-  const added = {}
+  const kept = {}
+  for (const [key, value] of Object.entries(env)) {
+    if (LOCAL_ENVIRONMENT.includes(key) || /^GIT_CONFIG_(KEY|VALUE)_\d+$/.test(key)) continue
+    kept[key] = value
+  }
   FIXED_CONFIG.forEach(([key, value], i) => {
-    added[`GIT_CONFIG_KEY_${have + i}`] = key
-    added[`GIT_CONFIG_VALUE_${have + i}`] = value
+    kept[`GIT_CONFIG_KEY_${i}`] = key
+    kept[`GIT_CONFIG_VALUE_${i}`] = value
   })
-  return { ...env, ...added, GIT_CONFIG_COUNT: String(have + FIXED_CONFIG.length), GIT_OPTIONAL_LOCKS: '0' }
+  return { ...kept, GIT_CONFIG_COUNT: String(FIXED_CONFIG.length), GIT_OPTIONAL_LOCKS: '0' }
 }
 
 /**
@@ -472,7 +503,7 @@ export function assertBranchName(run, root, name) {
  * itself, not of what was fetched), and a worktree at the path. Resolves a list of sentences, empty
  * when all is free; throws when `origin` cannot be asked.
  */
-export function branchCollisions(run, root, branch, worktree) {
+export function branchCollisions(run, root, branch, worktree, destination) {
   const found = []
   const listed = run(root, ['worktree', 'list', '--porcelain'])
   const trees = []
@@ -486,7 +517,8 @@ export function branchCollisions(run, root, branch, worktree) {
     const checkedOut = trees.find((t) => t.branch === branch)
     found.push(`the local branch ${branch} already exists${checkedOut ? `, checked out in ${checkedOut.where}` : ''}`)
   }
-  const remote = run(root, ['ls-remote', '--exit-code', '--heads', 'origin', `refs/heads/${branch}`])
+  // Asked of the destination the push will write to (`pushDestination`), not of `origin` by name.
+  const remote = run(root, ['ls-remote', '--exit-code', '--heads', destination, `refs/heads/${branch}`])
   if (remote.status === 0) found.push(`origin already has a branch ${branch}`)
   else if (remote.status !== 2) throw new GitError(['ls-remote', 'origin'], remote)
   if (trees.some((t) => path.resolve(t.where) === path.resolve(worktree))) found.push(`${worktree} is already a worktree of this repository`)
@@ -507,7 +539,7 @@ export function worktreePath(root, branch) {
  * lists a worktree at `dir`; `local` the full SHA of the local branch or `null`; `remote` the SHA
  * `origin` has for the branch or `null`. Each is `undefined` when git could not say.
  */
-export function inspectInstallation(run, root, { dir, branch }) {
+export function inspectInstallation(run, root, { dir, branch, destination }) {
   const found = { worktree: undefined, local: undefined, remote: undefined }
   const listed = run(root, ['worktree', 'list', '--porcelain'])
   if (listed.status === 0) {
@@ -516,7 +548,7 @@ export function inspectInstallation(run, root, { dir, branch }) {
   const local = run(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])
   if (local.status === 0) found.local = local.stdout.trim()
   else if (local.status === 1) found.local = null
-  const remote = run(root, ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`])
+  const remote = run(root, ['ls-remote', '--heads', destination, `refs/heads/${branch}`])
   if (remote.status === 0) found.remote = remote.stdout.trim() === '' ? null : remote.stdout.trim().split(/\s+/)[0]
   return found
 }
@@ -579,12 +611,117 @@ export function commitStaged(run, dir, message) {
 }
 
 /**
- * Pushes `branch` to `origin` as a new branch only: the lease expects the branch not to exist
- * there, so a branch another run created in the meantime makes the push fail instead of being
- * updated.
+ * Pushes `branch` to `destination` (the URL `pushDestination` found, not the remote's name, so that
+ * no `remote.origin.*` push setting applies) as a new branch only: the lease expects the branch not
+ * to exist there, so a branch another run created in the meantime makes the push fail instead of
+ * being updated. The explicit refspec is the only ref sent: tags are not followed, the push is not
+ * signed and submodules are not pushed, whatever the caller's `push.*` settings say.
  */
-export function pushNewBranch(run, dir, branch) {
-  gitOut(run, dir, ['push', 'origin', `refs/heads/${branch}:refs/heads/${branch}`, `--force-with-lease=refs/heads/${branch}:`])
+export function pushNewBranch(run, dir, branch, destination) {
+  gitOut(run, dir, [
+    'push',
+    '--no-follow-tags',
+    '--no-signed',
+    '--no-push-option',
+    '--recurse-submodules=no',
+    destination,
+    `refs/heads/${branch}:refs/heads/${branch}`,
+    `--force-with-lease=refs/heads/${branch}:`,
+  ])
+}
+
+/**
+ * Where a push of the installation would write, read before anything is made: every URL
+ * `git remote get-url --push --all origin` gives (so after `remote.origin.pushurl` and
+ * `url.*.pushInsteadOf`). Each must be the repository init installs into (`accepts(url)`) or the
+ * very place `origin` is fetched from; and there must be one. Resolves that URL, which the
+ * collision check, the push and the report then use. Throws `Refusal` naming what to clear.
+ */
+export function pushDestination(run, root, accepts) {
+  const pushes = run(root, ['remote', 'get-url', '--push', '--all', 'origin'])
+  const fetch = run(root, ['remote', 'get-url', 'origin'])
+  if (pushes.status !== 0 || fetch.status !== 0) {
+    throw new Refusal('init could not read where a push to origin would go (git remote get-url --push --all origin failed): fix the remote, or run init from another checkout')
+  }
+  const urls = pushes.stdout.split('\n').map((u) => u.trim()).filter((u) => u !== '')
+  const fetched = fetch.stdout.trim()
+  const elsewhere = urls.filter((u) => !(accepts(u) || u === fetched))
+  const how = 'clear remote.origin.pushurl and any url.<base>.pushInsteadOf that rewrites it, or run init from another checkout'
+  if (urls.length === 0 || elsewhere.length > 0) {
+    throw new Refusal(`a push to origin would go to ${elsewhere.length > 0 ? elsewhere.join(', ') : 'nowhere'}, not to the repository init installs into: ${how}`)
+  }
+  if (new Set(urls).size > 1) {
+    throw new Refusal(`a push to origin would go to more than one place (${urls.join(', ')}); init pushes to one: ${how}`)
+  }
+  return urls[0]
+}
+
+/**
+ * Checks that `main` on the push `destination` is the commit fetched from `origin` as the base, so
+ * that the place the base was read from and the place the branch will be written to are one
+ * repository. Throws `Refusal` when they differ (or `main` moved in between: run init again), and
+ * an ordinary error when the destination cannot be read.
+ */
+export function assertSameMain(run, root, destination, base) {
+  const listed = run(root, ['ls-remote', '--heads', destination, 'refs/heads/main'])
+  if (listed.status !== 0) throw new GitError(['ls-remote', destination], listed)
+  const sha = listed.stdout.trim().split(/\s+/)[0] || null
+  if (sha !== base) {
+    throw new Refusal(
+      `main at ${destination}, where the branch would be pushed, is ${sha ?? 'missing'}, not ${base}, the commit fetched from origin: the fetch and the push go to different places, or main moved just now; run init again`,
+    )
+  }
+}
+
+/** Setting names, in a checkout's own worktree configuration, that the installation's new worktree would not read. */
+const WORKTREE_ONLY = /^(user\.|author\.|committer\.|core\.hookspath$|commit\.gpgsign$|tag\.gpgsign$|gpg\.|include|core\.worktree$|core\.bare$|url\.|remote\.|push\.)/
+
+/**
+ * Refuses, before anything is made, a checkout whose configuration would send a write elsewhere or
+ * change who commits or which hooks run for the installation's worktree: `core.worktree` set at
+ * all, and, with `extensions.worktreeConfig`, any identity, signing, hooks, include, remote, url or
+ * push setting in the checkout's `config.worktree`, which a new worktree does not read.
+ */
+export function assertConfigApplies(run, root) {
+  if (run(root, ['config', '--get-all', 'core.worktree']).status === 0) {
+    throw new Refusal('core.worktree is set in this checkout\'s git configuration, which can send git\'s writes to another folder: clear it (git config --unset core.worktree), or run init from another checkout')
+  }
+  const extension = run(root, ['config', '--bool', '--get', 'extensions.worktreeConfig'])
+  if (extension.status !== 0 || extension.stdout.trim() !== 'true') return
+  const own = run(root, ['config', '--worktree', '--list', '-z'])
+  if (own.status !== 0) {
+    throw new Refusal('init could not read this checkout\'s own worktree configuration (git config --worktree --list failed): fix that, or run init from another checkout')
+  }
+  const keys = own.stdout.split('\0').map((entry) => entry.split('\n')[0]).filter((k) => WORKTREE_ONLY.test(k.toLowerCase()))
+  if (keys.length > 0) {
+    throw new Refusal(
+      `this checkout's own worktree configuration (config.worktree) sets ${keys.join(', ')}, which the installation's new worktree would not read, so its commit could be made as someone else or skip your hooks: ` +
+        `clear ${keys.length === 1 ? 'it' : 'them'} (git config --worktree --unset ${keys[0]}), or run init from another checkout`,
+    )
+  }
+}
+
+/** The settings, and the identities git derives from them, that decide who commits and which hooks run. */
+const COMMIT_SETTINGS = ['user.name', 'user.email', 'user.signingkey', 'core.hookspath', 'commit.gpgsign', 'tag.gpgsign', 'gpg.format', 'gpg.program']
+
+/**
+ * Checks that a commit made in the new worktree `dir` would be made as the checkout at `root` would
+ * make it: the same effective value of each of `COMMIT_SETTINGS` and the same author and committer
+ * identities (an `includeIf` on the branch or the git folder can differ between the two). Throws
+ * naming the first difference.
+ */
+export function assertSameCommitter(run, root, dir) {
+  const same = (args, label) => {
+    const here = run(root, args)
+    const there = run(dir, args)
+    const strip = (r) => (r.status === 0 ? r.stdout.trim().replace(/ \d+ [+-]\d{4}$/, '') : `(unset, status ${r.status})`)
+    if (strip(here) !== strip(there)) {
+      throw new Error(`a commit in the new worktree would not be made as this checkout makes it: ${label} is ${strip(there)} there and ${strip(here)} here`)
+    }
+  }
+  for (const key of COMMIT_SETTINGS) same(['config', '--get', key], key)
+  same(['var', 'GIT_AUTHOR_IDENT'], 'the author')
+  same(['var', 'GIT_COMMITTER_IDENT'], 'the committer')
 }
 
 /** Removes the worktree at `dir`, which `git` refuses to do when it holds any change. */
