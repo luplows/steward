@@ -2807,14 +2807,28 @@ shortened where it is long, so that it can be found there with its date.
   it does not change that decision's protection boundary or bootstrap adoption process.
 
   The planning session's conservative implementation contract is specified in ST-56 for crew
-  review in the draft planning PR: a clean caller at the fetched `origin/main`, a new worktree
-  beside the checkout, a separate branch (default `steward/install`, with a naming override),
+  review in the planning PR: an installation base captured from a fresh fetch of `origin/main`,
+  a new worktree beside the checkout, a separate branch (default `steward/install`, with a naming
+  override),
   additions only, a create-only remote push and a draft PR against `main`. Existing branches
   are refused and never adopted as installer-owned. Partial installations retain their files
   and configured checklist path, add only missing files, and are reported without a compatibility
   claim. Local-only target collisions refuse; a no-diff install opens no empty PR. Failures stop
   further writes and retain named recovery evidence, without automatic rollback or resume.
   Labels and missing machine settings remain separately reported effects outside the PR.
+
+  **Planned (ST-56), revised by the crew, 2026-10-27:** unrelated work in the caller's checkout
+  must not prevent adoption. Feature branches, detached HEAD, and unrelated committed, staged,
+  unstaged, untracked or ignored work are allowed; the installation uses the captured fetched
+  base SHA and leaves caller state untouched. Refuse relevant local changes to installation
+  targets, configuration, the configured checklist, template discovery or path-access ancestors.
+  Compare the caller's committed changes since the merge base and each index/working-file layer
+  separately; upstream-only changes do not count as caller work. ST-56/AC-1a specifies the exact
+  paths, rename/type/symlink cases and no-common-ancestor comparison. This replaces the initial
+  proposal requiring a completely clean caller exactly at `origin/main`, which the crew did not
+  choose: that restriction adds adoption friction without protecting an installation already
+  isolated in its own worktree. Manual recovery and the single-transaction story size are retained;
+  advanced PR-body customization may be split later if implementation evidence warrants it.
 
   The project template is the body skeleton; known installation facts fill it and project-specific
   unknowns are identified for the crew before readiness. Multiple templates require a choice.

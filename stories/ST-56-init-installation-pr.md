@@ -18,16 +18,35 @@ crew can inspect and adopt it without manually assembling the commit and pull re
 
 - [ ] **AC-1** — **Preflight before effects.** Before creating files, labels, machine settings,
       a branch or a PR, resolve the checkout and its GitHub `origin`, authenticate, fetch
-      `origin/main` and establish that it exists and is readable. Refuse with exit 2 if the
-      checkout has staged, unstaged or untracked changes, an unresolved merge/rebase, an unborn
-      HEAD, or HEAD differs from the fetched `origin/main`. Name the reason and actionable
-      remedy; never stash, reset, clean, rebase or commit the caller's work. A clean feature
-      branch or detached HEAD at that same commit is accepted. Missing/non-GitHub origin,
+      `origin/main` and capture its full commit SHA as the installation base. Accept a feature
+      branch, detached HEAD or checkout behind/ahead of that base, and unrelated staged,
+      unstaged, untracked or ignored work. An in-progress merge/rebase alone is not a refusal;
+      AC-1a defines the relevant conflicts. Never stage, stash, reset, clean, rebase, commit or
+      overwrite the caller's work. Refuse an unreadable/unborn HEAD or invalid checkout with
+      exit 2, naming the reason and actionable remedy. Missing/non-GitHub origin,
       missing `main`, invalid flags/answers, and unanswered non-interactive questions also
       refuse before effects. Failed authentication/network requests exit 1, without claiming
       a missing repository or a successful installation. Fetching refs is allowed in preflight.
+- [ ] **AC-1a** — **Relevant local conflicts.** Before effects, derive installation targets
+      and template selection from the captured base and explicit answers, not the caller's
+      feature files. Relevant paths are `steward.config.json`, the checklist path selected
+      from the base settings or new-install answers, the gate/runway workflows, inspection's
+      workflow when requested, and every PR-template file/directory location discovered by
+      the existing template finder (including locations where adding/removing a template
+      would change discovery). Include ancestor paths whose type or symlink changes affect
+      access to those paths. Inspect committed caller changes since its merge base with the
+      captured base, staged changes relative to HEAD, unstaged changes relative to the index,
+      and untracked/ignored entries. Refuse with exit 2 if any such change affects a relevant
+      path, including an addition, modification, deletion, either side of a rename, type change,
+      symlink or unmerged index entry. Check each layer independently: a staged change undone
+      in working files still counts. Upstream-only changes since the merge base do not count
+      as caller changes. With no common ancestor, compare caller HEAD directly with the base
+      for relevant differences. Name each conflict and advise resolving it or using another
+      checkout; never suggest discarding unrelated work. Refuse if the comparison cannot be
+      completed reliably. Never copy local versions into the installation worktree or silently
+      ignore a relevant conflict, including on the no-diff path or with a supplied PR body.
 - [ ] **AC-2** — **One isolated installation branch.** Work in a new worktree beside the main
-      checkout, under `<checkout>.worktrees/`, from that fetched base. Default branch:
+      checkout, under `<checkout>.worktrees/`, from that captured base SHA. Default branch:
       `steward/install`; `--branch <name>` permits the project's naming convention. Validate
       the name as a git branch, refuse `main` and `release/` names, and refuse any existing
       local or remote branch of that name, including one checked out in another worktree.
@@ -107,8 +126,14 @@ crew can inspect and adopt it without manually assembling the commit and pull re
       invent or run an activation command that has not been delivered.
 - [ ] **AC-9** — **Evidence and documentation.** Add Vitest cases named `ST-56/AC-N` using
       temporary real git repositories/worktrees and a bare remote, with GitHub and machine
-      settings injected. Exercise clean main, equal-tip feature/detached HEAD, divergent HEAD,
-      staged/unstaged/untracked dirt, ignored target collisions, local/remote branch collisions,
+      settings injected. Show successful installation from clean main, ahead/behind/divergent
+      feature branches and detached HEAD with unrelated committed or staged/unstaged/untracked/
+      ignored work; include unrelated in-progress merge/rebase state. Prove the installation
+      commit's parent is the captured fetched base and caller HEAD/index/files stay unchanged.
+      Refuse relevant conflicts in each AC-1a layer, including deletion, rename source and
+      destination, type/symlink changes, unmerged entries and cancelling index/worktree edits.
+      Cover upstream-only differences, no common ancestor, comparison failure, ignored target
+      collisions, template-discovery changes, no-diff conflicts and local/remote branch collisions,
       a racing push, malformed/conflicting partial settings, preservation of custom rules and
       true/false authorization, a partial addition, no-diff rerun, and failures at each mutation
       phase. Assert exact commit/diff contents, draft PR arguments/body, no mutation after
@@ -143,6 +168,8 @@ crew can inspect and adopt it without manually assembling the commit and pull re
 
 - Crew request, 2026-10-26: init creates a reviewable installation PR; write its body as the
   project expects. Design doc, "Installation through a reviewable pull request"; roadmap 0.1.
+- Crew decision, 2026-10-27: allow unrelated local work and feature branches; the captured
+  fetched base and relevant-path checks protect installation without requiring a clean caller.
 - `scripts/dispatch/init.mjs`: `run`, `writeNew`, `findPullRequestTemplates`, `ensureLabels`,
   `createInitContext` and `assertAllowedRequest`; current git calls only read root/origin.
 - `scripts/dispatch/init.test.mjs`: ST-44's overwrite, pinning, machine settings and no-commit
