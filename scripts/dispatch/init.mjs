@@ -1,16 +1,22 @@
 #!/usr/bin/env node
 /**
- * `steward init` (ST-44): sets a project up for steward's review gate. Run in the project's
- * checkout, it asks what it needs at the terminal, writes what the gate needs, creates the labels
- * steward reads and applies, and says what it left alone. It starts no model session, and it
- * commits, stages and pushes nothing: the crew commits what it wrote through a pull request of the
- * project's own. The design is `docs/agent-workflow-design.md`, Part 3, "Decided so far", "Steward
- * installs in another project as a review gate, through `init`"; `docs/settings.md` says what it
- * writes for each key.
+ * `steward init` (ST-44, ST-56): sets a project up for steward's review gate. Run in the project's
+ * checkout, it asks what it needs at the terminal, makes a commit of what the gate needs on a
+ * branch of its own, pushes that branch and opens a draft pull request for it, creates the labels
+ * steward reads and applies, and says what it left alone. It starts no model session. The design is
+ * `docs/agent-workflow-design.md`, Part 3, "Decided so far", "Steward installs in another project
+ * as a review gate, through `init`" and "Installation through a reviewable pull request";
+ * `docs/settings.md` says what it writes for each key.
  *
- * It overwrites nothing. Every file is created only when it is not there (`flag: 'wx'`), and one
- * that is there is named as left. It neither reads nor writes `storyPrefix`, `stories/` or the
- * project's `package.json` or CI workflows.
+ * It overwrites nothing. It captures the commit `origin/main` has after a fetch, makes a worktree
+ * of its own beside the checkout (`<checkout>.worktrees/`) on a new branch from that commit, and
+ * creates each file there only when `origin/main` does not have it (`flag: 'wx'`); one that is
+ * there is named as left. Only the files it created are staged and committed, and the commit is
+ * checked to hold nothing else before it is pushed. The caller's checkout is never staged, stashed,
+ * reset, cleaned, switched or committed to: its branch, uncommitted work and ignored files may be
+ * anything, except a change that touches a file the installation adds (`init-install.mjs`,
+ * `findLocalConflicts`), which `init` names and refuses. It neither reads nor writes `storyPrefix`,
+ * `stories/` or the project's `package.json` or CI workflows.
  *
  * Every question has a flag, `--yes` takes the default of every question no flag answers, and with
  * no terminal a question with neither is refused, before anything is written (`QUESTIONS`). The
@@ -18,20 +24,25 @@
  * a yes at the question or `--land yes` writes `land: true`. `--yes` is not that yes.
  *
  * It does nothing about branch protection: `steward protect` (`protect.mjs`) sets it, as a step of
- * its own once the gate is on `main`, and `init`'s closing message recommends it.
+ * its own once the gate is on `main`, and `init`'s closing message recommends it. It never marks
+ * the pull request ready, merges it, requests a landing, or starts anything on a machine.
  *
- * Exit code: 0 when it finished, whatever it left alone; 1 when a write or a request to GitHub
- * failed, nothing more being written; 2 when it refused: a checkout that is not a git repository, a
- * flag or answer that is wrong, or a question with no answer and no terminal.
+ * Exit code: 0 when it finished, whatever it left alone, or when nothing was missing and so no pull
+ * request was needed; 1 when a write, a git command or a request to GitHub failed, nothing more
+ * being written and what was already made left in place and named; 2 when it refused, before it
+ * wrote anything: a checkout that is not a git repository or has no commit, an `origin` that is not
+ * a GitHub repository or has no `main`, a flag or answer that is wrong, a question with no answer
+ * and no terminal, a branch or pull request already there, or a change of the caller's own that
+ * touches what the installation adds.
  *
  * Usage:
- *   steward init [--yes] [--ref <40-hex commit>] [--<question flag> <answer>]...
+ *   steward init [--yes] [--ref <40-hex commit>] [--branch <name>] [--pr-title <text>]
+ *                [--pr-body-file <path>] [--pr-template <path>] [--<question flag> <answer>]...
  * Examples:
  *   steward init --yes             review only, `land: false`; `steward land <pr-number>` lands one
  *   steward init --yes --land yes  `land: true`: unattended landing explicitly enabled
  */
-import { execFileSync } from 'node:child_process'
-import { accessSync, constants, existsSync, readdirSync, realpathSync, statSync } from 'node:fs'
+import { accessSync, constants, existsSync, realpathSync, statSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir as osHomedir } from 'node:os'
 import path from 'node:path'
@@ -39,8 +50,33 @@ import { createInterface } from 'node:readline/promises'
 import { fileURLToPath } from 'node:url'
 import { ghAuthToken } from './github.mjs'
 import { INSPECTION_LABEL, isLabelAlreadyExists } from './inspect.mjs'
+import {
+  addWorktree,
+  assertBranchName,
+  assertParentsAreDirectories,
+  branchCollisions,
+  captureBase,
+  checkAdditions,
+  commitStaged,
+  createBaseReader,
+  defaultGit,
+  discoverTemplates,
+  eachOriginUrl,
+  findLocalConflicts,
+  openCheckout,
+  parentDirectories,
+  pushNewBranch,
+  readBaseSettings,
+  Refusal,
+  relevance,
+  removeWorktree,
+  stageFiles,
+  worktreePath,
+} from './init-install.mjs'
+import { composePullRequestBody } from './init-pr-body.mjs'
 import { machineSettingsPath, TOOL_EFFORTS } from './machine-settings.mjs'
 import { isRulesFilePath } from './rules-file-path.mjs'
+import { readSettings } from './settings.mjs'
 import { BREAKER_OVERRIDE_LABEL, REVIEW_BLOCKED_LABEL } from '../land/runway.mjs'
 
 const API = 'https://api.github.com'
@@ -66,9 +102,6 @@ export const LABELS = [
 ]
 
 // ------------------------------------------------------------------ the questions
-
-/** Thrown for a wrong flag or answer; `main` prints it and exits 2. */
-class Refusal extends Error {}
 
 function parseYesNo(text) {
   const t = text.trim().toLowerCase()
@@ -146,6 +179,9 @@ export const QUESTIONS = [
     prompt: "Where is the project's checklist, the file of rules a pull request is reviewed against? An example is written there if the file is missing.",
     default: 'REVIEW.md',
     parse: parseRulesFile,
+    // A project that already has a settings file on `main` keeps it, and its checklist is the one
+    // it names.
+    when: (s) => s.baseRulesFile === null,
   },
   {
     id: 'land',
@@ -226,12 +262,31 @@ export const QUESTIONS = [
     parse: parseCodexEffort,
     when: (s) => s.machineMissing && s.answers.reviewer === 'codex',
   },
+  {
+    id: 'prTemplate',
+    flag: '--pr-template',
+    prompt:
+      "The project has more than one pull request template. Which is the installation pull request's body written from? " +
+      'Answer with its path in the repository. It has no default: the crew chooses.',
+    default: null,
+    choices: (s) => s.templates,
+    parse: (text, s) => {
+      const value = text.trim()
+      if (!s.templates.includes(value)) throw new Refusal(`answer one of: ${s.templates.join(', ')}`)
+      return value
+    },
+    when: (s) => s.templates.length > 1 && !s.bodySupplied,
+  },
 ]
 
-// `--yes`, `--ref`, and `--codex-path` (where `codex` is when it is not on the PATH) are not questions.
-const OTHER_FLAGS = ['--yes', '--ref', '--codex-path']
+// `--yes`, `--ref`, `--codex-path` (where `codex` is when it is not on the PATH) and the flags that
+// shape the installation pull request are not questions (`--pr-template` is one only when the
+// project has several).
+const OTHER_FLAGS = ['--yes', '--ref', '--codex-path', '--branch', '--pr-title', '--pr-body-file']
 const USAGE = [
-  `usage: steward init [--yes] [--ref <commit>] [--codex-path <path>] ${QUESTIONS.map((q) => `[${q.flag} <answer>]`).join(' ')}`,
+  `usage: steward init [--yes] [--ref <commit>] [--codex-path <path>] [--branch <name>] [--pr-title <text>] [--pr-body-file <path>] ${QUESTIONS.map((q) => `[${q.flag} <answer>]`).join(' ')}`,
+  'init commits its files on a new branch (steward/install, or --branch), pushes it and opens a draft pull request against main; it changes nothing in your checkout.',
+  '--pr-title replaces the title (Install Steward review gate); --pr-body-file uses a file as the whole body; --pr-template names the template to write the body from when the project has several.',
   'Unattended landing is off unless you turn it on: --yes takes the default of --land, which is no, and only --land yes (or a yes at the question) turns it on.',
   'With land false, `steward land <pr-number>` asks steward to land one pull request that has passed review.',
   'examples: steward init --yes                 review only; the project merges',
@@ -276,18 +331,18 @@ export async function gather({ flags, state, terminal }) {
       const given = flags.values[q.flag]
       if (given !== undefined) {
         try {
-          answers[q.id] = q.parse(given)
+          answers[q.id] = q.parse(given, here)
         } catch (error) {
           if (!(error instanceof Refusal)) throw error
           throw new Refusal(`${q.flag} ${given}: ${error.message}`)
         }
       } else if (flags.yes && q.default !== null) {
-        answers[q.id] = q.parse(q.default)
+        answers[q.id] = q.parse(q.default, here)
       } else if (terminal.isTTY) {
         for (;;) {
-          const reply = (await terminal.question(`${q.prompt}${q.default === null ? '' : ` [${q.default}]`} `)).trim()
+          const reply = (await terminal.question(`${promptOf(q, here)}${q.default === null ? '' : ` [${q.default}]`} `)).trim()
           try {
-            answers[q.id] = q.parse(reply === '' && q.default !== null ? q.default : reply)
+            answers[q.id] = q.parse(reply === '' && q.default !== null ? q.default : reply, here)
             break
           } catch (error) {
             if (!(error instanceof Refusal)) throw error
@@ -304,19 +359,6 @@ export async function gather({ flags, state, terminal }) {
 
 // ------------------------------------------------------------------ git and the files
 
-function git(cwd, args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
-}
-
-/** The checkout's root, or `null` when `cwd` is not in a git repository. */
-function gitRoot(cwd) {
-  try {
-    return path.resolve(git(cwd, ['rev-parse', '--show-toplevel']))
-  } catch {
-    return null
-  }
-}
-
 const ORIGIN_RE = /^(?:https?:\/\/(?:[^@/]+@)?|ssh:\/\/(?:[^@/]+@)?|git@)github\.com[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/
 
 /** `owner/name` from an `https` or an `ssh` URL of a GitHub repository, or `null`. */
@@ -325,16 +367,16 @@ export function repoFromRemoteUrl(url) {
   return match ? `${match[1]}/${match[2]}` : null
 }
 
-/** The `origin` remote's repository, or `{ repo: null, why }`. */
-function originRepo(root) {
-  let url
-  try {
-    url = git(root, ['remote', 'get-url', 'origin'])
-  } catch {
-    return { repo: null, why: 'the checkout has no `origin` remote' }
-  }
-  const repo = repoFromRemoteUrl(url)
-  return repo ? { repo } : { repo: null, why: `the \`origin\` remote, ${url}, is not a GitHub repository steward can read` }
+/**
+ * The `origin` remote's repository, or `{ repo: null, why }`. The URL as configured is read first
+ * and the URL after git's `insteadOf` rewriting second, so that an alias that expands to GitHub
+ * counts.
+ */
+function originRepo(run, root) {
+  const { found, url } = eachOriginUrl(run, root, repoFromRemoteUrl)
+  if (found) return { repo: found }
+  if (url === null) return { repo: null, why: 'the checkout has no `origin` remote' }
+  return { repo: null, why: `the \`origin\` remote, ${url}, is not a GitHub repository steward can read` }
 }
 
 const isFile = (file) => {
@@ -373,37 +415,6 @@ export function findOnPath(name, env = process.env, platform = process.platform)
   return null
 }
 
-/** Where a project's pull request template may be, as GitHub reads it (case-insensitively). */
-const TEMPLATE_DIRS = ['', 'docs', '.github']
-
-/**
- * The project's pull request templates, as paths relative to `root`: `pull_request_template.md` in
- * the root, `docs/` or `.github/`, and each file of a `PULL_REQUEST_TEMPLATE/` directory in any of
- * them.
- */
-export function findPullRequestTemplates(root) {
-  const found = []
-  for (const dir of TEMPLATE_DIRS) {
-    let entries
-    try {
-      entries = readdirSync(path.join(root, dir), { withFileTypes: true })
-    } catch {
-      continue
-    }
-    for (const entry of entries) {
-      const lower = entry.name.toLowerCase()
-      const rel = dir === '' ? entry.name : `${dir}/${entry.name}`
-      if (lower === 'pull_request_template.md' && !entry.isDirectory()) found.push(rel)
-      if (lower === 'pull_request_template' && entry.isDirectory()) {
-        const inside = readdirSync(path.join(root, rel), { withFileTypes: true }).filter((e) => e.isFile())
-        if (inside.length === 0) found.push(`${rel}/`)
-        for (const file of inside) found.push(`${rel}/${file.name}`)
-      }
-    }
-  }
-  return found
-}
-
 /** Creates `rel` under `root` with `content` only when it is not there. Resolves `'wrote'` or `'left'`. */
 async function writeNew(root, rel, content) {
   const target = path.join(root, ...rel.split('/'))
@@ -422,7 +433,13 @@ async function writeNew(root, rel, content) {
 /** An error for a response outside what a request expected: carries `status` and `body`. */
 class HttpError extends Error {
   constructor(request, status, body) {
-    super(`${request.method} ${request.url} failed with ${status}${body?.message ? `: ${body.message}` : ''}`)
+    const detail = [body?.message, ...(Array.isArray(body?.errors) ? body.errors.map((e) => e?.message) : [])]
+      .filter((m) => typeof m === 'string' && m !== '')
+      .join('; ')
+    super(
+      `${request.method} ${request.url} failed with ${status}${detail === '' ? '' : `: ${detail}`}` +
+        (status === 401 ? ' (GitHub did not accept the sign-in: run `gh auth login` and try again)' : ''),
+    )
     this.status = status
     this.body = body
   }
@@ -435,9 +452,47 @@ function repoPath(repo) {
 
 const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 const labelNames = () => LABELS.map((l) => l.name)
+/** The branch every installation pull request is opened against. */
+const BASE_BRANCH = 'main'
 
 export const buildGetLabel = (repo, name) => ({ method: 'GET', url: `${repoPath(repo)}/labels/${encodeURIComponent(name)}` })
 export const buildCreateLabel = (repo, label) => ({ method: 'POST', url: `${repoPath(repo)}/labels`, body: { ...label } })
+/**
+ * The open pull requests of the repository whose head is `branch` of the same repository and whose
+ * base is `main`.
+ */
+export const buildListOpenPulls = (repo, branch) => ({
+  method: 'GET',
+  url: `${repoPath(repo)}/pulls?state=open&head=${encodeURIComponent(`${repo.split('/')[0]}:${branch}`)}&base=${BASE_BRANCH}&per_page=100`,
+})
+/**
+ * The one pull request `init` creates: a draft from `branch` of the same repository into `main`.
+ */
+export const buildCreatePull = (repo, { title, body, branch }) => ({
+  method: 'POST',
+  url: `${repoPath(repo)}/pulls`,
+  body: { title, body, head: branch, base: BASE_BRANCH, draft: true },
+})
+
+/**
+ * Whether `body` is exactly the body of a draft pull request from a branch of the repository into
+ * `main`.
+ */
+function isDraftPullBody(body) {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return false
+  const keys = Object.keys(body).sort()
+  return (
+    sameJson(keys, ['base', 'body', 'draft', 'head', 'title']) &&
+    body.base === BASE_BRANCH &&
+    body.draft === true &&
+    typeof body.title === 'string' &&
+    typeof body.body === 'string' &&
+    typeof body.head === 'string' &&
+    body.head !== '' &&
+    !body.head.includes(':')
+  )
+}
+
 /** Throws unless `request` is one of the operations `init` performs; runs before any network call. */
 export function assertAllowedRequest(repo, request) {
   const prefix = repoPath(repo)
@@ -451,6 +506,20 @@ export function assertAllowedRequest(repo, request) {
   const labelGet = /^\/labels\/([^/?#]+)$/.exec(rest)
   if (method === 'GET' && labelGet && body === undefined && labelNames().includes(decodeURIComponent(labelGet[1]))) return
   if (method === 'POST' && rest === '/labels' && LABELS.some((l) => sameJson(body, l))) return
+  const pulls = new RegExp(`^/pulls\\?state=open&head=([^&]+)&base=${BASE_BRANCH}&per_page=100$`).exec(rest)
+  if (method === 'GET' && pulls && body === undefined) {
+    let head = ''
+    try {
+      head = decodeURIComponent(pulls[1])
+    } catch {
+      refuse()
+    }
+    // Only a branch of the installation's own repository: `owner:branch` with the repository's
+    // owner.
+    const owner = repo.split('/')[0]
+    if (head.startsWith(`${owner}:`) && head.length > owner.length + 1) return
+  }
+  if (method === 'POST' && rest === '/pulls' && isDraftPullBody(body)) return
   refuse()
 }
 
@@ -460,6 +529,10 @@ export function createInitContext({ repo, fetch = globalThis.fetch, getToken = g
   let token
   return {
     repo,
+    /** Reads the token now, so that a sign-in that fails does so before anything is written. */
+    async ready() {
+      token ??= await getToken()
+    },
     /** Resolves `{ status, body }` for any response; throws only on a request that is not allowed or a network failure. */
     async send(request) {
       assertAllowedRequest(repo, request)
@@ -484,6 +557,43 @@ export function createInitContext({ repo, fetch = globalThis.fetch, getToken = g
       return { status: response.status, body }
     },
   }
+}
+
+/** The open pull request from `branch` into `main` in the repository, or `null`. */
+export async function findOpenPull(ctx, branch) {
+  const request = buildListOpenPulls(ctx.repo, branch)
+  const response = await ctx.send(request)
+  if (response.status < 200 || response.status >= 300) throw new HttpError(request, response.status, response.body)
+  if (!Array.isArray(response.body)) throw new Error('GitHub did not answer the request for open pull requests with a list')
+  const same = (a, b) => typeof a === 'string' && a.toLowerCase() === b.toLowerCase()
+  return (
+    response.body.find(
+      (p) => p?.state === 'open' && p.head?.ref === branch && same(p.head?.repo?.full_name, ctx.repo) && p.base?.ref === BASE_BRANCH,
+    ) ?? null
+  )
+}
+
+/**
+ * Creates the draft pull request and resolves `{ url, number }` once GitHub's answer confirms it: a
+ * created, open, draft pull request from `branch` into `main`. Any other answer throws, carrying
+ * the pull request's `url` when GitHub gave one, so that the report can name it.
+ */
+export async function createDraftPull(ctx, { title, body, branch }) {
+  const request = buildCreatePull(ctx.repo, { title, body, branch })
+  const response = await ctx.send(request)
+  if (response.status < 200 || response.status >= 300) throw new HttpError(request, response.status, response.body)
+  const pr = response.body
+  const url = typeof pr?.html_url === 'string' ? pr.html_url : null
+  const confirmed = response.status === 201 && url !== null && pr.draft === true && pr.state === 'open' && pr.head?.ref === branch && pr.base?.ref === BASE_BRANCH
+  if (!confirmed) {
+    const error = new Error(
+      `GitHub answered ${response.status} but did not confirm an open draft pull request from ${branch} into ${BASE_BRANCH}` +
+        `${pr?.draft === false ? ' (it reports a pull request that is not a draft)' : ''}`,
+    )
+    error.pullUrl = url
+    throw error
+  }
+  return { url, number: pr.number }
 }
 
 /** Creates each label of `LABELS` the repository does not have, printing each created or found. */
@@ -564,8 +674,8 @@ export function machineSettingsBody(answers, codexExecutable) {
 }
 
 /**
- * What the person is told about landing, from what happened to `steward.config.json`: `'wrote'`,
- * `'left'` (a file was already there) or `null` (none, with no GitHub repository to name in it).
+ * What the person is told about landing, from what happened to `steward.config.json`: `'wrote'`
+ * (the installation adds it) or `'left'` (`origin/main` already has one).
  */
 export function landingNotes(settingsResult, answers, flags) {
   if (settingsResult === 'left') {
@@ -573,9 +683,6 @@ export function landingNotes(settingsResult, answers, flags) {
       'An existing steward.config.json governs its own landing authorization: init did not read it or change its land setting, ' +
         'so whether steward lands unattended is whatever that file already says.',
     ]
-  }
-  if (settingsResult === null) {
-    return ['With no steward.config.json there is no landing setting: steward lands nothing unattended until the file has land set to true.']
   }
   if (answers.land === true) {
     return [
@@ -612,12 +719,86 @@ function processTerminal() {
   }
 }
 
+/** The branch the installation is made on unless `--branch` names another. */
+const DEFAULT_BRANCH = 'steward/install'
+const DEFAULT_TITLE = 'Install Steward review gate'
+const COMMIT_MESSAGE = 'Install Steward review gate'
+
+/** What each phase of the installation is called in a report of where it stopped. */
+const PHASES = {
+  worktree: 'creating the installation worktree',
+  write: 'writing the installation files',
+  stage: 'staging the installation files',
+  check: 'checking the installation diff',
+  commit: 'committing the installation',
+  verify: 'checking the installation commit',
+  push: 'pushing the branch to origin',
+  pull: 'opening the draft pull request',
+  labels: 'creating the labels',
+  machine: "writing the machine's settings",
+}
+
+/**
+ * Thrown when a step after the first effect fails; its message is the whole report, and `main`
+ * exits 1 with it.
+ */
+class InstallFailure extends Error {}
+
+const quoted = (p) => (/\s/.test(p) ? `"${p}"` : p)
+
+/**
+ * The report of a failure: what stopped, what was already made and is left in place, and what the
+ * person does next. Nothing is retried, deleted or rolled back; a push or a pull request that may
+ * have happened without the answer arriving is to be looked at on GitHub before anything is
+ * repeated.
+ */
+function failureReport({ error, phase, created, worktree, branch, repo, pullUrl }) {
+  const lines = [`init stopped: ${error.message}`, `It stopped while ${PHASES[phase]}.`]
+  lines.push(
+    created.length === 0
+      ? 'Nothing had been created yet.'
+      : ['Already created, and left as it is (nothing is deleted or rolled back):', ...created.map((c) => `  ${c}`)].join('\n'),
+  )
+  const wt = worktree === null ? null : quoted(worktree)
+  const beforePush = ['worktree', 'write', 'stage', 'check', 'commit', 'verify'].includes(phase)
+  if (beforePush && wt === null) {
+    lines.push(
+      'Nothing was pushed and no pull request was opened, and your checkout is as it was.',
+      `Fix the cause above and run init again. Look first at git worktree list and git branch --list ${branch}, in case git made part of what it was asked for.`,
+    )
+  } else if (beforePush) {
+    lines.push(
+      'Nothing was pushed and no pull request was opened.',
+      `The worktree ${worktree} is kept for you to inspect: git -C ${wt} status`,
+      `To finish by hand once the cause is fixed: stage and commit the files there, run git -C ${wt} push origin ${branch}, and open a draft pull request against main from ${branch}.`,
+    )
+  } else if (phase === 'push') {
+    lines.push(
+      'Whether origin received the branch is not certain. Check before anything else: git ls-remote --heads origin ' + branch,
+      `If it lists the branch, do not push again: look at what is there first. If it does not, push by hand: git -C ${wt} push origin ${branch}, then open a draft pull request against main from ${branch}.`,
+    )
+  } else if (phase === 'pull') {
+    lines.push(
+      `The branch ${branch} is on origin.` + (pullUrl ? ` GitHub gave the address ${pullUrl}: look at it.` : ''),
+      `Whether the pull request exists is not certain unless GitHub confirmed it. Look at https://github.com/${repo}/pulls for one from ${branch} before opening another; if there is none, open a draft pull request against main from ${branch}.`,
+    )
+  } else {
+    lines.push(
+      ...(pullUrl ? [`The installation pull request is open: ${pullUrl}`] : []),
+      "The labels and the machine's settings are separate from the pull request: they are not part of it, and neither is rolled back.",
+      'Run init again once the installation has merged: it creates only what is missing, and opens no pull request when nothing is.',
+    )
+  }
+  return lines.join('\n')
+}
+
 /**
  * Runs the command and returns its exit code. Everything it reads from outside is injectable:
  * `cwd`, `env`, `homedir`, `fetch`, `getToken`, the `terminal` (`{ isTTY, question, write }`),
  * `findExecutable` (where `codex` is on the PATH), `exists` (whether a path names a file), the
- * steward package's root (`packageRoot`, where its `package.json` and `templates/` are) and the
- * output.
+ * steward package's root (`packageRoot`, where its `package.json` and `templates/` are), the runner
+ * of every git command (`git`, which takes the folder and the argument array and gives
+ * `{ status, stdout, stderr }`) and the output.
  */
 export async function main(
   argv,
@@ -631,16 +812,21 @@ export async function main(
     findExecutable = (name) => findOnPath(name, env),
     exists = isFile,
     packageRoot = PACKAGE_ROOT,
+    git = defaultGit,
     out = console.log,
     err = console.error,
   } = {},
 ) {
   try {
-    return await run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExecutable, exists, packageRoot, out })
+    return await run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExecutable, exists, packageRoot, git, out })
   } catch (error) {
     if (error instanceof Refusal) {
       err(error.message)
       return 2
+    }
+    if (error instanceof InstallFailure) {
+      err(error.message)
+      return 1
     }
     err(`init stopped: ${error.message}`)
     return 1
@@ -649,11 +835,14 @@ export async function main(
   }
 }
 
-async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExecutable, exists, packageRoot, out }) {
+/** The question's prompt, with the choices it offers when it has them. */
+const promptOf = (q, state) => (q.choices ? `${q.prompt} (${q.choices(state).join(', ')})` : q.prompt)
+
+async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExecutable, exists, packageRoot, git: runGit, out }) {
   const flags = parseFlags(argv)
 
   // Everything that can refuse comes before the first write.
-  const root = gitRoot(cwd)
+  const root = openCheckout(runGit, cwd)
   if (root === null) throw new Refusal(`${cwd} is not in a git repository: run init in the project's checkout`)
 
   const ref = flags.values['--ref']
@@ -665,6 +854,28 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
     throw new Error(`${path.join(packageRoot, 'package.json')}: 'version' must be a version such as 0.1.0, got ${JSON.stringify(version)}`)
   }
   const pin = ref?.toLowerCase() ?? `v${version}`
+
+  const { repo, why } = originRepo(runGit, root)
+  if (repo === null) {
+    throw new Refusal(`${why}: init opens its pull request on the project's GitHub repository, so give this checkout an \`origin\` that names one`)
+  }
+
+  const branch = flags.values['--branch'] ?? DEFAULT_BRANCH
+  assertBranchName(runGit, root, branch)
+  const title = flags.values['--pr-title'] ?? DEFAULT_TITLE
+  if (title.trim() === '') throw new Refusal('--pr-title needs a title')
+  let suppliedBody = null
+  const bodyFile = flags.values['--pr-body-file']
+  if (bodyFile !== undefined) {
+    if (flags.values['--pr-template'] !== undefined) {
+      throw new Refusal('--pr-body-file uses its file as the whole body, so there is no template to choose: give --pr-body-file or --pr-template, not both')
+    }
+    try {
+      suppliedBody = await readFile(path.resolve(cwd, bodyFile), 'utf8')
+    } catch (error) {
+      throw new Refusal(`--pr-body-file ${bodyFile}: cannot be read (${error.code ?? error.message})`)
+    }
+  }
 
   const machinePath = machineSettingsPath({ env, homedir })
   const machineMissing = !existsSync(machinePath)
@@ -682,91 +893,312 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
     throw new Refusal('--reviewer codex: `codex` is not on the PATH; give its path with --codex-path')
   }
 
-  const { answers, missing } = await gather({ flags, state: { machineMissing, codexExecutable }, terminal })
+  // Signing in, and the commit `origin/main` has now: the base of the installation.
+  const ctx = createInitContext({ repo, fetch, getToken })
+  try {
+    await ctx.ready()
+  } catch (error) {
+    throw new Error(`could not sign in to GitHub (${error.message}); run \`gh auth login\` and try again`)
+  }
+  let base
+  try {
+    base = captureBase(runGit, root)
+  } catch (error) {
+    if (error instanceof Refusal) throw error
+    throw new Error(`could not read origin (${error.message})`)
+  }
+  const reader = createBaseReader(runGit, root, base)
+  const baseSettings = readBaseSettings(reader, isRulesFilePath)
+  const baseRulesFile = baseSettings.present ? baseSettings.rulesFile : null
+  if (baseRulesFile !== null && flags.values['--rules-file'] !== undefined) {
+    let given
+    try {
+      given = parseRulesFile(flags.values['--rules-file'])
+    } catch (error) {
+      if (!(error instanceof Refusal)) throw error
+      throw new Refusal(`--rules-file ${flags.values['--rules-file']}: ${error.message}`)
+    }
+    if (given !== baseRulesFile) {
+      throw new Refusal(
+        `--rules-file ${given} conflicts with steward.config.json on origin/main, whose rulesFile is ${baseRulesFile}: ` +
+          'init keeps that file as it is, so drop the flag, or change the file through a pull request of the project first',
+      )
+    }
+  }
+
+  const discovered = discoverTemplates((dir) => reader.list(dir))
+  const usableTemplates = discovered.filter((t) => !t.endsWith('/'))
+  const emptyTemplates = discovered.filter((t) => t.endsWith('/'))
+
+  const state = { machineMissing, codexExecutable, baseRulesFile, templates: usableTemplates, bodySupplied: suppliedBody !== null }
+  const { answers, missing } = await gather({ flags, state, terminal })
   if (missing.length > 0) {
     throw new Refusal(
       `init asks ${missing.length === 1 ? 'a question' : 'questions'} it has no terminal to ask and no answer for. ` +
         `Answer with the flag${missing.length === 1 ? '' : 's'}, or pass --yes for the defaults (none covers a question with no default):\n` +
-        missing.map((q) => `  ${q.flag}: ${q.prompt}${q.default === null ? ' (no default)' : ` (default ${q.default})`}`).join('\n') +
+        missing.map((q) => `  ${q.flag}: ${promptOf(q, { ...state, answers })}${q.default === null ? ' (no default)' : ` (default ${q.default})`}`).join('\n') +
         '\nNothing was written.',
     )
   }
 
-  const { repo, why } = originRepo(root)
-  const report = async (rel, content) => {
-    const result = await writeNew(root, rel, content)
-    out(result === 'wrote' ? `wrote ${rel}` : `left ${rel}: already there`)
-    return result
+  // The pull request's body skeleton: the project's template (chosen when it has several), or
+  // steward's.
+  let chosenTemplate = null
+  if (suppliedBody === null) {
+    const wanted = flags.values['--pr-template']
+    if (wanted !== undefined && !usableTemplates.includes(wanted)) {
+      throw new Refusal(
+        `--pr-template ${wanted}: not one of the project's pull request templates` +
+          (usableTemplates.length === 0 ? ' (it has none)' : `: ${usableTemplates.join(', ')}`),
+      )
+    }
+    chosenTemplate = wanted ?? answers.prTemplate ?? (usableTemplates.length === 1 ? usableTemplates[0] : null)
   }
-
-  // The project's settings: 'wrote', 'left' (a file already there governs itself), or null.
-  let settingsResult = null
-  if (repo !== null) settingsResult = await report('steward.config.json', json(settingsBody(repo, answers)))
-  else if (existsSync(path.join(root, 'steward.config.json'))) {
-    out('left steward.config.json: already there')
-    settingsResult = 'left'
-  } else out(`did not write steward.config.json: ${why}`)
-
-  // The example checklist, byte for byte.
-  await report(answers.rulesFile, await readFile(path.join(packageRoot, 'templates', 'review-checklist.md')))
-
-  // The thin workflow files, pinned.
-  const workflows = answers.inspection ? [...GATE_WORKFLOWS, INSPECTION_WORKFLOW] : GATE_WORKFLOWS
-  for (const file of workflows) {
-    const text = await readFile(path.join(packageRoot, 'templates', 'workflows', file), 'utf8')
-    await report(`.github/workflows/${file}`, fillPin(text, pin))
-  }
-  if (answers.inspection) {
-    out(
-      "  Inspection's first run may raise, as issues, earlier merges and commits on main within its window that had no passing verdict. " +
-        'The crew closes each once.',
-    )
-  }
-
-  // The pull request template, only when the project has none.
-  const templates = findPullRequestTemplates(root)
-  if (templates.length === 0) {
-    await report('.github/pull_request_template.md', await readFile(path.join(packageRoot, 'templates', 'pull_request_template.md')))
-  } else {
-    for (const rel of templates) {
-      out(`left ${rel}: the project's pull request template`)
-      if (rel.endsWith('/')) continue
-      const text = await readFile(path.join(root, ...rel.split('/')), 'utf8')
-      if (!/^[ \t]*Unit:/m.test(text)) {
-        out(`  ${rel} has no Unit: line; steward finds a pull request's unit by that line, so add one`)
+  const templateTexts = reader.texts(usableTemplates)
+  let skeleton = ''
+  if (suppliedBody === null) {
+    if (chosenTemplate === null) {
+      skeleton = await readFile(path.join(packageRoot, 'templates', 'pull_request_template.md'), 'utf8')
+    } else {
+      skeleton = templateTexts.get(chosenTemplate)
+      if (skeleton === null) {
+        throw new Refusal(
+          `${chosenTemplate} on origin/main is a symbolic link, so the body cannot be written from it: ` +
+            'choose another template with --pr-template, or give the whole body with --pr-body-file',
+        )
       }
     }
   }
 
-  // GitHub: the labels.
-  if (repo === null) {
-    out('labels: not created, since there is no GitHub repository to create them in')
-  } else {
-    await ensureLabels(createInitContext({ repo, fetch, getToken }), out)
-  }
-
-  // The machine's settings, only when the file is missing.
-  if (machineMissing) {
-    await mkdir(path.dirname(machinePath), { recursive: true })
-    try {
-      await writeFile(machinePath, json(machineSettingsBody(answers, codexExecutable)), { flag: 'wx' })
-      out(`wrote ${machinePath}: the machine's settings`)
-    } catch (error) {
-      if (error.code !== 'EEXIST') throw error
-      out(`left ${machinePath}: already there`)
-    }
-  } else {
-    out(`left ${machinePath}: the machine's settings are already there, not read`)
-  }
-
-  for (const line of landingNotes(settingsResult, answers, flags)) out(line)
-  out("Nothing was committed, staged or pushed. Commit what was written, and open a pull request of the project's own for it.")
-  out(
-    'Merge that pull request as the project normally merges: the gate cannot review the pull request that installs it. ' +
-      'Merging it starts nothing on any machine: running steward on a machine is a separate step.',
+  // What the installation adds, from the base and the answers: each target is created only if the
+  // base lacks it.
+  const rulesTarget = baseRulesFile ?? answers.rulesFile
+  const workflows = answers.inspection ? [...GATE_WORKFLOWS, INSPECTION_WORKFLOW] : GATE_WORKFLOWS
+  const targets = []
+  const target = (group, rel, content, note) => targets.push({ group, rel, content, note, present: false })
+  target('settings', 'steward.config.json', baseSettings.present ? null : json(settingsBody(repo, answers)), "the project's steward settings")
+  target(
+    'checklist',
+    rulesTarget,
+    await readFile(path.join(packageRoot, 'templates', 'review-checklist.md')),
+    baseSettings.present
+      ? "the example checklist at the path the project's settings name, for the crew to replace with its own rules"
+      : 'the example checklist that pull requests are reviewed against, for the crew to replace with its own rules',
   )
-  out('Steward is then set up. To have GitHub stop a merge that has not passed review, run `steward protect` once it has merged.')
-  return 0
+  const WORKFLOW_NOTES = {
+    'review-gate.yml': 'the review gate, which turns a review verdict into the `review/agent` status',
+    'land-approved.yml': 'the landing workflow, the only thing that merges',
+    'inspection.yml': 'inspection, which raises a merge without a passing verdict as an issue',
+  }
+  for (const file of workflows) {
+    const text = await readFile(path.join(packageRoot, 'templates', 'workflows', file), 'utf8')
+    target('workflow', `.github/workflows/${file}`, fillPin(text, pin), WORKFLOW_NOTES[file])
+  }
+  if (usableTemplates.length === 0) {
+    target(
+      'template',
+      '.github/pull_request_template.md',
+      await readFile(path.join(packageRoot, 'templates', 'pull_request_template.md')),
+      'a pull request template, since the project had none',
+    )
+  }
+  // Which of them `origin/main` has, and whether the directories above the others are directories
+  // there.
+  const onBase = reader.entries([...targets.map((t) => t.rel), ...parentDirectories(targets.map((t) => t.rel))])
+  for (const t of targets) t.present = onBase.has(t.rel)
+  const toWrite = targets.filter((t) => !t.present)
+  assertParentsAreDirectories(onBase, toWrite.map((t) => t.rel))
+
+  // The caller's own changes, layer by layer, against what the installation adds.
+  const conflicts = findLocalConflicts(runGit, root, base, relevance({ rulesFile: rulesTarget, workflows }))
+  if (conflicts.length > 0) {
+    throw new Refusal(
+      "init cannot install while this checkout has changes of its own to what the installation adds:\n" +
+        conflicts.map((c) => `  ${c.path}: ${c.what}`).join('\n') +
+        "\nResolve each one yourself (commit it, move it elsewhere or remove it), or run init from another checkout of the project. " +
+        'init did not touch your work, and nothing was written.',
+    )
+  }
+
+  // A branch or pull request of that name already there is never reused: it is named, and init
+  // stops.
+  const worktree = toWrite.length === 0 ? null : worktreePath(root, branch)
+  if (worktree !== null) {
+    let found
+    try {
+      found = branchCollisions(runGit, root, branch, worktree)
+    } catch (error) {
+      throw new Error(`could not ask origin about the branch ${branch} (${error.message})`)
+    }
+    const open = await findOpenPull(ctx, branch)
+    if (open !== null) found.push(`a pull request from ${branch} into main is already open: ${open.html_url}`)
+    if (found.length > 0) {
+      throw new Refusal(
+        `init will not use the branch name ${branch}, since it is taken:\n` +
+          found.map((f) => `  ${f}`).join('\n') +
+          '\ninit never reuses, moves, adds to or deletes an existing branch or pull request, and nothing was written. ' +
+          'Finish or close the existing one yourself, or run init with --branch and another name.',
+      )
+    }
+  }
+
+  // ------------------------------------------------------------ effects begin here
+  const created = []
+  let phase = 'worktree'
+  let pullUrl = null
+  const settingsResult = baseSettings.present ? 'left' : 'wrote'
+  const expected = new Map()
+  const labelOut = (line) => {
+    out(line)
+    const made = /^label (.+): created$/.exec(line)
+    if (made) created.push(`label ${made[1]}`)
+  }
+  try {
+    if (worktree !== null) {
+      out(`Installing into ${repo} from origin/main at ${base}, on the new branch ${branch}.`)
+      addWorktree(runGit, root, branch, worktree, base)
+      created.push(`worktree ${worktree}`, `local branch ${branch} (made from ${base})`)
+    }
+
+    phase = 'write'
+    const place = async (t) => {
+      if (t.present) {
+        out(`left ${t.rel}: already there`)
+        return
+      }
+      const result = await writeNew(worktree, t.rel, t.content)
+      out(result === 'wrote' ? `wrote ${t.rel}` : `left ${t.rel}: already there`)
+      if (result === 'wrote') expected.set(t.rel, t.content)
+    }
+    for (const t of targets.filter((x) => x.group === 'settings' || x.group === 'checklist')) await place(t)
+    for (const t of targets.filter((x) => x.group === 'workflow')) await place(t)
+    if (answers.inspection) {
+      out(
+        "  Inspection's first run may raise, as issues, earlier merges and commits on main within its window that had no passing verdict. " +
+          'The crew closes each once.',
+      )
+    }
+    for (const dir of emptyTemplates) out(`left ${dir}: an empty directory, which counts as no usable pull request template`)
+    if (usableTemplates.length === 0) {
+      for (const t of targets.filter((x) => x.group === 'template')) await place(t)
+    } else {
+      for (const rel of usableTemplates) {
+        out(`left ${rel}: the project's pull request template`)
+        if (templateTexts.get(rel) !== null && !/^[ \t]*Unit:/m.test(templateTexts.get(rel))) {
+          out(`  ${rel} has no Unit: line; steward finds a pull request's unit by that line, so add one`)
+        }
+      }
+    }
+
+    let commit = null
+    if (worktree !== null) {
+      if (expected.size === 0) throw new Error('no file was written, though the base lacks some')
+      phase = 'stage'
+      stageFiles(runGit, worktree, [...expected.keys()])
+      phase = 'check'
+      const staged = checkAdditions(runGit, worktree, ['--cached', base], expected)
+      if (staged.length > 0) throw new Error(`what is staged is not only the installation's additions (${staged.join('; ')})`)
+      if (expected.has('steward.config.json')) {
+        const read = await readSettings(worktree)
+        if (read.repo !== repo) throw new Error(`the settings read back name ${read.repo}, not ${repo}`)
+      }
+      phase = 'commit'
+      const made = commitStaged(runGit, worktree, COMMIT_MESSAGE)
+      commit = made.commit
+      created.push(`commit ${commit}`)
+      phase = 'verify'
+      if (made.parent !== base) throw new Error(`the commit's parent is ${made.parent}, not ${base}`)
+      const committed = checkAdditions(runGit, worktree, [base, commit], expected)
+      if (committed.length > 0) throw new Error(`the commit is not only the installation's additions (${committed.join('; ')})`)
+
+      phase = 'push'
+      pushNewBranch(runGit, worktree, branch)
+      created.push(`branch ${branch} on origin`)
+      out(`Pushed ${branch} to origin.`)
+
+      phase = 'pull'
+      const count = expected.size
+      const facts = {
+        repo,
+        branch,
+        baseSha: base,
+        pin: ref ? `at commit ${pin}` : `${pin}`,
+        workflowsAdded: [...expected.keys()].some((rel) => rel.startsWith('.github/workflows/')),
+        added: targets.filter((t) => expected.has(t.rel)).map((t) => ({ rel: t.rel, note: t.note })),
+        preserved: [...targets.filter((t) => t.present).map((t) => t.rel), ...usableTemplates],
+        emptyTemplates,
+        land: expected.has('steward.config.json') ? answers.land : null,
+        checks: [
+          `Base: fetched \`origin/main\` and started the branch from its commit \`${base}\`. Passed.`,
+          `Diff: the staged changes, and then the commit, were compared with that commit path by path. They add exactly the ${count} file${count === 1 ? '' : 's'} listed above, each with the content steward generated, and change nothing else. The commit's only parent is that commit. Passed.`,
+          ...(expected.has('steward.config.json') ? ['Settings: `steward.config.json` was read back and accepted by steward. Passed.'] : []),
+        ],
+      }
+      const body = suppliedBody ?? composePullRequestBody({ skeleton, facts })
+      try {
+        const pull = await createDraftPull(ctx, { title, body, branch })
+        pullUrl = pull.url
+        created.push(`draft pull request ${pullUrl}`)
+      } catch (error) {
+        pullUrl = error.pullUrl ?? null
+        if (pullUrl !== null) created.push(`pull request ${pullUrl} (GitHub did not confirm it as a draft)`)
+        throw error
+      }
+      out(`Opened the draft pull request ${pullUrl}`)
+      try {
+        removeWorktree(runGit, root, worktree)
+        created.splice(created.indexOf(`worktree ${worktree}`), 1)
+        out(`Removed the worktree ${worktree}; the branch ${branch} is kept.`)
+      } catch (error) {
+        out(`Kept the worktree ${worktree} (git would not remove it: ${error.message}). Remove it yourself when you are done with it.`)
+      }
+    } else {
+      out('No installation pull request is needed: everything steward installs is already on origin/main, so no branch, commit or pull request was made.')
+    }
+
+    // GitHub: the labels, separate from the pull request.
+    phase = 'labels'
+    await ensureLabels(ctx, labelOut)
+
+    // The machine's settings, only when the file is missing.
+    phase = 'machine'
+    if (machineMissing) {
+      await mkdir(path.dirname(machinePath), { recursive: true })
+      try {
+        await writeFile(machinePath, json(machineSettingsBody(answers, codexExecutable)), { flag: 'wx' })
+        created.push(`machine settings ${machinePath}`)
+        out(`wrote ${machinePath}: the machine's settings`)
+      } catch (error) {
+        if (error.code !== 'EEXIST') throw error
+        out(`left ${machinePath}: already there`)
+      }
+    } else {
+      out(`left ${machinePath}: the machine's settings are already there, not read`)
+    }
+
+    if (commit !== null) {
+      out('The installation pull request is open for the crew:')
+      out(`  repository: ${repo}`)
+      out(`  branch: ${branch}`)
+      out('  base: main')
+      out(`  commit: ${commit}`)
+      out(`  pull request: ${pullUrl}`)
+    }
+    for (const line of landingNotes(settingsResult, answers, flags)) out(line)
+    if (commit !== null) {
+      out(
+        'The pull request is a draft. The crew reviews and merges it through the project\'s existing process: a fresh install cannot be reviewed ' +
+          'by the gate it introduces, and where the project already has a gate, its rules still apply, since init bypasses none.',
+      )
+      out('Merging it starts nothing on any machine: running steward on a machine is a separate step.')
+      out('Steward is then set up. To have GitHub stop a merge that has not passed review, run `steward protect` once it has merged.')
+    } else {
+      out('To have GitHub stop a merge that has not passed review, run `steward protect`.')
+    }
+    return 0
+  } catch (error) {
+    throw new InstallFailure(failureReport({ error, phase, created, worktree: created.some((c) => c.startsWith('worktree ')) ? worktree : null, branch, repo, pullUrl }))
+  }
 }
 
 if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {

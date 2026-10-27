@@ -1,11 +1,9 @@
 // @vitest-environment node
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { BREAKER_OVERRIDE_LABEL, REVIEW_BLOCKED_LABEL } from '../land/runway.mjs'
 import { REVIEW_BLOCKED_LABEL as APPLY_REVIEW_BLOCKED_LABEL } from '../land/apply-review-blocked.mjs'
 import { INSPECTION_LABEL } from './inspect.mjs'
@@ -15,161 +13,44 @@ import {
   GATE_WORKFLOWS,
   INSPECTION_WORKFLOW,
   LABELS,
-  main,
   QUESTIONS,
   repoFromRemoteUrl,
 } from './init.mjs'
+import {
+  ALL_FLAGS,
+  branchFiles,
+  bytesOn,
+  CLI,
+  fakeGitHub,
+  fakeTerminal,
+  fresh,
+  git,
+  hasOn,
+  labelWrites,
+  makePackage,
+  makeRepo,
+  mergeInstall,
+  read,
+  readOn,
+  REPO,
+  ROOT,
+  runInit,
+  SHA,
+  snapshot,
+  tree,
+  setUpInitFixture,
+  writes,
+} from './init-fixture.mjs'
 import { readMachineSettings } from './machine-settings.mjs'
 import { createLandContext, landPullRequest } from './land.mjs'
 import { readSettings } from './settings.mjs'
 import { runRunway } from '../land/runway.mjs'
 import { fakeGitHub as fakeRunwayGitHub, pull as runwayPull } from '../land/runway-fake.mjs'
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-const CLI = path.join(ROOT, 'scripts', 'dispatch', 'cli.mjs')
-const SHA = '0123456789abcdef0123456789abcdef01234567'
-const REPO = 'acme/widgets'
-
-// Every test runs init in a temporary repository, with GitHub's answers injected, the machine's
-// settings in a temporary file and the terminal injected: nothing for real.
-let base
-beforeAll(() => {
-  base = mkdtempSync(path.join(tmpdir(), 'steward-init-'))
-})
-afterAll(() => {
-  rmSync(base, { recursive: true, force: true })
-})
-
-let counter = 0
-const fresh = (name) => {
-  const dir = path.join(base, `${name}-${++counter}`)
-  mkdirSync(dir, { recursive: true })
-  return dir
-}
-
-const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
-
-/** A temporary repository with one commit (a `package.json`), and `origin` when given. */
-function makeRepo({ origin = `https://github.com/${REPO}.git`, files = {} } = {}) {
-  const dir = fresh('repo')
-  git(dir, 'init', '-q', '-b', 'main')
-  git(dir, 'config', 'user.email', 'crew@example.com')
-  git(dir, 'config', 'user.name', 'Crew')
-  git(dir, 'config', 'commit.gpgsign', 'false')
-  if (origin !== null) git(dir, 'remote', 'add', 'origin', origin)
-  writeFileSync(path.join(dir, 'package.json'), '{"name":"widgets","version":"1.0.0"}\n')
-  put(dir, files)
-  git(dir, 'add', '-A')
-  git(dir, 'commit', '-q', '-m', 'start')
-  return dir
-}
-
-function put(dir, files) {
-  for (const [rel, text] of Object.entries(files)) {
-    mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true })
-    writeFileSync(path.join(dir, rel), text)
-  }
-}
-
-/** A copy of steward's `templates/`, with a `package.json` whose version is `version`. */
-function makePackage(version = '9.8.7') {
-  const dir = fresh('package')
-  cpSync(path.join(ROOT, 'templates'), path.join(dir, 'templates'), { recursive: true })
-  writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'steward', version }))
-  return dir
-}
-
-/**
- * GitHub's answers, injected as `fetch`. `noMain` answers every request about `main`'s protection
- * `404 Branch not found`, as GitHub does for a repository with no `main`; otherwise `main` has none
- * (`404 Branch not protected`). `labelCreate` is `already_exists` or `other` (a 422 for each).
- * Records every request.
- */
-function fakeGitHub({ labels = [], labelStatus = null, labelCreate = null, noMain = false } = {}) {
-  const have = new Set(labels)
-  const requests = []
-  const fetch = async (url, init) => {
-    const rest = /\/repos\/[^/]+\/[^/]+(\/.*)$/.exec(url)[1]
-    const body = init.body === undefined ? undefined : JSON.parse(init.body)
-    requests.push({ method: init.method, rest, body })
-    const reply = (status, content) => ({ status, text: async () => (content === undefined ? '' : JSON.stringify(content)) })
-    const label = /^\/labels\/(.+)$/.exec(rest)
-    if (label && init.method === 'GET') {
-      if (labelStatus !== null) return reply(labelStatus, { message: 'boom' })
-      return have.has(decodeURIComponent(label[1])) ? reply(200, { name: label[1] }) : reply(404, { message: 'Not Found' })
-    }
-    if (rest === '/labels' && init.method === 'POST') {
-      if (labelCreate === 'already_exists') return reply(422, { message: 'Validation Failed', errors: [{ resource: 'Label', code: 'already_exists', field: 'name' }] })
-      if (labelCreate === 'other') return reply(422, { message: 'Validation Failed', errors: [{ resource: 'Label', code: 'invalid', field: 'color' }] })
-      have.add(body.name)
-      return reply(201, body)
-    }
-    if (rest.startsWith('/branches/main')) return reply(404, { message: noMain ? 'Branch not found' : 'Branch not protected' })
-    return reply(404, { message: 'Not Found' })
-  }
-  return { fetch, requests, have }
-}
-
-const writes = (gh) => gh.requests.filter((r) => r.method !== 'GET')
-
-/** A terminal: `answers` are given in order, one per question; `prompts` records what was asked. */
-function fakeTerminal(answers = null) {
-  const prompts = []
-  return {
-    isTTY: answers !== null,
-    prompts,
-    written: [],
-    write(text) {
-      this.written.push(text)
-    },
-    async question(prompt) {
-      prompts.push(prompt)
-      return answers.shift() ?? ''
-    },
-  }
-}
-
-/** Runs `init` in `cwd`; resolves `{ code, out, err, machine, gh, terminal }`. */
-async function runInit(args, { cwd, gh = fakeGitHub(), terminal = fakeTerminal(), pkg = makePackage(), machine = path.join(fresh('home'), 'settings.json'), codex = null, exists } = {}) {
-  const out = []
-  const err = []
-  const code = await main(args, {
-    cwd,
-    env: { STEWARD_SETTINGS: machine },
-    homedir: fresh('profile'),
-    fetch: gh.fetch,
-    getToken: async () => 'token',
-    terminal,
-    findExecutable: () => codex,
-    ...(exists ? { exists } : {}),
-    packageRoot: pkg,
-    out: (line) => out.push(line),
-    err: (line) => err.push(line),
-  })
-  return { code, out: out.join('\n'), err: err.join('\n'), machine, gh, terminal, pkg }
-}
-
-/** Every file under `dir` except `.git`, as relative paths, sorted. */
-function tree(dir, rel = '') {
-  return readdirSync(path.join(dir, rel), { withFileTypes: true })
-    .flatMap((e) => {
-      const r = rel === '' ? e.name : `${rel}/${e.name}`
-      if (e.name === '.git') return []
-      return e.isDirectory() ? tree(dir, r) : [r]
-    })
-    .sort()
-}
-
-const read = (dir, rel) => readFileSync(path.join(dir, rel), 'utf8')
-
-const ALL_FLAGS = [
-  '--unit-links', 'file,issue,other', '--rules-file', 'docs/RULES.md', '--land', 'no', '--inspect-after-hours', '48',
-  '--inspection', 'yes', '--coder-session-limit', '60', '--coder-weekly-limit', '65',
-  '--reviewer-session-limit', '80', '--reviewer-weekly-limit', '85',
-]
+setUpInitFixture()
 
 describe('ST-44/AC-1: init never overwrites, and names what it left', () => {
-  it('ST-44/AC-1: a second run writes nothing and names every file it wrote the first time', async () => {
+  it('ST-44/AC-1: a second run, once the installation has merged, writes nothing and names every file it wrote the first time', async () => {
     const cwd = makeRepo()
     const gh = fakeGitHub()
     const machine = path.join(fresh('home'), 'settings.json')
@@ -178,6 +59,7 @@ describe('ST-44/AC-1: init never overwrites, and names what it left', () => {
     expect(first.code).toBe(0)
     const wrote = [...first.out.matchAll(/^wrote (.+)$/gm)].map((m) => m[1])
     expect(wrote.length).toBeGreaterThanOrEqual(7)
+    mergeInstall(cwd)
     const before = tree(cwd).map((rel) => [rel, read(cwd, rel)])
     const settingsBefore = readFileSync(machine, 'utf8')
 
@@ -191,13 +73,16 @@ describe('ST-44/AC-1: init never overwrites, and names what it left', () => {
   })
 
   it('ST-44/AC-1: a file already there, with other content, keeps it', async () => {
-    const cwd = makeRepo({ files: { 'REVIEW.md': 'my rules\n', '.github/workflows/review-gate.yml': 'mine\n', 'steward.config.json': '{}\n' } })
+    const cwd = makeRepo({ files: { 'REVIEW.md': 'my rules\n', '.github/workflows/review-gate.yml': 'mine\n', 'steward.config.json': '{"rulesFile":"REVIEW.md"}\n' } })
     const { code, out, err } = await runInit(['--yes'], { cwd })
     expect(err).toBe('')
     expect(code).toBe(0)
     expect(read(cwd, 'REVIEW.md')).toBe('my rules\n')
     expect(read(cwd, '.github/workflows/review-gate.yml')).toBe('mine\n')
-    expect(read(cwd, 'steward.config.json')).toBe('{}\n')
+    expect(read(cwd, 'steward.config.json')).toBe('{"rulesFile":"REVIEW.md"}\n')
+    expect(readOn(cwd, 'REVIEW.md')).toBe('my rules\n')
+    expect(readOn(cwd, '.github/workflows/review-gate.yml')).toBe('mine\n')
+    expect(readOn(cwd, 'steward.config.json')).toBe('{"rulesFile":"REVIEW.md"}\n')
     for (const rel of ['REVIEW.md', '.github/workflows/review-gate.yml', 'steward.config.json']) {
       expect(out).toContain(`left ${rel}: already there`)
     }
@@ -221,11 +106,11 @@ describe('ST-44/AC-2: asking', () => {
   it('ST-44/AC-2: every question answered by flags asks nothing, and refuses nothing with no terminal', async () => {
     const cwd = makeRepo()
     const terminal = fakeTerminal()
-    const { code, err } = await runInit(ALL_FLAGS, { cwd, terminal })
+    const { code, err, view } = await runInit(ALL_FLAGS, { cwd, terminal })
     expect(err).toBe('')
     expect(code).toBe(0)
     expect(terminal.prompts).toEqual([])
-    const settings = await readSettings(cwd)
+    const settings = await readSettings(view)
     expect(settings).toMatchObject({ unitLinks: ['file', 'issue', 'other'], rulesFile: 'docs/RULES.md', land: false, inspectAfterHours: 48 })
   })
 
@@ -233,10 +118,10 @@ describe('ST-44/AC-2: asking', () => {
     const cwd = makeRepo()
     const machine = path.join(fresh('home'), 'settings.json')
     const gh = fakeGitHub()
-    const { code } = await runInit(['--yes'], { cwd, machine, gh })
+    const { code, view } = await runInit(['--yes'], { cwd, machine, gh })
     expect(code).toBe(0)
-    expect(await readSettings(cwd)).toMatchObject({ unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', land: false, inspectAfterHours: 24 })
-    expect(existsSync(path.join(cwd, '.github/workflows/inspection.yml'))).toBe(true)
+    expect(await readSettings(view)).toMatchObject({ unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', land: false, inspectAfterHours: 24 })
+    expect(hasOn(cwd, '.github/workflows/inspection.yml')).toBe(true)
     expect(writes(gh).some((r) => r.rest === '/branches/main/protection')).toBe(false)
   })
 
@@ -269,24 +154,24 @@ describe('ST-44/AC-2: asking', () => {
   it('ST-44/AC-2: an answer at the terminal is used, and the prompt shows its default', async () => {
     const cwd = makeRepo()
     const terminal = fakeTerminal(['issue', '', 'no', '12', 'no', '', '', '', ''])
-    const { code } = await runInit([], { cwd, terminal })
+    const { code, view } = await runInit([], { cwd, terminal })
     expect(code).toBe(0)
     expect(terminal.prompts.length).toBe(9)
     expect(terminal.prompts[0]).toContain('[file,issue]')
     expect(terminal.prompts[1]).toContain('[REVIEW.md]')
     expect(terminal.prompts[4]).toContain('[yes]')
-    expect(await readSettings(cwd)).toMatchObject({ unitLinks: ['issue'], rulesFile: 'REVIEW.md', land: false, inspectAfterHours: 12 })
-    expect(existsSync(path.join(cwd, '.github/workflows/inspection.yml'))).toBe(false)
+    expect(await readSettings(view)).toMatchObject({ unitLinks: ['issue'], rulesFile: 'REVIEW.md', land: false, inspectAfterHours: 12 })
+    expect(hasOn(cwd, '.github/workflows/inspection.yml')).toBe(false)
   })
 
   it('ST-44/AC-2: a wrong answer at the terminal is asked again; a wrong flag is refused before anything is written', async () => {
     const cwd = makeRepo()
     const terminal = fakeTerminal(['everything', 'none', ...Array(8).fill('')])
-    const { code } = await runInit([], { cwd, terminal })
+    const { code, view } = await runInit([], { cwd, terminal })
     expect(code).toBe(0)
     expect(terminal.prompts.length).toBe(10)
     expect(terminal.written.join('')).toMatch(/'everything' is not one of/)
-    expect((await readSettings(cwd)).unitLinks).toEqual([])
+    expect((await readSettings(view)).unitLinks).toEqual([])
 
     const other = makeRepo()
     const refused = await runInit(ALL_FLAGS.map((x) => (x === 'file,issue,other' ? 'wiki' : x)), { cwd: other })
@@ -308,10 +193,10 @@ describe('ST-44/AC-2: asking', () => {
 describe('ST-44/AC-3: steward.config.json', () => {
   it('ST-44/AC-3: it has a value for every key, and readSettings reads it', async () => {
     const cwd = makeRepo()
-    await runInit(['--yes'], { cwd })
-    const text = JSON.parse(read(cwd, 'steward.config.json'))
+    const { view } = await runInit(['--yes'], { cwd })
+    const text = JSON.parse(read(view, 'steward.config.json'))
     expect(Object.keys(text).sort()).toEqual(['check', 'inspectAfterHours', 'land', 'landWhen', 'repo', 'rulesFile', 'setup', 'unitLinks'])
-    expect(await readSettings(cwd)).toEqual({
+    expect(await readSettings(view)).toEqual({
       repo: REPO, setup: null, check: null, landWhen: 'all-checks', land: false, unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', inspectAfterHours: 24,
     })
   })
@@ -325,27 +210,33 @@ describe('ST-44/AC-3: steward.config.json', () => {
     expect(repoFromRemoteUrl('https://gitlab.com/acme/widgets.git')).toBeNull()
     expect(repoFromRemoteUrl('../elsewhere')).toBeNull()
     const cwd = makeRepo({ origin: 'git@github.com:acme/gadgets.git' })
-    await runInit(['--yes'], { cwd })
-    expect((await readSettings(cwd)).repo).toBe('acme/gadgets')
+    const { view, code } = await runInit(['--yes'], { cwd })
+    expect(code).toBe(0)
+    expect((await readSettings(view)).repo).toBe('acme/gadgets')
   })
 
-  it('ST-44/AC-3: with no origin it can read as a GitHub repository, it writes no settings file, says why, and creates no label', async () => {
+  it('ST-56/AC-1: with no origin, or an origin that is not a GitHub repository, init refuses before writing anything and asks GitHub for nothing', async () => {
+    // This replaces ST-44/AC-3's case, in which init wrote everything but the settings file and
+    // went on.
     for (const origin of [null, 'https://gitlab.com/acme/widgets.git']) {
       const cwd = makeRepo({ origin })
       const gh = fakeGitHub()
-      const { code, out } = await runInit(['--yes'], { cwd, gh })
-      expect(code).toBe(0)
-      expect(existsSync(path.join(cwd, 'steward.config.json'))).toBe(false)
-      expect(out).toMatch(/did not write steward\.config\.json: .*origin/)
+      const machine = path.join(fresh('home'), 'settings.json')
+      const { code, err } = await runInit(['--yes'], { cwd, gh, machine })
+      expect(code).toBe(2)
+      expect(err).toMatch(/origin/)
+      expect(err).toMatch(/GitHub repository/)
+      expect(tree(cwd)).toEqual(['package.json'])
+      expect(existsSync(`${cwd}.worktrees`)).toBe(false)
+      expect(existsSync(machine)).toBe(false)
       expect(gh.requests).toEqual([])
-      expect(existsSync(path.join(cwd, 'REVIEW.md'))).toBe(true)
     }
   })
 
   it('ST-44/AC-3: unitLinks none is written as an empty array, and setup, check and landWhen are fixed', async () => {
     const cwd = makeRepo()
-    await runInit(['--yes', '--unit-links', 'none'], { cwd })
-    expect(await readSettings(cwd)).toMatchObject({ unitLinks: [], setup: null, check: null, landWhen: 'all-checks' })
+    const { view } = await runInit(['--yes', '--unit-links', 'none'], { cwd })
+    expect(await readSettings(view)).toMatchObject({ unitLinks: [], setup: null, check: null, landWhen: 'all-checks' })
   })
 
   it('ST-44/AC-3: the question about unitLinks says what other covers', () => {
@@ -359,7 +250,7 @@ describe('ST-44/AC-4: the example checklist', () => {
   it('ST-44/AC-4: is copied byte for byte to the rulesFile path', async () => {
     const cwd = makeRepo()
     await runInit(['--yes', '--rules-file', 'docs/rules/CHECKLIST.md'], { cwd })
-    expect(readFileSync(path.join(cwd, 'docs/rules/CHECKLIST.md'))).toEqual(readFileSync(path.join(ROOT, 'templates', 'review-checklist.md')))
+    expect(bytesOn(cwd, 'docs/rules/CHECKLIST.md')).toEqual(readFileSync(path.join(ROOT, 'templates', 'review-checklist.md')))
   })
 
   it('ST-44/AC-4: a file already at the path is left and reported', async () => {
@@ -375,12 +266,12 @@ describe('ST-44/AC-5: the thin workflow files', () => {
     const cwd = makeRepo()
     await runInit(['--yes'], { cwd, pkg: makePackage('9.8.7') })
     for (const file of [...GATE_WORKFLOWS, INSPECTION_WORKFLOW]) {
-      const text = read(cwd, `.github/workflows/${file}`)
+      const text = readOn(cwd, `.github/workflows/${file}`)
       expect(text).toContain('--package=github:luplows/steward#v9.8.7 steward ')
       expect(text).not.toMatch(/\{\{[A-Z_]+\}\}/)
       expect(text).not.toContain('STEWARD_VERSION')
     }
-    expect(read(cwd, '.github/workflows/review-gate.yml')).toBe(
+    expect(readOn(cwd, '.github/workflows/review-gate.yml')).toBe(
       readFileSync(path.join(ROOT, 'templates/workflows/review-gate.yml'), 'utf8').replaceAll('v{{STEWARD_VERSION}}', () => 'v9.8.7'),
     )
   })
@@ -390,7 +281,7 @@ describe('ST-44/AC-5: the thin workflow files', () => {
     const { code } = await runInit(['--yes', '--ref', SHA], { cwd, pkg: makePackage('9.8.7') })
     expect(code).toBe(0)
     for (const file of [...GATE_WORKFLOWS, INSPECTION_WORKFLOW]) {
-      const text = read(cwd, `.github/workflows/${file}`)
+      const text = readOn(cwd, `.github/workflows/${file}`)
       expect(text).toContain(`--package=github:luplows/steward#${SHA} steward `)
       expect(text).not.toContain('v9.8.7')
       expect(text).not.toMatch(/\{\{[A-Z_]+\}\}/)
@@ -401,7 +292,7 @@ describe('ST-44/AC-5: the thin workflow files', () => {
     expect(QUESTIONS.some((q) => q.flag === '--ref')).toBe(false)
     const cwd = makeRepo()
     await runInit(['--yes'], { cwd, pkg: makePackage('9.8.7') })
-    expect(read(cwd, '.github/workflows/land-approved.yml')).toContain('#v9.8.7 steward')
+    expect(readOn(cwd, '.github/workflows/land-approved.yml')).toContain('#v9.8.7 steward')
   })
 
   it('ST-44/AC-5a: a tag, a short SHA or a SHA of the wrong length is refused, writing nothing', async () => {
@@ -421,7 +312,7 @@ describe('ST-44/AC-6: inspection', () => {
   it('ST-44/AC-6: on a yes it writes the thin inspection workflow, pinned, and warns of the first run', async () => {
     const cwd = makeRepo()
     const { out } = await runInit(['--yes', '--inspection', 'yes'], { cwd })
-    expect(read(cwd, '.github/workflows/inspection.yml')).toContain('run: npx --yes --package=github:luplows/steward#v9.8.7 steward inspect')
+    expect(readOn(cwd, '.github/workflows/inspection.yml')).toContain('run: npx --yes --package=github:luplows/steward#v9.8.7 steward inspect')
     expect(out).toMatch(/first run may raise, as issues, earlier merges and commits on main within its window that had no passing verdict/)
     expect(out).toMatch(/crew closes each once/)
   })
@@ -430,7 +321,7 @@ describe('ST-44/AC-6: inspection', () => {
     const cwd = makeRepo()
     const gh = fakeGitHub()
     const { out } = await runInit(['--yes', '--inspection', 'no'], { cwd, gh })
-    expect(existsSync(path.join(cwd, '.github/workflows/inspection.yml'))).toBe(false)
+    expect(hasOn(cwd, '.github/workflows/inspection.yml')).toBe(false)
     expect(out).not.toMatch(/first run may raise/)
     expect(gh.requests.some((r) => r.method === 'POST' && r.body.name === 'inspection')).toBe(true)
   })
@@ -459,13 +350,13 @@ describe('ST-44/AC-7: labels', () => {
     const gh = fakeGitHub({ labels: ['breaker-override'] })
     const { out, code } = await runInit(['--yes'], { cwd: makeRepo(), gh })
     expect(code).toBe(0)
-    expect(writes(gh).filter((r) => r.rest === '/labels').map((r) => r.body.name)).toEqual(['review-blocked', 'inspection'])
+    expect(labelWrites(gh).map((r) => r.body.name)).toEqual(['review-blocked', 'inspection'])
     expect(out).toContain('label review-blocked: created')
     expect(out).toContain('label breaker-override: found, left as it is')
     expect(out).toContain('label inspection: created')
   })
 
-  it('ST-44/AC-7: init asks GitHub for nothing outside the labels', () => {
+  it('ST-44/AC-7: init asks GitHub for nothing outside the labels and the installation pull request (ST-56/AC-9 lists the pull request\'s requests)', () => {
     expect(() => assertAllowedRequest(REPO, { method: 'DELETE', url: `https://api.github.com/repos/${REPO}/labels/inspection` })).toThrow(/refusing/)
     expect(() => assertAllowedRequest(REPO, { method: 'POST', url: `https://api.github.com/repos/${REPO}/issues`, body: {} })).toThrow(/refusing/)
     expect(() => assertAllowedRequest(REPO, { method: 'GET', url: `https://api.github.com/repos/${REPO}/labels/other` })).toThrow(/refusing/)
@@ -479,7 +370,7 @@ describe('ST-44/AC-8: the pull request template', () => {
   it('ST-44/AC-8: with none in the project, it writes the package\'s, which names neither AGENTS.md nor README.md', async () => {
     const cwd = makeRepo()
     await runInit(['--yes'], { cwd })
-    const text = read(cwd, '.github/pull_request_template.md')
+    const text = readOn(cwd, '.github/pull_request_template.md')
     expect(text).toBe(readFileSync(TEMPLATE, 'utf8'))
     expect(text).toMatch(/^Unit:/m)
     expect(text.match(/^## .+$/gm)).toEqual(['## What changed', '## Verification', '## Docs check'])
@@ -494,15 +385,15 @@ describe('ST-44/AC-8: the pull request template', () => {
   it('ST-44/AC-8: a template in docs/ with no Unit: line is left, edited not, and reported by name', async () => {
     const cwd = makeRepo({ files: { 'docs/pull_request_template.md': '## Summary\n' } })
     const { out } = await runInit(['--yes'], { cwd })
-    expect(read(cwd, 'docs/pull_request_template.md')).toBe('## Summary\n')
-    expect(existsSync(path.join(cwd, '.github/pull_request_template.md'))).toBe(false)
+    expect(readOn(cwd, 'docs/pull_request_template.md')).toBe('## Summary\n')
+    expect(hasOn(cwd, '.github/pull_request_template.md')).toBe(false)
     expect(out).toContain('docs/pull_request_template.md has no Unit: line')
   })
 
   it('ST-44/AC-8: a template in .github/ with a Unit: line is left, and nothing is said of the line', async () => {
     const cwd = makeRepo({ files: { '.github/pull_request_template.md': 'Unit:\n\n## Summary\n' } })
     const { out } = await runInit(['--yes'], { cwd })
-    expect(read(cwd, '.github/pull_request_template.md')).toBe('Unit:\n\n## Summary\n')
+    expect(readOn(cwd, '.github/pull_request_template.md')).toBe('Unit:\n\n## Summary\n')
     expect(out).toContain('left .github/pull_request_template.md: the project\'s pull request template')
     expect(out).not.toMatch(/no Unit: line/)
   })
@@ -510,8 +401,12 @@ describe('ST-44/AC-8: the pull request template', () => {
   it('ST-44/AC-8: a template at the root, in any case, or in a PULL_REQUEST_TEMPLATE/ directory counts as one', async () => {
     for (const files of [{ 'PULL_REQUEST_TEMPLATE.md': 'x' }, { '.github/PULL_REQUEST_TEMPLATE/bug.md': 'x' }, { 'docs/PULL_REQUEST_TEMPLATE/a.md': 'Unit:' }]) {
       const cwd = makeRepo({ files })
-      await runInit(['--yes'], { cwd })
-      expect(existsSync(path.join(cwd, '.github/pull_request_template.md'))).toBe(false)
+      // A project with two templates must choose one for the body (ST-56/AC-6): none of these has
+      // two.
+      const { code } = await runInit(['--yes'], { cwd })
+      expect(code).toBe(0)
+      expect(hasOn(cwd, '.github/pull_request_template.md')).toBe(false)
+      expect(hasOn(cwd, 'steward.config.json')).toBe(true)
     }
   })
 })
@@ -593,7 +488,7 @@ describe('ST-44/AC-9: the machine\'s settings', () => {
     const ok = await runInit(['--yes', '--reviewer', 'codex', '--codex-path', exe, '--codex-model', 'm', '--codex-effort', 'low'], { cwd: makeRepo(), machine })
     expect(ok.code).toBe(0)
     expect((await readMachineSettings({ env: { STEWARD_SETTINGS: machine }, homedir: '/nowhere' })).tools.codex.executable).toBe(exe)
-    const bad = await runInit(['--yes', '--codex-path', path.join(base, 'no-such-codex')], { cwd: makeRepo() })
+    const bad = await runInit(['--yes', '--codex-path', path.join(fresh('no-codex'), 'no-such-codex')], { cwd: makeRepo() })
     expect(bad.code).toBe(2)
     expect(bad.err).toMatch(/--codex-path/)
   })
@@ -663,7 +558,7 @@ describe('ST-44/AC-7 and AC-12: a label that fails to create', () => {
 })
 
 describe('ST-44/AC-11: what it leaves alone', () => {
-  it('ST-44/AC-11: HEAD, the index and package.json are unchanged, and nothing under stories/ is read or written', async () => {
+  it('ST-56/AC-1: HEAD, the index, the working files and package.json are unchanged, and nothing under stories/ is read or written (ST-44/AC-11 said init left the files it wrote untracked in the checkout; it now writes none there)', async () => {
     const cwd = makeRepo({ files: { 'stories/stories.json': '{ not json', 'stories/ST-1.md': 'x' } })
     git(cwd, 'config', 'user.name', 'Crew')
     const head = git(cwd, 'rev-parse', 'HEAD')
@@ -678,36 +573,34 @@ describe('ST-44/AC-11: what it leaves alone', () => {
     expect(read(cwd, 'package.json')).toBe(packageJson)
     expect(stories.map(([f]) => [f, read(cwd, f), statSync(path.join(cwd, f)).mtimeMs])).toEqual(stories)
     expect(tree(cwd).filter((f) => f.startsWith('stories/'))).toEqual(['stories/ST-1.md', 'stories/stories.json'])
-    expect(git(cwd, 'status', '--porcelain')).toMatch(/\?\? steward\.config\.json/)
-    const settings = JSON.parse(read(cwd, 'steward.config.json'))
+    expect(git(cwd, 'status', '--porcelain')).toBe('')
+    expect(tree(cwd)).toEqual(['package.json', 'stories/ST-1.md', 'stories/stories.json'])
+    const settings = JSON.parse(readOn(cwd, 'steward.config.json'))
     expect(settings).not.toHaveProperty('storyPrefix')
-    expect(out.split('\n').slice(-3).join('\n')).toMatch(/Commit what was written, and open a pull request of the project's own for it\./)
+    expect(branchFiles(cwd).filter((f) => f.startsWith('stories/'))).toEqual(['stories/ST-1.md', 'stories/stories.json'])
+    expect(out).toMatch(/draft pull request/)
   })
 
   it('ST-44/AC-11: it writes no after-sweep trigger and touches no workflow of the project\'s', async () => {
     const cwd = makeRepo({ files: { '.github/workflows/ci.yml': 'name: CI\n' } })
     await runInit(['--yes'], { cwd })
-    expect(read(cwd, '.github/workflows/ci.yml')).toBe('name: CI\n')
-    expect(tree(cwd).filter((f) => f.startsWith('.github/workflows/')).sort()).toEqual([
+    expect(readOn(cwd, '.github/workflows/ci.yml')).toBe('name: CI\n')
+    expect(branchFiles(cwd).filter((f) => f.startsWith('.github/workflows/')).sort()).toEqual([
       '.github/workflows/ci.yml',
       '.github/workflows/inspection.yml',
       '.github/workflows/land-approved.yml',
       '.github/workflows/review-gate.yml',
     ])
-    for (const file of GATE_WORKFLOWS) expect(read(cwd, `.github/workflows/${file}`)).not.toMatch(/workflow_run/)
+    for (const file of GATE_WORKFLOWS) expect(readOn(cwd, `.github/workflows/${file}`)).not.toMatch(/workflow_run/)
   })
 
   it('ST-44/AC-11: its source neither imports the story prefix nor names stories/ outside a comment', () => {
-    const source = readFileSync(path.join(ROOT, 'scripts/dispatch/init.mjs'), 'utf8')
-    expect(source).not.toMatch(/story-prefix|stories\.json/)
-    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
-    expect(code).not.toMatch(/stories\//)
-    // The only git commands it runs read: the checkout's root and the origin remote's URL.
-    expect([...code.matchAll(/\bgit\((?:cwd|root), (\[[^\]]*\])/g)].map((m) => m[1])).toEqual([
-      "['rev-parse', '--show-toplevel']",
-      "['remote', 'get-url', 'origin']",
-    ])
-    expect(code.match(/execFileSync\(/g)).toHaveLength(1)
+    for (const file of ['init.mjs', 'init-install.mjs', 'init-pr-body.mjs']) {
+      const source = readFileSync(path.join(ROOT, 'scripts/dispatch', file), 'utf8')
+      expect(source, file).not.toMatch(/story-prefix|stories\.json/)
+      const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+      expect(code, file).not.toMatch(/stories\//)
+    }
   })
 })
 
@@ -733,6 +626,7 @@ describe('ST-44/AC-12: exit codes', () => {
     const machine = path.join(fresh('home'), 'settings.json')
     const pkg = makePackage()
     await runInit(['--yes'], { cwd, gh, machine, pkg })
+    mergeInstall(cwd)
     expect((await runInit(['--yes'], { cwd, gh, machine, pkg })).code).toBe(0)
   })
 })
@@ -788,9 +682,9 @@ describe('ST-50/AC-1: init no longer touches branch protection', () => {
     const { code, out, err } = await runInit(['--yes'], { cwd, gh })
     expect(err).toBe('')
     expect(code).toBe(0)
-    expect(tree(cwd)).toContain('steward.config.json')
-    expect(tree(cwd)).toContain('.github/workflows/review-gate.yml')
-    expect(writes(gh).map((r) => r.body.name)).toEqual(['review-blocked', 'breaker-override', 'inspection'])
+    expect(branchFiles(cwd)).toContain('steward.config.json')
+    expect(branchFiles(cwd)).toContain('.github/workflows/review-gate.yml')
+    expect(labelWrites(gh).map((r) => r.body.name)).toEqual(['review-blocked', 'breaker-override', 'inspection'])
     expect(out).toContain('label review-blocked: created')
   })
 
@@ -818,12 +712,13 @@ describe('ST-50/AC-2: init\'s closing message', () => {
     return out.split('\n')
   }
 
-  it('ST-50/AC-2: its last lines say the crew commits and opens a pull request, merges it as the project normally merges, and recommends steward protect', async () => {
+  it('ST-56/AC-8: its last lines say the draft pull request is the crew\'s to review and merge through the project\'s process, that a fresh install cannot review itself, and recommend steward protect (ST-50/AC-2 had the crew commit and open the pull request)', async () => {
     for (const args of [['--yes'], ALL_FLAGS]) {
       const lines = await closing(args)
       const last = lines.slice(-3).join('\n')
-      expect(last).toMatch(/Commit what was written, and open a pull request of the project's own for it/)
-      expect(last).toMatch(/Merge that pull request as the project normally merges: the gate cannot review the pull request that installs it/)
+      expect(last).toMatch(/The pull request is a draft\. The crew reviews and merges it through the project's existing process/)
+      expect(last).toMatch(/a fresh install cannot be reviewed by the gate it introduces/)
+      expect(last).not.toMatch(/Commit what was written/)
       expect(lines.at(-1)).toMatch(/Steward is then set up\. .*run `steward protect` once it has merged\.$/)
     }
   })
@@ -896,7 +791,7 @@ describe('ST-55/AC-1: the land question defaults to no, and an explicit yes writ
     const { code } = await runInit([], { cwd, terminal })
     expect(code).toBe(0)
     expect(terminal.prompts[2]).toContain('[no]')
-    expect(await readSettings(cwd)).toEqual({
+    expect(await readSettings(snapshot(cwd))).toEqual({
       repo: REPO, setup: null, check: null, landWhen: 'all-checks', land: false, unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', inspectAfterHours: 24,
     })
   })
@@ -904,7 +799,7 @@ describe('ST-55/AC-1: the land question defaults to no, and an explicit yes writ
   it('ST-55/AC-1: --yes writes land false, with landWhen and every other setting as before', async () => {
     const cwd = makeRepo()
     expect((await runInit(['--yes'], { cwd })).code).toBe(0)
-    expect(JSON.parse(read(cwd, 'steward.config.json'))).toEqual({
+    expect(JSON.parse(readOn(cwd, 'steward.config.json'))).toEqual({
       repo: REPO, setup: null, check: null, landWhen: 'all-checks', land: false, unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', inspectAfterHours: 24,
     })
   })
@@ -913,42 +808,42 @@ describe('ST-55/AC-1: the land question defaults to no, and an explicit yes writ
     const cwd = makeRepo()
     const { code } = await runInit([], { cwd, terminal: fakeTerminal(LAND_ANSWERS(answer)) })
     expect(code).toBe(0)
-    expect(await readSettings(cwd)).toMatchObject({ land: true, landWhen: 'all-checks' })
+    expect(await readSettings(snapshot(cwd))).toMatchObject({ land: true, landWhen: 'all-checks' })
   })
 
   it('ST-55/AC-1: an explicit no at the terminal writes land false', async () => {
     const cwd = makeRepo()
     await runInit([], { cwd, terminal: fakeTerminal(LAND_ANSWERS('no')) })
-    expect(await readSettings(cwd)).toMatchObject({ land: false })
+    expect(await readSettings(snapshot(cwd))).toMatchObject({ land: false })
   })
 
   it('ST-55/AC-1: --land yes writes true, with --yes or with every question answered; --land no writes false', async () => {
     const withYes = makeRepo()
     await runInit(['--yes', '--land', 'yes'], { cwd: withYes })
-    expect(await readSettings(withYes)).toMatchObject({ land: true, landWhen: 'all-checks', rulesFile: 'REVIEW.md' })
+    expect(await readSettings(snapshot(withYes))).toMatchObject({ land: true, landWhen: 'all-checks', rulesFile: 'REVIEW.md' })
 
     const allAnswered = makeRepo()
     await runInit(ALL_FLAGS.map((x, i) => (ALL_FLAGS[i - 1] === '--land' ? 'yes' : x)), { cwd: allAnswered })
-    expect(await readSettings(allAnswered)).toMatchObject({ land: true, rulesFile: 'docs/RULES.md' })
+    expect(await readSettings(snapshot(allAnswered))).toMatchObject({ land: true, rulesFile: 'docs/RULES.md' })
 
     const no = makeRepo()
     await runInit(['--yes', '--land', 'no'], { cwd: no })
-    expect(await readSettings(no)).toMatchObject({ land: false })
+    expect(await readSettings(snapshot(no))).toMatchObject({ land: false })
 
     const equals = makeRepo()
     await runInit(['--yes', '--land=yes'], { cwd: equals })
-    expect(await readSettings(equals)).toMatchObject({ land: true })
+    expect(await readSettings(snapshot(equals))).toMatchObject({ land: true })
   })
 
   it('ST-55/AC-1: readSettings still requires land, and holds no default for it', async () => {
     const cwd = makeRepo()
-    await runInit(['--yes'], { cwd })
-    const body = JSON.parse(read(cwd, 'steward.config.json'))
+    const { view } = await runInit(['--yes'], { cwd })
+    const body = JSON.parse(read(view, 'steward.config.json'))
     delete body.land
-    writeFileSync(path.join(cwd, 'steward.config.json'), JSON.stringify(body))
-    await expect(readSettings(cwd)).rejects.toThrow(/missing required key 'land'/)
-    writeFileSync(path.join(cwd, 'steward.config.json'), JSON.stringify({ ...body, land: 'no' }))
-    await expect(readSettings(cwd)).rejects.toThrow(/land/)
+    writeFileSync(path.join(view, 'steward.config.json'), JSON.stringify(body))
+    await expect(readSettings(view)).rejects.toThrow(/missing required key 'land'/)
+    writeFileSync(path.join(view, 'steward.config.json'), JSON.stringify({ ...body, land: 'no' }))
+    await expect(readSettings(view)).rejects.toThrow(/land/)
   })
 })
 
@@ -1035,59 +930,49 @@ describe('ST-55/AC-3: an existing settings file keeps its authorization', () => 
   })
 
   it('ST-55/AC-3: answering the question at the terminal does not change an existing file either', async () => {
+    // With a settings file on main the checklist question is not asked (the file names the
+    // checklist), so the answers are those of ST-55's LAND_ANSWERS without the second one.
     for (const land of [true, false]) {
       const text = existing(land)
       const cwd = makeRepo({ files: { 'steward.config.json': text } })
-      await runInit([], { cwd, terminal: fakeTerminal(LAND_ANSWERS(land ? 'no' : 'yes')) })
+      const terminal = fakeTerminal(['', land ? 'no' : 'yes', '', '', '', '', '', ''])
+      const { code } = await runInit([], { cwd, terminal })
+      expect(code).toBe(0)
+      expect(terminal.prompts.some((p) => /checklist/.test(p))).toBe(false)
+      expect(terminal.prompts[1]).toMatch(/unattended/)
       expect(read(cwd, 'steward.config.json')).toBe(text)
+      expect(readOn(cwd, 'steward.config.json')).toBe(text)
     }
   })
 
-  it('ST-55/AC-3: two runs of a new installation: the second leaves every file as the first wrote it', async () => {
+  it('ST-55/AC-3: two runs of a new installation: once the first has merged, the second leaves every file as the first wrote it', async () => {
     for (const land of ['no', 'yes']) {
       const cwd = makeRepo()
       const machine = path.join(fresh('home'), 'settings.json')
       const pkg = makePackage()
       const first = await runInit(['--yes', '--land', land], { cwd, machine, pkg })
-      const written = Object.fromEntries(tree(cwd).map((rel) => [rel, bytes(cwd, rel)]))
-      expect(JSON.parse(read(cwd, 'steward.config.json')).land).toBe(land === 'yes')
+      const written = Object.fromEntries(branchFiles(cwd).map((rel) => [rel, bytesOn(cwd, rel)]))
+      expect(JSON.parse(readOn(cwd, 'steward.config.json')).land).toBe(land === 'yes')
+      mergeInstall(cwd)
       const opposite = land === 'yes' ? 'no' : 'yes'
       const second = await runInit(['--yes', '--land', opposite], { cwd, machine, pkg })
       expect(second.code).toBe(0)
       expect(tree(cwd)).toEqual(Object.keys(written))
-      for (const [rel, content] of Object.entries(written)) expect(bytes(cwd, rel).equals(content), rel).toBe(true)
+      // (A checkout on a machine with core.autocrlf writes CRLF; the blobs, which `written` holds,
+      // hold LF.)
+      const lf = (buffer) => buffer.toString('utf8').replaceAll('\r\n', '\n')
+      for (const [rel, content] of Object.entries(written)) expect(lf(bytes(cwd, rel)), rel).toBe(lf(content))
       expect(first.out).toContain('wrote steward.config.json')
       expect(second.out).toContain('left steward.config.json: already there')
       expect(second.out).not.toMatch(/land set to/)
     }
-  })
-
-  it.each([true, false])(
-    'ST-55/AC-3: an existing file with land %s and no GitHub origin is left byte for byte, and reported as left',
-    async (land) => {
-      for (const origin of [null, 'https://gitlab.com/acme/widgets.git']) {
-        const text = existing(land)
-        const cwd = makeRepo({ origin, files: { 'steward.config.json': text } })
-        const { code, out } = await runInit(['--yes', '--land', land ? 'no' : 'yes'], { cwd })
-        expect(code).toBe(0)
-        expect(bytes(cwd, 'steward.config.json').equals(Buffer.from(text))).toBe(true)
-        expect(out).toContain('left steward.config.json: already there')
-        expect(out).not.toMatch(/did not write steward.config.json|no landing setting|land set to/)
-        expect(out).toMatch(/An existing steward.config.json governs its own landing authorization/)
-      }
-    },
-  )
-
-  it('ST-55/AC-3: with no settings file written, it says there is no landing setting yet', async () => {
-    const { out } = await runInit(['--yes'], { cwd: makeRepo({ origin: null }) })
-    expect(out).toMatch(/With no steward\.config\.json there is no landing setting: steward lands nothing unattended/)
   })
 })
 
 describe('ST-55/AC-4: the gate is installed, and review-only installation does not let it merge unattended', () => {
   const alice = { alice: 'write' }
   /** A fake pull request 1 with everything the gate wants, and the settings file `init` wrote. */
-  const world = (cwd) => fakeRunwayGitHub({ pulls: [runwayPull(1)], settingsText: read(cwd, 'steward.config.json'), permissions: alice })
+  const world = (cwd) => fakeRunwayGitHub({ pulls: [runwayPull(1)], settingsText: readOn(cwd, 'steward.config.json'), permissions: alice })
   const HEAD = 'c'.repeat(39) + '1'
   const asGate = { repo: 'owner/project', eventName: 'workflow_dispatch', actor: 'alice' }
 
@@ -1097,21 +982,23 @@ describe('ST-55/AC-4: the gate is installed, and review-only installation does n
     const gh = fakeGitHub()
     await runInit(['--yes'], { cwd: off, gh })
     await runInit(['--yes', '--land', 'yes'], { cwd: on })
-    expect(tree(off)).toEqual(NEW_FILES)
-    expect(tree(on)).toEqual(tree(off))
-    for (const rel of tree(off).filter((r) => r !== 'steward.config.json')) {
-      expect(bytes(off, rel).equals(bytes(on, rel)), rel).toBe(true)
+    expect(branchFiles(off)).toEqual(NEW_FILES)
+    expect(branchFiles(on)).toEqual(branchFiles(off))
+    for (const rel of branchFiles(off).filter((r) => r !== 'steward.config.json')) {
+      expect(bytesOn(off, rel).equals(bytesOn(on, rel)), rel).toBe(true)
     }
     for (const file of [...GATE_WORKFLOWS, INSPECTION_WORKFLOW]) {
-      const text = read(off, `.github/workflows/${file}`)
+      const text = readOn(off, `.github/workflows/${file}`)
       expect(text, file).toContain('#v9.8.7 steward')
       expect(text, file).not.toContain('{{STEWARD_VERSION}}')
       // Inspection's workflow has a schedule of its own, from before; the gate's and the runway's
       // have none.
       if (GATE_WORKFLOWS.includes(file)) expect(text, file).not.toMatch(/^\s*schedule:/m)
     }
-    // Only labels are created, and no reviewer, coder, rotation or landing is started.
-    expect(writes(gh).map((r) => `${r.method} ${r.rest}`)).toEqual(['POST /labels', 'POST /labels', 'POST /labels'])
+    // Only the installation's draft pull request and the labels are created, and no reviewer,
+    // coder, rotation or landing is started (ST-55 allowed only labels; ST-56 adds the pull
+    // request).
+    expect(writes(gh).map((r) => `${r.method} ${r.rest}`)).toEqual(['POST /pulls', 'POST /labels', 'POST /labels', 'POST /labels'])
   })
 
   it('ST-55/AC-4: with land false the runway lands nothing unattended, but lands a scoped manual request for an eligible pull request', async () => {
@@ -1164,7 +1051,7 @@ describe('ST-55/AC-4: the gate is installed, and review-only installation does n
   it('ST-55/AC-4: with the settings init wrote, the pilot lands nothing unattended and sends no request, and a manual request is dispatched', async () => {
     const cwd = makeRepo()
     await runInit(['--yes'], { cwd })
-    const settings = await readSettings(cwd)
+    const settings = await readSettings(snapshot(cwd))
     expect(settings.land).toBe(false)
 
     const unattended = landWorld()
@@ -1180,7 +1067,7 @@ describe('ST-55/AC-4: the gate is installed, and review-only installation does n
   it('ST-55/AC-4: with the settings init wrote for an explicit yes, the pilot dispatches an unattended landing', async () => {
     const cwd = makeRepo()
     await runInit(['--yes', '--land', 'yes'], { cwd })
-    const settings = await readSettings(cwd)
+    const settings = await readSettings(snapshot(cwd))
     expect(settings.land).toBe(true)
     const g = landWorld()
     expect(await land(settings, g, 'unattended')).toMatchObject({ status: 'merged', mode: 'unattended', triggers: 1 })

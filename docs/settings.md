@@ -30,16 +30,21 @@ decisions behind the keys are in [`outline.md`](outline.md), "Defining steward",
 | `inspectAfterHours` | A positive integer | How many hours a pull request may stay pending or holding before inspection raises it. | Asked; default 24. |
 
 `steward init` (`scripts/dispatch/init.mjs`) writes the file, as the last column says: a question
-it asks at the terminal has a flag and, under `--yes`, its default (`QUESTIONS` there), and a file
-that is already there is left as it is. The decision is in `agent-workflow-design.md`, Part 3,
-"Decided so far". Steward's own file (below) shows values that work here.
+it asks at the terminal has a flag and, under `--yes`, its default (`QUESTIONS` there). It creates
+the file on a branch of its own and opens it, with the other files it adds, as a draft pull request,
+and only when `origin/main` does not have the file. A file that `origin/main` already has is left
+as it is, byte for byte, and `init` reads only its `rulesFile` (to choose where the example
+checklist goes; a malformed file, or a `rulesFile` that fails the form above, or a `--rules-file`
+that names another path, stops `init` before it writes anything). The decision is in
+`agent-workflow-design.md`, Part 3, "Decided so far". Steward's own file (below) shows values that
+work here.
 
 ## `land`
 
 `land` is the project's standing permission for unattended landing, and `true` is the opt-in.
 `steward init` writes `false` unless it is told yes at the question or by `--land yes`, and never
-changes a file that is already there, so a project's chosen value stays. The reader, `readSettings`,
-supplies no default: a file without `land` is refused.
+changes a file that `origin/main` already has, so a project's chosen value stays. The reader,
+`readSettings`, supplies no default: a file without `land` is refused.
 
 - Unattended: the rotation's landing, and a dispatch of `land-approved.yml` that names no mode (or
   `mode: unattended`, with or without a pull request). The runway reads `land` from `main`, and

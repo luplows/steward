@@ -16,6 +16,9 @@ steward runs on has settings of its own".
 - **Path:** `~/.steward/settings.json`, in the user's profile (`<homedir>/.steward/settings.json`).
 - **Override:** when the environment variable `STEWARD_SETTINGS` is set, the file it names is read
   instead.
+- **Made by `steward init`**, only when the file is missing, after the installation pull request
+  and apart from it: the file is on this computer, not in the project, so it is not part of that
+  pull request and is not rolled back with it. `init` never reads or replaces a file that is there.
 - **Every machine that runs steward needs the file.** Steward holds no default for any value, so a
   missing file, invalid JSON, a missing key, an unknown key, or a value of the wrong form is an
   error that names the file and the key with all its parents (for example

@@ -85,10 +85,10 @@ do not yet exist. The implemented review rotation is still started by hand; the 
 explicit activation and automatic scheduling are roadmap work, not delivered behaviour.
 `migration-plan.md` preserves the earlier migration plan and is not the version roadmap.
 
-**Planned (ST-56):** `steward init` delivers repository installation files through a draft
-installation PR instead of leaving the crew to commit and open it. It preserves existing files
-and project conventions, and neither creating nor merging that PR activates a project locally.
-See "Installation through a reviewable pull request", Part 3, for its transaction boundaries.
+`steward init` delivers repository installation files through a draft installation PR instead of
+leaving the crew to commit and open it. It preserves existing files and project conventions, and
+neither creating nor merging that PR activates a project locally. See "Installation through a
+reviewable pull request", Part 3, for its transaction boundaries.
 
 The roadmap schedules the ST-6 isolation investigation and its resulting implementation for 0.4,
 deliberately after the first coding and fixing slices. Earlier releases retain their resource
@@ -1105,7 +1105,7 @@ on a new scratch repository, then a review and a landing of a test pull request 
 `init --ref <commit>` pins that repository's workflow files to the release branch's last commit,
 since its tag does not exist yet, and each repeat of the walkthrough uses another new scratch
 repository, since `init` leaves a file that is already there. Between `init` and the test pull
-request, the pull request `init` leaves is merged by hand, since nothing can review it, and
+request, the draft pull request `init` opens is merged by hand, since nothing can review it, and
 `steward protect` is run from steward at the same commit, so that the test pull request is
 reviewed and landed with protection set.
 
@@ -2534,10 +2534,11 @@ shortened where it is long, so that it can be found there with its date.
     branch protection" to "switches them on alone" above: the command `steward protect` does it,
     once the gate is on `main`; see "One Node version for all of steward, and protection apart
     from `init`", below.
-    **Planned (ST-56):** revision requested by the crew on 2026-10-26: the earlier no-commit
-    delivery is replaced, after ST-55, by an isolated installation branch, commit, push and
-    draft PR. No existing-file or activation safeguard is relaxed; see "Installation through
-    a reviewable pull request", below. Until then the crew still commits and opens the PR.
+    **Since 2026-10-27:** revision requested by the crew on 2026-10-26: the earlier no-commit
+    delivery is replaced by an isolated installation branch, commit, push and draft PR. `init`
+    now stages, commits and pushes the files it created, on a branch of its own, and opens the
+    PR; the crew no longer commits and opens it by hand. No existing-file or activation safeguard
+    is relaxed; see "Installation through a reviewable pull request", below.
 
   The first release, `v0.1.0`, is cut by a release review session, whose instructions are a
   separate pull request.
@@ -2680,9 +2681,11 @@ shortened where it is long, so that it can be found there with its date.
     makes no protection request (which also ends its failure on a repository with no `main`);
     its closing message says to commit what it wrote and open a pull request, to merge it as the
     project normally merges, and recommends running `steward protect` once it has merged, which is
-    the only place its output names protection. What `init` and `protect` print is written for
-    the person running them, in plain sentences, naming no story, function or file of steward's
-    own (owner). `steward protect`
+    the only place its output names protection. (Since 2026-10-27 the closing message instead says
+    that the draft pull request `init` opened is the crew's to review and merge as the project
+    normally merges; the recommendation of `steward protect` stays last.) What `init` and `protect`
+    print is written for the person running them, in plain sentences, naming no story, function or
+    file of steward's own (owner). `steward protect`
     reads `main` on GitHub first, and refuses, naming what is missing and setting nothing, unless
     `main` holds `steward.config.json`, the checklist its `rulesFile` names,
     `.github/workflows/review-gate.yml` and `.github/workflows/land-approved.yml` (it reads that
@@ -2795,40 +2798,45 @@ shortened where it is long, so that it can be found there with its date.
   require the explicit follow-up reconciliation in the roadmap; none is retired by this decision.
   The older release branch and PR #86 are left for the crew's later release-review reconciliation.
 
-- **Installation through a reviewable pull request** (crew, 2026-10-26).
-  **Planned (ST-56):** "Have `steward init` create a reviewable installation PR instead of
-  requiring the crew to manually commit and open one." For its body: "Do your best with writing
-  the body as the project would expect it." Existing-file safeguards, project-specific work
-  conventions and the separation between installation and local coordinator activation remain.
-  ST-56 follows ST-55, which follows ST-54: those stories deliver landing authorization and
-  review-only defaults first, without adding git writes; ST-56 then changes delivery, preserving
-  their results. Their ACs and IDs are unchanged. This revises the earlier instructions to commit
-  and open the installation PR manually, including the closing-message decision of 2026-10-23;
-  it does not change that decision's protection boundary or bootstrap adoption process.
+- **Installation through a reviewable pull request** (crew, 2026-10-26). "Have `steward init`
+  create a reviewable installation PR instead of requiring the crew to manually commit and open
+  one." For its body: "Do your best with writing the body as the project would expect it."
+  Existing-file safeguards, project-specific work conventions and the separation between
+  installation and local coordinator activation remain. Landing authorization and the review-only
+  default were built first, without adding git writes; this then changed delivery, preserving
+  their results. It revises the earlier instructions to commit and open the installation PR
+  manually, including the closing-message decision of 2026-10-23; it does not change that
+  decision's protection boundary or bootstrap adoption process.
 
-  The planning session's conservative implementation contract is specified in ST-56 for crew
-  review in the planning PR: an installation base captured from a fresh fetch of `origin/main`,
-  a new worktree beside the checkout, a separate branch (default `steward/install`, with a naming
-  override),
-  additions only, a create-only remote push and a draft PR against `main`. Existing branches
-  are refused and never adopted as installer-owned. Partial installations retain their files
-  and configured checklist path, add only missing files, and are reported without a compatibility
-  claim. Local-only target collisions refuse; a no-diff install opens no empty PR. Failures stop
-  further writes and retain named recovery evidence, without automatic rollback or resume.
-  Labels and missing machine settings remain separately reported effects outside the PR.
+  As built (`scripts/dispatch/init.mjs`, with its git steps in `init-install.mjs` and the body in
+  `init-pr-body.mjs`): `init` fetches `origin/main` and takes the commit it points at as the
+  installation base, makes a new worktree beside the checkout (`<checkout>.worktrees/`) on a new
+  branch (default `steward/install`, with a naming override) from that commit, creates there
+  only the files `origin/main` lacks, stages those files by name, checks that the diff against
+  the base is exactly those additions with the contents it generated, commits with the checkout's
+  own git identity and hooks, pushes the branch as a new branch only (a push that expects the
+  branch not to exist, so a concurrent installer's branch is never overwritten), and opens a
+  draft PR against `main`, confirmed by GitHub's answer. An existing branch, local or remote, or
+  open PR of that head and base is refused and never adopted as installer-owned. Partial
+  installations retain their files and configured checklist path (`init` reads only the
+  `rulesFile` of an existing `steward.config.json`), add only missing files, and are reported
+  without a compatibility claim. A local-only file at a target refuses; an installation with
+  nothing missing opens no empty PR. Failures stop further writes and name what was made and how
+  to finish by hand, without automatic rollback or resume. Labels and missing machine settings
+  remain separately reported effects outside the PR, made after it.
 
-  **Planned (ST-56):** revised by the crew, 2026-10-27: unrelated work in the caller's checkout
-  must not prevent adoption. Feature branches, detached HEAD, and unrelated committed, staged,
-  unstaged, untracked or ignored work are allowed; the installation uses the captured fetched
-  base SHA and leaves caller state untouched. Refuse relevant local changes to installation
-  targets, configuration, the configured checklist, template discovery or path-access ancestors.
-  Compare the caller's committed changes since the merge base and each index/working-file layer
-  separately; upstream-only changes do not count as caller work. ST-56/AC-1a specifies the exact
-  paths, rename/type/symlink cases and no-common-ancestor comparison. This replaces the initial
-  proposal requiring a completely clean caller exactly at `origin/main`, which the crew did not
-  choose: that restriction adds adoption friction without protecting an installation already
-  isolated in its own worktree. Manual recovery and the single-transaction story size are retained;
-  advanced PR-body customization may be split later if implementation evidence warrants it.
+  Revised by the crew, 2026-10-27: unrelated work in the caller's checkout must not prevent
+  adoption. Feature branches, detached HEAD, and unrelated committed, staged, unstaged,
+  untracked or ignored work are allowed; the installation uses the captured fetched base SHA and
+  leaves caller state untouched. `init` refuses relevant local changes to installation targets,
+  configuration, the configured checklist, template discovery or path-access ancestors
+  (`findLocalConflicts` in `init-install.mjs`). It compares the caller's committed changes since
+  the merge base (or with the base itself when they share no history) and each index and
+  working-file layer separately; upstream-only changes do not count as caller work. This replaces
+  the initial proposal requiring a completely clean caller exactly at `origin/main`, which the
+  crew did not choose: that restriction adds adoption friction without protecting an installation
+  already isolated in its own worktree. Manual recovery and the single-transaction size are
+  retained; advanced PR-body customization may be split later if evidence warrants it.
 
   The project template is the body skeleton; known installation facts fill it and project-specific
   unknowns are identified for the crew before readiness. Multiple templates require a choice.
@@ -2839,11 +2847,11 @@ shortened where it is long, so that it can be found there with its date.
   installation through the project's existing process; a fresh gate cannot review its own install,
   while an existing gate retains its rules. Optional protection stays a later explicit command.
 
-  Considered: continuing manual commit/PR assembly (the current delivery, superseded by this
-  request); committing the caller's dirty tree or unrelated feature work; replacing or silently
-  repairing existing installation files; reusing branches by name; automatic rollback/resume;
-  and generating a generic PR without consulting the project's template. The proposed contract
-  avoids these, retaining a bounded first installation transaction. Coordinator activation and
+  Considered and not chosen: continuing manual commit/PR assembly (the earlier delivery, superseded
+  by this request); committing the caller's dirty tree or unrelated feature work; replacing or
+  silently repairing existing installation files; reusing branches by name; automatic
+  rollback/resume; and generating a generic PR without consulting the project's template. The
+  built contract avoids these, retaining a bounded first installation transaction. Coordinator activation and
   automatic scheduling remain separate roadmap stories. Nothing here authorizes installation in
   either client project or changes the release branch.
 

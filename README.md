@@ -17,8 +17,9 @@ from 0.1 through 1.0. Those targets are distinct from the implemented behaviour 
 - **The coding side is designed but not built.** Until it is, pull requests are written by people,
   or in their own agent sessions.
 - **Another project can use the review side.** Run `steward init` in the project's checkout (see
-  "Setting up another project", below). It asks what it needs, writes the files the gate needs,
-  creates the labels, and commits nothing. Nothing of the coding side is installed.
+  "Setting up another project", below). It asks what it needs, adds the files the gate needs on a
+  branch of its own and opens them as a draft pull request, and creates the labels. Nothing of the
+  coding side is installed.
 
 ## Setup
 
@@ -91,17 +92,45 @@ npx --yes --package=github:luplows/steward#v<version> steward init
 
 `init` runs no model. It asks each question at the terminal, showing its default; every question
 has a flag, and `--yes` takes the default of each one no flag answers. With no terminal and a
-question unanswered it refuses, names the question's flag, and writes nothing. It never overwrites
-a file: one already there is named and left. It writes:
+question unanswered it refuses, names the question's flag, and writes nothing. It needs the
+checkout to have a commit, and `origin` to be a GitHub repository with a `main` branch. It fetches
+`origin/main`, makes a worktree of its own beside the checkout (`<checkout>.worktrees/`) on a new
+branch from that commit, and creates there the files that `origin/main` does not have. It never
+overwrites a file: one already there is named and left. It commits what it created, pushes the
+branch, and opens a **draft pull request** against `main`; it prints the repository, the branch,
+the commit and the pull request's address. What it creates:
 
 - `steward.config.json`, with `repo` from the `origin` remote ([`docs/settings.md`](docs/settings.md)
-  says what it writes for each key), and the example checklist at its `rulesFile` path;
+  says what it writes for each key), and the example checklist at its `rulesFile` path (for a
+  project that already has a `steward.config.json`, the path that file names);
 - the thin workflow files for the gate and the runway, and for inspection when asked, in
   `.github/workflows/`, pinned to the version of the steward that ran it (`--ref <commit>` pins a
   commit's full SHA instead);
-- a pull request template, only when the project has none;
-- the labels steward reads and applies, `review-blocked`, `breaker-override` and `inspection`;
-- the machine's settings (`~/.steward/settings.json`), only when that file is missing.
+- a pull request template, only when the project has none.
+
+Outside the pull request, and after it, it creates the labels steward reads and applies,
+`review-blocked`, `breaker-override` and `inspection`, and the machine's settings
+(`~/.steward/settings.json`), only when that file is missing. Neither is part of the pull request
+or rolled back with it.
+
+The pull request's body is written from the project's own pull request template (a project with
+more than one names the one to use with `--pr-template <path>`, and `--yes` cannot choose; a
+project with none gets steward's own). Its `Unit:` line is set to `none` for the crew to confirm,
+and it lists the files added and left, the steward version, the checks `init` actually ran and what
+the crew still has to do. It claims no test run and no check of files that were already there.
+`--pr-title <text>` replaces the title (`Install Steward review gate`), `--pr-body-file <path>` uses
+a file as the whole body, and `--branch <name>` replaces the branch name `steward/install`. `init`
+never reuses, moves or deletes an existing branch or pull request of that name: it names it and
+stops.
+
+The checkout need not be clean, on `main` or up to date: a feature branch, a detached `HEAD`, and
+committed, staged, unstaged, untracked or ignored work of its own are left exactly as they are, and
+the installation is made from the commit fetched from `origin/main` whatever the checkout holds.
+The one exception is a change of the checkout's own to a file the installation adds (or to a pull
+request template location, or a directory above them): `init` names each and stops, before it
+writes anything. When a step fails after it has started, `init` exits 1, says which step and what
+it had already made, leaves all of it in place, and says how to finish by hand. When `origin/main`
+already has every file, it says no installation pull request is needed and opens none.
 
 `init` asks whether steward may land pull requests unattended, and the default is no, with `--yes`
 too: a new `steward.config.json` has `land: false`, so steward reviews and the project merges. Only
@@ -115,22 +144,17 @@ command by hand (a local coordinator, with activation, stop and status controls)
 ([`docs/outline.md`](docs/outline.md), "Product roadmap") and not built; the commands in this
 README are what exists now.
 
-It commits, stages and pushes nothing, and does not touch the project's `package.json`, its CI or
-its stories, and it does nothing about branch protection. Set up this way, a project uses steward
-as it is: this is a complete set-up, which a person or a group within a larger project may use
-alone. The order is:
+It never marks the pull request ready, merges it, requests a landing or alters branch protection,
+and does not touch the project's `package.json`, its CI or its stories. Set up this way, a project
+uses steward as it is: this is a complete set-up, which a person or a group within a larger project
+may use alone. The order is:
 
-1. Run `init`.
-2. Commit what it wrote, and open a pull request of the project's own.
-3. Merge that pull request as the project normally merges. The gate cannot review the pull request
-   that installs it, since the gate runs from `main`, where it is not yet installed, and reads the
-   checklist from `main`.
-4. Optionally, run `steward protect`, once that pull request has merged.
-
-Planned for 0.1: [ST-56](stories/ST-56-init-installation-pr.md) makes `init` commit its
-installation on a separate branch and open a draft PR using the project's template. The manual
-steps above describe the current command. Installation and explicit local activation remain
-separate; the planned PR creates no permission to run a local coordinator.
+1. Run `init`. It opens the draft pull request.
+2. Review it, mark it ready, and merge it as the project normally merges. The gate cannot review
+   the pull request that installs it, since the gate runs from `main`, where it is not yet
+   installed, and reads the checklist from `main`; where the project already has a gate, its rules
+   still apply to this pull request.
+3. Optionally, run `steward protect`, once that pull request has merged.
 
 `steward protect` sets branch protection on `main` so that GitHub stops a merge that has not passed
 review. It asks no question, takes no flag but `--repo owner/name` (the repository is otherwise the
