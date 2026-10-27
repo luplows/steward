@@ -233,6 +233,7 @@ const OTHER_FLAGS = ['--yes', '--ref', '--codex-path']
 const USAGE = [
   `usage: steward init [--yes] [--ref <commit>] [--codex-path <path>] ${QUESTIONS.map((q) => `[${q.flag} <answer>]`).join(' ')}`,
   'Unattended landing is off unless you turn it on: --yes takes the default of --land, which is no, and only --land yes (or a yes at the question) turns it on.',
+  'With land false, `steward land <pr-number>` asks steward to land one pull request that has passed review.',
   'examples: steward init --yes                 review only; the project merges',
   '          steward init --yes --land yes      also let steward land pull requests that pass, unattended',
 ].join('\n')
@@ -700,8 +701,11 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
 
   // The project's settings: 'wrote', 'left' (a file already there governs itself), or null.
   let settingsResult = null
-  if (repo === null) out(`did not write steward.config.json: ${why}`)
-  else settingsResult = await report('steward.config.json', json(settingsBody(repo, answers)))
+  if (repo !== null) settingsResult = await report('steward.config.json', json(settingsBody(repo, answers)))
+  else if (existsSync(path.join(root, 'steward.config.json'))) {
+    out('left steward.config.json: already there')
+    settingsResult = 'left'
+  } else out(`did not write steward.config.json: ${why}`)
 
   // The example checklist, byte for byte.
   await report(answers.rulesFile, await readFile(path.join(packageRoot, 'templates', 'review-checklist.md')))

@@ -986,6 +986,11 @@ describe('ST-55/AC-2: the output tells review-only from unattended landing', () 
     expect(err).toContain('steward init --yes --land yes')
   })
 
+  it('ST-55/AC-5: the printed usage shows the manual path, steward land <pr-number>, with land false', async () => {
+    const { err } = await runInit(['--nope'], { cwd: makeRepo() })
+    expect(err).toMatch(/With land false, `steward land <pr-number>` asks steward to land one pull request that has passed review/)
+  })
+
   it('ST-55/AC-2: both outcomes say merging the installation pull request starts nothing on any machine', async () => {
     for (const args of [['--yes'], ['--yes', '--land', 'yes']]) {
       const { out } = await runInit(args, { cwd: makeRepo() })
@@ -1056,6 +1061,22 @@ describe('ST-55/AC-3: an existing settings file keeps its authorization', () => 
       expect(second.out).not.toMatch(/land set to/)
     }
   })
+
+  it.each([true, false])(
+    'ST-55/AC-3: an existing file with land %s and no GitHub origin is left byte for byte, and reported as left',
+    async (land) => {
+      for (const origin of [null, 'https://gitlab.com/acme/widgets.git']) {
+        const text = existing(land)
+        const cwd = makeRepo({ origin, files: { 'steward.config.json': text } })
+        const { code, out } = await runInit(['--yes', '--land', land ? 'no' : 'yes'], { cwd })
+        expect(code).toBe(0)
+        expect(bytes(cwd, 'steward.config.json').equals(Buffer.from(text))).toBe(true)
+        expect(out).toContain('left steward.config.json: already there')
+        expect(out).not.toMatch(/did not write steward.config.json|no landing setting|land set to/)
+        expect(out).toMatch(/An existing steward.config.json governs its own landing authorization/)
+      }
+    },
+  )
 
   it('ST-55/AC-3: with no settings file written, it says there is no landing setting yet', async () => {
     const { out } = await runInit(['--yes'], { cwd: makeRepo({ origin: null }) })
