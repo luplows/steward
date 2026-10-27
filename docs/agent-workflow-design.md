@@ -2729,12 +2729,12 @@ shortened where it is long, so that it can be found there with its date.
     hand and tower-workshop-paths' frozen loop, and the flag with it (owner). Considered and not
     chosen: doing so in ST-51, which widens a fix the release waits on and changes the frozen
     loop's callers; and only renaming the option.
-  - **Planned (ST-52):** while a rotation is running on a machine, any later rotation of the same
-    project on that machine is refused, saying so, rather than reviewing the same head again or
-    requesting the same landing. Within one rotation reviews never overlap; two rotations can
-    overlap once something such as a schedule starts them. Rotations on several machines, and
-    several reviewers at once, need a claim every machine can see, and are to be solved later
-    (owner).
+  - **Planned (ST-52):** revised by the crew on 2026-10-27. The 2026-10-24
+    proposal to lock out overlapping rotations of one project is superseded.
+    The new coordinator reserves only automatic review work, whereas manual
+    `review`, `--rereview`, `rotation` and `land` remain independent and
+    may overlap. ST-52 remains a draft with obsolete criteria and must be
+    rewritten before dispatch. Distributed review claims remain later work.
 
 - **Manual landing and review-only installation defaults** (crew, 2026-10-26).
   - Standing permission for unattended landing differs from the crew explicitly requesting one
@@ -2794,6 +2794,39 @@ shortened where it is long, so that it can be found there with its date.
   release-review procedure to clients. Existing ST-48, ST-52, ST-6, ST-11/ST-12, ST-2 and ST-53
   require the explicit follow-up reconciliation in the roadmap; none is retired by this decision.
   The older release branch and PR #86 are left for the crew's later release-review reconciliation.
+
+- **Per-user coordinator foundations and manual independence** (crew, 2026-10-27).
+  - **Planned (ST-57):** explicit per-user local activation is separate from
+    installation. Check the installed revision on fetched `origin/main`, then
+    provision an isolated coordinator-owned detached checkout. Activation data
+    lives outside strict machine settings and project settings; deactivation
+    revokes new automatic admission and retains the checkout for reuse.
+  - **Planned (ST-58):** the coordinator is a detached process with exclusive
+    per-user ownership across projects. Start reports success only after
+    ownership acknowledgement; status distinguishes running, stopping, stopped
+    and uncertain recovery. Graceful stop promptly acknowledges a drain and
+    prohibits admission after acknowledgement while admitted work may finish.
+  - **Planned (ST-59):** the automatic review operation is a single PR/head
+    using existing reviewer and gate behavior, not the whole `rotation`.
+    Pass `expectedHeadSha` to the actual `reviewPullRequest` boundary and
+    refuse moved heads before a model session starts. It neither lands nor
+    inspects and does not introduce a second reviewer implementation.
+  - 0.1 still requires one automatic reviewer per user, fair bounded scanning,
+    duplicate automatic work prevention, session/usage bounds and conservative
+    restart safety before unattended scheduling starts. Manual commands and
+    external harnesses manage their own concurrency; overlaps may race over
+    current verdicts and are an operator risk. Existing reviewer correctness
+    and runway gate rules still apply.
+  - Shared per-user E-stop is not required for 0.1 but is a release gate
+    before 1.0: terminate registered manual and coordinator-managed local
+    process trees, block new supported commands until explicit reset, and
+    report termination uncertainty. It cannot cancel remote GitHub workflow
+    execution that was already dispatched.
+  - Considered and not chosen: one machine-wide cross-account coordinator or
+    E-stop authority (permissions and installation complexity); manual routing
+    through the scheduler (restricts voluntary parallelism and alternative
+    harnesses); and requiring universal E-stop before automatic review (would
+    hold up the smaller 0.1 goal). Existing bounds and recovery were retained.
 
 - **Installation through a reviewable pull request** (crew, 2026-10-26).
   **Planned (ST-56):** "Have `steward init` create a reviewable installation PR instead of
