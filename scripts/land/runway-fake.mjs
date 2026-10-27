@@ -30,9 +30,11 @@ const lines = (items) => items.map((item) => JSON.stringify(item)).join('\n')
 /**
  * `{ deps, calls, logs, merges }`: `deps` for `runRunway`. `pulls` are served oldest first.
  * `blockedCount` overrides the number of open pull requests the fake says carry `review-blocked`.
- * `calls` records each argument list given to `api`.
+ * `land` and `landWhen` are the project's settings on `main`; `settingsText`, when given, is served
+ * as the file's text instead. `permissions` maps a login to its collaborator permission; a login not
+ * in it is a request GitHub fails. `calls` records each argument list given to `api`.
  */
-export function fakeGitHub({ pulls = [], blockedCount = null, landWhen = 'all-checks' } = {}) {
+export function fakeGitHub({ pulls = [], blockedCount = null, landWhen = 'all-checks', land = true, settingsText = null, permissions = {} } = {}) {
   const calls = []
   const logs = []
   const merges = []
@@ -43,7 +45,13 @@ export function fakeGitHub({ pulls = [], blockedCount = null, landWhen = 'all-ch
     calls.push(args)
     const url = args.find((a) => a.startsWith('repos/')) ?? ''
     const path = url.replace(`repos/${REPO}/`, '').split('?')[0]
-    if (url.includes('/contents/')) return JSON.stringify({ landWhen })
+    if (url.includes('/contents/')) return settingsText ?? JSON.stringify({ land, landWhen })
+    const collaborator = path.match(/^collaborators\/([^/]+)\/permission$/)
+    if (collaborator) {
+      const permission = permissions[collaborator[1]]
+      if (permission === undefined) throw new Error(`gh: Not Found (HTTP 404): ${collaborator[1]} is not a collaborator`)
+      return JSON.stringify(permission)
+    }
     if (path === 'pulls' && url.includes('sort=created')) {
       return JSON.stringify(pulls.map((p) => ({ number: p.number, draft: p.draft, base: { ref: p.base } })))
     }

@@ -83,7 +83,7 @@ describe('OQ-93/AC-3: the input reaches the module only through env', () => {
     expect(runBlocks(yml).some((block) => block.includes('node scripts/dispatch/cli.mjs runway'))).toBe(true)
     const sweep = readFileSync(path.join(ROOT, 'scripts/land/runway.mjs'), 'utf8')
     expect(sweep).toContain("prInput: process.env.PR_INPUT ?? ''")
-    expect(sweep).toMatch(/import \{ selectCandidates \} from '\.\/select-candidates\.mjs'/)
+    expect(sweep).toMatch(/import \{[^}]*\bselectCandidates\b[^}]*\} from '\.\/select-candidates\.mjs'/)
   })
 
   it('ST-42/AC-1: runway given a pull request lands only that one, and given an invalid value lands nothing', () => {

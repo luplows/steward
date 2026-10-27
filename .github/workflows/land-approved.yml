@@ -15,21 +15,39 @@ name: Land approved PRs
 # enforces", says why.
 #
 # One PR per run. Given a `pr` input, only that PR is considered, and if it does
-# not land the run lands nothing. Given none, oldest first. GitHub recomputes mergeability
-# asynchronously, so a second merge in the same run would be decided on a `mergeable_state` read
-# before the first one landed -- it would still say `clean` because nothing had recalculated yet.
-# Stopping after one costs a few minutes and removes that whole class of mistake. Oldest first, for
-# a run given no PR, so a PR cannot be starved by newer ones.
+# not land the run lands nothing. Given none, oldest first, and only unattended. GitHub recomputes
+# mergeability asynchronously, so a second merge in the same run would be decided on a
+# `mergeable_state` read before the first one landed -- it would still say `clean` because nothing
+# had recalculated yet. Stopping after one costs a few minutes and removes that whole class of
+# mistake. Oldest first, for a run given no PR, so a PR cannot be starved by newer ones.
 #
 # There is deliberately no `schedule:` trigger. GitHub delivers scheduled runs late and unevenly,
 # which is the worst of both: too slow to rely on, yet automatic enough that nobody notices when
 # it stops. Landing is explicit: `gh workflow run land-approved.yml`.
+#
+# Two authorizations, chosen by the `mode` input. `unattended` (the default) is the project's
+# standing permission: it lands only where `land` is true in the project's settings on `main`.
+# `manual` is one explicit request: it names one `pr` and the full `head` SHA it authorizes, and
+# lands only that pull request at that head, with `land` either true or false. The run checks
+# against GitHub that whoever started it has write, maintain or admin permission on the repository.
+# The event and the actor come from the workflow's own context, never from an input. Everything
+# else the gate requires holds in both modes.
 
 on:
   workflow_dispatch:
     inputs:
       pr:
-        description: 'Pull request number to land, and only that one. Empty: the oldest landable.'
+        description: 'Pull request to land, and only that one. Empty: the oldest landable (unattended only).'
+        required: false
+        type: string
+        default: ''
+      mode:
+        description: 'unattended (standing permission) or manual (one explicit request).'
+        required: false
+        type: string
+        default: 'unattended'
+      head:
+        description: 'Manual only: the full 40-character head SHA that is authorized.'
         required: false
         type: string
         default: ''
@@ -63,8 +81,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          # Only through env, never interpolated into a script; `runway` validates it.
+          # Only through env, never interpolated into a script; `runway` validates each.
+          MODE_INPUT: ${{ inputs.mode }}
           PR_INPUT: ${{ inputs.pr }}
+          HEAD_INPUT: ${{ inputs.head }}
+          # The workflow's own context, which no input can set. `runway` checks the actor's
+          # permission with GitHub.
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
         run: node scripts/dispatch/cli.mjs runway
 
       # Deleting a merged PR's head branch is an explicit act of the sweep. The

@@ -3,7 +3,9 @@
  * Triggers the landing sweep once a pull request is landable, and waits for it
  * to merge (OQ-50). The sweep, `.github/workflows/land-approved.yml`, is the
  * only thing that merges; this module never does. Its one write is a
- * `workflow_dispatch` of that workflow on `main`, whose one input names this pull request.
+ * `workflow_dispatch` of that workflow on `main`. Unattended, its one input names this pull
+ * request. Manual (ST-54), its inputs are `mode: manual`, this pull request and the full head SHA
+ * the request authorizes. The runway checks each against GitHub and against the project's `main`.
  *
  * Landable means: not a draft, no `review-blocked` label, `review/agent` = `success` on the head
  * SHA, the checks the settings' `landWhen` names green on the head (read with `checksGreen`,
@@ -22,7 +24,10 @@
  * status after a verdict (`GATE_LAG_BOUND_MS`) and the runway's merge after a trigger
  * (`SWEEP_RUN_BOUND_MS`). It waits for nothing else, leaving anything of unknown length, such as
  * checks still running, to a later rotation. Called with `once` (ST-23, ST-51) it waits for those
- * two and no other: see `landPullRequest`. With the settings' `land` false it sends nothing at all.
+ * two and no other: see `landPullRequest`. Unattended, with the settings' `land` false, it sends
+ * nothing at all. The standalone `land` command below is a manual request (ST-54): one gated
+ * landing of one pull request at one head, valid whether `land` is true or false. It changes no
+ * setting, label or standing permission, and no other caller requests it.
  *
  * Latency bound (AC-5): a pull request is polled every `POLL_INTERVAL_MS`, and
  * the first trigger is sent in the same iteration that first sees it landable.
@@ -55,6 +60,9 @@ import { assertLandWhen, checksGreen, mergeableOutcome } from '../land/checks-gr
 const API = 'https://api.github.com'
 const CHECK_RUNS_PAGE = 100
 const WORKFLOW = 'land-approved.yml'
+const SHA_PATTERN = /^[0-9a-f]{40}$/
+export const MANUAL = 'manual'
+export const UNATTENDED = 'unattended'
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 export const DEFAULT_LATENCY_LOG = path.join(HERE, '..', '..', 'logs', 'land-latency.jsonl')
 
@@ -112,12 +120,29 @@ export function buildGetCommitStatus(repo, sha) {
   return { method: 'GET', url: `${repoPath(repo)}/commits/${sha}/status` }
 }
 
-/** The one write: dispatch the sweep on `main`, naming the one pull request it may land. */
+/**
+ * The one write, in its unattended form: dispatch the sweep on `main`, naming the one pull request
+ * it may land. It carries no `mode`, so the runway reads it as unattended and lands only where the
+ * project's `land` on `main` is true.
+ */
 export function buildDispatchSweep(repo, number) {
   return {
     method: 'POST',
     url: `${repoPath(repo)}/actions/workflows/${WORKFLOW}/dispatches`,
     body: { ref: 'main', inputs: { pr: String(requirePrNumber(number)) } },
+  }
+}
+
+/**
+ * The one write, in its manual form (ST-54): the same dispatch, with `mode: manual`, the pull
+ * request and the full head SHA the request authorizes, and nothing else.
+ */
+export function buildDispatchManualLanding(repo, number, head) {
+  if (!SHA_PATTERN.test(head ?? '')) throw new Error(`head must be a full 40-character SHA, got: ${head}`)
+  return {
+    method: 'POST',
+    url: `${repoPath(repo)}/actions/workflows/${WORKFLOW}/dispatches`,
+    body: { ref: 'main', inputs: { mode: MANUAL, pr: String(requirePrNumber(number)), head } },
   }
 }
 
@@ -128,7 +153,7 @@ const ALLOWED = [
   ['POST', new RegExp(`^/actions/workflows/${WORKFLOW.replace('.', '\\.')}/dispatches$`)],
 ]
 
-/** Throws unless `request` is one of the four this module builds. Runs before any network call. */
+/** Throws unless `request` is one of the four this module builds, a dispatch in either form. Runs before any network call. */
 export function assertAllowedRequest(repo, request) {
   const prefix = repoPath(repo)
   const url = typeof request?.url === 'string' ? request.url : ''
@@ -140,9 +165,14 @@ export function assertAllowedRequest(repo, request) {
   const keys = body === undefined ? [] : Object.keys(body)
   const inputKeys = body?.inputs && typeof body.inputs === 'object' ? Object.keys(body.inputs) : []
   const isDispatch = request.method === 'POST'
+  const hasPr = typeof body?.inputs?.pr === 'string' && /^[1-9][0-9]*$/.test(body.inputs.pr)
+  // Two bodies only: `{ pr }` (unattended) and `{ mode: 'manual', pr, head }` (ST-54).
+  const unattended = inputKeys.length === 1 && inputKeys[0] === 'pr'
+  const manual =
+    inputKeys.length === 3 && ['mode', 'pr', 'head'].every((key) => inputKeys.includes(key)) &&
+    body.inputs.mode === MANUAL && SHA_PATTERN.test(typeof body.inputs.head === 'string' ? body.inputs.head : '')
   const ok = isDispatch
-    ? keys.length === 2 && keys.includes('ref') && keys.includes('inputs') && body.ref === 'main' &&
-      inputKeys.length === 1 && inputKeys[0] === 'pr' && typeof body.inputs.pr === 'string' && /^[1-9][0-9]*$/.test(body.inputs.pr)
+    ? keys.length === 2 && keys.includes('ref') && keys.includes('inputs') && body.ref === 'main' && hasPr && (unattended || manual)
     : keys.length === 0
   if (!ok) throw new Error(`refusing a request with an unexpected body: ${request.method} ${url}`)
 }
@@ -282,7 +312,14 @@ function assessChecks(pr, checks) {
  * polled for its merge for at most `SWEEP_RUN_BOUND_MS`: `merged`, or `sweep-pending` if it has
  * not merged by then. It is never triggered a second time.
  *
- * With `ctx.landing` false, either mode returns `landing-off` before any request is sent.
+ * `mode`, optional (ST-54): `unattended` (the default) or `manual`. Unattended is standing
+ * permission and needs `ctx.landing` true: with it false, either `once` setting returns
+ * `landing-off` before any request is sent. Manual is one explicit request, valid with either value
+ * of `ctx.landing`, which it neither reads nor changes. It binds to the first head it reads and
+ * sends that head in its dispatch; if the head changes, while waiting or after the dispatch, it
+ * returns `head-changed` with the `newHeadSha` and sends nothing further. Only the standalone
+ * `land` command passes it. `onBound`, optional, is called once with `{ mode, pr, headSha }` when
+ * a manual request has read the head it is bound to.
  */
 export async function landPullRequest({
   number,
@@ -292,8 +329,12 @@ export async function landPullRequest({
   latencyLog = DEFAULT_LATENCY_LOG,
   passedAt,
   once = false,
+  mode = UNATTENDED,
+  onBound,
 }) {
   requirePrNumber(number)
+  if (mode !== UNATTENDED && mode !== MANUAL) throw new Error(`mode must be "${UNATTENDED}" or "${MANUAL}", got: ${JSON.stringify(mode)}`)
+  const manual = mode === MANUAL
   const startedAt = now()
   const times = { landableAt: null, triggeredAt: null, mergedAt: null }
   let triggers = 0
@@ -303,15 +344,20 @@ export async function landPullRequest({
   let gateLagSince = null // `once` only: when the gate's status was first read as not `success`
 
   const finish = async (status, extra = {}) => {
-    const result = { status, pr: number, headSha, triggers, ...extra }
+    const result = { status, pr: number, headSha, mode, triggers, ...extra }
     await recordLatency(latencyLog, { ...result, ...toIso(times), startedAt: new Date(startedAt).toISOString(), endedAt: new Date(now()).toISOString() })
     return result
   }
 
+  // A manual request sends the head it is bound to; an unattended one names the pull request only.
+  const dispatch = () => (manual ? buildDispatchManualLanding(ctx.repo, number, headSha) : buildDispatchSweep(ctx.repo, number))
+  // A head that is not the one first read: a manual request ends and needs a new invocation.
+  const headChanged = (pr) => finish(manual ? 'head-changed' : 'head-moved', { newHeadSha: pr.headSha })
+
   // `once`: the one trigger, then the merge polled for at most one sweep run's bound.
   const triggerOnce = async () => {
     times.landableAt = now()
-    await ctx.send(buildDispatchSweep(ctx.repo, number))
+    await ctx.send(dispatch())
     triggers += 1
     times.triggeredAt = now()
     for (;;) {
@@ -323,12 +369,13 @@ export async function landPullRequest({
         return finish('merged')
       }
       if (pr.state !== 'open') return finish('closed')
-      if (pr.headSha !== headSha) return finish('head-moved', { newHeadSha: pr.headSha })
+      if (pr.headSha !== headSha) return headChanged(pr)
     }
   }
 
-  // Anything but an explicit `true` is off, so a context built by hand fails closed.
-  if (ctx.landing !== true) return finish('landing-off')
+  // Anything but an explicit `true` is off, so a context built by hand fails closed. A manual
+  // request is its own authorization and does not read `ctx.landing`.
+  if (!manual && ctx.landing !== true) return finish('landing-off')
 
   for (;;) {
     const pr = readPullRequest(await ctx.send(buildGetPullRequest(ctx.repo, number)))
@@ -337,7 +384,8 @@ export async function landPullRequest({
       return finish('merged')
     }
     if (pr.state !== 'open') return finish('closed')
-    if (headSha !== null && pr.headSha !== headSha) return finish('head-moved', { newHeadSha: pr.headSha })
+    if (headSha !== null && pr.headSha !== headSha) return headChanged(pr)
+    if (headSha === null && manual) onBound?.({ mode, pr: number, headSha: pr.headSha })
     headSha = pr.headSha
 
     // Not asked for at all when the pull request is a draft or blocked: the answer changes nothing.
@@ -373,7 +421,7 @@ export async function landPullRequest({
       times.landableAt ??= now()
       if (lastTriggerAt === null || now() - lastTriggerAt >= SWEEP_RUN_BOUND_MS) {
         if (triggers >= MAX_TRIGGERS) return finish('trigger-limit')
-        await ctx.send(buildDispatchSweep(ctx.repo, number))
+        await ctx.send(dispatch())
         triggers += 1
         lastTriggerAt = now()
         times.triggeredAt ??= lastTriggerAt
@@ -425,30 +473,53 @@ export async function recentLandingLatencies(n = 10, file = DEFAULT_LATENCY_LOG)
 
 // --------------------------------------------------------------------- CLI
 
-async function main(argv) {
+/**
+ * The `land` command. `deps` are for tests: `readSettings`, `fetch` and `getToken` (for the
+ * context), `sleep`, `now`, `latencyLog`, `cwd` and `out`, a function printing a line. Returns the
+ * pilot's result for a landing request, which the command line turns into its exit code.
+ */
+export async function main(argv, deps = {}) {
+  const out = deps.out ?? ((line) => console.log(line))
+  const settingsOf = deps.readSettings ?? readSettings
+  const cwd = deps.cwd ?? process.cwd()
   const args = [...argv]
   const latencyAt = args.indexOf('--latency')
   if (latencyAt !== -1) {
     const n = args[latencyAt + 1] === undefined ? 10 : Number(args[latencyAt + 1])
     if (!Number.isInteger(n) || n <= 0) throw new Error('usage: node scripts/dispatch/land.mjs --latency [N]')
-    console.log(JSON.stringify(await recentLandingLatencies(n), null, 2))
+    out(JSON.stringify(await recentLandingLatencies(n, deps.latencyLog), null, 2))
     return
   }
   const repoAt = args.indexOf('--repo')
-  const repo = repoAt === -1 ? (await readSettings(process.cwd())).repo : args.splice(repoAt, 2)[1]
+  const repo = repoAt === -1 ? (await settingsOf(cwd)).repo : args.splice(repoAt, 2)[1]
   const number = Number(args[0])
   if (args.length !== 1 || !Number.isInteger(number) || number <= 0) {
     throw new Error('usage: node scripts/dispatch/land.mjs <pr-number> [--repo owner/name]')
   }
-  const { land: landing, landWhen } = await readSettings(process.cwd())
-  const result = await landPullRequest({ number, ctx: createLandContext({ repo, landing, landWhen }) })
-  console.log(JSON.stringify(result, null, 2))
-  if (result.status !== 'merged') process.exitCode = 1
+  const { land: landing, landWhen } = await settingsOf(cwd)
+  const ctx = createLandContext({ repo, landing, landWhen, fetch: deps.fetch, getToken: deps.getToken })
+  // The one place that asks for a manual landing (ST-54).
+  const result = await landPullRequest({
+    number,
+    ctx,
+    mode: MANUAL,
+    onBound: ({ mode, pr, headSha }) => out(`${mode} landing requested: project ${repo}, PR #${pr}, head ${headSha}`),
+    ...(deps.sleep ? { sleep: deps.sleep } : {}),
+    ...(deps.now ? { now: deps.now } : {}),
+    ...(deps.latencyLog ? { latencyLog: deps.latencyLog } : {}),
+  })
+  out(JSON.stringify({ project: repo, ...result }, null, 2))
+  return result
 }
 
 if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
-  main(process.argv.slice(2)).catch((error) => {
-    console.error(error.message)
-    process.exitCode = 1
-  })
+  main(process.argv.slice(2)).then(
+    (result) => {
+      if (result !== undefined && result.status !== 'merged') process.exitCode = 1
+    },
+    (error) => {
+      console.error(error.message)
+      process.exitCode = 1
+    },
+  )
 }

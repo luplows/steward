@@ -36,8 +36,9 @@ This file applies to every session. Each role has its own instructions as well:
   through pull requests, and no tag or release branch is ever moved or deleted.
 - The sweep lands one eligible pull request per run, only when triggered, so a merge-ready pull
   request waits. A run given a pull request (`land.mjs` always gives one) considers only that one;
-  a run given none lands the oldest. Its eligibility rules and the `review-blocked` circuit
-  breaker are defined in `scripts/land/runway.mjs`, which `land-approved.yml` runs.
+  a run given none is unattended, and lands the oldest only where `land` is true on `main`. Its
+  eligibility rules and the `review-blocked` circuit breaker are defined in
+  `scripts/land/runway.mjs`, which `land-approved.yml` runs.
 
 ## Claims about this repository
 

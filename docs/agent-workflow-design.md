@@ -360,12 +360,14 @@ it:
   `SWEEP_RUN_BOUND_MS`, returning `merged` or `sweep-pending`. The other wait comes first: when it
   holds a pass at the current head and `review/agent` on it is not `success`, it reads the status
   every `POLL_INTERVAL_MS` for up to `GATE_LAG_BOUND_MS`, goes on once it reads `success`, and
-  returns `not-landable` with the reason `gate-lag` if the gate has not caught up by then. With the
-  settings' `land` false it currently sends nothing and returns `landing-off`.
-  **Planned (ST-54):** that restriction applies to unattended calls; the crew's explicit manual
-  `land` request is scoped to one PR and head and goes through all the same gate checks. The
-  runway enforces the distinction as well; see "Manual landing and review-only installation
-  defaults", Part 3. The runway was
+  returns `not-landable` with the reason `gate-lag` if the gate has not caught up by then. A call
+  is unattended by default, and with the settings' `land` false an unattended call sends nothing
+  and returns `landing-off`. The standalone `steward land <pr-number>` command is the only caller
+  that asks for `manual`: one explicit request for one pull request at the first head the pilot
+  reads, valid whether `land` is true or false. It sends that head in its dispatch, and if the head
+  changes, while waiting or after the dispatch, it returns `head-changed` and sends nothing more.
+  It goes through all the same gate checks, and the runway enforces the distinction as well; see
+  "Manual landing and review-only installation defaults", Part 3. The runway was
   a `*/15` schedule until 2026-09-18, which GitHub delivered at roughly 5% of that rate
   (**Watchdog**, below).
 - **It lands when the checks the settings' `landWhen` names are green on the head**, as well as
@@ -395,17 +397,17 @@ it:
   rather than guessing. A run started soon after the previous merge can therefore land nothing
   even though a pull request is ready. That is safe, and it is why back-to-back manual runs
   sometimes need one more. See **GitHub mechanics** below and OQ-50.
-- **The named pull request, or else the oldest.** The runway takes an optional `pr` input, and the
-  pilot always names its own pull request in it. A run given a pull request considers only that
-  one and lands nothing if it is not landable, so the pilot lands what it was called for and
-  nothing else. A run given none, such as the crew's `gh workflow run`, lands the oldest landable
-  one, so nothing starves. The rotation decides which pull request is ready, and a runway that
+- **The named pull request, or else the oldest.** The runway takes an optional `pr` input (with
+  `mode` and `head`, below), and the pilot always names its own pull request in it. A run given a
+  pull request considers only that one and lands nothing if it is not landable, so the pilot lands
+  what it was called for and nothing else. A run given none, such as the crew's
+  `gh workflow run`, lands the oldest landable one, so nothing starves. The rotation decides which pull request is ready, and a runway that
   landed a different one would spend the pilot's requests and land pull requests nobody asked it
   to (decided 2026-09-28). The candidate choice is made in `scripts/land/select-candidates.mjs`,
   which `runway.mjs` calls and which is tested without running the workflow.
-  **Planned (ST-54):** an unscoped dispatch is unattended and requires the project's `land` to
-  be true on `main`. With landing off, manual mode must explicitly name one PR and full head
-  SHA and have an authorized workflow actor; it never picks the oldest PR as a fallback.
+  An unscoped dispatch is unattended and requires the project's `land` to be true on `main`.
+  With landing off, manual mode must explicitly name one PR and full head SHA and have an
+  authorized workflow actor; it never picks the oldest PR as a fallback.
 - **Re-checks `review/agent` directly** rather than trusting branch protection to require it,
   because a required check vanished from protection once. Prevention, not detection.
 - **`--match-head-commit`**, which refuses the merge if anything was pushed between the check and
@@ -757,7 +759,9 @@ request whose head has an honoured `pass` or `pass-with-observations` verdict, w
 go-ahead (owner, 2026-10-12); the pilot itself looks for green CI. A pull request that passed in
 the same rotation lands in it, the pilot waiting for the gate's status, and the rotation prints
 each pull request's line as its step is decided, step 3's lines, then step 4's, then inspection's
-output, and the stop line, if it stopped, last. The controller never runs
+output, and the stop line, if it stopped, last. The controller runs `land.mjs` by itself only for
+one manual request, for the one pull request the crew names (Part 3, "Manual landing and
+review-only installation defaults"). The controller never runs
 `gh workflow run land-approved.yml`, and never merges through the API or any other way. No other
 agent session starts the runway. `AGENTS.md`, "Every session", and `docs/controller.md` state the
 rule; this section is its rationale.
@@ -963,7 +967,8 @@ one. What keeps ATC from clearing its own gate is not credential scope:
 - **`land-approved.yml` is started only by the crew, by hand, or when the pilot, `land.mjs`,
   requests landing; no other agent session starts it.** `land.mjs` is the one module that
   starts it. Its own allowlist permits that one dispatch (`main`, with the one input `pr` naming
-  its pull request) and no other write, and neither `coder.mjs` nor `review.mjs` imports it. For
+  its pull request, or for a manual request the three inputs `mode: manual`, `pr` and `head`) and
+  no other write, and neither `coder.mjs` nor `review.mjs` imports it. For
   the controller it is a rule, not a mechanism (**The controller**, above).
 
 A genuinely separated credential needs a second GitHub identity, which is item 10 of the open
@@ -1987,8 +1992,10 @@ shortened where it is long, so that it can be found there with its date.
   - The reviewer given the linked unit, read from `main`, and the note on what was found, as two
     blocks, and verifying by reading, searching and diffing, with no check run and nothing
     installed (`scripts/dispatch/review.mjs`, `.claude/prompts/reviewer.md`).
-  - Landing in one look, without waiting, and a project able to turn steward's landing off
-    (`scripts/dispatch/land.mjs`: `landPullRequest`'s `once` option, and `landing` on its context).
+  - Landing in one look, without waiting, and a project able to turn steward's unattended landing
+    off (`scripts/dispatch/land.mjs`: `landPullRequest`'s `once` option, and `landing` on its
+    context), with a manual request for one gated landing still possible when it is off
+    (`landPullRequest`'s `mode`, and the runway's authorization in `scripts/land/runway.mjs`).
   - Landing when the checks `landWhen` names are green, in the pilot and the runway, rather than
     on `mergeable_state` `clean` (`scripts/land/checks-green.mjs`, `scripts/dispatch/land.mjs`,
     `scripts/land/runway.mjs`).
@@ -2719,31 +2726,38 @@ shortened where it is long, so that it can be found there with its date.
     (owner).
 
 - **Manual landing and review-only installation defaults** (crew, 2026-10-26).
-  - **Planned (ST-54):** standing permission for unattended landing differs from the crew
-    explicitly requesting one gated landing. The existing boolean `land` becomes unattended
-    permission. Among pilot callers, only the standalone `steward land <pr-number>` command
-    selects manual mode; direct workflow dispatch has the separate authorized path below.
-    Programmatic pilot calls default to unattended, and rotations and frozen-loop callers never
-    select manual mode. A manual request binds to the first head it reads and ends if that head
-    changes, including while waiting or after dispatch. It grants no future permission and
-    changes no project setting. Existing wait bounds and ST-53's separate refinement remain.
-  - **Planned (ST-54):** the runway reads both `land` and `landWhen` from the project's `main`.
-    Missing, unreadable or invalid authorization fails closed. An unattended trigger requires
-    `land: true`, even if a caller's local settings say otherwise. The two runway workflow files
-    expose `mode` (default `unattended`), `pr` and `head`. A manual request explicitly selects
-    `manual`, one positive PR number and a full SHA; the current head must match. The workflow
-    supplies its real dispatch actor and event through trusted context, never actor input, and
-    the runway verifies the actor's write, maintain or admin permission through GitHub. An
-    ordinary direct trigger, including one naming only a PR, cannot bypass `land: false`.
-    A fully scoped manual workflow trigger by an authorized actor is itself an explicit request.
-  - **Planned (ST-54):** manual mode preserves supported bases, PR author eligibility, draft
-    refusal, `review-blocked`, circuit-breaker rules, `review/agent` on the current head,
-    `landWhen`, mergeability and the final status re-check and `--match-head-commit` merge.
-    The pilot still only dispatches; the runway alone merges, at most one PR per run. Logs name
-    mode, actor, PR, authorized head and outcome. A mode input is not proof that a human is at
-    the terminal: software holding the crew's write credential can intentionally request manual
-    mode too. This is scoped authorization within the existing trusted-credential model,
-    not credential isolation or protection from a malicious credential holder.
+  - Standing permission for unattended landing differs from the crew explicitly requesting one
+    gated landing. The existing boolean `land` is unattended permission. Among pilot callers,
+    only the standalone `steward land <pr-number>` command selects manual mode; direct workflow
+    dispatch has the separate authorized path below. `landPullRequest` defaults to unattended,
+    and rotations and frozen-loop callers never select manual mode. A manual request binds to
+    the first head it reads and ends with `head-changed` if that head changes, including while
+    waiting or after dispatch; it needs a new invocation. It grants no future permission and
+    changes no project setting, label or standing permission. Existing wait bounds and ST-53's
+    separate refinement remain.
+  - The runway reads both `land` and `landWhen` from the project's `main`, before it looks at any
+    pull request. Missing, unreadable or invalid authorization fails closed, with the reason in
+    the log and a failed run. An unattended trigger requires `land: true`, even if a caller's
+    local settings say otherwise. The two runway workflow files expose `mode` (default
+    `unattended`), `pr` and `head`, which reach the runway through the environment, never
+    interpolated into shell text. A manual request explicitly selects `manual`, one positive PR
+    number and a full lowercase 40-character SHA; the current head must match, at the runway as
+    well as at the pilot. The workflow supplies its real dispatch actor and event (`github.actor`,
+    `github.event_name`) through trusted context, never actor input, and the runway verifies that
+    the event is `workflow_dispatch` and that GitHub gives the actor write, maintain or admin
+    permission on the repository (the collaborator permission endpoint; the job's `permissions:`
+    are unchanged). An ordinary direct trigger, including one naming only a PR, cannot bypass
+    `land: false`, and a head given without `mode: manual` is refused. A fully scoped manual
+    workflow trigger by an authorized actor is itself an explicit request.
+  - Manual mode preserves supported bases, PR author eligibility, draft refusal,
+    `review-blocked`, circuit-breaker rules, `review/agent` on the current head, `landWhen`,
+    mergeability and the final status re-check and `--match-head-commit` merge. The pilot still
+    only dispatches; the runway alone merges, at most one PR per run. Logs name mode, actor, PR,
+    authorized head and outcome, and an unattended run logs its standing-authorization decision.
+    A mode input is not proof that a human is at the terminal: software holding the crew's write
+    credential can intentionally request manual mode too. This is scoped authorization within the
+    existing trusted-credential model, not credential isolation or protection from a malicious
+    credential holder.
   - **Planned (ST-55):** 0.1 installs review-only by default: the landing question defaults to
     no and writes `land: false`, including under `--yes`. An explicit yes or `--land yes` opts
     into unattended landing. Prompt, help and final output explain the choice and ST-54's manual
