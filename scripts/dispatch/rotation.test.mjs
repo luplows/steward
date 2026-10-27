@@ -734,3 +734,33 @@ describe('ST-51/AC-5: the rotation prints in the order things happen', () => {
     ])
   })
 })
+
+describe('ST-54/AC-2: a rotation never requests a manual landing', () => {
+  it('ST-54/AC-2: with land true, the pilot is called without a mode, so unattended', async () => {
+    const seen = []
+    const h = harness({
+      lists: [[pr(1)]],
+      comments: { 1: [marker(SHA('a'), 'pass')] },
+      land: async (args) => {
+        seen.push(args)
+        return { status: 'merged' }
+      },
+    })
+    await h.run()
+    expect(seen).toHaveLength(1)
+    expect('mode' in seen[0]).toBe(false)
+    expect(seen[0].ctx.landing).toBe(true)
+  })
+
+  it('ST-54/AC-2: with land false, it still reviews and sends the pilot nothing', async () => {
+    const h = harness({
+      lists: [[pr(1)], [pr(1)]],
+      comments: { 1: [marker(SHA('a'), 'pass')] },
+      settings: { land: false },
+    })
+    const result = await h.run()
+    expect(landsOf(h.calls)).toEqual([])
+    expect(h.lines).toContain('#1 not landed: landing is off in the settings')
+    expect(result.exitCode).toBe(0)
+  })
+})

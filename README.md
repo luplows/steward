@@ -42,7 +42,7 @@ Then, from a checkout of the repository:
 
 ```sh
 node scripts/dispatch/cli.mjs review <pr-number>   # review the pull request at its head
-node scripts/dispatch/cli.mjs land <pr-number>     # land it, once it has passed and is green
+node scripts/dispatch/cli.mjs land <pr-number>     # one explicit, gated landing
 node scripts/dispatch/cli.mjs rotation             # one run of the review side: review what needs it, land what has passed, then inspect
 node scripts/dispatch/cli.mjs inspect              # raise a merge without a passing verdict, or a stall, on main or a release branch
 ```
@@ -146,7 +146,29 @@ For everyone:
 The crew is the repository's owner, members and collaborators (`HONOURED_ASSOCIATIONS`,
 `scripts/land/check-author.mjs`). Steward picks up a crew member's pull request once it is marked
 ready: it is reviewed against [`REVIEW.md`](REVIEW.md), and lands once it passes and CI is green
-([`docs/controller.md`](docs/controller.md)).
+([`docs/controller.md`](docs/controller.md)), where the project has opted into unattended landing.
+
+### Landing: unattended and manual
+
+There are two authorizations. The `land` setting of `steward.config.json` is the project's standing
+permission for unattended landing; `true` is the opt-in. A rotation lands only where it is `true`,
+and the runway reads it from `main` and merges nothing unattended where it is `false`, whatever
+the caller's own settings say. With `land: false` steward still reviews and posts `review/agent`,
+and the crew can land a pull request that has passed with `steward land <pr-number>`: one manual
+request, valid with either value of `land`, for that pull request at the head it first reads. It
+changes no setting, label or standing permission, and it goes through the same gate as any landing:
+the runway still requires every condition it requires of an unattended one, and merges with
+`--match-head-commit`. If the head changes, or the pull request is merged or closed at another
+head, the request ends (`head-changed`) and the crew must ask again.
+
+`land-approved.yml` takes the same two paths when dispatched directly. Its inputs are `pr`, `mode`
+(`unattended`, the default, or `manual`) and `head`. A dispatch with no mode, or with only a pull
+request, is unattended and so lands nothing where `land` is `false`. A manual one names
+`mode: manual`, one pull request and its full 40-character head SHA, and is started by someone
+GitHub says has write, maintain or admin permission on the repository; the workflow takes that
+actor from its own event, never from an input. A mode is an explicit authorization, not proof that
+a person is at a terminal or that credentials are isolated: a tool holding the crew's write
+credential can send a manual request too.
 
 ### From outside the crew
 

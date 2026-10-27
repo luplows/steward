@@ -20,7 +20,7 @@ describe('ST-42/AC-1: runway lands the oldest ready pull request, once', () => {
   it('ST-42/AC-1: with nothing open, or only drafts and other bases, lands nothing', () => {
     const none = fakeGitHub({ pulls: [] })
     expect(runRunway({ repo: REPO }, none.deps)).toEqual({ landed: null })
-    expect(none.logs).toEqual(['No open non-draft PR against main to try.'])
+    expect(none.logs.at(-1)).toBe('No open non-draft PR against main to try.')
     const skipped = fakeGitHub({ pulls: [pull(1, { draft: true }), pull(2, { base: 'other' })] })
     expect(runRunway({ repo: REPO }, skipped.deps)).toEqual({ landed: null })
     expect(skipped.merges).toEqual([])
@@ -70,11 +70,11 @@ describe('ST-42/AC-1: runway lands the oldest ready pull request, once', () => {
     expect(logs).toContain(`PR #1: review/agent=absent on ${SHA_OF(1)}, skipping`)
   })
 
-  it('ST-42/AC-1: an unreadable landWhen skips the pull request rather than landing it', () => {
+  it('ST-42/AC-1: an unreadable landWhen lands nothing, saying why (ST-54/AC-4 reads it before any pull request)', () => {
     const { deps, merges, logs } = fakeGitHub({ pulls: [pull(1)], landWhen: 'some' })
-    expect(runRunway({ repo: REPO }, deps)).toEqual({ landed: null })
+    expect(runRunway({ repo: REPO }, deps)).toMatchObject({ landed: null })
     expect(merges).toEqual([])
-    expect(logs.some((line) => line.startsWith(`PR #1: not landable on ${SHA_OF(1)}: landWhen must be`))).toBe(true)
+    expect(logs.some((line) => line.startsWith('::error title=Landing refused::') && line.includes('landWhen must be'))).toBe(true)
   })
 })
 
@@ -94,7 +94,7 @@ describe('ST-42/AC-1: the circuit breaker, with its limit of five and its two ex
     const { deps, logs, merges } = fakeGitHub({ pulls: [pull(1)], blockedCount: 5 })
     expect(runRunway({ repo: REPO }, deps)).toEqual({ landed: null })
     expect(merges).toEqual([])
-    expect(logs[0]).toBe(
+    expect(logs).toContain(
       '::warning title=Circuit breaker tripped::5 open PRs carry review-blocked; landing only breaker-override or workflow-only PRs.',
     )
     expect(logs).toContain('PR #1: breaker tripped and no exemption, skipping')

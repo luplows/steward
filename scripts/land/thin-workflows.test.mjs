@@ -281,3 +281,60 @@ describe('ST-44/AC-6: the thin inspection workflow the package carries stays in 
     }
   })
 })
+
+describe('ST-54/AC-6: the landing workflows take the mode, the pull request and the head, and pass them through env', () => {
+  const FILE = 'land-approved.yml'
+  const texts = () => [OWN(FILE), THIN(FILE)]
+  const step = (text) => text.slice(text.indexOf('      - name: Land the oldest ready PR'), text.indexOf('      # Deleting a merged'))
+
+  it('ST-54/AC-6: both files declare the inputs pr, mode (default unattended) and head, all optional strings', () => {
+    for (const text of texts()) {
+      const inputs = text.slice(text.indexOf('  workflow_dispatch:'), text.indexOf('\npermissions:'))
+      expect([...inputs.matchAll(/^ {6}(\w+):$/gm)].map((m) => m[1])).toEqual(['pr', 'mode', 'head'])
+      expect(inputs).toMatch(/ {6}mode:\n(?: {8}[^\n]*\n)*? {8}default: 'unattended'\n/)
+      expect(inputs.match(/required: false/g)).toHaveLength(3)
+      expect(inputs.match(/type: string/g)).toHaveLength(3)
+      expect(inputs).not.toMatch(/\bactor\b/i)
+    }
+  })
+
+  it('ST-54/AC-6: the runway step receives each input and the trusted context only as env values', () => {
+    for (const text of texts()) {
+      const landing = step(text)
+      expect(landing).toMatch(/^ {10}MODE_INPUT: \$\{\{ inputs\.mode \}\}$/m)
+      expect(landing).toMatch(/^ {10}PR_INPUT: \$\{\{ inputs\.pr \}\}$/m)
+      expect(landing).toMatch(/^ {10}HEAD_INPUT: \$\{\{ inputs\.head \}\}$/m)
+      expect(landing).toMatch(/^ {10}EVENT_NAME: \$\{\{ github\.event_name \}\}$/m)
+      expect(landing).toMatch(/^ {10}ACTOR: \$\{\{ github\.actor \}\}$/m)
+    }
+  })
+
+  it('ST-54/AC-6: no run: line interpolates anything, so no input or actor reaches shell text', () => {
+    for (const text of texts()) {
+      for (const [, run] of text.matchAll(/^\s*run:(.*)$/gm)) {
+        expect(run).not.toContain('${{')
+        expect(run).not.toMatch(/inputs|github\.actor|github\.event/)
+      }
+    }
+  })
+
+  it('ST-54/AC-6: the job holds the permissions it held, none added for the permission check', () => {
+    for (const text of texts()) {
+      const permissions = text.slice(text.indexOf('\npermissions:'), text.indexOf('\n# Never two sweeps'))
+      expect(permissions.replace(/ +#[^\n]*\n/g, '\n').replace(/\n+/g, '\n')).toBe(
+        '\npermissions:\n  contents: write\n  pull-requests: write\n  statuses: read\n  checks: read\n',
+      )
+    }
+  })
+
+  it('ST-54/AC-6: fails on a thin file that drops one of the new env values or inputs', () => {
+    for (const line of ['          HEAD_INPUT: ${{ inputs.head }}\n', '          ACTOR: ${{ github.actor }}\n', '          MODE_INPUT: ${{ inputs.mode }}\n']) {
+      const lost = THIN(FILE).replace(line, () => '')
+      expect(lost).not.toBe(THIN(FILE))
+      expect(firstDifference(OWN(FILE), lost)).not.toBeNull()
+    }
+    const lostInput = THIN(FILE).replace(/ {6}head:\n(?: {8}[^\n]*\n)+/, () => '')
+    expect(lostInput).not.toBe(THIN(FILE))
+    expect(firstDifference(OWN(FILE), lostInput)).not.toBeNull()
+  })
+})

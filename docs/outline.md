@@ -456,12 +456,12 @@ settles it.
   should be optional for projects with other gating rules). Steward still reviews and posts
   `review/agent`, but does not merge; the project merges by its own rules. Steward then never
   merges without a verdict, because it never merges there (Never, above).
-  **Planned (ST-54): revised by the crew, 2026-10-26.** `land: false` disables unattended
-  landing; an explicit `steward land <pr-number>` request may still land that PR at its named
-  head through the same gate. A default workflow dispatch is not a manual override. The precise
-  authorization contract is in the design doc, "Manual landing and review-only installation
-  defaults". **Planned (ST-55):** new installations write false by default, with explicit opt-in
-  to unattended landing; existing configuration is preserved.
+  Revised by the crew, 2026-10-26: `land: false` disables unattended landing; an explicit
+  `steward land <pr-number>` request may still land that PR at its named head through the same
+  gate. A default workflow dispatch is not a manual override. The precise authorization contract
+  is in the design doc, "Manual landing and review-only installation defaults".
+  **Planned (ST-55):** new installations write false by default, with explicit opt-in to
+  unattended landing; existing configuration is preserved.
 - **`unitLinks` and `rulesFile`**: as decided under Review, above.
 - **Kept out of the settings:** the cap on reviews per rotation, a command-line option (The two
   sides, below); the machine label, which belongs to a machine, so stays `TW_MACHINE_LABEL`; and
