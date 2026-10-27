@@ -178,7 +178,7 @@ describe('ST-24/AC-3: the runway decides with the same function', () => {
 describe('ST-24/AC-3: the runway decides with it in place of the mergeable_state test', () => {
   it('ST-24/AC-3: it no longer requires mergeable_state to be clean, and decides with checks-green.mjs', () => {
     expect(WORKFLOW).not.toContain('"${mergeable_state}"')
-    expect(SWEEP).toMatch(/import \{ runwayDecision \} from '\.\/checks-green\.mjs'/)
+    expect(SWEEP).toMatch(/import \{[^}]*\brunwayDecision\b[^}]*\} from '\.\/checks-green\.mjs'/)
     // GitHub's `unstable` (a check no rule requires is not green) is landable once the named checks are.
     const { deps } = fakeGitHub({ pulls: [pull(1, { mergeableState: 'unstable' })] })
     expect(runRunway({ repo: REPO }, deps)).toEqual({ landed: 1 })

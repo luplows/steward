@@ -9,6 +9,19 @@
 // newer ones. GitHub recomputes mergeability asynchronously, so a second merge in the same run would
 // be decided on a `mergeable_state` read before the first one landed.
 //
+// Authorization comes first, before any pull request is looked at (ST-54). Two kinds, from the
+// `MODE_INPUT`. Unattended (the default, and what a dispatch naming only a pull request is) is the
+// project's standing permission: the runway reads `land` from `steward.config.json` on `main`, and
+// merges nothing unless it is exactly `true`, whatever the caller's own settings said. Manual is
+// one explicit request by a person with write access: it needs `EVENT_NAME` `workflow_dispatch`, a
+// `PR_INPUT`, a full 40-character `HEAD_INPUT`, and an `ACTOR` (from the workflow's event context,
+// never an input) whom GitHub says has write, maintain or admin permission on the repository. It
+// is valid with either value of `land`, authorizes only that pull request at that head, and never
+// falls back to another. It changes only the `land` restriction: every condition below holds in
+// both. A missing, malformed or unreadable `land` or `landWhen`, an unknown mode, missing scope, a
+// head that is not 40 hex characters or is not the pull request's head, an unqualified actor and an
+// unreadable permission each refuse the merge, with the reason in the log and a failed run.
+//
 // In the order of the workflow this replaced:
 //  1. The circuit breaker. Once `BREAKER_LIMIT` open pull requests carry `review-blocked`,
 //     something systemic is wrong, and landing more only spreads it. A tripped breaker narrows what
@@ -30,15 +43,16 @@
 // command needs no checkout of the project.
 //
 // Usage: steward runway
-// Reads GH_TOKEN, REPO (owner/name) and PR_INPUT from the environment, as land-approved.yml sets them.
+// Reads GH_TOKEN, REPO (owner/name), MODE_INPUT, PR_INPUT, HEAD_INPUT, EVENT_NAME and ACTOR from
+// the environment, as land-approved.yml sets them.
 
 import { existsSync, realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { isHonouredAuthor } from './check-author.mjs'
-import { runwayDecision } from './checks-green.mjs'
+import { assertLandWhen, runwayDecision } from './checks-green.mjs'
 import { gh, ghApi, parseNdjson } from './gh.mjs'
 import { REVIEW_CONTEXT } from './mark-pending.mjs'
-import { selectCandidates } from './select-candidates.mjs'
+import { PR_INPUT_PATTERN, selectCandidates } from './select-candidates.mjs'
 
 export const BREAKER_LIMIT = 5
 export const REVIEW_BLOCKED_LABEL = 'review-blocked'
@@ -46,6 +60,16 @@ export const BREAKER_OVERRIDE_LABEL = 'breaker-override'
 export const WORKFLOWS_DIR = '.github/workflows/'
 export const SETTINGS_PATH = 'steward.config.json'
 export const BASE_BRANCH = 'main'
+export const MODE_UNATTENDED = 'unattended'
+export const MODE_MANUAL = 'manual'
+/** The collaborator permissions of an actor whose manual request is honoured. */
+export const MANUAL_PERMISSIONS = ['admin', 'maintain', 'write']
+export const HEAD_PATTERN = /^[0-9a-f]{40}$/
+/**
+ * A GitHub login: letters, digits and single hyphens, at most 39, so it cannot reshape a request
+ * path.
+ */
+export const ACTOR_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/
 
 const PAGE = 'per_page=100'
 
@@ -57,14 +81,96 @@ export function touchesOnlyWorkflows(changedFiles) {
 }
 
 /**
- * Runs the runway. `deps.api` takes the argument list after `gh api` and returns stdout; `deps.merge`
- * takes the argument list after `gh pr merge`; `deps.log` prints a line. Returns `{ landed }`: the
- * number of the pull request merged, or null. Throws on an invalid `prInput`, or when `gh` fails.
+ * Reads `steward.config.json` on `main` and returns `{ land, landWhen }` with `land` checked to be
+ * a boolean; `landWhen` is returned as read, for the caller to check. Throws, saying why, when
+ * the file cannot be read or parsed, is not an object, or has no boolean `land`.
  */
-export function runRunway({ repo, prInput = '' }, deps = {}) {
+function readAuthorization(api, repo) {
+  let settings
+  try {
+    settings = JSON.parse(api(['-H', 'Accept: application/vnd.github.raw+json', `repos/${repo}/contents/${SETTINGS_PATH}?ref=${BASE_BRANCH}`]))
+  } catch (error) {
+    throw new Error(`${SETTINGS_PATH} on ${BASE_BRANCH} cannot be read: ${error.message}`)
+  }
+  if (settings === null || typeof settings !== 'object' || Array.isArray(settings)) {
+    throw new Error(`${SETTINGS_PATH} on ${BASE_BRANCH} is not an object`)
+  }
+  if (typeof settings.land !== 'boolean') {
+    throw new Error(`${SETTINGS_PATH} on ${BASE_BRANCH}: land must be true or false, got ${JSON.stringify(settings.land)}`)
+  }
+  return { land: settings.land, landWhen: settings.landWhen }
+}
+
+/**
+ * Decides the authorization (ST-54) from the inputs and the project's `main`, before any pull
+ * request is looked at. Returns `{ mode, landWhen }` or `{ refusal }`; the reason names what
+ * failed.
+ */
+function authorize({ repo, modeInput, prInput, headInput, eventName, actor }, api, log) {
+  const mode = modeInput === '' ? MODE_UNATTENDED : modeInput
+  if (mode !== MODE_UNATTENDED && mode !== MODE_MANUAL) {
+    return { refusal: `unknown mode ${JSON.stringify(mode)}; it must be "${MODE_UNATTENDED}" or "${MODE_MANUAL}"` }
+  }
+  if (mode === MODE_MANUAL) {
+    if (eventName !== 'workflow_dispatch') return { refusal: `a manual landing needs a workflow_dispatch event, got ${JSON.stringify(eventName)}` }
+    if (!PR_INPUT_PATTERN.test(prInput)) return { refusal: `a manual landing needs one positive pull request number, got ${JSON.stringify(prInput)}` }
+    if (!HEAD_PATTERN.test(headInput)) return { refusal: `a manual landing needs a full 40-character head SHA, got ${JSON.stringify(headInput)}` }
+    if (!ACTOR_PATTERN.test(actor)) return { refusal: `a manual landing needs a qualified actor from the workflow event, got ${JSON.stringify(actor)}` }
+  } else if (headInput !== '') {
+    return { refusal: 'an unattended landing takes no head; a head belongs to a manual request, which names its mode' }
+  }
+
+  let settings
+  try {
+    settings = readAuthorization(api, repo)
+    assertLandWhen(settings.landWhen)
+  } catch (error) {
+    return { refusal: error.message }
+  }
+
+  if (mode === MODE_UNATTENDED) {
+    if (!settings.land) return { refusal: `standing authorization absent: land is false in ${SETTINGS_PATH} on ${BASE_BRANCH}` }
+    log(`Standing authorization: land is true in ${SETTINGS_PATH} on ${BASE_BRANCH}.`)
+    return { mode, landWhen: settings.landWhen }
+  }
+
+  let permission
+  try {
+    permission = JSON.parse(api([`repos/${repo}/collaborators/${actor}/permission`, '--jq', '.permission | tojson']))
+  } catch (error) {
+    return { refusal: `the permission of ${actor} on ${repo} cannot be read: ${error.message}` }
+  }
+  if (!MANUAL_PERMISSIONS.includes(permission)) {
+    return { refusal: `${actor} has ${JSON.stringify(permission)} permission on ${repo}; a manual landing needs ${MANUAL_PERMISSIONS.join(', ')}` }
+  }
+  log(`Manual authorization: ${actor} has ${permission} permission on ${repo}; land is ${settings.land} in ${SETTINGS_PATH} on ${BASE_BRANCH}.`)
+  return { mode, landWhen: settings.landWhen }
+}
+
+/**
+ * Runs the runway. `deps.api` takes the argument list after `gh api` and returns stdout; `deps.merge`
+ * takes the argument list after `gh pr merge`; `deps.log` prints a line. `modeInput`,
+ * `prInput`, `headInput`, `eventName` and `actor` are the workflow's inputs and event context.
+ * Returns `{ landed }`: the number of the pull request merged, or null; with `refused`, the reason,
+ * when the authorization (or, for a manual landing, the pull request's head) refuses the merge.
+ * Throws on an invalid `prInput` for an unattended landing, or when `gh` fails.
+ */
+export function runRunway({ repo, prInput = '', modeInput = '', headInput = '', eventName = '', actor = '' }, deps = {}) {
   const api = deps.api ?? ghApi
   const merge = deps.merge ?? ((args) => gh(['pr', 'merge', ...args]))
   const log = deps.log ?? ((line) => console.log(line))
+
+  // Raw values are quoted, so that an input cannot add a line, or a workflow command, to the log.
+  const who = `mode=${JSON.stringify(modeInput || MODE_UNATTENDED)} actor=${JSON.stringify(actor)} PR=${JSON.stringify(prInput)} authorized head=${JSON.stringify(headInput)}`
+  const refuse = (reason) => {
+    log(`::error title=Landing refused::${who}: ${reason}`)
+    return { landed: null, refused: reason }
+  }
+  const authorization = authorize({ repo, modeInput, prInput, headInput, eventName, actor }, api, log)
+  if (authorization.refusal) return refuse(authorization.refusal)
+  const { mode, landWhen } = authorization
+  const manual = mode === MODE_MANUAL
+  log(`Landing authorized: ${who}`)
 
   const blockedPrs = JSON.parse(
     api([
@@ -96,6 +202,9 @@ export function runRunway({ repo, prInput = '' }, deps = {}) {
   for (const pr of candidates) {
     const pull = JSON.parse(api([`repos/${repo}/pulls/${pr}`]))
     const sha = pull.head.sha
+    if (manual && sha !== headInput) {
+      return refuse(`PR #${pr} is at ${sha}, not the authorized head ${headInput}; a new request is needed`)
+    }
     const mergeableState = pull.mergeable_state ?? 'unknown'
 
     // Honoured associations: check-author.mjs's, which apply-verdict.mjs's marker reading shares.
@@ -134,9 +243,6 @@ export function runRunway({ repo, prInput = '' }, deps = {}) {
     const statuses = parseNdjson(
       api([`repos/${repo}/commits/${sha}/status?${PAGE}`, '--paginate', '--jq', '.statuses[] | {context, state, id}']),
     )
-    const landWhen = JSON.parse(
-      api(['-H', 'Accept: application/vnd.github.raw+json', `repos/${repo}/contents/${SETTINGS_PATH}?ref=${BASE_BRANCH}`]),
-    ).landWhen
     let decision
     try {
       decision = runwayDecision({ checkRuns, statuses, landWhen, mergeableState })
@@ -163,6 +269,7 @@ export function runRunway({ repo, prInput = '' }, deps = {}) {
     // --match-head-commit refuses the merge if anything was pushed between the checks above and this
     // call. A push would have reset review/agent to pending anyway; this closes the window rather
     // than trusting it to be narrow.
+    log(`Landing PR #${pr}: ${who}, merging at ${sha}`)
     merge([String(pr), '--repo', repo, '--squash', '--match-head-commit', sha])
     log(`::notice title=Landed::PR #${pr} merged at ${sha}`)
     return { landed: pr }
@@ -179,7 +286,15 @@ if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(process.argv[
     process.exitCode = 1
   } else {
     try {
-      runRunway({ repo, prInput: process.env.PR_INPUT ?? '' })
+      const result = runRunway({
+        repo,
+        prInput: process.env.PR_INPUT ?? '',
+        modeInput: process.env.MODE_INPUT ?? '',
+        headInput: process.env.HEAD_INPUT ?? '',
+        eventName: process.env.EVENT_NAME ?? '',
+        actor: process.env.ACTOR ?? '',
+      })
+      if (result.refused) process.exitCode = 1
     } catch (error) {
       console.error(error.message)
       process.exitCode = 1

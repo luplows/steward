@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -18,12 +18,14 @@ import {
   UNKNOWN_BOUND_MS,
   assertAllowedRequest,
   CHECKS_PENDING_BOUND_MS,
+  buildDispatchManualLanding,
   buildDispatchSweep,
   buildGetCheckRuns,
   buildGetCommitStatus,
   buildGetPullRequest,
   createLandContext,
   landPullRequest,
+  main as landCommand,
   recentLandingLatencies,
 } from './land.mjs'
 
@@ -57,7 +59,7 @@ const run = (name, conclusion, id = 1) => ({
  * of `t` ms after the start and the number of dispatches so far; `reviewAt`
  * likewise the `review/agent` state.
  */
-function world({ pullAt, reviewAt = () => 'success', checksAt = () => [], statusesAt = () => [], landWhen = 'all-checks' }) {
+function world({ pullAt, reviewAt = () => 'success', checksAt = () => [], statusesAt = () => [], landWhen = 'all-checks', landing = true }) {
   const w = { t: 0, requests: [], dispatches: [], dispatchTimes: [] }
   const dir = mkdtempSync(path.join(tmpdir(), 'land-test-'))
   w.log = path.join(dir, 'latency.jsonl')
@@ -78,7 +80,9 @@ function world({ pullAt, reviewAt = () => 'success', checksAt = () => [], status
     if (url.includes('/commits/')) return ok(status(reviewAt(w.t), statusesAt(w.t)))
     return ok(pullAt(w.t, w.dispatches.length))
   }
-  const ctx = createLandContext({ repo: REPO, landing: true, landWhen, fetch, getToken: async () => 't' })
+  const ctx = createLandContext({ repo: REPO, landing, landWhen, fetch, getToken: async () => 't' })
+  w.fetch = fetch
+  w.ctx = ctx
   w.run = (opts = {}) =>
     landPullRequest({
       number: 7,
@@ -597,7 +601,7 @@ describe('ST-23: land without waiting for anything of unknown length, and not at
       const calls = source.match(/createLandContext\(\{[^}]*\}\)/g) ?? []
       expect(calls.length, file).toBeGreaterThan(0)
       for (const call of calls) expect(call, file).toMatch(/\blanding\b/)
-      expect(source, file).toMatch(/land: landing\b[^\n]*readSettings\(process\.cwd\(\)\)/)
+      expect(source, file).toMatch(/land: landing\b[^\n]*(?:readSettings|settingsOf)\((?:process\.cwd\(\)|cwd)\)/)
     }
   })
 
@@ -793,6 +797,288 @@ describe('ST-45/AC-3: a pull request into a release branch is landed as one into
     const result = await w.run()
     expect(result).toMatchObject({ status: 'merged', pr: 7, headSha: SHA, triggers: 1 })
     expect(w.dispatches).toEqual([{ method: 'POST', url: `${BASE}/actions/workflows/land-approved.yml/dispatches`, body: { ref: 'main', inputs: { pr: '7' } } }])
+    w.cleanup()
+  })
+})
+
+describe('ST-54: a manual landing is one explicit request, valid with land true or false', () => {
+  const dispatchUrl = `${BASE}/actions/workflows/land-approved.yml/dispatches`
+  const manualBody = (head = SHA) => ({ ref: 'main', inputs: { mode: 'manual', pr: '7', head } })
+
+  it.each([false, true])('ST-54/AC-1: steward land dispatches the same eligible PR in manual mode with land %s', async (landing) => {
+    const w = world({ landing, pullAt: (t, d) => pull({ merged: d > 0 }) })
+    const lines = []
+    const result = await landCommand(['7'], {
+      readSettings: async () => ({ repo: REPO, land: landing, landWhen: 'all-checks' }),
+      fetch: w.fetch,
+      getToken: async () => 't',
+      sleep: async (ms) => { w.t += ms },
+      now: () => w.t,
+      latencyLog: w.log,
+      out: (line) => lines.push(line),
+    })
+    expect(result).toMatchObject({ status: 'merged', mode: 'manual', pr: 7, headSha: SHA, triggers: 1 })
+    expect(w.dispatches).toEqual([{ method: 'POST', url: dispatchUrl, body: manualBody() }])
+    // The report names the mode, the project, the pull request and the full head.
+    expect(lines[0]).toBe(`manual landing requested: project ${REPO}, PR #7, head ${SHA}`)
+    expect(JSON.parse(lines[1])).toMatchObject({ project: REPO, mode: 'manual', pr: 7, headSha: SHA })
+    // It writes nothing else: no setting, label or comment.
+    expect(w.requests.filter((r) => r.method !== 'GET')).toHaveLength(1)
+    w.cleanup()
+  })
+
+  it('ST-54/AC-1: a manual request neither reads nor changes the context\'s standing permission', async () => {
+    for (const landing of [false, true]) {
+      const w = world({ landing, pullAt: (t, d) => pull({ merged: d > 0 }) })
+      expect(await w.run({ mode: 'manual' })).toMatchObject({ status: 'merged', mode: 'manual' })
+      expect(w.ctx.landing).toBe(landing)
+      w.cleanup()
+    }
+  })
+
+  it('ST-54/AC-1: the command takes one pull request number, and refuses anything else before a request', async () => {
+    await expect(landCommand(['x'], { readSettings: async () => ({ repo: REPO, land: false, landWhen: 'all-checks' }) })).rejects.toThrow(/usage/)
+  })
+
+  it('ST-54/AC-2: a programmatic call defaults to unattended, and with land false returns landing-off', async () => {
+    for (const once of [false, true]) {
+      const w = world({ landing: false, pullAt: () => pull() })
+      const result = await w.run({ once })
+      expect(result).toMatchObject({ status: 'landing-off', mode: 'unattended', pr: 7, triggers: 0 })
+      expect(w.requests).toEqual([])
+      w.cleanup()
+    }
+    const w = world({ landing: false, pullAt: () => pull() })
+    expect(await w.run({ mode: 'unattended' })).toMatchObject({ status: 'landing-off' })
+    expect(w.requests).toEqual([])
+    w.cleanup()
+  })
+
+  it('ST-54/AC-2: unattended landing with land true dispatches as before, naming only the pull request', async () => {
+    const w = world({ landing: true, pullAt: (t, d) => pull({ merged: d > 0 }) })
+    expect(await w.run()).toMatchObject({ status: 'merged', mode: 'unattended', triggers: 1 })
+    expect(w.dispatches).toEqual([{ method: 'POST', url: dispatchUrl, body: { ref: 'main', inputs: { pr: '7' } } }])
+    w.cleanup()
+  })
+
+  it('ST-54/AC-2: an unknown mode is refused before any request', async () => {
+    for (const mode of ['auto', 'MANUAL', '', null]) {
+      const w = world({ pullAt: () => pull() })
+      await expect(w.run({ mode })).rejects.toThrow(/mode must be/)
+      expect(w.requests).toEqual([])
+      w.cleanup()
+    }
+  })
+
+  it('ST-54/AC-2: only the standalone land command selects manual mode', async () => {
+    const asks = (source) => /mode:\s*(?:MANUAL|'manual')/.test(source)
+    const files = readdirSync(here).filter((file) => file.endsWith('.mjs') && !file.endsWith('.test.mjs'))
+    expect(files).toContain('rotation.mjs')
+    const selecting = []
+    for (const file of files) if (asks(await readFile(path.join(here, file), 'utf8'))) selecting.push(file)
+    expect(selecting).toEqual(['land.mjs'])
+    // And within land.mjs, it is the command, not landPullRequest's default.
+    const source = await readFile(path.join(here, 'land.mjs'), 'utf8')
+    expect(source).toMatch(/mode = UNATTENDED,/)
+  })
+
+  it('ST-54/AC-3: the manual dispatch body names the mode, the pull request and the full head, and nothing else', () => {
+    expect(buildDispatchManualLanding(REPO, 7, SHA)).toEqual({ method: 'POST', url: dispatchUrl, body: manualBody() })
+    for (const head of [undefined, '', 'a'.repeat(39), 'a'.repeat(41), 'A'.repeat(40), 'g'.repeat(40), 7]) {
+      expect(() => buildDispatchManualLanding(REPO, 7, head), String(head)).toThrow(/40-character/)
+    }
+    expect(() => buildDispatchManualLanding(REPO, 0, SHA)).toThrow(/positive integer/)
+  })
+
+  it('ST-54/AC-3: the allowlist permits exactly the unattended and the manual body, and no mixture', () => {
+    expect(() => assertAllowedRequest(REPO, buildDispatchSweep(REPO, 7))).not.toThrow()
+    expect(() => assertAllowedRequest(REPO, buildDispatchManualLanding(REPO, 7, SHA))).not.toThrow()
+    const post = (inputs, extra = {}) => ({ method: 'POST', url: dispatchUrl, body: { ref: 'main', inputs, ...extra } })
+    const refused = [
+      post({ mode: 'manual', pr: '7' }),
+      post({ mode: 'manual', head: SHA }),
+      post({ pr: '7', head: SHA }),
+      post({ mode: 'unattended', pr: '7' }),
+      post({ mode: 'unattended', pr: '7', head: SHA }),
+      post({ mode: 'MANUAL', pr: '7', head: SHA }),
+      post({ mode: 'manual', pr: '7', head: SHA.toUpperCase() }),
+      post({ mode: 'manual', pr: '7', head: 'a'.repeat(39) }),
+      post({ mode: 'manual', pr: '7', head: 'a'.repeat(41) }),
+      post({ mode: 'manual', pr: '7', head: 7 }),
+      post({ mode: 'manual', pr: '07', head: SHA }),
+      post({ mode: 'manual', pr: 7, head: SHA }),
+      post({ mode: 'manual', pr: '7', head: SHA, actor: 'someone' }),
+      post({ mode: 'manual', pr: '7', head: SHA }, { extra: 1 }),
+      { method: 'POST', url: dispatchUrl, body: { inputs: { mode: 'manual', pr: '7', head: SHA } } },
+      { method: 'POST', url: dispatchUrl, body: { ref: 'other', inputs: { mode: 'manual', pr: '7', head: SHA } } },
+      { method: 'POST', url: `${BASE}/actions/workflows/ci.yml/dispatches`, body: manualBody() },
+    ]
+    for (const request of refused) expect(() => assertAllowedRequest(REPO, request), JSON.stringify(request.body)).toThrow(/refusing/)
+  })
+
+  it('ST-54/AC-3: a head change before the dispatch ends the request, with no dispatch', async () => {
+    const changes = (t) => (t < POLL_INTERVAL_MS ? SHA : SHA2)
+    const w = world({ reviewAt: () => 'pending', pullAt: (t) => pull({ head: { sha: changes(t) } }) })
+    const result = await w.run({ mode: 'manual' })
+    expect(result).toMatchObject({ status: 'head-changed', mode: 'manual', headSha: SHA, newHeadSha: SHA2, triggers: 0 })
+    expect(w.dispatches).toEqual([])
+    w.cleanup()
+    // An unattended call keeps its status for the same change.
+    const unattended = world({ reviewAt: () => 'pending', pullAt: (t) => pull({ head: { sha: changes(t) } }) })
+    expect(await unattended.run()).toMatchObject({ status: 'head-moved', headSha: SHA })
+    unattended.cleanup()
+  })
+
+  it('ST-54/AC-3: a head change after the dispatch ends the request, with no further dispatch, even past the sweep bound', async () => {
+    for (const [name, opts, changeAt] of [
+      ['waiting', {}, 2 * POLL_INTERVAL_MS],
+      ['waiting, after the bound', {}, SWEEP_RUN_BOUND_MS],
+      ['once', { once: true }, 2 * POLL_INTERVAL_MS],
+    ]) {
+      const w = world({ pullAt: (t) => pull({ head: { sha: t < changeAt ? SHA : SHA2 } }) })
+      const result = await w.run({ mode: 'manual', ...opts })
+      expect(result, name).toMatchObject({ status: 'head-changed', mode: 'manual', headSha: SHA, newHeadSha: SHA2, triggers: 1 })
+      expect(w.dispatches, name).toEqual([{ method: 'POST', url: dispatchUrl, body: manualBody() }])
+      w.cleanup()
+    }
+  })
+
+  it('ST-54/AC-3: a manual request binds to the first head it reads, and a retrigger sends that head again', async () => {
+    const w = world({ pullAt: () => pull() })
+    const result = await w.run({ mode: 'manual' })
+    expect(result.status).toBe('trigger-limit')
+    expect(w.dispatches.length).toBeGreaterThan(1)
+    for (const d of w.dispatches) expect(d.body).toEqual(manualBody())
+    w.cleanup()
+  })
+
+  it('ST-54/AC-6: after a manual success, or a refused request, an unattended call with land false still lands nothing', async () => {
+    const w = world({ landing: false, pullAt: (t, d) => pull({ merged: d > 0 }) })
+    expect(await w.run({ mode: 'manual' })).toMatchObject({ status: 'merged' })
+    const before = w.requests.length
+    expect(await w.run()).toMatchObject({ status: 'landing-off', mode: 'unattended' })
+    expect(w.requests).toHaveLength(before)
+    w.cleanup()
+
+    const moved = world({ landing: false, reviewAt: () => 'pending', pullAt: (t) => pull({ head: { sha: t < POLL_INTERVAL_MS ? SHA : SHA2 } }) })
+    expect(await moved.run({ mode: 'manual' })).toMatchObject({ status: 'head-changed' })
+    const requests = moved.requests.length
+    expect(await moved.run()).toMatchObject({ status: 'landing-off' })
+    expect(moved.requests).toHaveLength(requests)
+    expect(moved.ctx.landing).toBe(false)
+    moved.cleanup()
+  })
+})
+
+describe('ST-54/AC-3: a merge or close at another head is a changed head, not a merge', () => {
+  const dispatchBody = (head) => ({ ref: 'main', inputs: { mode: 'manual', pr: '7', head } })
+
+  it('ST-54/AC-3: merged at another head before the dispatch returns head-changed, with no dispatch', async () => {
+    const w = world({ reviewAt: () => 'pending', pullAt: (t) => pull(t < POLL_INTERVAL_MS ? {} : { head: { sha: SHA2 }, merged: true, state: 'closed' }) })
+    expect(await w.run({ mode: 'manual' })).toMatchObject({ status: 'head-changed', headSha: SHA, newHeadSha: SHA2, triggers: 0 })
+    expect(w.dispatches).toEqual([])
+    w.cleanup()
+  })
+
+  it('ST-54/AC-3: merged or closed at another head after the dispatch returns head-changed, whichever loop reads it', async () => {
+    for (const opts of [{}, { once: true }]) {
+      for (const over of [{ merged: true, state: 'closed' }, { state: 'closed' }]) {
+        const w = world({ pullAt: (t, d) => pull(d > 0 ? { head: { sha: SHA2 }, ...over } : {}) })
+        const result = await w.run({ mode: 'manual', ...opts })
+        expect(result, JSON.stringify([opts, over])).toMatchObject({ status: 'head-changed', headSha: SHA, newHeadSha: SHA2, triggers: 1 })
+        expect(w.dispatches).toEqual([{ method: 'POST', url: `${BASE}/actions/workflows/land-approved.yml/dispatches`, body: dispatchBody(SHA) }])
+        w.cleanup()
+      }
+    }
+  })
+
+  it('ST-54/AC-3: merged at the bound head is still merged, in either loop', async () => {
+    for (const opts of [{}, { once: true }]) {
+      const w = world({ pullAt: (t, d) => pull(d > 0 ? { merged: true, state: 'closed' } : {}) })
+      expect(await w.run({ mode: 'manual', ...opts })).toMatchObject({ status: 'merged', headSha: SHA })
+      w.cleanup()
+    }
+  })
+
+  it('ST-54/AC-3: an unattended call keeps its order: merged or closed is reported before a head change', async () => {
+    for (const opts of [{}, { once: true }]) {
+      const merged = world({ pullAt: (t, d) => pull(d > 0 ? { head: { sha: SHA2 }, merged: true, state: 'closed' } : {}) })
+      expect(await merged.run(opts)).toMatchObject({ status: 'merged', headSha: SHA })
+      merged.cleanup()
+      const closed = world({ pullAt: (t, d) => pull(d > 0 ? { head: { sha: SHA2 }, state: 'closed' } : {}) })
+      expect(await closed.run(opts)).toMatchObject({ status: 'closed', headSha: SHA })
+      closed.cleanup()
+    }
+  })
+})
+
+describe('ST-54/AC-1: every result of a manual request carries the head it read, and the report line is printed', () => {
+  const LINE = `manual landing requested: project ${REPO}, PR #7, head ${SHA}`
+  const commandOver = (w, landing, out) =>
+    landCommand(['7'], {
+      readSettings: async () => ({ repo: REPO, land: landing, landWhen: 'all-checks' }),
+      fetch: w.fetch,
+      getToken: async () => 't',
+      sleep: async (ms) => { w.t += ms },
+      now: () => w.t,
+      latencyLog: w.log,
+      out,
+    })
+
+  it.each([
+    ['merged', { merged: true, state: 'closed' }],
+    ['closed', { state: 'closed' }],
+  ])('ST-54/AC-1: a first read that is already %s still reports the full head and returns it', async (status, over) => {
+    for (const landing of [false, true]) {
+      const w = world({ landing, pullAt: () => pull(over) })
+      const lines = []
+      const result = await commandOver(w, landing, (line) => lines.push(line))
+      expect(result).toMatchObject({ status, mode: 'manual', pr: 7, headSha: SHA, triggers: 0 })
+      expect(lines[0]).toBe(LINE)
+      expect(JSON.parse(lines[1])).toMatchObject({ project: REPO, mode: 'manual', pr: 7, headSha: SHA, status })
+      expect(w.dispatches).toEqual([])
+      w.cleanup()
+    }
+  })
+
+  it('ST-54/AC-1: an unattended call whose first read is merged or closed is unchanged: no head, no report', async () => {
+    for (const [status, over] of [['merged', { merged: true, state: 'closed' }], ['closed', { state: 'closed' }]]) {
+      const w = world({ pullAt: () => pull(over) })
+      const bound = []
+      expect(await w.run({ onBound: (info) => bound.push(info) })).toMatchObject({ status, headSha: null, mode: 'unattended' })
+      expect(bound).toEqual([])
+      w.cleanup()
+    }
+  })
+
+  // Every way a manual request can end once it has read a head: each is after the binding.
+  const ENDINGS = [
+    ['draft', { pullAt: () => pull({ draft: true }) }, {}],
+    ['review-blocked', { pullAt: () => pull({ labels: [{ name: 'review-blocked' }] }) }, {}],
+    ['review-failed', { pullAt: () => pull(), reviewAt: () => 'failure' }, {}],
+    ['conflict', { pullAt: () => pull({ mergeable_state: 'dirty' }) }, {}],
+    ['checks-failed', { pullAt: () => pull(), checksAt: () => [run('test', 'failure')] }, {}],
+    ['review-pending', { pullAt: () => pull(), reviewAt: () => 'pending' }, {}],
+    ['checks-pending', { pullAt: () => pull(), checksAt: () => [run('test', null)] }, {}],
+    ['github-blocked', { pullAt: () => pull({ mergeable_state: 'blocked' }) }, {}],
+    ['unknown', { pullAt: () => pull({ mergeable_state: 'unknown' }) }, {}],
+    ['trigger-limit', { pullAt: () => pull() }, {}],
+    ['not-landable', { pullAt: () => pull(), reviewAt: () => 'pending' }, { once: true }],
+    ['github-blocked', { pullAt: () => pull({ mergeable_state: 'blocked' }) }, { once: true }],
+    ['sweep-pending', { pullAt: () => pull() }, { once: true }],
+    ['merged', { pullAt: (t, d) => pull({ merged: d > 0 }) }, {}],
+    ['merged', { pullAt: (t, d) => pull({ merged: d > 0 }) }, { once: true }],
+    ['closed', { pullAt: (t) => pull(t === 0 ? {} : { state: 'closed' }), reviewAt: () => 'pending' }, {}],
+    ['head-changed', { pullAt: (t) => pull({ head: { sha: t === 0 ? SHA : SHA2 } }), reviewAt: () => 'pending' }, {}],
+  ]
+
+  it.each(ENDINGS)('ST-54/AC-1: ending %s is after the binding and carries the bound head', async (status, spec, opts) => {
+    const w = world(spec)
+    const bound = []
+    const result = await w.run({ mode: 'manual', onBound: (info) => bound.push(info), ...opts })
+    expect(result.status).toBe(status)
+    expect(result).toMatchObject({ mode: 'manual', pr: 7, headSha: SHA })
+    expect(bound).toEqual([{ mode: 'manual', pr: 7, headSha: SHA }])
     w.cleanup()
   })
 })

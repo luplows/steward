@@ -16,13 +16,13 @@ landing does not force me to merge outside steward's review gate.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — **Two authorizations.** The required boolean `land` setting means standing
+- [x] **AC-1** — **Two authorizations.** The required boolean `land` setting means standing
       permission for unattended landing. `steward land <pr-number>` is an explicit manual
       request, valid with either value of `land`. The command reports its manual mode, project,
       PR number and full head SHA. It changes no project setting, label or standing permission.
       Tests invoke the CLI entry point with `land: false` and `land: true` and show the same
       eligible PR dispatched through the pilot in manual mode.
-- [ ] **AC-2** — **Automatic callers stay automatic.** `landPullRequest`'s programmatic mode
+- [x] **AC-2** — **Automatic callers stay automatic.** `landPullRequest`'s programmatic mode
       defaults to unattended; among pilot callers, only the standalone `land` command selects
       manual mode. Direct workflow dispatch has the separate explicitly authorized path in AC-4.
       A rotation and the existing frozen-loop callers do not request manual mode. With `land: false` a
@@ -30,7 +30,7 @@ landing does not force me to merge outside steward's review gate.
       call returns `landing-off`. Tests cover both, and show unattended landing with `land: true`
       still working. A true local setting cannot override a false setting read by the runway
       from the project's `main`.
-- [ ] **AC-3** — **Explicit workflow scope.** Both `land-approved.yml` files, steward's and the
+- [x] **AC-3** — **Explicit workflow scope.** Both `land-approved.yml` files, steward's and the
       thin template's, take `mode` (`unattended` by default), `pr`, and `head` inputs. A manual
       dispatch requires `mode: manual`, one positive PR number and a full 40-character head SHA;
       it authorizes only that PR at that head. The pilot binds the manual request to the first
@@ -39,7 +39,7 @@ landing does not force me to merge outside steward's review gate.
       This applies while waiting for checks and after dispatch. Manual mode never falls back
       to the oldest candidate. Tests cover the dispatch body, strict allowlist validation, a
       head change before dispatch, and a head change after dispatch.
-- [ ] **AC-4** — **The runway enforces authorization.** Before merging, the runway reads and
+- [x] **AC-4** — **The runway enforces authorization.** Before merging, the runway reads and
       validates `land` and `landWhen` from the project's settings on `main`. An unattended
       dispatch, including a direct workflow trigger with no mode or only a PR number, merges
       nothing when `land` is false. Missing, malformed or unreadable authorization settings
@@ -50,7 +50,7 @@ landing does not force me to merge outside steward's review gate.
       the PR and matching head. Unknown modes, missing scope, a head mismatch, an unqualified
       actor or an unreadable permission refuse the merge. Tests demonstrate each refusal and
       an authorized scoped manual dispatch with `land: false` succeeding.
-- [ ] **AC-5** — **The same gate.** Manual authorization changes only the `land` restriction.
+- [x] **AC-5** — **The same gate.** Manual authorization changes only the `land` restriction.
       It bypasses none of: an open non-draft PR against a supported landing base; honoured PR
       author; `review-blocked`; the circuit breaker and its existing exemptions; passing
       `review/agent` on the current head; the checks `landWhen` requires; GitHub mergeability;
@@ -58,14 +58,14 @@ landing does not force me to merge outside steward's review gate.
       must equal the current head at the runway as well as at the pilot. Tests with `land: false`
       show each failed prerequisite preventing merge, and a head change at the merge boundary
       refused. No call merges through the pilot or through a new merge path.
-- [ ] **AC-6** — **Workflow parity and traceability.** The workflows pass mode, PR, head and
+- [x] **AC-6** — **Workflow parity and traceability.** The workflows pass mode, PR, head and
       trusted event context through environment values, never interpolated shell text. Update
       the existing thin-workflow parity tests to cover the new inputs and environment. The
       workflow log identifies the mode, actor, PR, authorized head and landing or refusal; an
       unattended dispatch logs its standing-authorization decision. No manual request changes
       subsequent rotations' permission to land, even after a failed request or process restart.
       Tests show manual success and refusal followed by an unattended refusal with `land: false`.
-- [ ] **AC-7** — **Documentation and decisions.** `README.md`, `docs/settings.md` and the
+- [x] **AC-7** — **Documentation and decisions.** `README.md`, `docs/settings.md` and the
       controller instructions describe manual landing with `land: false`, unattended opt-in,
       and the scoped direct-dispatch contract. They state that tools using the crew's write
       credential can deliberately issue a manual request too: mode is explicit authorization,
