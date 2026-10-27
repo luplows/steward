@@ -323,7 +323,8 @@ function assessChecks(pr, checks) {
  * the pull request is merged or closed at another head, it returns `head-changed` with the
  * `newHeadSha` and sends nothing further. Only the standalone `land` command passes it.
  * `onBound`, optional, is called once with `{ mode, pr, headSha }` when a manual request has read
- * the head it is bound to.
+ * the head it is bound to. That is its first read, before any result, so every result of a manual
+ * request carries that `headSha`, a merged or closed pull request included.
  */
 export async function landPullRequest({
   number,
@@ -385,14 +386,19 @@ export async function landPullRequest({
 
   for (;;) {
     const pr = readPullRequest(await ctx.send(buildGetPullRequest(ctx.repo, number)))
-    if (manual && headSha !== null && pr.headSha !== headSha) return headChanged(pr)
+    // A manual request binds to the head of its first read before anything else, a merged or closed
+    // pull request included, so that every result of it carries the head it read.
+    if (manual && headSha === null) {
+      headSha = pr.headSha
+      onBound?.({ mode, pr: number, headSha })
+    }
+    if (manual && pr.headSha !== headSha) return headChanged(pr)
     if (pr.merged) {
       times.mergedAt = now()
       return finish('merged')
     }
     if (pr.state !== 'open') return finish('closed')
     if (headSha !== null && pr.headSha !== headSha) return headChanged(pr)
-    if (headSha === null && manual) onBound?.({ mode, pr: number, headSha: pr.headSha })
     headSha = pr.headSha
 
     // Not asked for at all when the pull request is a draft or blocked: the answer changes nothing.

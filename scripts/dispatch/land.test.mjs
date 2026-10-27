@@ -1011,3 +1011,74 @@ describe('ST-54/AC-3: a merge or close at another head is a changed head, not a 
     }
   })
 })
+
+describe('ST-54/AC-1: every result of a manual request carries the head it read, and the report line is printed', () => {
+  const LINE = `manual landing requested: project ${REPO}, PR #7, head ${SHA}`
+  const commandOver = (w, landing, out) =>
+    landCommand(['7'], {
+      readSettings: async () => ({ repo: REPO, land: landing, landWhen: 'all-checks' }),
+      fetch: w.fetch,
+      getToken: async () => 't',
+      sleep: async (ms) => { w.t += ms },
+      now: () => w.t,
+      latencyLog: w.log,
+      out,
+    })
+
+  it.each([
+    ['merged', { merged: true, state: 'closed' }],
+    ['closed', { state: 'closed' }],
+  ])('ST-54/AC-1: a first read that is already %s still reports the full head and returns it', async (status, over) => {
+    for (const landing of [false, true]) {
+      const w = world({ landing, pullAt: () => pull(over) })
+      const lines = []
+      const result = await commandOver(w, landing, (line) => lines.push(line))
+      expect(result).toMatchObject({ status, mode: 'manual', pr: 7, headSha: SHA, triggers: 0 })
+      expect(lines[0]).toBe(LINE)
+      expect(JSON.parse(lines[1])).toMatchObject({ project: REPO, mode: 'manual', pr: 7, headSha: SHA, status })
+      expect(w.dispatches).toEqual([])
+      w.cleanup()
+    }
+  })
+
+  it('ST-54/AC-1: an unattended call whose first read is merged or closed is unchanged: no head, no report', async () => {
+    for (const [status, over] of [['merged', { merged: true, state: 'closed' }], ['closed', { state: 'closed' }]]) {
+      const w = world({ pullAt: () => pull(over) })
+      const bound = []
+      expect(await w.run({ onBound: (info) => bound.push(info) })).toMatchObject({ status, headSha: null, mode: 'unattended' })
+      expect(bound).toEqual([])
+      w.cleanup()
+    }
+  })
+
+  // Every way a manual request can end once it has read a head: each is after the binding.
+  const ENDINGS = [
+    ['draft', { pullAt: () => pull({ draft: true }) }, {}],
+    ['review-blocked', { pullAt: () => pull({ labels: [{ name: 'review-blocked' }] }) }, {}],
+    ['review-failed', { pullAt: () => pull(), reviewAt: () => 'failure' }, {}],
+    ['conflict', { pullAt: () => pull({ mergeable_state: 'dirty' }) }, {}],
+    ['checks-failed', { pullAt: () => pull(), checksAt: () => [run('test', 'failure')] }, {}],
+    ['review-pending', { pullAt: () => pull(), reviewAt: () => 'pending' }, {}],
+    ['checks-pending', { pullAt: () => pull(), checksAt: () => [run('test', null)] }, {}],
+    ['github-blocked', { pullAt: () => pull({ mergeable_state: 'blocked' }) }, {}],
+    ['unknown', { pullAt: () => pull({ mergeable_state: 'unknown' }) }, {}],
+    ['trigger-limit', { pullAt: () => pull() }, {}],
+    ['not-landable', { pullAt: () => pull(), reviewAt: () => 'pending' }, { once: true }],
+    ['github-blocked', { pullAt: () => pull({ mergeable_state: 'blocked' }) }, { once: true }],
+    ['sweep-pending', { pullAt: () => pull() }, { once: true }],
+    ['merged', { pullAt: (t, d) => pull({ merged: d > 0 }) }, {}],
+    ['merged', { pullAt: (t, d) => pull({ merged: d > 0 }) }, { once: true }],
+    ['closed', { pullAt: (t) => pull(t === 0 ? {} : { state: 'closed' }), reviewAt: () => 'pending' }, {}],
+    ['head-changed', { pullAt: (t) => pull({ head: { sha: t === 0 ? SHA : SHA2 } }), reviewAt: () => 'pending' }, {}],
+  ]
+
+  it.each(ENDINGS)('ST-54/AC-1: ending %s is after the binding and carries the bound head', async (status, spec, opts) => {
+    const w = world(spec)
+    const bound = []
+    const result = await w.run({ mode: 'manual', onBound: (info) => bound.push(info), ...opts })
+    expect(result.status).toBe(status)
+    expect(result).toMatchObject({ mode: 'manual', pr: 7, headSha: SHA })
+    expect(bound).toEqual([{ mode: 'manual', pr: 7, headSha: SHA }])
+    w.cleanup()
+  })
+})
