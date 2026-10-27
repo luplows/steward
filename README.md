@@ -128,9 +128,11 @@ committed, staged, unstaged, untracked or ignored work of its own are left exact
 the installation is made from the commit fetched from `origin/main` whatever the checkout holds.
 The one exception is a change of the checkout's own to a file the installation adds (or to a pull
 request template location, or a directory above them): `init` names each and stops, before it
-writes anything. When a step fails after it has started, `init` exits 1, says which step and what
-it had already made, leaves all of it in place, and says how to finish by hand. When `origin/main`
-already has every file, it says no installation pull request is needed and opens none.
+writes anything. It also refuses such a file that is marked `assume-unchanged` or `skip-worktree`,
+since `git status` would not show an edit to it, and says how to clear the mark. When a step fails
+after it has started, `init` exits 1, says which step and what it has made (found by asking git),
+leaves all of it in place, and says how to finish by hand. When `origin/main` already has every
+file, it says no installation pull request is needed and opens none.
 
 `init` asks whether steward may land pull requests unattended, and the default is no, with `--yes`
 too: a new `steward.config.json` has `land: false`, so steward reviews and the project merges. Only

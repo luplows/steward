@@ -55,6 +55,7 @@ import {
   assertBranchName,
   assertParentsAreDirectories,
   branchCollisions,
+  canonicalPath,
   captureBase,
   checkAdditions,
   commitStaged,
@@ -63,6 +64,7 @@ import {
   discoverTemplates,
   eachOriginUrl,
   findLocalConflicts,
+  inspectInstallation,
   openCheckout,
   parentDirectories,
   pushNewBranch,
@@ -126,7 +128,9 @@ function parseRulesFile(text) {
   if (!isRulesFilePath(value)) {
     throw new Refusal(`'${value}' is not a relative path with forward slashes, no '..' segment, and no control character, backtick, '<' or '>'`)
   }
-  return value
+  const canonical = canonicalPath(value)
+  if (canonical === '') throw new Refusal(`'${value}' names no file`)
+  return canonical
 }
 
 function parseInteger(min, max) {
@@ -271,7 +275,7 @@ export const QUESTIONS = [
     default: null,
     choices: (s) => s.templates,
     parse: (text, s) => {
-      const value = text.trim()
+      const value = canonicalPath(text.trim())
       if (!s.templates.includes(value)) throw new Refusal(`answer one of: ${s.templates.join(', ')}`)
       return value
     },
@@ -945,7 +949,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   // steward's.
   let chosenTemplate = null
   if (suppliedBody === null) {
-    const wanted = flags.values['--pr-template']
+    const wanted = flags.values['--pr-template'] === undefined ? undefined : canonicalPath(flags.values['--pr-template'].trim())
     if (wanted !== undefined && !usableTemplates.includes(wanted)) {
       throw new Refusal(
         `--pr-template ${wanted}: not one of the project's pull request templates` +
@@ -1197,7 +1201,27 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
     }
     return 0
   } catch (error) {
-    throw new InstallFailure(failureReport({ error, phase, created, worktree: created.some((c) => c.startsWith('worktree ')) ? worktree : null, branch, repo, pullUrl }))
+    // What exists is asked of git, not assumed from the phase that failed.
+    const found = worktree === null ? { worktree: false, local: null, remote: null } : inspectInstallation(runGit, root, { dir: worktree, branch })
+    const kept = created.filter((c) => /^(label |machine settings |draft pull request |pull request )/.test(c))
+    const made = []
+    if (found.worktree === true || (found.worktree === undefined && created.some((c) => c.startsWith('worktree ')))) made.push(`worktree ${worktree}`)
+    if (typeof found.local === 'string') {
+      made.push(`local branch ${branch} at ${found.local}`)
+      if (found.local !== base) made.push(`commit ${found.local}`)
+    }
+    if (typeof found.remote === 'string') {
+      made.push(
+        `branch ${branch} on origin at ${found.remote}` +
+          (found.remote === found.local && found.local !== base ? '' : " (not this run's commit: look at what is there before pushing)"),
+      )
+    }
+    if (worktree !== null && (found.local === undefined || found.remote === undefined)) {
+      made.push(`(git could not say whether the branch ${branch} exists ${found.local === undefined ? 'locally' : 'on origin'}: look before doing anything by hand)`)
+    }
+    throw new InstallFailure(
+      failureReport({ error, phase, created: [...made, ...kept], worktree: found.worktree === true || (found.worktree === undefined && made.some((m) => m.startsWith('worktree '))) ? worktree : null, branch, repo, pullUrl }),
+    )
   }
 }
 

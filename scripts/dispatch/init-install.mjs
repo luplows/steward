@@ -28,6 +28,33 @@ export class GitError extends Error {
 }
 
 /**
+ * The settings that decide what a read of the checkout sees, fixed for every git command so that
+ * the caller's own configuration cannot hide a change from the check (a file system monitor or an
+ * untracked cache lets `git status` trust earlier answers; `core.ignoreStat`, a
+ * `status.showUntrackedFiles` or a `diff.ignoreSubmodules` of the caller's could change its
+ * output). The status and diff commands also pass their own options. Passed as environment
+ * configuration, after any the caller's environment holds.
+ */
+const FIXED_CONFIG = [
+  ['core.ignoreStat', 'false'],
+  ['core.fsmonitor', 'false'],
+  ['core.untrackedCache', 'false'],
+  ['status.showUntrackedFiles', 'normal'],
+  ['diff.ignoreSubmodules', 'none'],
+]
+
+/** The environment git runs in: `env`, with `FIXED_CONFIG` added and optional locks off. */
+export function gitEnvironment(env) {
+  const have = Number.parseInt(env.GIT_CONFIG_COUNT ?? '0', 10) || 0
+  const added = {}
+  FIXED_CONFIG.forEach(([key, value], i) => {
+    added[`GIT_CONFIG_KEY_${have + i}`] = key
+    added[`GIT_CONFIG_VALUE_${have + i}`] = value
+  })
+  return { ...env, ...added, GIT_CONFIG_COUNT: String(have + FIXED_CONFIG.length), GIT_OPTIONAL_LOCKS: '0' }
+}
+
+/**
  * Runs `git` with `args` in `cwd` without a shell and resolves nothing it did not throw: `{ status,
  * stdout, stderr }`, `status` being `-1` when git could not start. `GIT_OPTIONAL_LOCKS=0` keeps a
  * read from refreshing the caller's index behind its back.
@@ -39,7 +66,7 @@ export function defaultGit(cwd, args, { input } = {}) {
     encoding: 'utf8',
     maxBuffer: 1 << 30,
     windowsHide: true,
-    env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
+    env: gitEnvironment(process.env),
   })
   if (result.error) return { status: -1, stdout: '', stderr: String(result.error.message) }
   return { status: result.status ?? -1, stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
@@ -53,6 +80,15 @@ export function gitOut(run, cwd, args, options) {
 }
 
 const FULL_SHA = /^[0-9a-f]{40}$/
+
+/**
+ * A path as git spells it: without `.` segments (`isRulesFilePath` allows `a/./b.md` and
+ * `./REVIEW.md`, which git reports as `a/b.md` and `REVIEW.md`). Every path the installer compares
+ * with git's output, uses as a key of a tree or stages is put in this form once, where it is read.
+ */
+export function canonicalPath(rel) {
+  return rel.split('/').filter((s) => s !== '' && s !== '.').join('/')
+}
 
 // -------- preflight: the checkout and origin
 
@@ -207,7 +243,11 @@ export function readBaseSettings(reader, isValid) {
         'it must be a relative path with forward slashes; fix it through a pull request of the project, then run init again',
     )
   }
-  return { present: true, rulesFile }
+  const canonical = canonicalPath(rulesFile)
+  if (canonical === '') {
+    throw new Refusal('steward.config.json on origin/main has a rulesFile that names no file; fix it through a pull request of the project, then run init again')
+  }
+  return { present: true, rulesFile: canonical }
 }
 
 /** Every parent directory of the paths `rels`, shortest first, each once. */
@@ -369,6 +409,27 @@ export function findLocalConflicts(run, root, base, relevant) {
       throw cannot(`the files under ${dir}`, error)
     }
   }
+  // A tracked file marked assume-unchanged or skip-worktree (a sparse checkout sets the second) is
+  // one whose edits `git status` does not show, and nothing else compares its bytes with the index
+  // here, so a relevant one is refused rather than trusted: the flags are what `git ls-files -v`
+  // shows.
+  let tagged
+  try {
+    tagged = gitOut(run, root, ['ls-files', '-v', '-z'])
+  } catch (error) {
+    throw cannot('the index flags of tracked files', error)
+  }
+  for (const record of tagged.split('\0')) {
+    if (record.length < 3) continue
+    const tag = record[0]
+    const file = record.slice(2)
+    if (!relevant.affects(file)) continue
+    if (tag === 'S' || tag === 's') {
+      note(file, `marked skip-worktree, so git does not show edits to it (a sparse checkout does this); clear it with: git update-index --no-skip-worktree ${file}`)
+    } else if (/[a-z]/.test(tag)) {
+      note(file, `marked assume-unchanged, so git does not show edits to it; clear it with: git update-index --no-assume-unchanged ${file}`)
+    }
+  }
   for (const record of status.split('\0')) {
     if (record.length < 4) continue
     const xy = record.slice(0, 2)
@@ -438,6 +499,27 @@ export function worktreePath(root, branch) {
 }
 
 // ------------------------------------------------------------------ making the commit
+
+/**
+ * What of the installation exists now, found by asking git rather than by assuming from where a
+ * step failed (a hook can fail after git has made the worktree and the branch, and a push can fail
+ * after origin has the branch): `{ worktree, local, remote }`. `worktree` is whether the repository
+ * lists a worktree at `dir`; `local` the full SHA of the local branch or `null`; `remote` the SHA
+ * `origin` has for the branch or `null`. Each is `undefined` when git could not say.
+ */
+export function inspectInstallation(run, root, { dir, branch }) {
+  const found = { worktree: undefined, local: undefined, remote: undefined }
+  const listed = run(root, ['worktree', 'list', '--porcelain'])
+  if (listed.status === 0) {
+    found.worktree = listed.stdout.split('\n').some((l) => l.startsWith('worktree ') && path.resolve(l.slice('worktree '.length).trim()) === path.resolve(dir))
+  }
+  const local = run(root, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])
+  if (local.status === 0) found.local = local.stdout.trim()
+  else if (local.status === 1) found.local = null
+  const remote = run(root, ['ls-remote', '--heads', 'origin', `refs/heads/${branch}`])
+  if (remote.status === 0) found.remote = remote.stdout.trim() === '' ? null : remote.stdout.trim().split(/\s+/)[0]
+  return found
+}
 
 /** Adds the worktree `dir` on a new branch at `base`. */
 export function addWorktree(run, root, branch, dir, base) {

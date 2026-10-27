@@ -1565,3 +1565,197 @@ describe('ST-56/AC-9: the request allowlist, the source and the documents', () =
     expect(marked).toEqual([])
   })
 })
+
+describe('ST-56/AC-1a, AC-3 and AC-4 (review 1): paths as git spells them', () => {
+  const config = (rulesFile) => `${JSON.stringify({ repo: REPO, setup: null, check: null, landWhen: 'all-checks', land: false, unitLinks: ['file'], rulesFile, inspectAfterHours: 6 })}\n`
+
+  it('ST-56/AC-4: a rulesFile with a . segment is the checklist git reports: an existing one is found, left and reported', async () => {
+    const cwd = makeRepo({ files: { 'steward.config.json': config('docs/./RULES.md'), 'docs/RULES.md': 'mine\n' } })
+    const { code, out, err } = await runInit(['--yes'], { cwd })
+    expect(err).toBe('')
+    expect(code).toBe(0)
+    expect(out).toContain('left docs/RULES.md: already there')
+    expect(readOn(cwd, 'docs/RULES.md')).toBe('mine\n')
+    expect(hasOn(cwd, 'docs/./RULES.md')).toBe(false)
+  })
+
+  it('ST-56/AC-1a: a local edit of that checklist is a conflict named by git\'s spelling', async () => {
+    const cwd = makeRepo({ files: { 'steward.config.json': config('./docs/./RULES.md'), 'docs/RULES.md': 'mine\n' } })
+    writeFileSync(path.join(cwd, 'docs/RULES.md'), 'edited\n')
+    const { code, err } = await runInit(['--yes'], { cwd })
+    expect(code).toBe(2)
+    expect(err).toContain('  docs/RULES.md: ')
+  })
+
+  it.each([['./docs/./RULES.md'], ['docs/./RULES.md'], ['./REVIEW.md']])('ST-56/AC-3: --rules-file %s is written at git\'s spelling, in the settings and the checklist, and passes the diff check', async (flag) => {
+    const cwd = makeRepo()
+    const { code, err } = await runInit(['--yes', '--rules-file', flag], { cwd })
+    expect(err).toBe('')
+    expect(code).toBe(0)
+    const canonical = flag.split('/').filter((s) => s !== '.').join('/')
+    expect(JSON.parse(readOn(cwd, 'steward.config.json')).rulesFile).toBe(canonical)
+    expect(hasOn(cwd, canonical)).toBe(true)
+  })
+
+  it('ST-56/AC-1a: a local file at that checklist is a conflict whatever the flag\'s spelling', async () => {
+    const cwd = makeRepo()
+    put(cwd, { 'docs/RULES.md': 'mine\n' })
+    const { code, err } = await runInit(['--yes', '--rules-file', 'docs/./RULES.md'], { cwd })
+    expect(code).toBe(2)
+    expect(err).toContain('  docs/RULES.md: ')
+  })
+
+  it('ST-56/AC-4: a --rules-file equal to the settings\' rulesFile after canonicalizing is accepted, and a doubled slash or a bare . is refused', async () => {
+    const cwd = makeRepo({ files: { 'steward.config.json': config('docs/./RULES.md') } })
+    expect((await runInit(['--yes', '--rules-file', './docs/RULES.md'], { cwd })).code).toBe(0)
+    for (const bad of ['docs//RULES.md', '.', './']) {
+      const refused = await runInit(['--yes', '--rules-file', bad], { cwd: makeRepo() })
+      expect(refused.code, bad).toBe(2)
+    }
+  })
+
+  it('ST-56/AC-6: --pr-template is compared as git spells the path', async () => {
+    const cwd = makeRepo({ files: { '.github/PULL_REQUEST_TEMPLATE/bug.md': 'Unit:\n<!-- bug -->\n', '.github/PULL_REQUEST_TEMPLATE/feature.md': 'Unit:\n<!-- feature -->\n' } })
+    const gh = fakeGitHub()
+    const { code } = await runInit(['--yes', '--pr-template', './.github/./PULL_REQUEST_TEMPLATE/feature.md'], { cwd, gh })
+    expect(code).toBe(0)
+    expect(bodyOf(gh)).toContain('<!-- feature -->')
+  })
+})
+
+describe('ST-56/AC-1a (review 1): changes that git status does not show', () => {
+  const refused = async (cwd) => {
+    const gh = fakeGitHub()
+    const { code, err } = await runInit(['--yes'], { cwd, gh })
+    expect(code).toBe(2)
+    expect(gh.requests).toEqual([])
+    expect(existsSync(worktreeOf(cwd))).toBe(false)
+    return err
+  }
+
+  it.each([
+    ['assume-unchanged', 'no-assume-unchanged'],
+    ['skip-worktree', 'no-skip-worktree'],
+  ])('ST-56/AC-1a: a tracked relevant file marked %s is refused, naming the path, the flag and how to clear it, on a new installation', async (flag, clear) => {
+    const cwd = makeRepo({ files: { 'REVIEW.md': 'v1\n' } })
+    git(cwd, 'update-index', `--${flag}`, 'REVIEW.md')
+    writeFileSync(path.join(cwd, 'REVIEW.md'), 'v2\n')
+    expect(git(cwd, 'status', '--porcelain')).not.toMatch(/REVIEW\.md/)
+    const before = callerState(cwd)
+    const err = await refused(cwd)
+    expect(err).toContain('  REVIEW.md: ')
+    expect(err).toContain(`marked ${flag}`)
+    expect(err).toContain(`git update-index --${clear} REVIEW.md`)
+    expect(callerState(cwd)).toEqual(before)
+  })
+
+  it.each([['assume-unchanged'], ['skip-worktree']])('ST-56/AC-1a: the same on the path where nothing is missing (%s)', async (flag) => {
+    const cwd = makeRepo()
+    expect((await runInit(['--yes'], { cwd })).code).toBe(0)
+    mergeInstall(cwd)
+    git(cwd, 'update-index', `--${flag}`, 'steward.config.json')
+    writeFileSync(path.join(cwd, 'steward.config.json'), '{"edited":true}\n')
+    const err = await refused(cwd)
+    expect(err).toContain('  steward.config.json: ')
+    expect(err).toContain(`marked ${flag}`)
+  })
+
+  it('ST-56/AC-1a: a flag on a file the installation does not touch is not a conflict', async () => {
+    const cwd = makeRepo({ files: BASE_FILES })
+    git(cwd, 'update-index', '--assume-unchanged', 'src/tracked.txt')
+    writeFileSync(path.join(cwd, 'src/tracked.txt'), 'hidden edit\n')
+    expect((await runInit(['--yes'], { cwd })).code).toBe(0)
+  })
+
+  it('ST-56/AC-1a: the caller\'s git configuration cannot hide an edit: core.ignoreStat, an untracked-files setting of no, and info/exclude', async () => {
+    const edited = makeRepo({ files: { 'REVIEW.md': 'v1\n' } })
+    git(edited, 'config', 'core.ignoreStat', 'true')
+    writeFileSync(path.join(edited, 'REVIEW.md'), 'v2 with a different length\n')
+    expect(await refused(edited)).toContain('  REVIEW.md: ')
+
+    const untracked = makeRepo()
+    git(untracked, 'config', 'status.showUntrackedFiles', 'no')
+    writeFileSync(path.join(untracked, 'steward.config.json'), '{}\n')
+    expect(await refused(untracked)).toContain('  steward.config.json: ')
+
+    const excluded = makeRepo()
+    writeFileSync(path.join(excluded, '.git/info/exclude'), 'steward.config.json\n')
+    writeFileSync(path.join(excluded, 'steward.config.json'), '{}\n')
+    expect(await refused(excluded)).toMatch(/steward\.config\.json: an ignored file/)
+  })
+})
+
+describe('ST-56/AC-7 (review 1): what exists is asked of git after a failure', () => {
+  const attempt = async (hookName, script, runner) => {
+    const cwd = makeRepo({ files: BASE_FILES })
+    hook(cwd, hookName, script)
+    const gh = fakeGitHub()
+    const result = await runInit(['--yes'], { cwd, gh, git: runner })
+    return { cwd, gh, err: result.err, code: result.code }
+  }
+
+  it('ST-56/AC-7: a post-checkout hook that fails after git made the worktree and the branch: both are reported, not "nothing created"', async () => {
+    const r = await attempt('post-checkout', 'echo "checkout hook says no" >&2\nexit 1')
+    expect(r.code).toBe(1)
+    expect(r.err).toMatch(/It stopped while creating the installation worktree\./)
+    expect(r.err).not.toContain('Nothing had been created yet.')
+    expect(r.err).toContain(`worktree ${worktreeOf(r.cwd)}`)
+    expect(r.err).toContain('local branch steward/install at ')
+    expect(existsSync(worktreeOf(r.cwd))).toBe(true)
+    expect(writes(r.gh)).toEqual([])
+  })
+
+  it('ST-56/AC-7: a commit-msg hook that fails leaves the worktree and branch, and no commit, in the report', async () => {
+    const r = await attempt('commit-msg', 'echo "message refused" >&2\nexit 1')
+    expect(r.code).toBe(1)
+    expect(r.err).toMatch(/It stopped while committing the installation\./)
+    expect(r.err).toContain('message refused')
+    expect(r.err).toContain(`worktree ${worktreeOf(r.cwd)}`)
+    expect(r.err).toContain('local branch steward/install at ')
+    expect(r.err).not.toMatch(/\n {2}commit [0-9a-f]{40}/)
+  })
+
+  it('ST-56/AC-7: a post-commit hook that fails does not fail the commit, and the run finishes', async () => {
+    const r = await attempt('post-commit', 'echo "after the commit" >&2\nexit 1')
+    expect(r.code).toBe(0)
+    expect(pullWrites(r.gh)).toHaveLength(1)
+  })
+
+  it('ST-56/AC-7: a pre-push hook that fails reports the commit and the worktree and no branch on origin, and how to look and push by hand', async () => {
+    const r = await attempt('pre-push', 'echo "push refused" >&2\nexit 1')
+    expect(r.code).toBe(1)
+    expect(r.err).toMatch(/It stopped while pushing the branch to origin\./)
+    expect(r.err).toContain('push refused')
+    expect(r.err).toMatch(/\n {2}commit [0-9a-f]{40}/)
+    expect(r.err).toContain(`worktree ${worktreeOf(r.cwd)}`)
+    expect(r.err).not.toContain('on origin at')
+    expect(r.err).toContain('git ls-remote --heads origin steward/install')
+    expect(bareRef(r.cwd, 'refs/heads/steward/install')).toBe('')
+    expect(writes(r.gh)).toEqual([])
+  })
+
+  it('ST-56/AC-7: a push that reaches origin but is reported as failed: the branch on origin is found by asking, at this run\'s commit', async () => {
+    const runner = watchGit({ after: (args) => (args[0] === 'push' ? failing('connection lost after the push', 128) : undefined) })
+    const r = await attempt('pre-commit', 'exit 0', runner)
+    expect(r.code).toBe(1)
+    expect(r.err).toMatch(/It stopped while pushing the branch to origin\./)
+    const commit = bareRef(r.cwd, 'refs/heads/steward/install')
+    expect(commit).toMatch(/^[0-9a-f]{40}$/)
+    expect(r.err).toContain(`branch steward/install on origin at ${commit}`)
+    expect(r.err).not.toContain("not this run's commit")
+  })
+
+  it('ST-56/AC-7: a branch that origin has from someone else is reported as not this run\'s commit', async () => {
+    const cwd = makeRepo()
+    let racer = null
+    const runner = watchGit({
+      before: (args) => {
+        if (args[0] === 'push') racer = pushToRemote(cwd, { 'race.txt': 'x\n' }, { branch: 'steward/install' })
+        return undefined
+      },
+    })
+    const { code, err } = await runInit(['--yes'], { cwd, git: runner })
+    expect(code).toBe(1)
+    expect(err).toContain(`branch steward/install on origin at ${racer} (not this run's commit`)
+  })
+})
