@@ -114,13 +114,13 @@ PR, explicitly activates that project on their machine, and receives independent
 without starting rotations by hand. Installing files and enabling a project locally are separate
 acts: finding a checkout or merging an installation PR does not authorize machine execution.
 
-The milestone includes review-only installation defaults (ST-55), explicit manual gated landing
-(ST-54), and one authoritative local coordinator managing only explicitly enabled projects. The
-coordinator needs local start, graceful stop, emergency stop and status controls, unattended review
-scheduling, duplicate-work prevention, resource limits and safe restart handling. Those coordinator
-contracts still need implementation-ready stories; this PR does not claim to define or deliver
-their commands, storage or scheduling policy. Essential safety and restart reliability ship when
-the affected capability first becomes available.
+The milestone includes review-only installation defaults (ST-55), explicit manual gated
+landing (ST-54), and one authoritative automatic coordinator **per OS user**, for projects
+the user has explicitly activated. It supports start, status and graceful stop; one automatic
+reviewer at a time per user; bounded resource use and fair scanning; duplicate automatic
+work prevention and safe restart. Independent manual review, rotation and landing commands
+do not join the coordinator's admission or concurrency policy, and may overlap.
+**Shared E-stop is not a 0.1 requirement**, but resource/session bounds and restart safety are.
 
 Validate on two existing client projects with different unit conventions, preserving their native
 planning practices (ST-48). Review and every landing still use the existing gate. **Unattended
@@ -165,26 +165,33 @@ usage limits and review safeguards still apply before isolation.
 ### Toward 1.0
 
 Automated coding and automated fixing are both essential before 1.0, together with demonstrated
-reliability, recovery, resource safety and use across projects. A graphical board, distributed
-execution, universal backlog integrations and sophisticated per-handoff cancellation are not
-prerequisites for the early milestones. They remain future options, not implicit release gates.
+reliability, recovery, resource safety and use across projects. **Shared per-user E-stop is
+required before 1.0:** it terminates registered local manual and automatic processes, blocks
+new supported execution until explicit reset, and reports uncertain termination. It cannot
+retract a remote GitHub workflow that has already been dispatched. This is a later story,
+not a 0.1 dependency. A graphical board, distributed execution, universal backlog
+integrations and sophisticated per-handoff cancellation remain optional.
 
 ### Follow-up planning and existing work
 
-Existing stories retain their IDs, status and ACs in this planning PR. No story is retired or
-silently replaced. The following reconciliation must happen before dispatching overlapping work:
+Existing story IDs are preserved. ST-52 is explicitly revised in this planning PR to replace
+its superseded draft rotation-lock criteria; other existing story ACs are unchanged. No story
+is retired or silently replaced. Reconcile the remaining overlaps before dispatch:
 
 | Existing work | Relationship to the roadmap and next planning action |
 |---|---|
-| ST-48 | Retains manual two-client installation and gate validation. Refine its dependencies to include ST-54/ST-55 and add or link evidence for unattended reviews and explicit local activation when coordinator stories exist. Its current ACs alone do not prove all of 0.1.0. |
-| ST-52 | Reuse and refine its per-project rotation exclusion before scheduled reviews. Settle lock location, stale-owner recovery, refusal result and interaction with manual commands as part of coordinator planning; do not build a second overlapping lock design. |
+| ST-48 | Retains crew-only two-client installation and gate validation. Refine its dependencies/evidence after ST-56 and the automatic scheduler exist, including activation and unattended review; manual evidence alone does not prove all of 0.1.0. |
+| ST-52 | Revised in this PR: durable per-user reservations apply only to coordinator-dispatched automatic reviews, not manual rotations or reviews. The story depends on ST-58 and ST-59; it does not implement recovery (ST-60), scheduling (ST-61) or a second rotation lock. |
 | ST-6 | Schedule the owner-run investigation and the implementation it recommends for 0.4. Reconcile earlier coder/scheduler dependencies when those stories are refined; deferring isolation does not mean it already exists. |
 | ST-11 / ST-12 | Held stories address the old loop's scheduler and retry pause/resume. Reconcile their useful requirements with the new coordinator, resource bounds and restart contracts; do not start the frozen coder loop to satisfy automatic review. |
 | ST-2 | Starvation promotion conflicts with approval-order scheduling of explicit handoffs. Decide its disposition with the crew before refining the coding queue; do not dispatch it as the 0.2 scheduling rule. Steward's current story queue stays tier/id ordered until separately changed. |
 | ST-53 | Separately refines the pilot's wait behaviour and frozen-loop callers. ST-54 changes authorization, preserves existing wait bounds, and does not consume or resolve ST-53. |
 
-The coordinator, durable handoff and fixing contracts need further planning; these roadmap
-outcomes are not implementation-ready units. No additional story IDs are reserved here.
+ST-57 (activation), ST-58 (coordinator controls), ST-59 (bounded review-only work)
+and the revised ST-52 (automatic review admission) define the first coordinator units.
+Coordinator recovery, fair scheduling, the ST-48 evidence amendment, deferred E-stop,
+durable handoff and fixing require separate refinement. No future mechanism is claimed
+implemented here.
 
 ### Release preparation
 
@@ -508,7 +515,10 @@ settles it.
 - **One machine runs the review side, for now** (owner, 2026-10-11). Several machines are wanted
   later, and the rotation is built so that adding them is small. On one machine, while a rotation
   is running, any later rotation is locked out (owner, 2026-10-24; ST-52); several machines, and
-  several reviewers at once, are still to be solved. Ideas kept for then, none decided:
+  several reviewers at once, are still to be solved. **Revised 2026-10-27:** this proposed
+  rotation lock is superseded for 0.1. The coordinator is per OS user and prevents duplicate
+  *automatic* work only; independent manual commands may overlap. Ideas kept for future
+  distributed coordination, none decided:
   - landing is already safe across machines: each trigger names its pull request, and the runway
     re-checks it before merging;
   - reviewing is the exposure, since two machines could review the same head and both pay, though
