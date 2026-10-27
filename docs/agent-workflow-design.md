@@ -2495,7 +2495,7 @@ shortened where it is long, so that it can be found there with its date.
     `steward.config.json`, with `repo` from the git remote and a value for every key: `unitLinks`,
     any combination of `file`, `issue` and `other` (which covers a tracker steward cannot read yet,
     passed unread), or none, default `["file", "issue"]`, which settles D5; `rulesFile`, default
-    `REVIEW.md`; `land`, default `true` (the original decision; **Planned (ST-55):** false under
+    `REVIEW.md`; `land`, default `true` (the original decision; since ST-55 false, under
     the crew's 2026-10-26 revision below); ST-29's `inspectAfterHours`, asked; and `setup` and `check`
     `null`, since only a coder uses them. It writes the thin workflow files, pinned to the tag of
     the steward that ran it, read from its own `package.json`'s `version` (or, with `--ref`, which
@@ -2760,7 +2760,7 @@ shortened where it is long, so that it can be found there with its date.
     credential can intentionally request manual mode too. This is scoped authorization within the
     existing trusted-credential model, not credential isolation or protection from a malicious
     credential holder.
-  - **Planned (ST-55):** 0.1 installs review-only by default: the landing question defaults to
+  - 0.1 installs review-only by default: the landing question defaults to
     no and writes `land: false`, including under `--yes`. An explicit yes or `--land yes` opts
     into unattended landing. Prompt, help and final output explain the choice and ST-54's manual
     path. Existing files and their chosen authorization are preserved; no configuration is

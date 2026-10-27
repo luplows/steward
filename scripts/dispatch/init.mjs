@@ -13,7 +13,9 @@
  * project's `package.json` or CI workflows.
  *
  * Every question has a flag, `--yes` takes the default of every question no flag answers, and with
- * no terminal a question with neither is refused, before anything is written (`QUESTIONS`).
+ * no terminal a question with neither is refused, before anything is written (`QUESTIONS`). The
+ * `land` question defaults to no: a new installation reviews and does not land unattended, and only
+ * a yes at the question or `--land yes` writes `land: true`. `--yes` is not that yes.
  *
  * It does nothing about branch protection: `steward protect` (`protect.mjs`) sets it, as a step of
  * its own once the gate is on `main`, and `init`'s closing message recommends it.
@@ -24,6 +26,9 @@
  *
  * Usage:
  *   steward init [--yes] [--ref <40-hex commit>] [--<question flag> <answer>]...
+ * Examples:
+ *   steward init --yes               review only: `land: false`; `steward land <pr-number>` still lands one
+ *   steward init --yes --land yes    `land: true`: unattended landing explicitly enabled
  */
 import { execFileSync } from 'node:child_process'
 import { accessSync, constants, existsSync, readdirSync, realpathSync, statSync } from 'node:fs'
@@ -145,8 +150,10 @@ export const QUESTIONS = [
   {
     id: 'land',
     flag: '--land',
-    prompt: 'Should steward land pull requests that pass? (no: steward reviews and the project merges)',
-    default: 'yes',
+    prompt:
+      'Should steward land pull requests unattended, merging each one that passes review without anyone asking for it? ' +
+      '(no: steward reviews, the project merges, and you can still ask steward to land one pull request with `steward land <pr-number>`)',
+    default: 'no',
     parse: parseYesNo,
   },
   {
@@ -223,7 +230,12 @@ export const QUESTIONS = [
 
 // `--yes`, `--ref`, and `--codex-path` (where `codex` is when it is not on the PATH) are not questions.
 const OTHER_FLAGS = ['--yes', '--ref', '--codex-path']
-const USAGE = `usage: steward init [--yes] [--ref <commit>] [--codex-path <path>] ${QUESTIONS.map((q) => `[${q.flag} <answer>]`).join(' ')}`
+const USAGE = [
+  `usage: steward init [--yes] [--ref <commit>] [--codex-path <path>] ${QUESTIONS.map((q) => `[${q.flag} <answer>]`).join(' ')}`,
+  'Unattended landing is off unless you turn it on: --yes takes the default of --land, which is no, and only --land yes (or a yes at the question) turns it on.',
+  'examples: steward init --yes                 review only; the project merges',
+  '          steward init --yes --land yes      also let steward land pull requests that pass, unattended',
+].join('\n')
 
 /** The flags of `argv` as `{ yes, values }`, `values` mapping a flag to its text. */
 export function parseFlags(argv) {
@@ -550,6 +562,37 @@ export function machineSettingsBody(answers, codexExecutable) {
   return body
 }
 
+/**
+ * What the person is told about landing, from what happened to `steward.config.json`: `'wrote'`,
+ * `'left'` (a file was already there) or `null` (none, with no GitHub repository to name in it).
+ */
+export function landingNotes(settingsResult, answers, flags) {
+  if (settingsResult === 'left') {
+    return [
+      'An existing steward.config.json governs its own landing authorization: init did not read it or change its land setting, ' +
+        'so whether steward lands unattended is whatever that file already says.',
+    ]
+  }
+  if (settingsResult === null) {
+    return ['With no steward.config.json there is no landing setting: steward lands nothing unattended until the file has land set to true.']
+  }
+  if (answers.land === true) {
+    return [
+      'steward.config.json has land set to true: unattended landing was explicitly enabled, so steward may merge a pull request ' +
+        'that has passed review without anyone asking for that one. Landing one on request, with `steward land <pr-number>`, works as well.',
+    ]
+  }
+  const notes = [
+    'steward.config.json has land set to false: steward can review pull requests but will not land any unattended. ' +
+      'To land one that has passed review, ask for it: `steward land <pr-number>`, which goes through the same review gate.',
+    'To allow unattended landing later, set land to true in steward.config.json through a pull request of the project.',
+  ]
+  if (flags.yes && flags.values['--land'] === undefined) {
+    notes.push('--yes took the default for the landing question, no: it does not consent to unattended landing.')
+  }
+  return notes
+}
+
 const json = (value) => `${JSON.stringify(value, null, 2)}\n`
 
 // ------------------------------------------------------------------ the command
@@ -652,11 +695,13 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   const report = async (rel, content) => {
     const result = await writeNew(root, rel, content)
     out(result === 'wrote' ? `wrote ${rel}` : `left ${rel}: already there`)
+    return result
   }
 
-  // The project's settings.
+  // The project's settings: 'wrote', 'left' (a file already there governs itself), or null.
+  let settingsResult = null
   if (repo === null) out(`did not write steward.config.json: ${why}`)
-  else await report('steward.config.json', json(settingsBody(repo, answers)))
+  else settingsResult = await report('steward.config.json', json(settingsBody(repo, answers)))
 
   // The example checklist, byte for byte.
   await report(answers.rulesFile, await readFile(path.join(packageRoot, 'templates', 'review-checklist.md')))
@@ -710,8 +755,12 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
     out(`left ${machinePath}: the machine's settings are already there, not read`)
   }
 
+  for (const line of landingNotes(settingsResult, answers, flags)) out(line)
   out("Nothing was committed, staged or pushed. Commit what was written, and open a pull request of the project's own for it.")
-  out('Merge that pull request as the project normally merges: the gate cannot review the pull request that installs it.')
+  out(
+    'Merge that pull request as the project normally merges: the gate cannot review the pull request that installs it. ' +
+      'Merging it starts nothing on any machine: running steward on a machine is a separate step.',
+  )
   out('Steward is then set up. To have GitHub stop a merge that has not passed review, run `steward protect` once it has merged.')
   return 0
 }

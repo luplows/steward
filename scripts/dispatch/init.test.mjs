@@ -20,7 +20,10 @@ import {
   repoFromRemoteUrl,
 } from './init.mjs'
 import { readMachineSettings } from './machine-settings.mjs'
+import { createLandContext, landPullRequest } from './land.mjs'
 import { readSettings } from './settings.mjs'
+import { runRunway } from '../land/runway.mjs'
+import { fakeGitHub as fakeRunwayGitHub, pull as runwayPull } from '../land/runway-fake.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const CLI = path.join(ROOT, 'scripts', 'dispatch', 'cli.mjs')
@@ -232,7 +235,7 @@ describe('ST-44/AC-2: asking', () => {
     const gh = fakeGitHub()
     const { code } = await runInit(['--yes'], { cwd, machine, gh })
     expect(code).toBe(0)
-    expect(await readSettings(cwd)).toMatchObject({ unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', land: true, inspectAfterHours: 24 })
+    expect(await readSettings(cwd)).toMatchObject({ unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', land: false, inspectAfterHours: 24 })
     expect(existsSync(path.join(cwd, '.github/workflows/inspection.yml'))).toBe(true)
     expect(writes(gh).some((r) => r.rest === '/branches/main/protection')).toBe(false)
   })
@@ -309,7 +312,7 @@ describe('ST-44/AC-3: steward.config.json', () => {
     const text = JSON.parse(read(cwd, 'steward.config.json'))
     expect(Object.keys(text).sort()).toEqual(['check', 'inspectAfterHours', 'land', 'landWhen', 'repo', 'rulesFile', 'setup', 'unitLinks'])
     expect(await readSettings(cwd)).toEqual({
-      repo: REPO, setup: null, check: null, landWhen: 'all-checks', land: true, unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', inspectAfterHours: 24,
+      repo: REPO, setup: null, check: null, landWhen: 'all-checks', land: false, unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', inspectAfterHours: 24,
     })
   })
 
@@ -860,5 +863,305 @@ describe('ST-50/AC-11: what init prints is written for the person running it', (
     }
     expect(message).toMatch(/refusing/)
     expect(message).not.toMatch(MENTIONS_STEWARD_INTERNALS)
+  })
+})
+
+// ------------------------------------------------------------------ ST-55: review-only by default
+
+const LAND_ANSWERS = (land) => ['', '', land, '', '', '', '', '', '']
+const NEW_FILES = [
+  '.github/pull_request_template.md',
+  '.github/workflows/inspection.yml',
+  '.github/workflows/land-approved.yml',
+  '.github/workflows/review-gate.yml',
+  'REVIEW.md',
+  'package.json',
+  'steward.config.json',
+]
+const bytes = (dir, rel) => readFileSync(path.join(dir, rel))
+
+describe('ST-55/AC-1: the land question defaults to no, and an explicit yes writes true', () => {
+  it('ST-55/AC-1: the question describes unattended landing and its default is no', () => {
+    const q = QUESTIONS.find((x) => x.id === 'land')
+    expect(q.default).toBe('no')
+    expect(q.flag).toBe('--land')
+    expect(q.prompt).toMatch(/unattended/)
+    expect(q.prompt).toMatch(/without anyone asking/)
+    expect(q.prompt).toContain('steward land <pr-number>')
+  })
+
+  it('ST-55/AC-1: accepting the default at the terminal writes land false, and the other settings keep their defaults', async () => {
+    const cwd = makeRepo()
+    const terminal = fakeTerminal(LAND_ANSWERS(''))
+    const { code } = await runInit([], { cwd, terminal })
+    expect(code).toBe(0)
+    expect(terminal.prompts[2]).toContain('[no]')
+    expect(await readSettings(cwd)).toEqual({
+      repo: REPO, setup: null, check: null, landWhen: 'all-checks', land: false, unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', inspectAfterHours: 24,
+    })
+  })
+
+  it('ST-55/AC-1: --yes writes land false, with landWhen and every other setting as before', async () => {
+    const cwd = makeRepo()
+    expect((await runInit(['--yes'], { cwd })).code).toBe(0)
+    expect(JSON.parse(read(cwd, 'steward.config.json'))).toEqual({
+      repo: REPO, setup: null, check: null, landWhen: 'all-checks', land: false, unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', inspectAfterHours: 24,
+    })
+  })
+
+  it.each([['yes'], ['y'], ['true']])('ST-55/AC-1: an explicit %s at the terminal writes land true', async (answer) => {
+    const cwd = makeRepo()
+    const { code } = await runInit([], { cwd, terminal: fakeTerminal(LAND_ANSWERS(answer)) })
+    expect(code).toBe(0)
+    expect(await readSettings(cwd)).toMatchObject({ land: true, landWhen: 'all-checks' })
+  })
+
+  it('ST-55/AC-1: an explicit no at the terminal writes land false', async () => {
+    const cwd = makeRepo()
+    await runInit([], { cwd, terminal: fakeTerminal(LAND_ANSWERS('no')) })
+    expect(await readSettings(cwd)).toMatchObject({ land: false })
+  })
+
+  it('ST-55/AC-1: --land yes writes true, with --yes or with every question answered; --land no writes false', async () => {
+    const withYes = makeRepo()
+    await runInit(['--yes', '--land', 'yes'], { cwd: withYes })
+    expect(await readSettings(withYes)).toMatchObject({ land: true, landWhen: 'all-checks', rulesFile: 'REVIEW.md' })
+
+    const allAnswered = makeRepo()
+    await runInit(ALL_FLAGS.map((x, i) => (ALL_FLAGS[i - 1] === '--land' ? 'yes' : x)), { cwd: allAnswered })
+    expect(await readSettings(allAnswered)).toMatchObject({ land: true, rulesFile: 'docs/RULES.md' })
+
+    const no = makeRepo()
+    await runInit(['--yes', '--land', 'no'], { cwd: no })
+    expect(await readSettings(no)).toMatchObject({ land: false })
+
+    const equals = makeRepo()
+    await runInit(['--yes', '--land=yes'], { cwd: equals })
+    expect(await readSettings(equals)).toMatchObject({ land: true })
+  })
+
+  it('ST-55/AC-1: readSettings still requires land, and holds no default for it', async () => {
+    const cwd = makeRepo()
+    await runInit(['--yes'], { cwd })
+    const body = JSON.parse(read(cwd, 'steward.config.json'))
+    delete body.land
+    writeFileSync(path.join(cwd, 'steward.config.json'), JSON.stringify(body))
+    await expect(readSettings(cwd)).rejects.toThrow(/missing required key 'land'/)
+    writeFileSync(path.join(cwd, 'steward.config.json'), JSON.stringify({ ...body, land: 'no' }))
+    await expect(readSettings(cwd)).rejects.toThrow(/land/)
+  })
+})
+
+describe('ST-55/AC-2: the output tells review-only from unattended landing', () => {
+  it('ST-55/AC-2: a new land false says steward reviews and does not land unattended, and shows the manual path', async () => {
+    const { out, code } = await runInit(['--yes'], { cwd: makeRepo() })
+    expect(code).toBe(0)
+    expect(out).toMatch(/land set to false: steward can review pull requests but will not land any unattended/)
+    expect(out).toContain('`steward land <pr-number>`')
+    expect(out).not.toMatch(/explicitly enabled/)
+  })
+
+  it('ST-55/AC-2: a new land true says unattended landing was explicitly enabled', async () => {
+    const { out } = await runInit(['--yes', '--land', 'yes'], { cwd: makeRepo() })
+    expect(out).toMatch(/land set to true: unattended landing was explicitly enabled/)
+    expect(out).not.toMatch(/will not land any unattended/)
+  })
+
+  it('ST-55/AC-2: --yes is said not to consent to unattended landing, and is never described as enabling it', async () => {
+    const { out } = await runInit(['--yes'], { cwd: makeRepo() })
+    expect(out).toMatch(/--yes took the default for the landing question, no: it does not consent to unattended landing/)
+    for (const line of out.split('\n').filter((l) => l.includes('--yes'))) expect(line).toMatch(/does not consent/)
+    // An explicit --land yes is the person's own answer; --yes is not blamed or credited for it.
+    const explicit = await runInit(['--yes', '--land', 'yes'], { cwd: makeRepo() })
+    expect(explicit.out).not.toMatch(/--yes took the default/)
+    const terminal = await runInit([], { cwd: makeRepo(), terminal: fakeTerminal(LAND_ANSWERS('')) })
+    expect(terminal.out).not.toMatch(/--yes/)
+  })
+
+  it('ST-55/AC-2: the prompt and the usage text say that --yes and the default do not enable unattended landing', async () => {
+    const q = QUESTIONS.find((x) => x.id === 'land')
+    expect(q.prompt).toMatch(/\(no: steward reviews, the project merges/)
+    const { err } = await runInit(['--nope'], { cwd: makeRepo() })
+    expect(err).toMatch(/--yes takes the default of --land, which is no, and only --land yes/)
+    expect(err).toContain('steward init --yes --land yes')
+  })
+
+  it('ST-55/AC-2: both outcomes say merging the installation pull request starts nothing on any machine', async () => {
+    for (const args of [['--yes'], ['--yes', '--land', 'yes']]) {
+      const { out } = await runInit(args, { cwd: makeRepo() })
+      expect(out).toMatch(/Merging it starts nothing on any machine: running steward on a machine is a separate step/)
+    }
+  })
+
+  it('ST-55/AC-2: what it prints for either outcome names no story or criterion id, script or module file', async () => {
+    for (const args of [['--yes'], ['--yes', '--land', 'yes']]) {
+      const { out, err } = await runInit(args, { cwd: makeRepo() })
+      expect(`${out}\n${err}`).not.toMatch(MENTIONS_STEWARD_INTERNALS)
+    }
+    expect(QUESTIONS.find((x) => x.id === 'land').prompt).not.toMatch(MENTIONS_STEWARD_INTERNALS)
+  })
+})
+
+describe('ST-55/AC-3: an existing settings file keeps its authorization', () => {
+  const existing = (land) => `${JSON.stringify({
+    repo: REPO, setup: null, check: null, landWhen: 'all-checks', land, unitLinks: ['file'], rulesFile: 'REVIEW.md', inspectAfterHours: 6,
+  }, null, 4)}\n`
+
+  it.each([
+    ['true', true, ['--yes']],
+    ['false', false, ['--yes']],
+    ['true', true, ['--yes', '--land', 'no']],
+    ['false', false, ['--yes', '--land', 'yes']],
+    ['false', false, ['--yes', '--land', 'no']],
+    ['true', true, ['--yes', '--land', 'yes']],
+  ])('ST-55/AC-3: a file with land %s is left byte for byte by %j', async (_name, land, args) => {
+    const text = existing(land)
+    const cwd = makeRepo({ files: { 'steward.config.json': text } })
+    const before = bytes(cwd, 'steward.config.json')
+    const { code, out } = await runInit(args, { cwd })
+    expect(code).toBe(0)
+    expect(bytes(cwd, 'steward.config.json').equals(before)).toBe(true)
+    expect(read(cwd, 'steward.config.json')).toBe(text)
+    expect(out).toContain('left steward.config.json: already there')
+    expect(out).not.toMatch(/wrote steward\.config\.json/)
+    // It does not claim its land setting was set, changed or enabled.
+    expect(out).not.toMatch(/land set to (true|false)|explicitly enabled|will not land any unattended|took the default/)
+    expect(out).toMatch(/An existing steward\.config\.json governs its own landing authorization: init did not read it or change its land setting/)
+  })
+
+  it('ST-55/AC-3: answering the question at the terminal does not change an existing file either', async () => {
+    for (const land of [true, false]) {
+      const text = existing(land)
+      const cwd = makeRepo({ files: { 'steward.config.json': text } })
+      await runInit([], { cwd, terminal: fakeTerminal(LAND_ANSWERS(land ? 'no' : 'yes')) })
+      expect(read(cwd, 'steward.config.json')).toBe(text)
+    }
+  })
+
+  it('ST-55/AC-3: two runs of a new installation: the second leaves every file as the first wrote it', async () => {
+    for (const land of ['no', 'yes']) {
+      const cwd = makeRepo()
+      const machine = path.join(fresh('home'), 'settings.json')
+      const pkg = makePackage()
+      const first = await runInit(['--yes', '--land', land], { cwd, machine, pkg })
+      const written = Object.fromEntries(tree(cwd).map((rel) => [rel, bytes(cwd, rel)]))
+      expect(JSON.parse(read(cwd, 'steward.config.json')).land).toBe(land === 'yes')
+      const opposite = land === 'yes' ? 'no' : 'yes'
+      const second = await runInit(['--yes', '--land', opposite], { cwd, machine, pkg })
+      expect(second.code).toBe(0)
+      expect(tree(cwd)).toEqual(Object.keys(written))
+      for (const [rel, content] of Object.entries(written)) expect(bytes(cwd, rel).equals(content), rel).toBe(true)
+      expect(first.out).toContain('wrote steward.config.json')
+      expect(second.out).toContain('left steward.config.json: already there')
+      expect(second.out).not.toMatch(/land set to/)
+    }
+  })
+
+  it('ST-55/AC-3: with no settings file written, it says there is no landing setting yet', async () => {
+    const { out } = await runInit(['--yes'], { cwd: makeRepo({ origin: null }) })
+    expect(out).toMatch(/With no steward\.config\.json there is no landing setting: steward lands nothing unattended/)
+  })
+})
+
+describe('ST-55/AC-4: the gate is installed, and review-only installation does not let it merge unattended', () => {
+  const alice = { alice: 'write' }
+  /** A fake pull request 1 with everything the gate wants, and the settings file `init` wrote. */
+  const world = (cwd) => fakeRunwayGitHub({ pulls: [runwayPull(1)], settingsText: read(cwd, 'steward.config.json'), permissions: alice })
+  const HEAD = 'c'.repeat(39) + '1'
+  const asGate = { repo: 'owner/project', eventName: 'workflow_dispatch', actor: 'alice' }
+
+  it('ST-55/AC-4: a review-only installation writes the same files as one with land true, and nothing else', async () => {
+    const off = makeRepo()
+    const on = makeRepo()
+    const gh = fakeGitHub()
+    await runInit(['--yes'], { cwd: off, gh })
+    await runInit(['--yes', '--land', 'yes'], { cwd: on })
+    expect(tree(off)).toEqual(NEW_FILES)
+    expect(tree(on)).toEqual(tree(off))
+    for (const rel of tree(off).filter((r) => r !== 'steward.config.json')) {
+      expect(bytes(off, rel).equals(bytes(on, rel)), rel).toBe(true)
+    }
+    for (const file of [...GATE_WORKFLOWS, INSPECTION_WORKFLOW]) {
+      const text = read(off, `.github/workflows/${file}`)
+      expect(text, file).toContain('#v9.8.7 steward')
+      expect(text, file).not.toContain('{{STEWARD_VERSION}}')
+      // Inspection's workflow has a schedule of its own, from before; the gate's and the runway's have none.
+      if (GATE_WORKFLOWS.includes(file)) expect(text, file).not.toMatch(/^\s*schedule:/m)
+    }
+    // Only labels are created, and no reviewer, coder, rotation or landing is started.
+    expect(writes(gh).map((r) => `${r.method} ${r.rest}`)).toEqual(['POST /labels', 'POST /labels', 'POST /labels'])
+  })
+
+  it('ST-55/AC-4: with land false the runway lands nothing unattended, but lands a scoped manual request for an eligible pull request', async () => {
+    const cwd = makeRepo()
+    await runInit(['--yes'], { cwd })
+
+    for (const inputs of [{}, { prInput: '1' }, { prInput: '1', modeInput: 'unattended' }]) {
+      const w = world(cwd)
+      const result = runRunway({ ...asGate, ...inputs }, w.deps)
+      expect(result.landed).toBeNull()
+      expect(result.refused).toMatch(/land is false/)
+      expect(w.merges).toEqual([])
+    }
+
+    const w = world(cwd)
+    expect(runRunway({ ...asGate, prInput: '1', modeInput: 'manual', headInput: HEAD }, w.deps)).toEqual({ landed: 1 })
+    expect(w.merges).toEqual([['1', '--repo', 'owner/project', '--squash', '--match-head-commit', HEAD]])
+  })
+
+  it('ST-55/AC-4: with land true the runway keeps its unattended eligibility', async () => {
+    const cwd = makeRepo()
+    await runInit(['--yes', '--land', 'yes'], { cwd })
+    for (const inputs of [{}, { prInput: '1' }]) {
+      const w = world(cwd)
+      expect(runRunway({ ...asGate, ...inputs }, w.deps)).toEqual({ landed: 1 })
+      expect(w.merges).toEqual([['1', '--repo', 'owner/project', '--squash', '--match-head-commit', HEAD]])
+    }
+  })
+
+  /** A GitHub for `landPullRequest`: pull request 7 is open and landable until it is dispatched. */
+  function landWorld() {
+    const requests = []
+    const SHA7 = 'a'.repeat(40)
+    const fetch = async (url, init) => {
+      requests.push({ method: init.method, url })
+      const ok = (json, code = 200) => ({ ok: true, status: code, json: async () => json })
+      if (init.method === 'POST') return ok(null, 204)
+      if (url.includes('/check-runs')) return ok({ total_count: 1, check_runs: [{ id: 1, name: 'test', status: 'completed', conclusion: 'success' }] })
+      if (url.includes('/commits/')) return ok({ statuses: [{ id: 1, context: 'review/agent', state: 'success' }] })
+      const dispatched = requests.some((r) => r.method === 'POST')
+      return ok({ head: { sha: SHA7 }, state: 'open', merged: dispatched, draft: false, labels: [], mergeable_state: 'clean' })
+    }
+    return { requests, fetch }
+  }
+  const land = async (settings, g, mode) => {
+    const ctx = createLandContext({ repo: REPO, landing: settings.land, landWhen: settings.landWhen, fetch: g.fetch, getToken: async () => 't' })
+    return landPullRequest({ number: 7, ctx, mode, once: true, sleep: async () => {}, latencyLog: path.join(fresh('log'), 'latency.jsonl') })
+  }
+
+  it('ST-55/AC-4: with the settings init wrote, the pilot lands nothing unattended and sends no request, and a manual request is dispatched', async () => {
+    const cwd = makeRepo()
+    await runInit(['--yes'], { cwd })
+    const settings = await readSettings(cwd)
+    expect(settings.land).toBe(false)
+
+    const unattended = landWorld()
+    expect(await land(settings, unattended, 'unattended')).toMatchObject({ status: 'landing-off', triggers: 0 })
+    expect(unattended.requests).toEqual([])
+
+    const manual = landWorld()
+    expect(await land(settings, manual, 'manual')).toMatchObject({ status: 'merged', mode: 'manual', triggers: 1 })
+    const dispatch = manual.requests.filter((r) => r.method === 'POST')
+    expect(dispatch.map((r) => r.url)).toEqual([`https://api.github.com/repos/${REPO}/actions/workflows/land-approved.yml/dispatches`])
+  })
+
+  it('ST-55/AC-4: with the settings init wrote for an explicit yes, the pilot dispatches an unattended landing', async () => {
+    const cwd = makeRepo()
+    await runInit(['--yes', '--land', 'yes'], { cwd })
+    const settings = await readSettings(cwd)
+    expect(settings.land).toBe(true)
+    const g = landWorld()
+    expect(await land(settings, g, 'unattended')).toMatchObject({ status: 'merged', mode: 'unattended', triggers: 1 })
+    expect(g.requests.filter((r) => r.method === 'POST')).toHaveLength(1)
   })
 })
