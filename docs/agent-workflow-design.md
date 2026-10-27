@@ -2851,9 +2851,9 @@ shortened where it is long, so that it can be found there with its date.
   by this request); committing the caller's dirty tree or unrelated feature work; replacing or
   silently repairing existing installation files; reusing branches by name; automatic
   rollback/resume; and generating a generic PR without consulting the project's template. The
-  built contract avoids these, retaining a bounded first installation transaction. Coordinator activation and
-  automatic scheduling remain separate roadmap stories. Nothing here authorizes installation in
-  either client project or changes the release branch.
+  built contract avoids these, retaining a bounded first installation transaction. Coordinator
+  activation and automatic scheduling remain separate roadmap stories. Nothing here authorizes
+  installation in either client project or changes the release branch.
 
 ### The move, in order
 
