@@ -65,10 +65,10 @@ import {
   createBaseReader,
   defaultGit,
   discoverTemplates,
-  eachOriginUrl,
   findLocalConflicts,
   inspectInstallation,
   openCheckout,
+  originUrls,
   parentDirectories,
   pushDestination,
   pushNewBranch,
@@ -376,15 +376,27 @@ export function repoFromRemoteUrl(url) {
 }
 
 /**
- * The `origin` remote's repository, or `{ repo: null, why }`. The URL as configured is read first
- * and the URL after git's `insteadOf` rewriting second, so that an alias that expands to GitHub
- * counts.
+ * The `origin` remote's repository, or `{ repo: null, why }`, and the URL a fetch goes to. It is
+ * read from the URL git will really use (`git remote get-url --all origin`, after
+ * `url.<base>.insteadOf` rewriting): there must be one, and it must be a GitHub URL. When
+ * `remote.origin.url` is itself a GitHub URL, it must name the same repository, so that a rewrite
+ * to another repository, which would fetch from and push to that one, is refused.
  */
 function originRepo(run, root) {
-  const { found, url } = eachOriginUrl(run, root, repoFromRemoteUrl)
-  if (found) return { repo: found }
-  if (url === null) return { repo: null, why: 'the checkout has no `origin` remote' }
-  return { repo: null, why: `the \`origin\` remote, ${url}, is not a GitHub repository steward can read` }
+  const { effective, configured } = originUrls(run, root)
+  if (effective === null || effective.length === 0) return { repo: null, why: 'the checkout has no `origin` remote' }
+  if (effective.length > 1) return { repo: null, why: `the \`origin\` remote has more than one URL (${effective.join(', ')}); init needs one` }
+  const [url] = effective
+  const repo = repoFromRemoteUrl(url)
+  if (repo === null) {
+    const rewritten = configured !== null && configured !== url ? ` (${configured} rewritten by a url.<base>.insteadOf setting)` : ''
+    return { repo: null, why: `the \`origin\` remote, ${url}${rewritten}, is not a GitHub repository steward can read` }
+  }
+  const asWritten = configured === null ? null : repoFromRemoteUrl(configured)
+  if (asWritten !== null && asWritten.toLowerCase() !== repo.toLowerCase()) {
+    return { repo: null, why: `a url.<base>.insteadOf setting rewrites the \`origin\` URL ${configured} to ${url}, which is another repository` }
+  }
+  return { repo, url }
 }
 
 const isFile = (file) => {
@@ -821,8 +833,11 @@ function failureReport({ error, phase, created, worktree, branch, repo, pullUrl 
  * `cwd`, `env`, `homedir`, `fetch`, `getToken`, the `terminal` (`{ isTTY, question, write }`),
  * `findExecutable` (where `codex` is on the PATH), `exists` (whether a path names a file), the
  * steward package's root (`packageRoot`, where its `package.json` and `templates/` are), the runner
- * of every git command (`git`, which takes the folder and the argument array and gives
- * `{ status, stdout, stderr }`) and the output.
+ * of every git command (`git`, which takes the folder and the argument array and gives `{ status,
+ * stdout, stderr }`), `transport` and the output. `transport(url)` maps a GitHub URL that has been
+ * checked (the URL a fetch or a push of `origin` goes to, after git's own rewriting) to the URL git
+ * is run against; it is the identity unless a caller of `main` passes another, which only the tests
+ * do (to reach a bare repository): neither the command line nor the environment reaches it.
  */
 export async function main(
   argv,
@@ -838,12 +853,13 @@ export async function main(
     packageRoot = PACKAGE_ROOT,
     git = defaultGit,
     writeMachineSettings = writeWhole,
+    transport = (url) => url,
     out = console.log,
     err = console.error,
   } = {},
 ) {
   try {
-    return await run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExecutable, exists, packageRoot, git, writeMachineSettings, out })
+    return await run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExecutable, exists, packageRoot, git, writeMachineSettings, transport, out })
   } catch (error) {
     if (error instanceof Refusal) {
       err(error.message)
@@ -863,7 +879,7 @@ export async function main(
 /** The question's prompt, with the choices it offers when it has them. */
 const promptOf = (q, state) => (q.choices ? `${q.prompt} (${q.choices(state).join(', ')})` : q.prompt)
 
-async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExecutable, exists, packageRoot, git: runGit, writeMachineSettings, out }) {
+async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExecutable, exists, packageRoot, git: runGit, writeMachineSettings, transport, out }) {
   const flags = parseFlags(argv)
 
   // Everything that can refuse comes before the first write.
@@ -880,14 +896,15 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   }
   const pin = ref?.toLowerCase() ?? `v${version}`
 
-  const { repo, why } = originRepo(runGit, root)
+  const { repo, why, url: fetchUrl } = originRepo(runGit, root)
   if (repo === null) {
     throw new Refusal(`${why}: init opens its pull request on the project's GitHub repository, so give this checkout an \`origin\` that names one`)
   }
 
   // Where a push would write, and what in the caller's configuration would send a write or a commit
   // elsewhere, are settled before anything is made.
-  const destination = pushDestination(runGit, root, (url) => repoFromRemoteUrl(url) === repo)
+  const pushUrl = pushDestination(runGit, root, (url) => repoFromRemoteUrl(url)?.toLowerCase() === repo.toLowerCase())
+  const destination = transport(pushUrl)
   assertConfigApplies(runGit, root)
 
   const branch = flags.values['--branch'] ?? DEFAULT_BRANCH
@@ -932,7 +949,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   }
   let base
   try {
-    base = captureBase(runGit, root)
+    base = captureBase(runGit, root, transport(fetchUrl))
   } catch (error) {
     if (error instanceof Refusal) throw error
     throw new Error(`could not read origin (${error.message})`)

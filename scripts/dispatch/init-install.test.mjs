@@ -144,7 +144,10 @@ describe('ST-56/AC-1: the preflight, before anything is made', () => {
     const worktreeCalls = inCheckout.filter((c) => c.args[0] === 'worktree').map((c) => c.args[1])
     expect([...new Set(worktreeCalls)].sort()).toEqual(['add', 'list', 'remove'])
     const fetches = inCheckout.filter((c) => c.args[0] === 'fetch').map((c) => c.args)
-    expect(fetches).toEqual([['fetch', '--no-tags', '--quiet', 'origin', '+refs/heads/main:refs/remotes/origin/main']])
+    expect(fetches).toHaveLength(1)
+    expect(fetches[0].slice(0, 3)).toEqual(['fetch', '--no-tags', '--quiet'])
+    expect(path.resolve(fetches[0][3])).toBe(path.resolve(remoteOf(cwd)))
+    expect(fetches[0][4]).toBe('+refs/heads/main:refs/remotes/origin/main')
   })
 
   it('ST-56/AC-1: an unborn HEAD is refused, exit 2, naming the reason and the remedy, before anything is made', async () => {
@@ -1167,7 +1170,7 @@ describe('ST-56/AC-6: the body, written as the project expects', () => {
     const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd, encoding: 'utf8', input: 'docs/elsewhere.md' }).trim()
     git(cwd, 'update-index', '--add', '--cacheinfo', `120000,${blob},.github/pull_request_template.md`)
     git(cwd, 'commit', '-q', '-m', 'link')
-    git(cwd, 'push', '-q', 'origin', 'main')
+    git(cwd, 'push', '-q', slashes(remoteOf(cwd)), 'main')
     git(cwd, 'checkout', '-q', '--', '.github/pull_request_template.md')
     const gh = fakeGitHub()
     const refused = await runInit(['--yes'], { cwd, gh })
@@ -1803,7 +1806,7 @@ describe('ST-56/AC-5 and AC-2 (review 2): what a push can add, and where it goes
     const { code, err } = await runInit(['--yes'], { cwd, gh, git: watched })
     expect(code).toBe(2)
     expect(err).toMatch(/a push to origin would go to|a push to origin would go to more than one place/)
-    expect(err).toMatch(/clear remote\.origin\.pushurl and any url\.<base>\.pushInsteadOf/)
+    expect(err).toMatch(/clear remote\.origin\.pushurl and any url\.<base>\.insteadOf or pushInsteadOf/)
     expect(gh.requests).toEqual([])
     expect(watched.calls.some((c) => c.args[0] === 'fetch' || isGit(c.args, 'worktree', 'add'))).toBe(false)
     expect(callerState(cwd)).toEqual(before)
@@ -1811,18 +1814,56 @@ describe('ST-56/AC-5 and AC-2 (review 2): what a push can add, and where it goes
     expect(bareRef(cwd, 'refs/heads/steward/install')).toBe('')
   })
 
-  it('ST-56/AC-2: a push destination that names the same GitHub repository is read before anything is made: main there must be the base that was fetched', async () => {
+  it('ST-56/AC-2: a push URL that names the same repository in another spelling (ssh for https) is accepted, and the push goes to it', async () => {
     const cwd = makeRepo()
     git(cwd, 'config', 'remote.origin.pushurl', 'git@github.com:acme/widgets.git')
     const watched = watchGit()
+    const { code, err } = await runInit(['--yes'], { cwd, git: watched })
+    expect(err).toBe('')
+    expect(code).toBe(0)
+    expect(bareRef(cwd, 'refs/heads/steward/install')).toMatch(/^[0-9a-f]{40}$/)
+  })
+
+  const rewrites = {
+    'a url.<base>.insteadOf that rewrites origin to another GitHub repository': 'https://github.com/other/repo.git',
+    'a url.<base>.insteadOf that rewrites origin to a URL that is not GitHub': 'https://gitlab.com/acme/widgets.git',
+    'a url.<base>.insteadOf that rewrites origin to a local path': '/somewhere/else.git',
+  }
+  it.each(Object.keys(rewrites))('ST-56/AC-1: %s (fetch and push alike) is refused before anything is made, naming the URL', async (name) => {
+    const cwd = makeRepo()
+    git(cwd, 'config', `url.${rewrites[name]}.insteadOf`, GITHUB_URL)
+    const before = callerState(cwd)
+    const watched = watchGit()
     const gh = fakeGitHub()
     const { code, err } = await runInit(['--yes'], { cwd, gh, git: watched })
-    // The file transport only is allowed, so GitHub cannot be reached: reading the destination fails.
-    expect(code).toBe(1)
-    expect(err).toMatch(/could not read git@github\.com:acme\/widgets\.git, where the branch would be pushed/)
+    expect(code).toBe(2)
+    expect(err).toContain(rewrites[name])
+    expect(err).toMatch(/insteadOf/)
     expect(gh.requests).toEqual([])
-    expect(watched.calls.some((c) => isGit(c.args, 'worktree', 'add'))).toBe(false)
+    expect(watched.calls.some((c) => c.args[0] === 'fetch' || isGit(c.args, 'worktree', 'add'))).toBe(false)
+    expect(callerState(cwd)).toEqual(before)
     expect(existsSync(worktreeOf(cwd))).toBe(false)
+    expect(bareRef(cwd, 'refs/heads/steward/install')).toBe('')
+  })
+
+  it('ST-56/AC-1: with no transport given, as in a real run, init goes to the URL git names: here GitHub, which the file transport refuses, so nothing is made', async () => {
+    const cwd = makeRepo()
+    const watched = watchGit()
+    const gh = fakeGitHub()
+    const { code, err } = await runInit(['--yes'], { cwd, gh, git: watched, transport: (url) => url })
+    expect(code).toBe(1)
+    expect(err).toMatch(/could not read origin/)
+    const fetch = watched.calls.find((c) => c.args[0] === 'fetch')
+    expect(fetch.args[3]).toBe(GITHUB_URL)
+    expect(gh.requests).toEqual([])
+    expect(existsSync(worktreeOf(cwd))).toBe(false)
+  })
+
+  it('ST-56/AC-1: the transport is an option of main, not of the command line or the environment', () => {
+    const source = readFileSync(path.join(ROOT, 'scripts/dispatch/init.mjs'), 'utf8')
+    expect(source).toContain('transport = (url) => url,')
+    expect(source).toContain('process.exitCode = await main(process.argv.slice(2))')
+    expect(source).not.toMatch(/process\.env[^\n]*transport|transport[^\n]*process\.env|'--transport'/)
   })
 
   it('ST-56/AC-2: main at the push destination must be the commit that was fetched: if it is not, init refuses before anything is made', async () => {

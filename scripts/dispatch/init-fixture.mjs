@@ -16,9 +16,10 @@ export const SHA = '0123456789abcdef0123456789abcdef01234567'
 export const REPO = 'acme/widgets'
 
 // Every test runs init in a temporary repository whose `origin` is a temporary bare repository
-// (the GitHub address it names is routed there by `url.<bare>.insteadOf`, and `GIT_ALLOW_PROTOCOL`
-// lets git use nothing but the file transport, so a fetch or push that was not routed there fails
-// instead of reaching github.com), with GitHub's answers injected, the machine's settings in a
+// (init is given a `transport` that maps the checked GitHub address to it, as `main`'s own option;
+// the checkout's git configuration still names GitHub, and `GIT_ALLOW_PROTOCOL` lets git use nothing
+// but the file transport, so a fetch or push that was not routed there fails instead of reaching
+// github.com), with GitHub's answers injected, the machine's settings in a
 // temporary file and the terminal injected: nothing for real.
 let base
 const savedEnv = {}
@@ -64,8 +65,9 @@ export const slashes = (p) => p.replaceAll('\\', '/')
 
 /**
  * A temporary repository with one commit (a `package.json`) on `main`, and `origin` when given. An
- * `origin` that is a GitHub address is routed to a temporary bare repository
- * (`url.<bare>.insteadOf`), which `main` is pushed to unless `push` is false.
+ * `origin` that is a GitHub address has a temporary bare repository behind it (`remoteOf`, which
+ * `runInit` hands to init as its transport), which `main` is pushed to unless `push` is false. The
+ * checkout's own configuration is not changed to reach it.
  */
 export function makeRepo({ origin = GITHUB_URL, files = {}, push = true } = {}) {
   const dir = fresh('repo')
@@ -77,14 +79,17 @@ export function makeRepo({ origin = GITHUB_URL, files = {}, push = true } = {}) 
   if (origin !== null && repoFromRemoteUrl(origin) !== null) {
     const bare = fresh('remote')
     git(bare, 'init', '-q', '--bare', '-b', 'main')
-    git(dir, 'config', `url.${slashes(bare)}.insteadOf`, origin)
     REMOTES.set(dir, bare)
   }
   writeFileSync(path.join(dir, 'package.json'), '{"name":"widgets","version":"1.0.0"}\n')
   put(dir, files)
   git(dir, 'add', '-A')
   git(dir, 'commit', '-q', '-m', 'start')
-  if (REMOTES.has(dir) && push) git(dir, 'push', '-q', '-u', 'origin', 'main')
+  if (REMOTES.has(dir) && push) {
+    git(dir, 'push', '-q', slashes(remoteOf(dir)), 'main')
+    git(dir, 'update-ref', 'refs/remotes/origin/main', 'HEAD')
+    git(dir, 'branch', '--set-upstream-to=origin/main')
+  }
   return dir
 }
 
@@ -131,7 +136,7 @@ export function snapshot(cwd, ref = 'steward/install') {
 /** Merges the installation branch into `main` and pushes it, as the crew's merge would. */
 export function mergeInstall(cwd, ref = 'steward/install') {
   git(cwd, 'merge', '-q', '--ff-only', ref)
-  git(cwd, 'push', '-q', 'origin', 'main')
+  git(cwd, 'push', '-q', slashes(remoteOf(cwd)), 'main')
 }
 
 export function put(dir, files) {
@@ -236,7 +241,7 @@ export function fakeTerminal(answers = null) {
  * being a folder holding the installation branch's files (made when first read). `git` replaces the
  * runner of every git command (see `watchGit`).
  */
-export async function runInit(args, { cwd, gh = fakeGitHub(), terminal = fakeTerminal(), pkg = makePackage(), machine = path.join(fresh('home'), 'settings.json'), codex = null, exists, git: runner, writeMachineSettings, getToken = async () => 'token' } = {}) {
+export async function runInit(args, { cwd, gh = fakeGitHub(), terminal = fakeTerminal(), pkg = makePackage(), machine = path.join(fresh('home'), 'settings.json'), codex = null, exists, git: runner, writeMachineSettings, getToken = async () => 'token', transport } = {}) {
   const out = []
   const err = []
   const code = await main(args, {
@@ -250,6 +255,7 @@ export async function runInit(args, { cwd, gh = fakeGitHub(), terminal = fakeTer
     ...(exists ? { exists } : {}),
     ...(runner ? { git: runner } : {}),
     ...(writeMachineSettings ? { writeMachineSettings } : {}),
+    transport: transport ?? ((url) => (REMOTES.has(cwd) && repoFromRemoteUrl(url) !== null ? slashes(REMOTES.get(cwd)) : url)),
     packageRoot: pkg,
     out: (line) => out.push(line),
     err: (line) => err.push(line),

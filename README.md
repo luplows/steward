@@ -130,8 +130,9 @@ The one exception is a change of the checkout's own to a file the installation a
 request template location, or a directory above them): `init` names each and stops, before it
 writes anything. It also refuses such a file that is marked `assume-unchanged` or `skip-worktree`,
 since `git status` would not show an edit to it, and says how to clear the mark. Before anything is
-made it also refuses a push destination that is not the repository it installs into
-(`remote.origin.pushurl`, `url.<base>.pushInsteadOf`, more than one), a `core.worktree` setting,
+made it also refuses an `origin` whose fetch or push URL, after git's own rewriting, is not a
+GitHub URL naming the repository it installs into (`remote.origin.pushurl`, `url.<base>.insteadOf`,
+`url.<base>.pushInsteadOf`, more than one URL), a `core.worktree` setting,
 and, with `extensions.worktreeConfig`, an identity, signing or hooks setting in the checkout's own
 worktree configuration that the new worktree would not read. It pushes the branch alone (no tags,
 no signing, no push options), runs git without the caller's repository environment variables

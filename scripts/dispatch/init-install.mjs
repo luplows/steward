@@ -143,39 +143,28 @@ export function openCheckout(run, cwd) {
 }
 
 /**
- * Finds the URL of `origin` that `resolve` accepts (it returns a truthy value for one it can use):
- * first the URL as configured, then, only if that is not accepted, the URL after git's
- * `url.<base>.insteadOf` rewriting, which is how a checkout may reach GitHub through an alias.
- * Resolves `{ found, url }`: what `resolve` gave and the URL it gave it for, or `found: null` and
- * the URL that was tried first (`null` when `origin` has none).
+ * The URLs `origin` has: `effective`, what `git remote get-url --all origin` gives (after any
+ * `url.<base>.insteadOf` rewriting, so where a fetch goes) as a list, or `null` when there is no
+ * `origin`; and `configured`, the first `remote.origin.url` as written, or `null`.
  */
-export function eachOriginUrl(run, root, resolve) {
-  const configured = run(root, ['config', '--get', 'remote.origin.url'])
-  const first = configured.status === 0 ? configured.stdout.trim() : ''
-  if (first !== '') {
-    const found = resolve(first)
-    if (found) return { found, url: first }
-  }
-  const expanded = run(root, ['remote', 'get-url', 'origin'])
-  const second = expanded.status === 0 ? expanded.stdout.trim() : ''
-  if (second !== '' && second !== first) {
-    const found = resolve(second)
-    if (found) return { found, url: second }
-  }
-  return { found: null, url: first || second || null }
+export function originUrls(run, root) {
+  const effective = run(root, ['remote', 'get-url', '--all', 'origin'])
+  const configured = run(root, ['config', '--get-all', 'remote.origin.url'])
+  const lines = (r) => (r.status === 0 ? r.stdout.split('\n').map((l) => l.trim()).filter((l) => l !== '') : [])
+  return { effective: effective.status === 0 ? lines(effective) : null, configured: lines(configured)[0] ?? null }
 }
 
 /**
- * Fetches `main` from `origin` and returns the full SHA of the commit it points at: the
- * installation's base. A remote with no `main` is a refusal; a remote that cannot be reached is an
- * ordinary failure.
+ * Fetches `main` from `url` (the URL of `origin`, as the caller's transport reaches it) and returns
+ * the full SHA of the commit it points at: the installation's base. A remote with no `main` is a
+ * refusal; a remote that cannot be reached is an ordinary failure.
  */
-export function captureBase(run, root) {
-  const fetched = run(root, ['fetch', '--no-tags', '--quiet', 'origin', '+refs/heads/main:refs/remotes/origin/main'])
+export function captureBase(run, root, url) {
+  const fetched = run(root, ['fetch', '--no-tags', '--quiet', url, '+refs/heads/main:refs/remotes/origin/main'])
   if (fetched.status !== 0) {
     // Which of the two it is: ask `origin` for its heads (exit 2 is "no such branch", anything else
     // a failure).
-    const listed = run(root, ['ls-remote', '--exit-code', '--heads', 'origin', 'refs/heads/main'])
+    const listed = run(root, ['ls-remote', '--exit-code', '--heads', url, 'refs/heads/main'])
     if (listed.status === 2) {
       throw new Refusal('origin has no `main` branch: steward installs through a pull request against `main`, so push `main` first')
     }
@@ -633,22 +622,20 @@ export function pushNewBranch(run, dir, branch, destination) {
 /**
  * Where a push of the installation would write, read before anything is made: every URL
  * `git remote get-url --push --all origin` gives (so after `remote.origin.pushurl` and
- * `url.*.pushInsteadOf`). Each must be the repository init installs into (`accepts(url)`) or the
- * very place `origin` is fetched from; and there must be one. Resolves that URL, which the
- * collision check, the push and the report then use. Throws `Refusal` naming what to clear.
+ * `url.*.pushInsteadOf`). There must be exactly one, and `accepts(url)` must say it is a GitHub URL
+ * naming the repository init installs into. Resolves that URL. Throws `Refusal` naming the URL and
+ * what to clear.
  */
 export function pushDestination(run, root, accepts) {
   const pushes = run(root, ['remote', 'get-url', '--push', '--all', 'origin'])
-  const fetch = run(root, ['remote', 'get-url', 'origin'])
-  if (pushes.status !== 0 || fetch.status !== 0) {
+  if (pushes.status !== 0) {
     throw new Refusal('init could not read where a push to origin would go (git remote get-url --push --all origin failed): fix the remote, or run init from another checkout')
   }
   const urls = pushes.stdout.split('\n').map((u) => u.trim()).filter((u) => u !== '')
-  const fetched = fetch.stdout.trim()
-  const elsewhere = urls.filter((u) => !(accepts(u) || u === fetched))
-  const how = 'clear remote.origin.pushurl and any url.<base>.pushInsteadOf that rewrites it, or run init from another checkout'
+  const elsewhere = urls.filter((u) => !accepts(u))
+  const how = 'clear remote.origin.pushurl and any url.<base>.insteadOf or pushInsteadOf that rewrites it, or run init from another checkout'
   if (urls.length === 0 || elsewhere.length > 0) {
-    throw new Refusal(`a push to origin would go to ${elsewhere.length > 0 ? elsewhere.join(', ') : 'nowhere'}, not to the repository init installs into: ${how}`)
+    throw new Refusal(`a push to origin would go to ${elsewhere.length > 0 ? elsewhere.join(', ') : 'nowhere'}, which is not a GitHub URL naming the repository init installs into: ${how}`)
   }
   if (new Set(urls).size > 1) {
     throw new Refusal(`a push to origin would go to more than one place (${urls.join(', ')}); init pushes to one: ${how}`)
