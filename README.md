@@ -103,6 +103,18 @@ a file: one already there is named and left. It writes:
 - the labels steward reads and applies, `review-blocked`, `breaker-override` and `inspection`;
 - the machine's settings (`~/.steward/settings.json`), only when that file is missing.
 
+`init` asks whether steward may land pull requests unattended, and the default is no, with `--yes`
+too: a new `steward.config.json` has `land: false`, so steward reviews and the project merges. Only
+a yes at that question, or `--land yes`, writes `land: true`. Either way, `steward land <pr-number>`
+asks for one landing of one pull request that has passed review, through the same gate
+([below](#landing-unattended-and-manual)). `init` leaves a `steward.config.json` that is already
+there as it is, byte for byte, whatever its `land` says or what `--yes` or `--land` are given, and
+its closing output says that file governs its own landing authorization. Merging the installation
+pull request starts nothing on any machine. Running steward on a machine without starting each
+command by hand (a local coordinator, with activation, stop and status controls) is planned
+([`docs/outline.md`](docs/outline.md), "Product roadmap") and not built; the commands in this
+README are what exists now.
+
 It commits, stages and pushes nothing, and does not touch the project's `package.json`, its CI or
 its stories, and it does nothing about branch protection. Set up this way, a project uses steward
 as it is: this is a complete set-up, which a person or a group within a larger project may use

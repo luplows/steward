@@ -24,7 +24,7 @@ decisions behind the keys are in [`outline.md`](outline.md), "Defining steward",
 | `setup` | `null`, or an object (below) | The command that prepares a worktree for a coder session. Nothing is run before a review. | `null`. |
 | `check` | `null`, or an object (below) | The command that checks a change, which the coder runs. | `null`. |
 | `landWhen` | `"all-checks"`, or a non-empty array of distinct, non-empty check names | Which checks must be green before steward lands a pull request. | `"all-checks"`. |
-| `land` | `true` or `false` | Standing permission for unattended landing: the rotation's landing, and a workflow dispatch that names no mode. The runway reads it from `main`. It does not stop `steward land <pr-number>`, a manual request ([below](#land)). | Currently asked; default `true`. **Planned (ST-55):** default `false`, with explicit opt-in and existing files preserved. |
+| `land` | `true` or `false` | Standing permission for unattended landing: the rotation's landing, and a workflow dispatch that names no mode. The runway reads it from `main`. It does not stop `steward land <pr-number>`, a manual request ([below](#land)). | Asked; default `false` (`--yes` takes it too), so a new installation reviews and does not land unattended. A yes at the question, or `--land yes`, writes `true`. A file already there is left as it is. |
 | `unitLinks` | An array, possibly empty, of distinct values from `"issue"`, `"file"` and `"other"` | The kinds of link steward reads from a pull request's body to find its unit. | Asked; default `["file", "issue"]`. |
 | `rulesFile` | A relative path with forward slashes, neither absolute nor containing a `..` segment, with no control character, backtick, `<` or `>` (`isRulesFilePath`, `scripts/dispatch/rules-file-path.mjs`) | The file of rules a pull request is reviewed against, read from `main`. | Asked; default `REVIEW.md`. `init` copies steward's example checklist there. |
 | `inspectAfterHours` | A positive integer | How many hours a pull request may stay pending or holding before inspection raises it. | Asked; default 24. |
@@ -37,6 +37,9 @@ that is already there is left as it is. The decision is in `agent-workflow-desig
 ## `land`
 
 `land` is the project's standing permission for unattended landing, and `true` is the opt-in.
+`steward init` writes `false` unless it is told yes at the question or by `--land yes`, and never
+changes a file that is already there, so a project's chosen value stays. The reader, `readSettings`,
+supplies no default: a file without `land` is refused.
 
 - Unattended: the rotation's landing, and a dispatch of `land-approved.yml` that names no mode (or
   `mode: unattended`, with or without a pull request). The runway reads `land` from `main`, and
