@@ -321,9 +321,9 @@ function assessChecks(pr, checks) {
  * of `ctx.landing`, which it neither reads nor changes. It binds to the first head it reads and
  * sends that head in its dispatch; if the head changes, while waiting or after the dispatch, or
  * the pull request is merged or closed at another head, it returns `head-changed` with the
- * `newHeadSha` and sends nothing further. Only the standalone
- * `land` command passes it. `onBound`, optional, is called once with `{ mode, pr, headSha }` when
- * a manual request has read the head it is bound to.
+ * `newHeadSha` and sends nothing further. Only the standalone `land` command passes it.
+ * `onBound`, optional, is called once with `{ mode, pr, headSha }` when a manual request has read
+ * the head it is bound to.
  */
 export async function landPullRequest({
   number,

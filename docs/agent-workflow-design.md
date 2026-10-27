@@ -2735,9 +2735,8 @@ shortened where it is long, so that it can be found there with its date.
     and rotations and frozen-loop callers never select manual mode. A manual request binds to
     the first head it reads and ends with `head-changed` if that head changes, including while
     waiting or after dispatch, or if the pull request is merged or closed at another head; it
-    needs a new invocation. It grants no future permission and
-    changes no project setting, label or standing permission. Existing wait bounds and ST-53's
-    separate refinement remain.
+    needs a new invocation. It grants no future permission and changes no project setting, label
+    or standing permission. Existing wait bounds and ST-53's separate refinement remain.
   - The runway reads both `land` and `landWhen` from the project's `main`, before it looks at any
     pull request. Missing, unreadable or invalid authorization fails closed, with the reason in
     the log and a failed run. An unattended trigger requires `land: true`, even if a caller's
