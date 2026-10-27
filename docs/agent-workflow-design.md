@@ -2733,8 +2733,11 @@ shortened where it is long, so that it can be found there with its date.
     proposal to lock out overlapping rotations of one project is superseded.
     The new coordinator reserves only automatic review work, whereas manual
     `review`, `--rereview`, `rotation` and `land` remain independent and
-    may overlap. ST-52 remains a draft with obsolete criteria and must be
-    rewritten before dispatch. Distributed review claims remain later work.
+    may overlap. ST-52's revised ACs in this planning PR reserve a canonical
+    repository/PR/head identity only for automatic coordinator work; the
+    story depends on ST-58 and ST-59. Crashed worker reconciliation belongs
+    to ST-60, and project fairness belongs to ST-61. Distributed review
+    claims remain later work.
 
 - **Manual landing and review-only installation defaults** (crew, 2026-10-26).
   - Standing permission for unattended landing differs from the crew explicitly requesting one

@@ -174,22 +174,24 @@ integrations and sophisticated per-handoff cancellation remain optional.
 
 ### Follow-up planning and existing work
 
-Existing stories retain their IDs, status and ACs in this planning PR. No story is retired or
-silently replaced. The following reconciliation must happen before dispatching overlapping work:
+Existing story IDs are preserved. ST-52 is explicitly revised in this planning PR to replace
+its superseded draft rotation-lock criteria; other existing story ACs are unchanged. No story
+is retired or silently replaced. Reconcile the remaining overlaps before dispatch:
 
 | Existing work | Relationship to the roadmap and next planning action |
 |---|---|
 | ST-48 | Retains crew-only two-client installation and gate validation. Refine its dependencies/evidence after ST-56 and the automatic scheduler exist, including activation and unattended review; manual evidence alone does not prove all of 0.1.0. |
-| ST-52 | Rewrite its obsolete manual-rotation-lock draft before dispatch. Reservations belong to the per-user coordinator's automatic work admission only; manual commands bypass them. Do not introduce a second lock system. |
+| ST-52 | Revised in this PR: durable per-user reservations apply only to coordinator-dispatched automatic reviews, not manual rotations or reviews. The story depends on ST-58 and ST-59; it does not implement recovery (ST-60), scheduling (ST-61) or a second rotation lock. |
 | ST-6 | Schedule the owner-run investigation and the implementation it recommends for 0.4. Reconcile earlier coder/scheduler dependencies when those stories are refined; deferring isolation does not mean it already exists. |
 | ST-11 / ST-12 | Held stories address the old loop's scheduler and retry pause/resume. Reconcile their useful requirements with the new coordinator, resource bounds and restart contracts; do not start the frozen coder loop to satisfy automatic review. |
 | ST-2 | Starvation promotion conflicts with approval-order scheduling of explicit handoffs. Decide its disposition with the crew before refining the coding queue; do not dispatch it as the 0.2 scheduling rule. Steward's current story queue stays tier/id ordered until separately changed. |
 | ST-53 | Separately refines the pilot's wait behaviour and frozen-loop callers. ST-54 changes authorization, preserves existing wait bounds, and does not consume or resolve ST-53. |
 
-ST-57 (activation), ST-58 (coordinator controls) and ST-59 (bounded review-only work)
-define the first coordinator units. ST-52 remains a draft requiring revision; coordinator
-recovery, fair scheduling, the ST-48 evidence amendment, deferred E-stop, durable handoff
-and fixing require separate refinement. No future mechanism is claimed implemented here.
+ST-57 (activation), ST-58 (coordinator controls), ST-59 (bounded review-only work)
+and the revised ST-52 (automatic review admission) define the first coordinator units.
+Coordinator recovery, fair scheduling, the ST-48 evidence amendment, deferred E-stop,
+durable handoff and fixing require separate refinement. No future mechanism is claimed
+implemented here.
 
 ### Release preparation
 
