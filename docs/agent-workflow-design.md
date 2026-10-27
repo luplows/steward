@@ -401,10 +401,11 @@ it:
   `mode` and `head`, below), and the pilot always names its own pull request in it. A run given a
   pull request considers only that one and lands nothing if it is not landable, so the pilot lands
   what it was called for and nothing else. A run given none, such as the crew's
-  `gh workflow run`, lands the oldest landable one, so nothing starves. The rotation decides which pull request is ready, and a runway that
-  landed a different one would spend the pilot's requests and land pull requests nobody asked it
-  to (decided 2026-09-28). The candidate choice is made in `scripts/land/select-candidates.mjs`,
-  which `runway.mjs` calls and which is tested without running the workflow.
+  `gh workflow run`, lands the oldest landable one, so nothing starves. The rotation decides
+  which pull request is ready, and a runway that landed a different one would spend the pilot's
+  requests and land pull requests nobody asked it to (decided 2026-09-28). The candidate choice is
+  made in `scripts/land/select-candidates.mjs`, which `runway.mjs` calls and which is tested
+  without running the workflow.
   An unscoped dispatch is unattended and requires the project's `land` to be true on `main`.
   With landing off, manual mode must explicitly name one PR and full head SHA and have an
   authorized workflow actor; it never picks the oldest PR as a fallback.

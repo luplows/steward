@@ -21,7 +21,7 @@ const manual = (extra = {}) => ({
   actor: 'alice',
   ...extra,
 })
-/** The fake for it: `land` false unless said otherwise, which is the case manual mode exists for. */
+/** The fake for it: `land` false unless said otherwise, the case manual mode exists for. */
 const github = (options = {}) => fakeGitHub({ pulls: [pull(1)], land: false, permissions: { alice: 'write' }, ...options })
 const refusedLine = (logs) => logs.find((line) => line.startsWith('::error title=Landing refused::'))
 

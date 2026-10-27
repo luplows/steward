@@ -30,9 +30,9 @@ const lines = (items) => items.map((item) => JSON.stringify(item)).join('\n')
 /**
  * `{ deps, calls, logs, merges }`: `deps` for `runRunway`. `pulls` are served oldest first.
  * `blockedCount` overrides the number of open pull requests the fake says carry `review-blocked`.
- * `land` and `landWhen` are the project's settings on `main`; `settingsText`, when given, is served
- * as the file's text instead. `permissions` maps a login to its collaborator permission; a login not
- * in it is a request GitHub fails. `calls` records each argument list given to `api`.
+ * `land` and `landWhen` are the project's settings on `main`; `settingsText`, when given, is
+ * served as the file's text instead. `permissions` maps a login to its collaborator permission; a
+ * login not in it is a request GitHub fails. `calls` records each argument list given to `api`.
  */
 export function fakeGitHub({ pulls = [], blockedCount = null, landWhen = 'all-checks', land = true, settingsText = null, permissions = {} } = {}) {
   const calls = []

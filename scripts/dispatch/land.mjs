@@ -153,7 +153,10 @@ const ALLOWED = [
   ['POST', new RegExp(`^/actions/workflows/${WORKFLOW.replace('.', '\\.')}/dispatches$`)],
 ]
 
-/** Throws unless `request` is one of the four this module builds, a dispatch in either form. Runs before any network call. */
+/**
+ * Throws unless `request` is one of the four this module builds, a dispatch in either form. Runs
+ * before any network call.
+ */
 export function assertAllowedRequest(repo, request) {
   const prefix = repoPath(repo)
   const url = typeof request?.url === 'string' ? request.url : ''

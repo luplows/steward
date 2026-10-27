@@ -37,7 +37,7 @@ on:
   workflow_dispatch:
     inputs:
       pr:
-        description: 'Pull request to land, and only that one. Empty: the oldest landable (unattended only).'
+        description: 'Pull request to land, only it. Empty: the oldest landable (unattended only).'
         required: false
         type: string
         default: ''

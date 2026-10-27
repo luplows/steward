@@ -43,8 +43,8 @@
 // command needs no checkout of the project.
 //
 // Usage: steward runway
-// Reads GH_TOKEN, REPO (owner/name), MODE_INPUT, PR_INPUT, HEAD_INPUT, EVENT_NAME and ACTOR from the
-// environment, as land-approved.yml sets them.
+// Reads GH_TOKEN, REPO (owner/name), MODE_INPUT, PR_INPUT, HEAD_INPUT, EVENT_NAME and ACTOR from
+// the environment, as land-approved.yml sets them.
 
 import { existsSync, realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -65,7 +65,10 @@ export const MODE_MANUAL = 'manual'
 /** The collaborator permissions of an actor whose manual request is honoured. */
 export const MANUAL_PERMISSIONS = ['admin', 'maintain', 'write']
 export const HEAD_PATTERN = /^[0-9a-f]{40}$/
-/** A GitHub login: letters, digits and single hyphens, at most 39, so it cannot reshape a request path. */
+/**
+ * A GitHub login: letters, digits and single hyphens, at most 39, so it cannot reshape a request
+ * path.
+ */
 export const ACTOR_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/
 
 const PAGE = 'per_page=100'
@@ -78,9 +81,9 @@ export function touchesOnlyWorkflows(changedFiles) {
 }
 
 /**
- * Reads `steward.config.json` on `main` and returns `{ land, landWhen }` with `land` checked to be a
- * boolean; `landWhen` is returned as read, for the caller to check. Throws, saying why, when the
- * file cannot be read or parsed, is not an object, or has no boolean `land`.
+ * Reads `steward.config.json` on `main` and returns `{ land, landWhen }` with `land` checked to be
+ * a boolean; `landWhen` is returned as read, for the caller to check. Throws, saying why, when
+ * the file cannot be read or parsed, is not an object, or has no boolean `land`.
  */
 function readAuthorization(api, repo) {
   let settings
@@ -100,7 +103,8 @@ function readAuthorization(api, repo) {
 
 /**
  * Decides the authorization (ST-54) from the inputs and the project's `main`, before any pull
- * request is looked at. Returns `{ mode, landWhen }` or `{ refusal }`; the reason names what failed.
+ * request is looked at. Returns `{ mode, landWhen }` or `{ refusal }`; the reason names what
+ * failed.
  */
 function authorize({ repo, modeInput, prInput, headInput, eventName, actor }, api, log) {
   const mode = modeInput === '' ? MODE_UNATTENDED : modeInput

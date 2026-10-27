@@ -42,7 +42,7 @@ Then, from a checkout of the repository:
 
 ```sh
 node scripts/dispatch/cli.mjs review <pr-number>   # review the pull request at its head
-node scripts/dispatch/cli.mjs land <pr-number>     # one explicit, gated landing, once it has passed and is green
+node scripts/dispatch/cli.mjs land <pr-number>     # one explicit, gated landing
 node scripts/dispatch/cli.mjs rotation             # one run of the review side: review what needs it, land what has passed, then inspect
 node scripts/dispatch/cli.mjs inspect              # raise a merge without a passing verdict, or a stall, on main or a release branch
 ```
