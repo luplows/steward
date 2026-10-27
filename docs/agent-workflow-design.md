@@ -2534,7 +2534,7 @@ shortened where it is long, so that it can be found there with its date.
     branch protection" to "switches them on alone" above: the command `steward protect` does it,
     once the gate is on `main`; see "One Node version for all of steward, and protection apart
     from `init`", below.
-    **Planned (ST-56), revision requested by the crew on 2026-10-26:** the earlier no-commit
+    **Planned (ST-56):** revision requested by the crew on 2026-10-26: the earlier no-commit
     delivery is replaced, after ST-55, by an isolated installation branch, commit, push and
     draft PR. No existing-file or activation safeguard is relaxed; see "Installation through
     a reviewable pull request", below. Until then the crew still commits and opens the PR.
@@ -2817,7 +2817,7 @@ shortened where it is long, so that it can be found there with its date.
   further writes and retain named recovery evidence, without automatic rollback or resume.
   Labels and missing machine settings remain separately reported effects outside the PR.
 
-  **Planned (ST-56), revised by the crew, 2026-10-27:** unrelated work in the caller's checkout
+  **Planned (ST-56):** revised by the crew, 2026-10-27: unrelated work in the caller's checkout
   must not prevent adoption. Feature branches, detached HEAD, and unrelated committed, staged,
   unstaged, untracked or ignored work are allowed; the installation uses the captured fetched
   base SHA and leaves caller state untouched. Refuse relevant local changes to installation
