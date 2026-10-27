@@ -2318,6 +2318,25 @@ shortened where it is long, so that it can be found there with its date.
   chosen: the project's `steward.config.json`; a gitignored file in each checkout, which the
   controller's reset to `origin/main` before every rotation makes fragile; and the environment
   variable alone.
+- **Per-user configuration naming and coordinator cadence** (crew, 2026-10-27).
+  **Planned (ST-63):** rename the existing per-user “machine settings” file to
+  `~/.steward/config.json` with `STEWARD_CONFIG` as its only environment override;
+  rename the reader and documentation to “user config”. Preserve required
+  `usageLimits`, `roles` and optional `tools` semantics. Add optional
+  `coordinator.scanIntervalMinutes`, default 15, accepting any positive whole
+  minute count that remains safely representable in milliseconds. A missing
+  configuration file still fails, and no automatic migration or old-name
+  fallback is provided before any clients have been installed. Editable
+  configuration remains separate from planned per-user operational state under
+  `~/.steward/state/`. Existing model selection and manual commands do not
+  acquire coordinator admission. ST-61 will consume the setting but owns the
+  actual scheduling and any CLI editing convenience. This revises the
+  2026-10-15 path/name decision above without erasing its history.
+  Considered and not chosen: a second coordinator-specific settings file
+  (needless duplication), retaining the “machine” naming (mistakenly implies
+  cross-account ownership), retaining the old path as a hidden fallback
+  (ambiguous source of truth), or including runtime state in editable config.
+
 - **A Codex reviewer runs read-only** (decided 2026-10-15 by the owner, with the planning session,
   from a second trial on the ChatGPT Plus plan). This answers ST-32's open
   questions. Codex's usage is read through `codex app-server`'s `account/rateLimits/read`, with no
