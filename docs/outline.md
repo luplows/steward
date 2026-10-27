@@ -461,7 +461,7 @@ settles it.
   gate. A default workflow dispatch is not a manual override. The precise authorization contract
   is in the design doc, "Manual landing and review-only installation defaults".
   New installations write false by default, with explicit opt-in to unattended landing;
-  existing configuration is preserved (ST-55).
+  existing configuration is preserved.
 - **`unitLinks` and `rulesFile`**: as decided under Review, above.
 - **Kept out of the settings:** the cap on reviews per rotation, a command-line option (The two
   sides, below); the machine label, which belongs to a machine, so stays `TW_MACHINE_LABEL`; and

@@ -27,8 +27,8 @@
  * Usage:
  *   steward init [--yes] [--ref <40-hex commit>] [--<question flag> <answer>]...
  * Examples:
- *   steward init --yes               review only: `land: false`; `steward land <pr-number>` still lands one
- *   steward init --yes --land yes    `land: true`: unattended landing explicitly enabled
+ *   steward init --yes             review only, `land: false`; `steward land <pr-number>` lands one
+ *   steward init --yes --land yes  `land: true`: unattended landing explicitly enabled
  */
 import { execFileSync } from 'node:child_process'
 import { accessSync, constants, existsSync, readdirSync, realpathSync, statSync } from 'node:fs'

@@ -1085,7 +1085,8 @@ describe('ST-55/AC-4: the gate is installed, and review-only installation does n
       const text = read(off, `.github/workflows/${file}`)
       expect(text, file).toContain('#v9.8.7 steward')
       expect(text, file).not.toContain('{{STEWARD_VERSION}}')
-      // Inspection's workflow has a schedule of its own, from before; the gate's and the runway's have none.
+      // Inspection's workflow has a schedule of its own, from before; the gate's and the runway's
+      // have none.
       if (GATE_WORKFLOWS.includes(file)) expect(text, file).not.toMatch(/^\s*schedule:/m)
     }
     // Only labels are created, and no reviewer, coder, rotation or landing is started.
