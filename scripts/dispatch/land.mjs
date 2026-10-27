@@ -319,8 +319,9 @@ function assessChecks(pr, checks) {
  * permission and needs `ctx.landing` true: with it false, either `once` setting returns
  * `landing-off` before any request is sent. Manual is one explicit request, valid with either value
  * of `ctx.landing`, which it neither reads nor changes. It binds to the first head it reads and
- * sends that head in its dispatch; if the head changes, while waiting or after the dispatch, it
- * returns `head-changed` with the `newHeadSha` and sends nothing further. Only the standalone
+ * sends that head in its dispatch; if the head changes, while waiting or after the dispatch, or
+ * the pull request is merged or closed at another head, it returns `head-changed` with the
+ * `newHeadSha` and sends nothing further. Only the standalone
  * `land` command passes it. `onBound`, optional, is called once with `{ mode, pr, headSha }` when
  * a manual request has read the head it is bound to.
  */
@@ -367,6 +368,8 @@ export async function landPullRequest({
       if (now() - times.triggeredAt >= SWEEP_RUN_BOUND_MS) return finish('sweep-pending')
       await sleep(POLL_INTERVAL_MS)
       const pr = readPullRequest(await ctx.send(buildGetPullRequest(ctx.repo, number)))
+      // A manual request checks the head first: a merge at another head is not its request.
+      if (manual && pr.headSha !== headSha) return headChanged(pr)
       if (pr.merged) {
         times.mergedAt = now()
         return finish('merged')
@@ -382,6 +385,7 @@ export async function landPullRequest({
 
   for (;;) {
     const pr = readPullRequest(await ctx.send(buildGetPullRequest(ctx.repo, number)))
+    if (manual && headSha !== null && pr.headSha !== headSha) return headChanged(pr)
     if (pr.merged) {
       times.mergedAt = now()
       return finish('merged')

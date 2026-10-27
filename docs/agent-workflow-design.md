@@ -365,7 +365,8 @@ it:
   and returns `landing-off`. The standalone `steward land <pr-number>` command is the only caller
   that asks for `manual`: one explicit request for one pull request at the first head the pilot
   reads, valid whether `land` is true or false. It sends that head in its dispatch, and if the head
-  changes, while waiting or after the dispatch, it returns `head-changed` and sends nothing more.
+  changes, while waiting or after the dispatch, or the pull request is merged or closed at another
+  head, it returns `head-changed` and sends nothing more.
   It goes through all the same gate checks, and the runway enforces the distinction as well; see
   "Manual landing and review-only installation defaults", Part 3. The runway was
   a `*/15` schedule until 2026-09-18, which GitHub delivered at roughly 5% of that rate
@@ -2733,7 +2734,8 @@ shortened where it is long, so that it can be found there with its date.
     dispatch has the separate authorized path below. `landPullRequest` defaults to unattended,
     and rotations and frozen-loop callers never select manual mode. A manual request binds to
     the first head it reads and ends with `head-changed` if that head changes, including while
-    waiting or after dispatch; it needs a new invocation. It grants no future permission and
+    waiting or after dispatch, or if the pull request is merged or closed at another head; it
+    needs a new invocation. It grants no future permission and
     changes no project setting, label or standing permission. Existing wait bounds and ST-53's
     separate refinement remain.
   - The runway reads both `land` and `landWhen` from the project's `main`, before it looks at any

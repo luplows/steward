@@ -969,3 +969,45 @@ describe('ST-54: a manual landing is one explicit request, valid with land true 
     moved.cleanup()
   })
 })
+
+describe('ST-54/AC-3: a merge or close at another head is a changed head, not a merge', () => {
+  const dispatchBody = (head) => ({ ref: 'main', inputs: { mode: 'manual', pr: '7', head } })
+
+  it('ST-54/AC-3: merged at another head before the dispatch returns head-changed, with no dispatch', async () => {
+    const w = world({ reviewAt: () => 'pending', pullAt: (t) => pull(t < POLL_INTERVAL_MS ? {} : { head: { sha: SHA2 }, merged: true, state: 'closed' }) })
+    expect(await w.run({ mode: 'manual' })).toMatchObject({ status: 'head-changed', headSha: SHA, newHeadSha: SHA2, triggers: 0 })
+    expect(w.dispatches).toEqual([])
+    w.cleanup()
+  })
+
+  it('ST-54/AC-3: merged or closed at another head after the dispatch returns head-changed, whichever loop reads it', async () => {
+    for (const opts of [{}, { once: true }]) {
+      for (const over of [{ merged: true, state: 'closed' }, { state: 'closed' }]) {
+        const w = world({ pullAt: (t, d) => pull(d > 0 ? { head: { sha: SHA2 }, ...over } : {}) })
+        const result = await w.run({ mode: 'manual', ...opts })
+        expect(result, JSON.stringify([opts, over])).toMatchObject({ status: 'head-changed', headSha: SHA, newHeadSha: SHA2, triggers: 1 })
+        expect(w.dispatches).toEqual([{ method: 'POST', url: `${BASE}/actions/workflows/land-approved.yml/dispatches`, body: dispatchBody(SHA) }])
+        w.cleanup()
+      }
+    }
+  })
+
+  it('ST-54/AC-3: merged at the bound head is still merged, in either loop', async () => {
+    for (const opts of [{}, { once: true }]) {
+      const w = world({ pullAt: (t, d) => pull(d > 0 ? { merged: true, state: 'closed' } : {}) })
+      expect(await w.run({ mode: 'manual', ...opts })).toMatchObject({ status: 'merged', headSha: SHA })
+      w.cleanup()
+    }
+  })
+
+  it('ST-54/AC-3: an unattended call keeps its order: merged or closed is reported before a head change', async () => {
+    for (const opts of [{}, { once: true }]) {
+      const merged = world({ pullAt: (t, d) => pull(d > 0 ? { head: { sha: SHA2 }, merged: true, state: 'closed' } : {}) })
+      expect(await merged.run(opts)).toMatchObject({ status: 'merged', headSha: SHA })
+      merged.cleanup()
+      const closed = world({ pullAt: (t, d) => pull(d > 0 ? { head: { sha: SHA2 }, state: 'closed' } : {}) })
+      expect(await closed.run(opts)).toMatchObject({ status: 'closed', headSha: SHA })
+      closed.cleanup()
+    }
+  })
+})

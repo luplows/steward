@@ -158,8 +158,8 @@ and the crew can land a pull request that has passed with `steward land <pr-numb
 request, valid with either value of `land`, for that pull request at the head it first reads. It
 changes no setting, label or standing permission, and it goes through the same gate as any landing:
 the runway still requires every condition it requires of an unattended one, and merges with
-`--match-head-commit`. If the head changes the request ends (`head-changed`) and the crew must ask
-again.
+`--match-head-commit`. If the head changes, or the pull request is merged or closed at another head, the request ends
+(`head-changed`) and the crew must ask again.
 
 `land-approved.yml` takes the same two paths when dispatched directly. Its inputs are `pr`, `mode`
 (`unattended`, the default, or `manual`) and `head`. A dispatch with no mode, or with only a pull
