@@ -85,6 +85,11 @@ do not yet exist. The implemented review rotation is still started by hand; the 
 explicit activation and automatic scheduling are roadmap work, not delivered behaviour.
 `migration-plan.md` preserves the earlier migration plan and is not the version roadmap.
 
+**Planned (ST-56):** `steward init` delivers repository installation files through a draft
+installation PR instead of leaving the crew to commit and open it. It preserves existing files
+and project conventions, and neither creating nor merging that PR activates a project locally.
+See "Installation through a reviewable pull request", Part 3, for its transaction boundaries.
+
 The roadmap schedules the ST-6 isolation investigation and its resulting implementation for 0.4,
 deliberately after the first coding and fixing slices. Earlier releases retain their resource
 bounds and existing safeguards but must disclose that stronger credential/filesystem isolation
@@ -2520,6 +2525,10 @@ shortened where it is long, so that it can be found there with its date.
     branch protection" to "switches them on alone" above: the command `steward protect` does it,
     once the gate is on `main`; see "One Node version for all of steward, and protection apart
     from `init`", below.
+    **Planned (ST-56), revision requested by the crew on 2026-10-26:** the earlier no-commit
+    delivery is replaced, after ST-55, by an isolated installation branch, commit, push and
+    draft PR. No existing-file or activation safeguard is relaxed; see "Installation through
+    a reviewable pull request", below. Until then the crew still commits and opens the PR.
 
   The first release, `v0.1.0`, is cut by a release review session, whose instructions are a
   separate pull request.
@@ -2769,6 +2778,44 @@ shortened where it is long, so that it can be found there with its date.
   release-review procedure to clients. Existing ST-48, ST-52, ST-6, ST-11/ST-12, ST-2 and ST-53
   require the explicit follow-up reconciliation in the roadmap; none is retired by this decision.
   The older release branch and PR #86 are left for the crew's later release-review reconciliation.
+
+- **Installation through a reviewable pull request** (crew, 2026-10-26).
+  **Planned (ST-56):** "Have `steward init` create a reviewable installation PR instead of
+  requiring the crew to manually commit and open one." For its body: "Do your best with writing
+  the body as the project would expect it." Existing-file safeguards, project-specific work
+  conventions and the separation between installation and local coordinator activation remain.
+  ST-56 follows ST-55, which follows ST-54: those stories deliver landing authorization and
+  review-only defaults first, without adding git writes; ST-56 then changes delivery, preserving
+  their results. Their ACs and IDs are unchanged. This revises the earlier instructions to commit
+  and open the installation PR manually, including the closing-message decision of 2026-10-23;
+  it does not change that decision's protection boundary or bootstrap adoption process.
+
+  The planning session's conservative implementation contract is specified in ST-56 for crew
+  review in the draft planning PR: a clean caller at the fetched `origin/main`, a new worktree
+  beside the checkout, a separate branch (default `steward/install`, with a naming override),
+  additions only, a create-only remote push and a draft PR against `main`. Existing branches
+  are refused and never adopted as installer-owned. Partial installations retain their files
+  and configured checklist path, add only missing files, and are reported without a compatibility
+  claim. Local-only target collisions refuse; a no-diff install opens no empty PR. Failures stop
+  further writes and retain named recovery evidence, without automatic rollback or resume.
+  Labels and missing machine settings remain separately reported effects outside the PR.
+
+  The project template is the body skeleton; known installation facts fill it and project-specific
+  unknowns are identified for the crew before readiness. Multiple templates require a choice.
+  Title and complete-body overrides accommodate a project's native work links and wording.
+  No model infers authorization from project prose, no client story schema is imposed, and no
+  tests or validation are claimed without actual results. The installer never marks the PR ready,
+  merges, requests landing, changes protection or enables local execution. The crew adopts the
+  installation through the project's existing process; a fresh gate cannot review its own install,
+  while an existing gate retains its rules. Optional protection stays a later explicit command.
+
+  Considered: continuing manual commit/PR assembly (the current delivery, superseded by this
+  request); committing the caller's dirty tree or unrelated feature work; replacing or silently
+  repairing existing installation files; reusing branches by name; automatic rollback/resume;
+  and generating a generic PR without consulting the project's template. The proposed contract
+  avoids these, retaining a bounded first installation transaction. Coordinator activation and
+  automatic scheduling remain separate roadmap stories. Nothing here authorizes installation in
+  either client project or changes the release branch.
 
 ### The move, in order
 

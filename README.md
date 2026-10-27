@@ -115,6 +115,11 @@ alone. The order is:
    checklist from `main`.
 4. Optionally, run `steward protect`, once that pull request has merged.
 
+Planned for 0.1: [ST-56](stories/ST-56-init-installation-pr.md) makes `init` commit its
+installation on a separate branch and open a draft PR using the project's template. The manual
+steps above describe the current command. Installation and explicit local activation remain
+separate; the planned PR creates no permission to run a local coordinator.
+
 `steward protect` sets branch protection on `main` so that GitHub stops a merge that has not passed
 review. It asks no question, takes no flag but `--repo owner/name` (the repository is otherwise the
 `repo` of the working directory's `steward.config.json`), and runs with `gh` signed in as an
