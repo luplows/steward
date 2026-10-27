@@ -18,9 +18,9 @@ enough, are in [`agent-workflow-design.md`](agent-workflow-design.md), "The cont
   for themselves, such as the pilot's flight log under the gitignored `logs/` and the reviewer's
   scratch checkout, is theirs. This holds even when the crew asks you for a change: it goes to a
   session that makes changes.
-- On steward, until its coder works, you run `rotation`, and `review.mjs` for a re-review (below),
-  not `coder.mjs`, `story.mjs` or `loop.mjs` (`agent-workflow-design.md`, "Portability", "Decided
-  so far").
+- On steward, until its coder works, you run `rotation`, `review.mjs` for a re-review (below), and
+  `land` for a manual landing the crew asks for ("Landing", below), not `coder.mjs`, `story.mjs` or
+  `loop.mjs` (`agent-workflow-design.md`, "Portability", "Decided so far").
 
 ## Where you run
 
@@ -79,8 +79,8 @@ node scripts/dispatch/cli.mjs rotation
   Do not run the command again, run `review.mjs` or `land.mjs` yourself, or move to another
   choice.
 - Run the command at most once per request. Do not run it again, or reach the same end another way,
-  except for a `--rereview` asked for as below. A later rotation reviews or lands a pull request
-  again only as the command's steps say.
+  except for a `--rereview` asked for as below, or a manual landing the crew asks for ("Landing",
+  below). A later rotation reviews or lands a pull request again only as the command's steps say.
 
 ## Re-review
 
