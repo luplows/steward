@@ -108,13 +108,20 @@ crew can inspect and adopt it without manually assembling the commit and pull re
       installation commit, push only the new branch to `origin`, then create one **draft** PR
       against `main` in that same repository. Print the repository, branch, base, full commit
       SHA and returned PR URL. Do not report completion until GitHub confirms the PR and its
-      draft state. Use the caller's ordinary configured git identity; do not invent an author,
-      attribution trailer or signing override. **Disable all Git hooks in the installation
+      draft state. For 0.1, an accepted ordinary commit identity has effective Git
+      `user.name` and `user.email` both present and nonblank; `commit.gpgSign` must be absent
+      or effectively `false`. Refuse an absent/blank identity, unreadable signing setting or
+      enabled `commit.gpgSign` (including `true` expressed through Git's accepted boolean
+      forms) **before effects**, naming the key and a remedy. Configured signing keys or GPG
+      tool paths are permitted when signing is disabled, because they do not sign this commit;
+      no identity/signature override is supplied, no new author or attribution is invented,
+      and Git's effective identity is used. **Disable all Git hooks in the installation
       worktree**, including checkout and commit hooks, by using a known empty hooks location
       for every installer-owned Git operation; never disable hooks in the caller's checkout.
-      Explain the bypassed installation hooks in output and the PR body so the crew can run
-      any necessary project-specific checks before approving. Refuse unsupported identity or
-      signing configuration rather than quietly overriding it. Keep the finished branch;
+      Always explain the bypassed installation hooks in command output so the crew can run
+      necessary project-specific checks before approving. Include the disclosure in the
+      **generated** PR body; AC-6 governs an explicitly supplied verbatim body instead.
+      Keep the finished branch;
       remove only the invocation's clean worktree after confirmed success.
 - [ ] **AC-6** — **Write the body as the project expects.** Use the existing project PR
       template as the body skeleton, retaining its headings and project-specific prompts.
@@ -131,8 +138,13 @@ crew can inspect and adopt it without manually assembling the commit and pull re
       deterministic installer cannot complete as crew follow-up before readiness; do not
       invent issue links, story IDs or completed work. Offer `--pr-title <text>` and
       `--pr-body-file <path>` overrides; read the latter before effects and use its contents
-      verbatim, without requiring steward's headings or a `Unit:` schema. Template selection
-      applies only without a supplied body; that override needs no template choice. The default
+      verbatim, without requiring steward's headings or a `Unit:` schema. With
+      `--pr-body-file`, never append the hook disclosure to the supplied body or refuse it
+      solely because the disclosure is absent. Instead, print the hook-bypass disclosure
+      and a specific instruction to add it to the PR body before marking the installation
+      ready; report this outstanding crew action even when the supplied body has no such
+      wording. Template selection applies only without a supplied body; that override
+      needs no template choice. The default
       title is `Install Steward review gate`. In the generated body, fill an existing `Unit:` line
       with `none` and flag it for crew confirmation; preserve a supplied body's unit link.
       Do not edit an existing project template or impose steward's story format.
@@ -177,8 +189,12 @@ crew can inspect and adopt it without manually assembling the commit and pull re
       second application, a linked-worktree `.git` file with `core.hooksPath=.git/hooks`, a
       `post-checkout` hook creating the checklist, and an unowned `settings.json.<pid>.tmp`
       collision to prove the new refusals and ownership checks. Include positive evidence that
-      supported origin/identity setups still create the intended branch and draft PR. Assert exact commit/diff contents, draft PR arguments/body, no mutation after
-      failure and unchanged caller state. Cover one/multiple/empty templates and both overrides.
+      valid `user.name`/`user.email` with unset or false `commit.gpgSign` succeeds even
+      when an unused signing key is configured; missing identity and enabled signing refuse
+      before effects. Verify generated PR bodies disclose skipped hooks, and a supplied
+      `--pr-body-file` lacking the disclosure is preserved byte-for-byte while command
+      output explicitly reports both the bypass and the crew action. Assert exact commit/diff
+      contents, draft PR arguments/body, no mutation after failure and unchanged caller state. Cover one/multiple/empty templates and both overrides.
       Update the old no-commit/no-push and labels-only assertions to test this bounded contract;
       retain the independent overwrite, pinning, template, settings and protection safeguards.
       Tests send no real GitHub writes or agent invocations. Update README installation guidance,
@@ -197,7 +213,8 @@ crew can inspect and adopt it without manually assembling the commit and pull re
 - Merging the installation, granting a gate exception, setting protection, **running hooks in
   the installer-owned worktree**, adding credentials/secrets, or changing the machine-settings
   schema. Supporting complex URL rewrites, pushurl, per-worktree Git configuration, repository
-  environment overrides and custom signing/hook execution is separate future compatibility work.
+  environment overrides, **enabled commit signing**, or custom hook execution is separate
+  future compatibility work.
 
 ## Constraints
 
