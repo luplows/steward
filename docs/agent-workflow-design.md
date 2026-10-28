@@ -2866,6 +2866,25 @@ shortened where it is long, so that it can be found there with its date.
   isolated in its own worktree. Manual recovery and the single-transaction story size are retained;
   advanced PR-body customization may be split later if implementation evidence warrants it.
 
+  **Planned (ST-56):** revised by the crew on 2026-10-27 after three blocked
+  implementation reviews. The installer supports a deliberately restricted Git
+  environment for the initial 0.1 install: it refuses URL rewrite rules, pushurl,
+  enabled per-worktree configuration, unsafe relative or Git-internal hooks paths,
+  ambiguous repository identity and inherited Git overrides that could alter
+  the repository or transport. These are read-only preflight refusals, with
+  remedies, not configurations claimed safe after one-step inspection.
+  Installer-owned worktree Git operations run with hooks disabled beginning with
+  worktree creation, and the generated PR discloses that fact; the caller's own
+  hooks and files are never changed. Every created target and temporary file
+  must have verifiable invocation ownership: unowned temp collisions are not
+  cleaned up, and generated content is checked against its own bytes and final
+  staged/commit tree. This supersedes ST-56's earlier normal-commit-hook
+  requirement but retains AC-1a's protection for unrelated work and feature
+  branches. Considered and not chosen: continuing to fix arbitrary chained
+  rewrites and hook side effects in the first release, or quietly bypassing
+  failing hooks without changing the story. This is a revised planned contract,
+  not behavior already implemented in PR #92.
+
   The project template is the body skeleton; known installation facts fill it and project-specific
   unknowns are identified for the crew before readiness. Multiple templates require a choice.
   Title and complete-body overrides accommodate a project's native work links and wording.
