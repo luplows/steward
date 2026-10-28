@@ -2831,6 +2831,42 @@ shortened where it is long, so that it can be found there with its date.
     harnesses); and requiring universal E-stop before automatic review (would
     hold up the smaller 0.1 goal). Existing bounds and recovery were retained.
 
+- **Automatic-review recovery, fair scheduling and deferred shared E-stop**
+  (crew, 2026-10-27; planning drafts reserved in ST-60–62).
+  - **Planned (ST-60):** after an unclean coordinator interruption, do not
+    dispatch another automatic reviewer until unfinished work and child survival
+    are positively reconciled. Persist work intent before dispatch; keep
+    ambiguous child/process outcomes blocked and observable rather than
+    reclaiming reservations solely from age or PID absence. The OS-level
+    liveness and operator-reconciliation mechanism remains an open design
+    question in this draft, not an implemented recovery guarantee.
+  - **Planned (ST-61):** scan only explicitly activated projects. After a safe
+    initial scan, give projects round-robin turns, with at most one
+    coordinator-managed reviewer per OS user; already discovered work does
+    not wait for another scan interval. Use the separately planned ST-63
+    per-user configuration, defaulting to a 15-minute discovery interval
+    with a configurable positive whole-minute value and no arbitrary
+    product ceiling. GitHub discovery failures retry on subsequent scans;
+    no exponential project backoff is in 0.1. Respect usage refusals and
+    their reported resets. A model-consuming review that definitively
+    fails does not automatically retry the unchanged head; a new head is
+    a new candidate, and direct manual commands remain independent.
+    Precise recovery handoff remains open while ST-60 is investigated.
+  - **Planned (ST-62):** a per-user shared emergency-stop latch with
+    registered local process trees, including independent manual commands,
+    explicit reset and verified-or-uncertain termination reporting is a
+    release requirement **before 1.0**, not part of the 0.1 automatic
+    review milestone. Neither a local stop nor reset can recall remote
+    GitHub actions already dispatched. Registration, descendant
+    termination and operator reconciliation are not yet designed for
+    implementation. This refines the earlier 2026-10-26 milestone statement
+    that included E-stop in 0.1; PR #93 contains the broader coordinator
+    roadmap reconciliation.
+  - Considered and not chosen: implicit age-based recovery, whole-rotation
+    automatic scheduling, manual admission locks, automatic repeat attempts
+    of a failed model-consuming review on the same head, mandatory project
+    exponential backoff and requiring full E-stop before 0.1.
+
 - **Installation through a reviewable pull request** (crew, 2026-10-26).
   **Planned (ST-56):** "Have `steward init` create a reviewable installation PR instead of
   requiring the crew to manually commit and open one." For its body: "Do your best with writing
