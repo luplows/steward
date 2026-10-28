@@ -2886,6 +2886,31 @@ shortened where it is long, so that it can be found there with its date.
     of a failed model-consuming review on the same head, mandatory project
     exponential backoff and requiring full E-stop before 0.1.
 
+  **Planned (ST-56):** revised by the crew on 2026-10-27 after three blocked
+  implementation reviews. The installer supports a deliberately restricted Git
+  environment for the initial 0.1 install: it refuses URL rewrite rules, pushurl,
+  enabled per-worktree configuration, unsafe relative or Git-internal hooks paths,
+  ambiguous repository identity and inherited Git overrides that could alter
+  the repository or transport. These are read-only preflight refusals, with
+  remedies, not configurations claimed safe after one-step inspection.
+  Installer-owned worktree Git operations run with hooks disabled beginning with
+  worktree creation; the command output always discloses this and generated PR
+  bodies include the disclosure. A supplied `--pr-body-file` remains verbatim:
+  the command reports the bypass and directs the crew to disclose it before
+  making that PR ready. Accept only effective nonblank `user.name` and
+  `user.email`, with `commit.gpgSign` unset or false; refuse missing identity
+  or enabled signing before any effects. An unused signing key can be present
+  when signing is disabled, without forcing a signing override. The caller's
+  own hooks, identity and files are never changed. Every created target and temporary file
+  must have verifiable invocation ownership: unowned temp collisions are not
+  cleaned up, and generated content is checked against its own bytes and final
+  staged/commit tree. This supersedes ST-56's earlier normal-commit-hook
+  requirement but retains AC-1a's protection for unrelated work and feature
+  branches. Considered and not chosen: continuing to fix arbitrary chained
+  rewrites and hook side effects in the first release, or quietly bypassing
+  failing hooks without changing the story. This is a revised planned contract,
+  not behavior already implemented in PR #92.
+
 - **Installation through a reviewable pull request** (crew, 2026-10-26).
   **Planned (ST-56):** "Have `steward init` create a reviewable installation PR instead of
   requiring the crew to manually commit and open one." For its body: "Do your best with writing
