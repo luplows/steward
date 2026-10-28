@@ -1,6 +1,6 @@
 ---
 id: ST-60
-title: Reconcile unfinished coordinator reviews safely after interruption
+title: Handle routine review failures and clean coordinator restart
 tier: next
 kind: workflow
 depends_on: [ST-52]
@@ -10,37 +10,35 @@ blocked: null
 
 ## Intent
 
-As a developer, I want a restarted coordinator to reconcile its previous automatic review before scheduling another, so that a crashed owner does not silently duplicate a live reviewer or discard an uncertain outcome.
+As a developer, I want routine reviewer failures and graceful coordinator restarts to leave automatic work in a clear state, so that ordinary operation can continue without repeating a failed review or silently abandoning uncertain work.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — Before spawning an automatic review, persist its repository, PR, intended head SHA, execution ID, owner identity, start intent and recovery phase durably. Persist the supervised process identity when known, including enough identity to reject a reused PID. State transitions use crash-safe writes, and an interrupted write never becomes an implied clean completion.
-- [ ] **AC-2** — On explicit coordinator start after an unclean exit, reconcile all nonterminal automatic work and ownership before accepting another automatic job. Inspect surviving process identity and the current PR/head/governing verdict. Neither process age nor the absence of a current-head verdict alone proves that a previous worker ended.
-- [ ] **AC-3** — When termination of the prior operation and its potentially surviving descendants is positively established, release its obsolete reservation, record the recovery outcome, and let later scheduling reconsider the current GitHub head using existing review eligibility. A recorded verdict is not duplicated. Tests cover an exited worker with and without a posted verdict and a moved head.
-- [ ] **AC-4** — When process identity, child startup, descendant liveness, or termination is uncertain, the coordinator reports `recovery-needed` with the implicated project/PR/head and actionable diagnostics, and dispatches no further automatic reviewer until reconciled. It does not kill unknown processes or take over using only an expired lock/PID. Tests cover PID reuse, missing child identity after spawn intent and a confirmed survivor.
-- [ ] **AC-5** — Graceful-stop intent survives an interruption: recovery reports it rather than silently interpreting a stop request as permission for unattended scheduling. Status remains available, and independent manual commands are unaffected by the coordinator's recovery block.
-- [ ] **AC-6** — Tests simulate process death between intent recording, child creation, child identity persistence, verdict posting and final state commit; no path treats unverified work as safe to duplicate. The implementing PR documents the recovery procedure and resolves its planned design marker.
+- [ ] **AC-1** — While the coordinator remains alive, an automatic operation that returns after its supervised reviewer work has ended records its actual terminal result through ST-52, including whether a model session started. Successful review, a refusal before model start, and a definitive model-consuming failure remain distinct. A thrown error is not alone evidence that reviewer work ended; an uncertain operation retains its nonterminal reservation.
+- [ ] **AC-2** — The completion handoff to ST-61 distinguishes a recorded verdict, a no-model refusal, and a definitive model-consuming failure. ST-61 applies its existing retry rules: a failure after model start does not automatically retry the unchanged repository/PR/head on later scans or after restart; no-model refusals may be reconsidered under its usage/discovery rules. Preserve the reviewer's existing bounded malformed-output retry within the original invocation. Persist the outcome needed for this handoff before admitting another automatic operation; persistence failure enters AC-4 rather than silently losing retry suppression.
+- [ ] **AC-3** — A graceful stop follows ST-58: close admission at stop acknowledgement, let the admitted operation finish, durably record its outcome, then release clean ownership. An explicit start after that clean stop may schedule after ownership acknowledgement and validation of local state, rechecking current GitHub eligibility through ST-59. Recorded verdicts and unchanged-head failure suppression survive this clean restart. No machine reboot is required.
+- [ ] **AC-4** — On start with abandoned or unverifiable ownership, a nonterminal review reservation, or unreadable/inconsistent completion state, report `recovery-needed` and start no automatic reviewer. Status identifies the known repository/PR/head and last phase when available, explains the uncertainty, and says automatic reconciliation is outside 0.1. Do not delete a reservation, kill an unknown process or take over based only on elapsed time or PID absence. A posted verdict or moved head alone does not clear unfinished execution. Independent manual commands remain available.
+- [ ] **AC-5** — A durable graceful-stop request is not treated as clean completion. If interruption prevents the drain and completion record from finishing, a later explicit start reports AC-4's refusal. Repeated status/stop calls do not clear the uncertainty or admit work.
+- [ ] **AC-6** — Stand-in tests cover a returned no-model refusal, a definitive reviewer failure, a recorded review, an acknowledged stop with work held open, successful drain and clean restart, failed outcome persistence, and a startup fixture containing unfinished work or interrupted-stop state. Assert the handoff classifications and zero automatic admissions in uncertain cases; no exhaustive OS crash-window or descendant-liveness experiment is required. The implementing PR documents these boundaries and resolves this story's planned design marker.
 
 ## Out of scope
 
-- Killing outstanding sessions on demand, a shared E-stop, or a process registry for independent manual commands.
-- Automatically retrying a reviewer that still has a live or unverifiable child, or treating local state as a GitHub verdict.
-- Cross-user or cross-machine claims and forced abandonment of an uncertain review without explicit operator reconciliation.
-- Scheduling policy, interval controls and fairness (ST-61).
+- Automatic recovery after coordinator/supervisor death, reconstructing orphaned process trees, PID-reuse reconciliation, uncertain GitHub POST recovery or a targeted operator recovery command (draft ST-64, future release).
+- Proving termination of every arbitrary descendant, OS-specific containment, or verifying a full machine reboot (ST-64 questions, not 0.1 prerequisites).
+- Killing sessions on demand, shared E-stop or registration of independent manual commands (ST-62).
+- Adding scheduler retry budgets, backoff or retry-reset commands; ST-61 keeps its existing policy.
 
 ## Constraints
 
-- Recovery must be conservative on supported operating systems. If it cannot verify the necessary process facts, do not claim safe automatic resumption.
+- Reuse ST-52 reservations, ST-58 ownership/drain behavior, ST-59 review execution and ST-61 retry policy. Local execution records are not GitHub verdicts.
+- This story handles routine outcomes under a living supervisor and clean stop/start. Unexpected interruptions receive a protective refusal, not a claim of automatic recovery.
 
 ## Context
 
-- `scripts/dispatch/spawn.mjs` currently supervises child timeouts and stalls but does not supply durable child supervision across a crash of the launching process.
-- `scripts/dispatch/review.mjs` checks PR head/verdict state around review posting; recovery must reuse those facts rather than invent a parallel result authority.
-- ST-52 (revised in planning PR #93) supplies nonterminal automatic reservations; ST-58 (also in PR #93) supplies ownership/control and graceful-stop intent.
-- Crew decision, 2026-10-27: E-stop is deferred until before 1.0, but safe restart remains essential to 0.1.
-- Suggested size: medium/large; may require platform-specific process supervision tests.
+- Crew decision, 2026-10-27: narrow 0.1 to expected reviewer failures and ordinary graceful restart; defer comprehensive exceptional recovery to a separate draft.
+- `scripts/dispatch/review.mjs` reports named outcomes and rechecks heads/verdicts; `spawn.mjs` supplies timeout/stall supervision while its caller lives. Neither supplies durable supervision across caller death.
+- ST-64 holds the exceptional-recovery questions. It is not a dependency of 0.1 scheduling.
 
 ## Open questions
 
-- Which supported OS process identity and descendant-liveness mechanism gives sufficient positive evidence after a supervisor crash, particularly on Windows? Define observable success/refusal cases before dispatching this story.
-- When previous work remains unverifiable, what explicit operator recovery action is allowed, and what proof is required to clear the block? Do not introduce an implicit unsafe `--force` takeover.
+*(none)*
