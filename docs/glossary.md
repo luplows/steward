@@ -19,6 +19,11 @@ Where a file defines the thing, the entry names it, and the file is the authorit
   yet run. *Formerly: Session B.*
 - **controller** — the session asked to run steward's dispatch scripts by hand, doing ATC's work
   (`docs/controller.md`). *Formerly: the dispatcher session.*
+- **coordinator** — planned for 0.1: the per-OS-user authority for scheduling
+  explicitly activated projects' automatic reviews, not manual commands
+  (`docs/outline.md`, Product roadmap).
+- **activation** — planned per-user permission for unattended local review of
+  an installed project; installation alone grants none (`docs/outline.md`).
 - **coder** — a session ATC starts to implement a unit. It commits; ATC pushes its branch and opens
   its flight.
 - **reviewer** — a session ATC starts to judge one flight at one head. It returns a verdict and
