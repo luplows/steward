@@ -342,7 +342,9 @@ export async function assertReviewableCheckout(dir, sha, repoDir) {
  *                  governing verdict there is `block`
  *   expectedHeadSha  optional full SHA binding automatic work to the selected head.
  *                  Validated here before any model session, together with current
- *                  automatic eligibility; omitted for independent manual review.
+ *                  automatic eligibility. Changed eligibility returns `head-moved`,
+ *                  retaining `eligibilityStatus` and `reason`; omitted for independent
+ *                  manual review. Rechecks after a session keep their existing results.
  *   scratchRoot    the directory the `tw-review-*` scratch directory is made in;
  *                  defaults to `os.tmpdir()`. Not exposed by the CLI
  *   sessionOptions extra `spawnSession` options (executable, run, timeouts,
@@ -404,6 +406,12 @@ export async function reviewPullRequest(options) {
     ? result : { ...result, headSha }
 }
 
+// AC-2: the selected candidate is stale even when its SHA is unchanged. Keep the
+// admission reason while giving the coordinator the required head-moved outcome.
+function eligibilityChanged(refusal) {
+  return { ...refusal, status: 'head-moved', eligibilityStatus: refusal.status }
+}
+
 async function executeReview({
   number, ctx, repoDir = process.cwd(), promptTemplate, baseEnv = process.env, sessionOptions = {},
   rereview = false, scratchRoot = tmpdir(), usage = readUsage, choice: named,
@@ -432,7 +440,7 @@ async function executeReview({
       return { status: 'head-moved', headSha: pr.headSha, reason: `the pull request is at ${pr.headSha}, not the expected ${expectedHeadSha}` }
     }
     const refusal = reviewTargetRefusal(pr) ?? await reviewHeadRefusal({ ctx, pr: { ...pr, number } })
-    if (refusal) return refusal
+    if (refusal) return eligibilityChanged(refusal)
   }
   if (!SHA_RE.test(pr.headSha) || !pr.headRef || !pr.baseRef) {
     throw new Error(`pull request #${number} did not resolve a head SHA, head branch and base branch`)
@@ -450,7 +458,9 @@ async function executeReview({
       }
     }
   } else if (existing) {
-    return { status: 'already-reviewed', headSha: pr.headSha, existing }
+    const refusal = { status: 'already-reviewed', headSha: pr.headSha, existing }
+    return expectedHeadSha === undefined ? refusal
+      : eligibilityChanged({ ...refusal, reason: 'a verdict is already at its head' })
   }
 
   const scratch = await mkdtemp(path.join(scratchRoot, 'tw-review-'))

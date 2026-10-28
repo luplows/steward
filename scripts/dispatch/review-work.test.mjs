@@ -108,7 +108,10 @@ function github(prs, comments = {}) {
         const p = prs.find((p) => p.number === Number(n))
         if (kind === 'pulls' && !sub && p) return json(p)
         if (sub === 'labels' && p) return json(p.labels)
-        if (sub === 'comments' && p) return json(comments[n] ?? [])
+        if (sub === 'comments' && p) {
+          const found = comments[n] ?? []
+          return json(typeof found === 'function' ? found() : found)
+        }
         if (kind === 'issues' && n === '81' && !sub) return json({ number: 81, title: 'Client issue', body: UNIT })
       }
     }
@@ -195,16 +198,47 @@ describe('ST-59 review-only work', () => {
     ['unsupported-base', (p) => { p.base = { ref: 'feature/other' } }],
     ['already-reviewed', (_p, comments) => { comments[1] = [comment(head)] }],
   ]) {
-    it(`ST-59/AC-2, AC-6: ${status} after selection refuses before any session`, async () => {
+    for (const boundary of ['candidate', 'reviewer']) it(`ST-59/AC-2, AC-6: ${status} after selection returns head-moved at the ${boundary} boundary`, async () => {
       const p = pr(1), comments = {}, g = github([p], comments), s = session()
       const [candidate] = await listReviewCandidates(g)
       change(p, comments)
-      const result = await reviewCandidate({ candidate, ctx: g.ctx, repoDir: clone(), reviewOptions: s.options })
-      expect(result).toMatchObject({ status, headSha: head })
+      const repoDir = clone()
+      const result = boundary === 'candidate'
+        ? await reviewCandidate({ candidate, ctx: g.ctx, repoDir, reviewOptions: s.options })
+        : await reviewPullRequest({ ...s.options, ctx: g.ctx, repoDir, number: candidate.number, expectedHeadSha: candidate.expectedHeadSha })
+      expect(result).toMatchObject({ status: 'head-moved', eligibilityStatus: status, headSha: head })
+      expect(result.reason).toBeTruthy()
+      if (status === 'already-reviewed') expect(result.existing.marker.verdict).toBe('pass')
       expect(s.calls).toEqual([])
       expect(g.posted).toEqual([])
     })
   }
+
+  it('ST-59/AC-2: a verdict arriving at the final pre-session check also returns head-moved', async () => {
+    let reads = 0
+    const g = github([pr(1)], { 1: () => ++reads >= 3 ? [comment(head)] : [] }), s = session()
+    const [candidate] = await listReviewCandidates(g)
+    const result = await reviewCandidate({ candidate, ctx: g.ctx, repoDir: clone(), reviewOptions: s.options })
+    expect(reads).toBe(3) // discovery, automatic admission, existing reviewer verdict check
+    expect(result).toMatchObject({ status: 'head-moved', eligibilityStatus: 'already-reviewed', headSha: head })
+    expect(result.reason).toBeTruthy()
+    expect(result.existing.verdict).toBe('pass')
+    expect(s.calls).toEqual([])
+    expect(g.posted).toEqual([])
+  })
+
+  it('ST-59/AC-2: a verdict arriving during the session keeps the existing already-reviewed result', async () => {
+    const comments = {}, g = github([pr(1)], comments), [candidate] = await listReviewCandidates(g)
+    const s = session(() => {
+      comments[1] = [comment(head)]
+      return JSON.stringify({ head, verdict: 'pass', findings: [], sections: [{ name: 'Client policy', applied: true }], summary: 'Checked.' })
+    })
+    const result = await reviewCandidate({ candidate, ctx: g.ctx, repoDir: clone(), reviewOptions: s.options })
+    expect(result).toMatchObject({ status: 'already-reviewed', headSha: head, sessions: 1, existing: { verdict: 'pass' } })
+    expect(result).not.toHaveProperty('eligibilityStatus')
+    expect(s.calls).toHaveLength(1)
+    expect(g.posted).toEqual([])
+  }, 30_000)
 
   for (const unitType of ['issue', 'file']) for (const land of [true, false]) {
     it(`ST-59/AC-3, AC-4, AC-5, AC-6: ${unitType} units, land=${land}, review one valid head with client policy`, async () => {
