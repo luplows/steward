@@ -50,21 +50,23 @@ import { execFile } from 'node:child_process'
 import { existsSync, realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { isLandingBase } from '../land/release-branch.mjs'
 import {
-  createContext, getPullRequestLabels, listOpenPullRequests, listPullRequestComments,
+  createContext, getPullRequestLabels, listPullRequestComments,
 } from './github.mjs'
-import { createInspectContext, listReleaseBranches, main as inspectMain } from './inspect.mjs'
+import { createInspectContext, main as inspectMain } from './inspect.mjs'
 import { createLandContext, landPullRequest } from './land.mjs'
 import { requireOwnWorktree, updateCheckout } from './loop.mjs'
-import { HONOURED_ASSOCIATIONS, reviewPullRequest } from './review.mjs'
+import { reviewPullRequest } from './review.mjs'
+import { reviewAuthorRefusal, reviewHeadRefusal, verdictAtHead } from './review-eligibility.mjs'
+import { listLandingPullRequests } from './review-work.mjs'
 import { readSettings } from './settings.mjs'
+
+export { listLandingPullRequests }
 
 const execFileAsync = promisify(execFile)
 
 export const DEFAULT_MAX_REVIEWS = 5
 const PASSING = ['pass', 'pass-with-observations']
-const REVIEW_BLOCKED = 'review-blocked'
 // The refusals that hold for every pull request alike: they end the reviewing, not the rotation.
 const ENDS_REVIEWING = ['rules-unreadable', 'choice-unavailable']
 const USAGE = 'usage: node scripts/dispatch/rotation.mjs [--max-reviews N] [--repo owner/name]'
@@ -102,30 +104,12 @@ async function git(cwd, args) {
   return stdout
 }
 
-/**
- * Every open pull request against `main` or a release branch (`isLandingBase`), in one list: the
- * release branches are read the way inspection reads them (`listReleaseBranches`), then the open
- * pull requests against each base (`listOpenPullRequests`).
- */
-export async function listLandingPullRequests({ ctx, inspectCtx }) {
-  const bases = ['main', ...(await listReleaseBranches(inspectCtx))].filter((base) => isLandingBase(base))
-  const all = []
-  for (const base of bases) all.push(...(await listOpenPullRequests(ctx, { base })))
-  return all
-}
-
 const defaultDeps = {
   requireOwnWorktree, updateCheckout, readSettings, git,
   createContext, createLandContext, createInspectContext,
   listPullRequests: listLandingPullRequests, getPullRequestLabels, listPullRequestComments,
   reviewPullRequest, landPullRequest,
   inspection: ({ repo, cwd, out }) => inspectMain(['--repo', repo], { cwd, out, err: out }),
-}
-
-/** The latest comment with an honoured marker at `headSha`, or `undefined`. */
-function verdictAtHead(comments, headSha) {
-  return comments.findLast((c) =>
-    c.marker.kind === 'marker' && c.marker.headSha === headSha && HONOURED_ASSOCIATIONS.includes(c.authorAssociation))
 }
 
 const byNumber = (a, b) => a.number - b.number
@@ -231,12 +215,9 @@ export async function runRotation({ repoDir, maxReviews = DEFAULT_MAX_REVIEWS, r
       say(pr.number, reviewingEnded)
       continue
     }
-    if (pr.draft) {
-      say(pr.number, 'skipped: a draft')
-      continue
-    }
-    if (!HONOURED_ASSOCIATIONS.includes(pr.authorAssociation)) {
-      say(pr.number, `skipped: outsider (${pr.authorAssociation})`)
+    const authorRefusal = reviewAuthorRefusal(pr)
+    if (authorRefusal) {
+      say(pr.number, `skipped: ${authorRefusal.reason}`)
       continue
     }
     if (reviews >= maxReviews) {
@@ -244,12 +225,9 @@ export async function runRotation({ repoDir, maxReviews = DEFAULT_MAX_REVIEWS, r
       continue
     }
     try {
-      if ((await d.getPullRequestLabels(ctx, pr.number)).includes(REVIEW_BLOCKED)) {
-        say(pr.number, 'skipped: labelled review-blocked')
-        continue
-      }
-      if (verdictAtHead(await d.listPullRequestComments(ctx, pr.number), pr.headSha)) {
-        say(pr.number, 'skipped: a verdict is already at its head')
+      const refusal = await reviewHeadRefusal({ ctx, pr, deps: d })
+      if (refusal) {
+        say(pr.number, `skipped: ${refusal.reason}`)
         continue
       }
     } catch (error) {

@@ -2828,11 +2828,16 @@ shortened where it is long, so that it can be found there with its date.
     ownership acknowledgement; status distinguishes running, stopping, stopped
     and uncertain recovery. Graceful stop promptly acknowledges a drain and
     prohibits admission after acknowledgement while admitted work may finish.
-  - **Planned (ST-59):** the automatic review operation is a single PR/head
-    using existing reviewer and gate behavior, not the whole `rotation`.
-    Pass `expectedHeadSha` to the actual `reviewPullRequest` boundary and
-    refuse moved heads before a model session starts. It neither lands nor
-    inspects and does not introduce a second reviewer implementation.
+  - The automatic review operation, `reviewCandidate` in
+    `scripts/dispatch/review-work.mjs`, attempts a single PR/head using the
+    existing reviewer and gate behavior. `listReviewCandidates` discovers
+    supported-base PRs in number order and reports eligibility or a skip reason,
+    sharing admission rules with `rotation` through `review-eligibility.mjs`.
+    It passes `expectedHeadSha` to the actual `reviewPullRequest` boundary,
+    which refuses malformed expectations, moved heads and changed eligibility
+    before a model session starts. It returns the reviewer's result and actual
+    head, retains the existing malformed-result retry, and neither lands nor
+    inspects. Manual review and rotation keep their existing behavior.
   - 0.1 still requires one automatic reviewer per user, fair bounded scanning,
     duplicate automatic work prevention, session/usage bounds and conservative
     restart safety before unattended scheduling starts. Manual commands and

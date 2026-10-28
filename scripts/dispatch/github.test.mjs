@@ -120,6 +120,8 @@ describe('OQ-68/AC-1: the operations', () => {
         json: {
           head: { sha: SHA, ref: 'story/OQ-1-x' },
           base: { ref: 'main' },
+          state: 'open',
+          author_association: 'MEMBER',
           body: 'the body',
           draft: true,
           labels: [{ name: 'review-blocked' }],
@@ -134,6 +136,8 @@ describe('OQ-68/AC-1: the operations', () => {
       headSha: SHA,
       headRef: 'story/OQ-1-x',
       baseRef: 'main',
+      state: 'open',
+      authorAssociation: 'MEMBER',
       body: 'the body',
       draft: true,
       labels: ['review-blocked'],
