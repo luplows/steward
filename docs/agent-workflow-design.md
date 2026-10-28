@@ -2754,7 +2754,7 @@ shortened where it is long, so that it can be found there with its date.
     `review`, `--rereview`, `rotation` and `land` remain independent and
     may overlap. ST-52's revised ACs in this planning PR reserve a canonical
     repository/PR/head identity only for automatic coordinator work; the
-    story depends on ST-58 and ST-59. Routine completion, clean restart and
+    story depends on ST-58 and ST-59. Routine completion, clean/provably idle restart and
     uncertain-work refusal belong to ST-60; exceptional crashed-worker reconciliation is deferred to draft ST-64.
     Project fairness belongs to ST-61. Distributed review
     claims remain later work.
@@ -2859,9 +2859,16 @@ shortened where it is long, so that it can be found there with its date.
     outcomes through ST-52; distinguish no-model refusals from definitive
     model-consuming failures for ST-61's unchanged-head retry suppression.
     Preserve the reviewer's bounded retry inside its original invocation.
-    A clean start rechecks GitHub eligibility; it does not require a machine reboot.
-    Unfinished work, uncertain termination/posting, interrupted drain or unreadable
-    completion state reports `recovery-needed` and starts no automatic reviewer.
+    Clarified by the crew, 2026-10-28: a crash while provably idle also permits
+    restart after exclusive ownership is safely reacquired and complete durable
+    admission/completion state positively establishes no review was in flight.
+    Reserve before any reviewer work; record idle only after definitive completion
+    and durable outcome. Stale owner metadata alone does not block this case;
+    an old idle flag or absent PID alone is insufficient. Clean and provably idle
+    restarts recheck GitHub eligibility, preserve retry suppression and require
+    neither an operator reset nor a machine reboot.
+    Unfinished work, uncertain ownership/termination/posting, an unproven drain or missing/unreadable
+    established completion state reports `recovery-needed` and starts no automatic reviewer.
     Do not treat a missing PID, elapsed time, moved head or posted verdict alone
     as permission to clear uncertain execution. Manual commands remain independent.
   - **Planned (ST-64):** exceptional recovery is a holding draft for a future

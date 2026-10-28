@@ -21,7 +21,7 @@ Provisional only. This story is a holding draft, not implementation-ready.
 
 ## Out of scope
 
-- Routine failures under a living coordinator and clean stop/start (ST-60).
+- Routine failures under a living coordinator, clean stop/start and provably idle restart after safely reacquiring ownership (ST-60).
 - Shared E-stop and universal manual-process registration (ST-62).
 - Cross-user or distributed ownership unless separately authorized.
 
@@ -32,7 +32,7 @@ Provisional only. This story is a holding draft, not implementation-ready.
 ## Context
 
 - Crew decision, 2026-10-27: keep 0.1 focused on expected failures; retain these questions as a draft for a future release, without choosing its release number or mechanism.
-- ST-60 leaves uncertain work visible as `recovery-needed` and blocks automatic admission. ST-52 retains its nonterminal reservation.
+- ST-60 permits provably idle restart, but leaves uncertain work visible as `recovery-needed` and blocks automatic admission. ST-52 retains its nonterminal reservation.
 - The read-only architecture investigation found that current timeout and tree-kill handling depends on a living supervisor; a missing root PID or a posted verdict does not establish descendant termination.
 
 ## Open questions
