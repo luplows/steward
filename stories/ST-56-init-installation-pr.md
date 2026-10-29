@@ -160,8 +160,8 @@ crew can inspect and adopt it without manually assembling the commit and pull re
       work for inspection, with concrete instructions to finish the push/PR by hand or inspect
       GitHub before retrying an ambiguous network result. Never retry a mutation blindly,
       delete remote work, remove user work, or roll back labels or user config. A rerun
-      does not infer ownership of an existing branch from its name. Labels and local machine
-      settings remain explicitly reported effects outside the PR; neither is claimed atomic
+      does not infer ownership of an existing branch from its name. Labels and the user config
+      remain explicitly reported effects outside the PR; neither is claimed atomic
       with it. Install nothing into a project's dependencies and run no project setup/check.
 - [ ] **AC-8** — **Adoption and activation remain separate.** Keep ST-55's new-install
       review-only default, explicit unattended opt-in, existing-setting preservation and
@@ -174,8 +174,8 @@ crew can inspect and adopt it without manually assembling the commit and pull re
       execution permission. Recommend optional `steward protect` only after adoption; do not
       invent or run an activation command that has not been delivered.
 - [ ] **AC-9** — **Evidence and documentation.** Add Vitest cases named `ST-56/AC-N` using
-      temporary real git repositories/worktrees and a bare remote, with GitHub and machine
-      settings injected. Show successful installation from clean main, ahead/behind/divergent
+      temporary real git repositories/worktrees and a bare remote, with GitHub and user config
+      injected. Show successful installation from clean main, ahead/behind/divergent
       feature branches and detached HEAD with unrelated committed or staged/unstaged/untracked/
       ignored work; include unrelated in-progress merge/rebase state. Prove the installation
       commit's parent is the captured fetched base and caller HEAD/index/files stay unchanged.
@@ -198,8 +198,9 @@ crew can inspect and adopt it without manually assembling the commit and pull re
       Update the old no-commit/no-push and labels-only assertions to test this bounded contract;
       retain the independent overwrite, pinning, template, settings and protection safeguards.
       Tests send no real GitHub writes or agent invocations. Update README installation guidance,
-      command help, affected project-settings and user-config guidance and release-walkthrough instructions, and
-      resolve every **Planned** marker naming ST-56 in `docs/` to the delivered behaviour.
+      command help, affected project-settings and user-config guidance, and release-walkthrough
+      instructions. Resolve every **Planned** marker naming ST-56 in `docs/` to the
+      delivered behaviour.
 
 ## Out of scope
 
