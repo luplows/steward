@@ -47,6 +47,14 @@ node scripts/dispatch/cli.mjs rotation             # one run of the review side:
 node scripts/dispatch/cli.mjs inspect              # raise a merge without a passing verdict, or a stall, on main or a release branch
 ```
 
+For coordinator integration, [`scripts/dispatch/review-work.mjs`](scripts/dispatch/review-work.mjs)
+exports `listReviewCandidates` and `reviewCandidate`: discovery reports eligible PR/head pairs
+and skip reasons in PR-number order; execution attempts one named pair through the existing
+reviewer. It binds the expected full head SHA at reviewer admission and starts no model if the
+head or eligibility changed. This operation only reviews, with either value of `land`; it requests
+no landing and runs no coding or inspection. Automatic scheduling and local activation remain
+planned work.
+
 In another project, the crew runs steward from the package at the tag the project's workflow files
 pin, the form those files use, from the project's checkout:
 
