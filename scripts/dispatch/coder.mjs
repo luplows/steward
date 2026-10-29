@@ -59,7 +59,7 @@ import { coderEnv } from './coder-env.mjs'
 import { buildGetPullRequestState, createContext, createPullRequest, parsePullRequestState, replacePullRequest } from './github.mjs'
 import { installDependencies } from './install.mjs'
 import { RETRY_SOURCES } from './invocation.mjs'
-import { coderChoice, readMachineSettings } from './machine-settings.mjs'
+import { coderChoice, readUserConfig } from './user-config.mjs'
 import { buildStory, deriveStatus, dispatchable, isStoryFilename, orderStories, parseFrontmatter } from './queue.mjs'
 import { readSettings } from './settings.mjs'
 import { readStoryPrefix } from './story-prefix.mjs'
@@ -338,7 +338,7 @@ async function cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded }) {
  *                  chosen and before the branch is claimed (ST-31)
  *   codexUsage     `({ executable, cwd })`, resolving `readCodexUsage`'s result, for a choice whose
  *                  tool is `codex` (ST-35/AC-6; none can be configured until ST-15)
- *   machineSettings  `()`, resolving the machine's settings; defaults to `readMachineSettings`
+ *   userConfig  `()`, resolving the user config; defaults to `readUserConfig`
  *                  on the real environment and home directory. Called once, before the
  *                  usage check (ST-34)
  *
@@ -363,7 +363,7 @@ async function cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded }) {
 export async function dispatchCoder({
   ctx, repoDir = process.cwd(), storyId, promptTemplate, baseEnv = process.env, sessionOptions = {},
   install = installDependencies, usage = readUsage, choice: named, codexUsage = readCodexUsage,
-  machineSettings = () => readMachineSettings({ env: process.env, homedir: homedir() }),
+  userConfig = () => readUserConfig({ env: process.env, homedir: homedir() }),
 }) {
   const template = promptTemplate ?? readFileSync(CODER_PROMPT, 'utf8')
 
@@ -372,7 +372,7 @@ export async function dispatchCoder({
   // Stopgap: the coder reads the story prefix from stories/stories.json. The coder's stories own
   // this and will rework it with the coder's readiness setting.
   const storyPrefix = await readStoryPrefix(repoDir)
-  const machine = await machineSettings()
+  const machine = await userConfig()
   await git(repoDir, ['fetch', REMOTE, BASE])
   const mainSha = (await git(repoDir, ['rev-parse', `${REMOTE}/${BASE}`])).trim()
   const queue = await loadQueueAt(repoDir, mainSha, storyPrefix)
@@ -649,7 +649,7 @@ async function hasStoryFile(repoDir, ref, filename, storyId) {
  * ones it emitted. It opens no pull request and leaves the draft state alone.
  *
  *   ctx, repoDir, promptTemplate, baseEnv, sessionOptions, install, usage, codexUsage, choice,
- *   machineSettings
+ *   userConfig
  *                    as for `dispatchCoder`; `usage` is called before the
  *                    worktree is made, so `over-usage` and `usage-unknown`
  *                    (ST-31) come before anything is installed. The body it replaces ends with
@@ -676,12 +676,12 @@ export async function retryStory({
   ctx, repoDir = process.cwd(), storyId, prNumber, findings, source, round, roundsRemaining,
   promptTemplate, baseEnv = process.env, sessionOptions = {}, install = installDependencies,
   usage = readUsage, choice: named, codexUsage = readCodexUsage,
-  machineSettings = () => readMachineSettings({ env: process.env, homedir: homedir() }),
+  userConfig = () => readUserConfig({ env: process.env, homedir: homedir() }),
 }) {
   // Stopgap: the coder reads the story prefix from stories/stories.json. The coder's stories own
   // this and will rework it with the coder's readiness setting.
   const storyPrefix = await readStoryPrefix(repoDir)
-  const machine = await machineSettings()
+  const machine = await userConfig()
   if (!new RegExp(`^${storyPrefix}-\\d+$`).test(storyId ?? '')) {
     throw new Error(`retryStory requires a story id of the form ${storyPrefix}-<n>, got ${JSON.stringify(storyId)}`)
   }

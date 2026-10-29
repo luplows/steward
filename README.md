@@ -28,15 +28,22 @@ To run the review side, you need:
 - **The GitHub CLI, `gh`**, signed in with `gh auth login` as an account with write access to the
   repository. The scripts take its token from `gh auth token`.
 - **The Claude Code CLI, `claude`**, on your `PATH`, or its path in `CLAUDE_EXECUTABLE`. Coder
-  sessions run in it, and reviewer sessions do unless the machine's settings choose the Codex CLI.
-- **The Codex CLI, `codex`**, signed in, only if the machine's settings give the reviewer a choice
+  sessions run in it, and reviewer sessions do unless the user config chooses the Codex CLI.
+- **The Codex CLI, `codex`**, signed in, only if the user config gives the reviewer a choice
   whose tool is `"codex"`. Its path goes in `tools.codex.executable`.
-- **The machine's settings file**, `~/.steward/settings.json` (or the file `STEWARD_SETTINGS`
-  names). Every machine that runs steward needs it: it holds the plan's usage limits and each
+- **The user config file**, `~/.steward/config.json` (or a nonempty `STEWARD_CONFIG`
+  path). Each OS user running steward needs it: it holds the plan's usage limits and each
   role's default and available choices of tool, model and effort (and a strength, for a coder's
   choice), and steward has no default for any of them. Each key is described in
-  [`docs/machine-settings.md`](docs/machine-settings.md). `review` and `coder` take `--choice <name>`
+  [`docs/user-config.md`](docs/user-config.md). `review` and `coder` take `--choice <name>`
   to run a role on another of its available choices for one run.
+
+**Breaking local rename:** existing developers must manually rename `~/.steward/settings.json`
+to `~/.steward/config.json` and replace `STEWARD_SETTINGS` with `STEWARD_CONFIG` where used.
+The old names are ignored; there is no migration or fallback. Optional
+`coordinator.scanIntervalMinutes` defaults to 15 only in an otherwise valid file. Reading it
+starts no coordinator or session; scheduling is planned separately. See
+[`docs/user-config.md`](docs/user-config.md) for validation and multi-day intervals.
 
 Then, from a checkout of the repository:
 
@@ -71,8 +78,8 @@ What the review side reads:
 
 - **`steward.config.json`**, the project's settings: its repository, its setup and check commands,
   when to land, and which checklist to use. Each key is described in
-  [`docs/settings.md`](docs/settings.md). What depends on the computer rather than the project is
-  in the machine's settings, [`docs/machine-settings.md`](docs/machine-settings.md).
+  [`docs/settings.md`](docs/settings.md). What depends on the user rather than the project is
+  in the user config, [`docs/user-config.md`](docs/user-config.md).
 - **The checklist**, [`REVIEW.md`](REVIEW.md) here, read from `main`, so that a pull request cannot
   change the rules it is reviewed against.
   A project's checklist may hold HTML comments; they are removed before the reviewer is given it.
@@ -109,7 +116,7 @@ a file: one already there is named and left. It writes:
   commit's full SHA instead);
 - a pull request template, only when the project has none;
 - the labels steward reads and applies, `review-blocked`, `breaker-override` and `inspection`;
-- the machine's settings (`~/.steward/settings.json`), only when that file is missing.
+- the user config (`~/.steward/config.json`), only when that file is missing.
 
 `init` asks whether steward may land pull requests unattended, and the default is no, with `--yes`
 too: a new `steward.config.json` has `land: false`, so steward reviews and the project merges. Only
