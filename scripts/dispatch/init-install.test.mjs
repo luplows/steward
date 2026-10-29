@@ -114,11 +114,14 @@ describe('ST-56/AC-1: the preflight, before anything is made', () => {
     ACCEPTED[name](cwd)
     const expectedBase = bareRef(cwd, 'refs/heads/main')
     const before = callerState(cwd)
+    const indexPath = path.resolve(cwd, git(cwd, 'rev-parse', '--git-path', 'index'))
+    const indexBytes = readFileSync(indexPath)
     const watched = watchGit()
     const { code, err, gh } = await runInit(['--yes'], { cwd, git: watched })
     expect(err).toBe('')
     expect(code).toBe(0)
     expect(callerState(cwd)).toEqual(before)
+    expect(readFileSync(indexPath)).toEqual(indexBytes)
 
     const commit = bareRef(cwd, 'refs/heads/steward/install')
     expect(commit).toMatch(/^[0-9a-f]{40}$/)
@@ -769,12 +772,16 @@ describe('ST-56/AC-3: only the installation diff', () => {
   })
 
   it.each([
-    ['a hook that edits an added file', 'echo "edited by a hook" >> REVIEW.md\ngit add REVIEW.md', /REVIEW\.md: its content is not what was generated/],
-    ['a hook that adds a file', 'echo more > extra.txt\ngit add extra.txt', /extra\.txt: a change that is not one of the files the installation adds/],
-  ])('ST-56/AC-3: %s is found in the commit and stops the operation before the push', async (_name, script, finding) => {
+    ['an external edit to an added file', 'REVIEW.md', /REVIEW\.md: its content is not what was generated/],
+    ['an external addition', 'extra.txt', /extra\.txt: a change that is not one of the files the installation adds/],
+  ])('ST-56/AC-3: %s during commit is found and stops the operation before the push', async (_name, rel, finding) => {
     const cwd = makeRepo()
-    hook(cwd, 'pre-commit', script)
-    const watched = watchGit()
+    const watched = watchGit({ before: (args, where) => {
+      if (args[0] === 'commit') {
+        put(where, { [rel]: 'external content\n' })
+        git(where, 'add', rel)
+      }
+    } })
     const gh = fakeGitHub()
     const { code, err } = await runInit(['--yes'], { cwd, gh, git: watched })
     expect(code).toBe(1)
@@ -955,14 +962,14 @@ describe('ST-56/AC-5: the draft pull request', () => {
     }
   })
 
-  it('ST-56/AC-5: it uses the checkout\'s configured identity and normal hooks, and invents no author, trailer, signing override or bypass', async () => {
+  it('ST-56/AC-5: it uses the configured identity, disables installation hooks, and invents no author, trailer or signing override', async () => {
     const cwd = makeRepo()
     const marker = path.join(fresh('marker'), 'ran')
     hook(cwd, 'pre-commit', `echo hook-ran > "${marker.replaceAll('\\', '/')}"`)
     const watched = watchGit()
     const { code } = await runInit(['--yes'], { cwd, git: watched })
     expect(code).toBe(0)
-    expect(existsSync(marker)).toBe(true)
+    expect(existsSync(marker)).toBe(false)
     const commits = watched.calls.filter((c) => c.args[0] === 'commit')
     expect(commits.map((c) => c.args)).toEqual([['commit', '--quiet', '-m', 'Install Steward review gate']])
     const everyArg = watched.calls.flatMap((c) => c.args)
@@ -974,8 +981,13 @@ describe('ST-56/AC-5: the draft pull request', () => {
 
   it('ST-56/AC-5: a worktree that is not clean after the pull request is confirmed is kept, not removed, and the run still finishes', async () => {
     const cwd = makeRepo()
-    hook(cwd, 'post-commit', 'echo left behind > junk.txt')
     const gh = fakeGitHub()
+    const fetch = gh.fetch
+    gh.fetch = async (url, options) => {
+      const response = await fetch(url, options)
+      if (url.endsWith('/pulls') && options.method === 'POST') put(worktreeOf(cwd), { 'junk.txt': 'left by another process\n' })
+      return response
+    }
     const { code, out, err } = await runInit(['--yes'], { cwd, gh })
     expect(err).toBe('')
     expect(code).toBe(0)
@@ -985,15 +997,14 @@ describe('ST-56/AC-5: the draft pull request', () => {
     expect(bareRef(cwd, 'refs/heads/steward/install')).toBe(git(cwd, 'rev-parse', 'steward/install'))
   })
 
-  it('ST-56/AC-5: a hook that fails stops the commit, and nothing is pushed or opened', async () => {
+  it('ST-56/AC-5: a commit command that fails stops publication', async () => {
     const cwd = makeRepo()
-    hook(cwd, 'pre-commit', 'echo "hook says no" >&2\nexit 1')
-    const watched = watchGit()
+    const watched = watchGit({ before: (args) => args[0] === 'commit' ? failing('commit says no') : undefined })
     const gh = fakeGitHub()
     const { code, err } = await runInit(['--yes'], { cwd, gh, git: watched })
     expect(code).toBe(1)
     expect(err).toMatch(/It stopped while committing the installation/)
-    expect(err).toContain('hook says no')
+    expect(err).toContain('commit says no')
     expect(watched.calls.some((c) => c.args[0] === 'push')).toBe(false)
     expect(bareRef(cwd, 'refs/heads/steward/install')).toBe('')
     expect(writes(gh)).toEqual([])
@@ -1285,12 +1296,13 @@ describe('ST-56/AC-7: bounded failures with recoverable evidence', () => {
     return { err: result.err, out: result.out, gh, cwd, machine, worktree: worktreeOf(cwd) }
   }
 
-  it('ST-56/AC-7: a worktree that cannot be made stops before any file, branch or request, naming the phase and that nothing was created', async () => {
+  it('ST-56/AC-7: a worktree that cannot be made stops before installation files, branch or request, reporting its private hooks folder', async () => {
     const watched = watchGit({ before: (args) => (isGit(args, 'worktree', 'add') ? failing('fatal: simulated failure', 128) : undefined) })
     const r = await failAt({ git: watched })
     expect(r.err).toMatch(/^init stopped: git worktree add .*simulated failure/m)
     expect(r.err).toMatch(/It stopped while creating the installation worktree\./)
-    expect(r.err).toContain('Nothing had been created yet.')
+    expect(r.err).toContain('empty hooks directory for this installation')
+    expect(r.err).not.toContain('local branch steward/install at')
     expect(r.err).toContain('your checkout is as it was')
     expect(r.err).not.toContain('<worktree>')
     expect(writes(r.gh)).toEqual([])
@@ -1326,7 +1338,7 @@ describe('ST-56/AC-7: bounded failures with recoverable evidence', () => {
   })
 
   it('ST-56/AC-7: a commit that fails keeps the worktree, says so, and stops', async () => {
-    const r = await failAt({ prepare: (cwd) => hook(cwd, 'pre-commit', 'echo "no commits today" >&2\nexit 1') })
+    const r = await failAt({ git: watchGit({ before: (args) => args[0] === 'commit' ? failing('no commits today') : undefined }) })
     expect(r.err).toMatch(/It stopped while committing the installation\./)
     expect(r.err).toContain('no commits today')
     expect(r.err).toContain(`worktree ${r.worktree}`)
@@ -1702,8 +1714,9 @@ describe('ST-56/AC-7 (review 1): what exists is asked of git after a failure', (
     return { cwd, gh, err: result.err, code: result.code }
   }
 
-  it('ST-56/AC-7: a post-checkout hook that fails after git made the worktree and the branch: both are reported, not "nothing created"', async () => {
-    const r = await attempt('post-checkout', 'echo "checkout hook says no" >&2\nexit 1')
+  it('ST-56/AC-7: worktree add reported failed after Git created resources: both are reported', async () => {
+    const runner = watchGit({ after: (args) => isGit(args, 'worktree', 'add') ? failing('failure after worktree creation') : undefined })
+    const r = await attempt('post-checkout', 'exit 1', runner)
     expect(r.code).toBe(1)
     expect(r.err).toMatch(/It stopped while creating the installation worktree\./)
     expect(r.err).not.toContain('Nothing had been created yet.')
@@ -1713,8 +1726,9 @@ describe('ST-56/AC-7 (review 1): what exists is asked of git after a failure', (
     expect(writes(r.gh)).toEqual([])
   })
 
-  it('ST-56/AC-7: a commit-msg hook that fails leaves the worktree and branch, and no commit, in the report', async () => {
-    const r = await attempt('commit-msg', 'echo "message refused" >&2\nexit 1')
+  it('ST-56/AC-7: a commit failure leaves the worktree and branch, and no commit, in the report', async () => {
+    const runner = watchGit({ before: (args) => args[0] === 'commit' ? failing('message refused') : undefined })
+    const r = await attempt('commit-msg', 'exit 1', runner)
     expect(r.code).toBe(1)
     expect(r.err).toMatch(/It stopped while committing the installation\./)
     expect(r.err).toContain('message refused')
@@ -1723,14 +1737,15 @@ describe('ST-56/AC-7 (review 1): what exists is asked of git after a failure', (
     expect(r.err).not.toMatch(/\n {2}commit [0-9a-f]{40}/)
   })
 
-  it('ST-56/AC-7: a post-commit hook that fails does not fail the commit, and the run finishes', async () => {
+  it('ST-56/AC-5: a configured failing post-commit hook is bypassed and the run finishes', async () => {
     const r = await attempt('post-commit', 'echo "after the commit" >&2\nexit 1')
     expect(r.code).toBe(0)
     expect(pullWrites(r.gh)).toHaveLength(1)
   })
 
-  it('ST-56/AC-7: a pre-push hook that fails reports the commit and the worktree and no branch on origin, and how to look and push by hand', async () => {
-    const r = await attempt('pre-push', 'echo "push refused" >&2\nexit 1')
+  it('ST-56/AC-7: a push failure reports the commit and worktree and how to inspect origin before recovery', async () => {
+    const runner = watchGit({ before: (args) => args[0] === 'push' ? failing('push refused') : undefined })
+    const r = await attempt('pre-push', 'exit 1', runner)
     expect(r.code).toBe(1)
     expect(r.err).toMatch(/It stopped while pushing the branch to origin\./)
     expect(r.err).toContain('push refused')
@@ -1805,8 +1820,8 @@ describe('ST-56/AC-5 and AC-2 (review 2): what a push can add, and where it goes
     const gh = fakeGitHub()
     const { code, err } = await runInit(['--yes'], { cwd, gh, git: watched })
     expect(code).toBe(2)
-    expect(err).toMatch(/a push to origin would go to|a push to origin would go to more than one place/)
-    expect(err).toMatch(/clear remote\.origin\.pushurl and any url\.<base>\.insteadOf or pushInsteadOf/)
+    expect(err).toMatch(/remote\.origin\.pushurl|pushinsteadof/)
+    expect(err).toContain('ordinary checkout')
     expect(gh.requests).toEqual([])
     expect(watched.calls.some((c) => c.args[0] === 'fetch' || isGit(c.args, 'worktree', 'add'))).toBe(false)
     expect(callerState(cwd)).toEqual(before)
@@ -1814,14 +1829,14 @@ describe('ST-56/AC-5 and AC-2 (review 2): what a push can add, and where it goes
     expect(bareRef(cwd, 'refs/heads/steward/install')).toBe('')
   })
 
-  it('ST-56/AC-2: a push URL that names the same repository in another spelling (ssh for https) is accepted, and the push goes to it', async () => {
+  it('ST-56/AC-1b: a pushurl naming even the same repository in another spelling is refused', async () => {
     const cwd = makeRepo()
     git(cwd, 'config', 'remote.origin.pushurl', 'git@github.com:acme/widgets.git')
     const watched = watchGit()
     const { code, err } = await runInit(['--yes'], { cwd, git: watched })
-    expect(err).toBe('')
-    expect(code).toBe(0)
-    expect(bareRef(cwd, 'refs/heads/steward/install')).toMatch(/^[0-9a-f]{40}$/)
+    expect(err).toContain('remote.origin.pushurl')
+    expect(code).toBe(2)
+    expect(bareRef(cwd, 'refs/heads/steward/install')).toBe('')
   })
 
   const rewrites = {
@@ -1837,8 +1852,8 @@ describe('ST-56/AC-5 and AC-2 (review 2): what a push can add, and where it goes
     const gh = fakeGitHub()
     const { code, err } = await runInit(['--yes'], { cwd, gh, git: watched })
     expect(code).toBe(2)
-    expect(err).toContain(rewrites[name])
-    expect(err).toMatch(/insteadOf/)
+    expect(err.toLowerCase()).toContain(rewrites[name].toLowerCase())
+    expect(err).toMatch(/insteadof/)
     expect(gh.requests).toEqual([])
     expect(watched.calls.some((c) => c.args[0] === 'fetch' || isGit(c.args, 'worktree', 'add'))).toBe(false)
     expect(callerState(cwd)).toEqual(before)
@@ -1896,29 +1911,17 @@ describe('ST-56/AC-5 and AC-2 (review 2): what a push can add, and where it goes
 })
 
 describe('ST-56/AC-2 (review 2): the caller\'s repository environment', () => {
-  it('ST-56/AC-2: GIT_INDEX_FILE, GIT_DIR and GIT_WORK_TREE in the environment leave the caller\'s index byte for byte unchanged and stage in the installation\'s own', async () => {
+  it('ST-56/AC-1b: GIT_INDEX_FILE, GIT_DIR and GIT_WORK_TREE refuse and leave the index byte for byte unchanged', async () => {
     const cwd = makeRepo({ files: BASE_FILES })
     writeFileSync(path.join(cwd, 'src/staged.txt'), 's\n')
     git(cwd, 'add', 'src/staged.txt')
     const indexFile = path.join(cwd, '.git', 'index')
     const before = readFileSync(indexFile)
-    const saved = { ...process.env }
-    process.env.GIT_INDEX_FILE = indexFile
-    process.env.GIT_DIR = path.join(cwd, '.git')
-    process.env.GIT_WORK_TREE = cwd
-    let result
-    try {
-      result = await runInit(['--yes'], { cwd })
-    } finally {
-      for (const key of ['GIT_INDEX_FILE', 'GIT_DIR', 'GIT_WORK_TREE']) {
-        if (saved[key] === undefined) delete process.env[key]
-        else process.env[key] = saved[key]
-      }
-    }
-    expect(result.err).toBe('')
-    expect(result.code).toBe(0)
+    const result = await runInit(['--yes'], { cwd, env: { GIT_INDEX_FILE: indexFile, GIT_DIR: path.join(cwd, '.git'), GIT_WORK_TREE: cwd } })
+    expect(result.err).toContain('unsupported inherited Git environment')
+    expect(result.code).toBe(2)
     expect(readFileSync(indexFile).equals(before)).toBe(true)
-    expect(branchFiles(cwd)).not.toContain('src/staged.txt')
+    expect(tryGit(cwd, 'rev-parse', '--verify', '--quiet', 'refs/heads/steward/install')).toBe('')
     expect(git(cwd, 'diff', '--cached', '--name-only')).toBe('src/staged.txt')
   })
 
@@ -1949,7 +1952,7 @@ describe('ST-56/AC-5 (review 2): who commits and which hooks run in the new work
     ['core.hooksPath', ['core.hooksPath', 'elsewhere-hooks']],
     ['commit.gpgSign', ['commit.gpgSign', 'false']],
     ['user.signingKey', ['user.signingKey', 'ABCDEF']],
-  ])('ST-56/AC-5: %s in the checkout\'s own worktree configuration is refused before anything is made', async (key, [name, value]) => {
+  ])('ST-56/AC-5: %s in the checkout\'s own worktree configuration is refused before anything is made', async (_key, [name, value]) => {
     const cwd = makeRepo()
     git(cwd, 'config', 'extensions.worktreeConfig', 'true')
     git(cwd, 'config', '--worktree', name, value)
@@ -1957,18 +1960,18 @@ describe('ST-56/AC-5 (review 2): who commits and which hooks run in the new work
     const { code, err } = await runInit(['--yes'], { cwd, gh })
     expect(code).toBe(2)
     expect(err).toContain('config.worktree')
-    expect(err.toLowerCase()).toContain(key.toLowerCase())
-    expect(err).toContain('git config --worktree --unset')
+    expect(err.toLowerCase()).toContain('extensions.worktreeconfig')
+    expect(err).toContain('ordinary checkout')
     expect(gh.requests).toEqual([])
     expect(existsSync(worktreeOf(cwd))).toBe(false)
     expect(bareRef(cwd, 'refs/heads/steward/install')).toBe('')
   })
 
-  it('ST-56/AC-5: a worktree configuration with extensions.worktreeConfig off, or one that sets nothing of the kind, is accepted', async () => {
+  it('ST-56/AC-1b: enabled per-worktree config refuses even a harmless setting', async () => {
     const cwd = makeRepo()
     git(cwd, 'config', 'extensions.worktreeConfig', 'true')
     git(cwd, 'config', '--worktree', 'core.abbrev', '12')
-    expect((await runInit(['--yes'], { cwd })).code).toBe(0)
+    expect((await runInit(['--yes'], { cwd })).code).toBe(2)
   })
 
   it('ST-56/AC-5: a new worktree that would commit with another effective setting is refused before the commit, whatever made it differ', async () => {
@@ -1986,7 +1989,7 @@ describe('ST-56/AC-5 (review 2): who commits and which hooks run in the new work
     const gh = fakeGitHub()
     const { code, err } = await runInit(['--yes'], { cwd, gh, git: watched })
     expect(code).toBe(1)
-    expect(err).toMatch(/a commit in the new worktree would not be made as this checkout makes it: user\.email is other@example\.com there and crew@example\.com here/)
+    expect(err).toContain('extensions.worktreeconfig')
     expect(err).toContain(`worktree ${worktreeOf(cwd)}`)
     expect(watched.calls.some((c) => c.args[0] === 'commit')).toBe(false)
     expect(writes(gh)).toEqual([])
@@ -1998,26 +2001,18 @@ describe('ST-56/AC-5 (review 2): who commits and which hooks run in the new work
     git(other, 'config', 'includeIf.onbranch:steward/**.path', slashes(included))
     const watchedOther = watchGit()
     const result = await runInit(['--yes'], { cwd: other, git: watchedOther })
-    expect(result.code).toBe(1)
-    expect(result.err).toMatch(/user\.name is Branch Person there and Crew here/)
+    expect(result.code).toBe(2)
+    expect(result.err).toContain('includeif.')
+    expect(watchedOther.calls.some((c) => c.args[0] === 'fetch' || isGit(c.args, 'worktree', 'add'))).toBe(false)
     expect(watchedOther.calls.some((c) => c.args[0] === 'commit')).toBe(false)
   })
 
-  it('ST-56/AC-5: the caller\'s identity variables are kept: the commit is made as GIT_AUTHOR_* and GIT_COMMITTER_* say', async () => {
+  it('ST-56/AC-1b: inherited identity variables refuse before commit', async () => {
     const cwd = makeRepo()
-    const saved = { ...process.env }
-    Object.assign(process.env, { GIT_AUTHOR_NAME: 'Env Author', GIT_AUTHOR_EMAIL: 'author@example.com', GIT_COMMITTER_NAME: 'Env Committer', GIT_COMMITTER_EMAIL: 'committer@example.com' })
-    let result
-    try {
-      result = await runInit(['--yes'], { cwd })
-    } finally {
-      for (const key of ['GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL']) {
-        if (saved[key] === undefined) delete process.env[key]
-        else process.env[key] = saved[key]
-      }
-    }
-    expect(result.code).toBe(0)
-    expect(git(cwd, 'log', '-1', '--format=%an <%ae>|%cn <%ce>', 'steward/install')).toBe('Env Author <author@example.com>|Env Committer <committer@example.com>')
+    const result = await runInit(['--yes'], { cwd, env: { GIT_AUTHOR_NAME: 'Env Author', GIT_AUTHOR_EMAIL: 'author@example.com', GIT_COMMITTER_NAME: 'Env Committer', GIT_COMMITTER_EMAIL: 'committer@example.com' } })
+    expect(result.code).toBe(2)
+    expect(result.err).toContain('GIT_AUTHOR_NAME')
+    expect(tryGit(cwd, 'rev-parse', '--verify', '--quiet', 'refs/heads/steward/install')).toBe('')
   })
 })
 

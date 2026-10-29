@@ -139,6 +139,8 @@ function verificationBlock(facts) {
     'Checks `steward init` ran while making this pull request, and their results:',
     ...list(facts.checks),
     '',
+    'All Git hooks were disabled in the installation worktree, including checkout, commit and push hooks. The crew must run necessary project-specific checks before approving this installation.',
+    '',
     'Not run: the project\'s tests, setup and checks, and no steward review. Files left as they were were not validated, and nothing here claims that an existing installation is compatible with this one.',
   ]
 }

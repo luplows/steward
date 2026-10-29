@@ -18,7 +18,9 @@ steward runs on has settings of its own".
   instead.
 - **Made by `steward init`**, only when the file is missing, after the installation pull request
   and apart from it: the file is on this computer, not in the project, so it is not part of that
-  pull request and is not rolled back with it. `init` never reads or replaces a file that is there.
+  pull request and is not rolled back with it. `init` preserves existing files and validates the
+  intended target before reporting successful provisioning. An invalid file is left for the crew
+  to inspect. A colliding temporary file is left untouched and reported as a failure.
 - **Every machine that runs steward needs the file.** Steward holds no default for any value, so a
   missing file, invalid JSON, a missing key, an unknown key, or a value of the wrong form is an
   error that names the file and the key with all its parents (for example

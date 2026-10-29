@@ -92,7 +92,11 @@ describe('ST-44/AC-1: init never overwrites, and names what it left', () => {
     const dir = fresh('not-a-repo')
     let result
     try {
-      execFileSync(process.execPath, [CLI, 'init', '--yes'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' })
+      // The fixture's GIT_* confinement is itself refused by AC-1b. This subprocess exercises
+      // ordinary checkout discovery, with no repository or remote on which it could act.
+      const profile = fresh('cli-profile')
+      const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^GIT_/i.test(key)))
+      execFileSync(process.execPath, [CLI, 'init', '--yes'], { cwd: dir, env: { ...env, HOME: profile, USERPROFILE: profile, XDG_CONFIG_HOME: profile }, encoding: 'utf8', stdio: 'pipe' })
     } catch (error) {
       result = error
     }
@@ -434,16 +438,17 @@ describe('ST-44/AC-9: the machine\'s settings', () => {
     expect(usageLimits).toEqual({ coder: { session: 50, weekly: 75 }, reviewer: { session: 90, weekly: 95 } })
   })
 
-  it('ST-44/AC-9: a file that exists is not read, changed or replaced', async () => {
+  it('ST-56/AC-7: an invalid existing machine settings file is preserved but cannot claim successful provisioning', async () => {
     const machine = path.join(fresh('home'), 'settings.json')
     writeFileSync(machine, 'not even json')
     const before = statSync(machine).mtimeMs
     const terminal = fakeTerminal(['file,issue', '', '', '', ''])
-    const { code, out } = await runInit([], { cwd: makeRepo(), machine, terminal })
-    expect(code).toBe(0)
+    const { code, out, err } = await runInit([], { cwd: makeRepo(), machine, terminal })
+    expect(code).toBe(1)
     expect(readFileSync(machine, 'utf8')).toBe('not even json')
     expect(statSync(machine).mtimeMs).toBe(before)
-    expect(out).toContain(`left ${machine}`)
+    expect(out).not.toContain(`left ${machine}`)
+    expect(err).toContain('invalid JSON')
     expect(terminal.prompts.some((p) => /usage/.test(p))).toBe(false)
   })
 

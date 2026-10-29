@@ -2318,6 +2318,25 @@ shortened where it is long, so that it can be found there with its date.
   chosen: the project's `steward.config.json`; a gitignored file in each checkout, which the
   controller's reset to `origin/main` before every rotation makes fragile; and the environment
   variable alone.
+- **Per-user configuration naming and coordinator cadence** (crew, 2026-10-27).
+  **Planned (ST-63):** rename the existing per-user “machine settings” file to
+  `~/.steward/config.json` with `STEWARD_CONFIG` as its only environment override;
+  rename the reader and documentation to “user config”. Preserve required
+  `usageLimits`, `roles` and optional `tools` semantics. Add optional
+  `coordinator.scanIntervalMinutes`, default 15, accepting any positive whole
+  minute count that remains safely representable in milliseconds. A missing
+  configuration file still fails, and no automatic migration or old-name
+  fallback is provided before any clients have been installed. Editable
+  configuration remains separate from planned per-user operational state under
+  `~/.steward/state/`. Existing model selection and manual commands do not
+  acquire coordinator admission. ST-61 will consume the setting but owns the
+  actual scheduling and any CLI editing convenience. This revises the
+  2026-10-15 path/name decision above without erasing its history.
+  Considered and not chosen: a second coordinator-specific settings file
+  (needless duplication), retaining the “machine” naming (mistakenly implies
+  cross-account ownership), retaining the old path as a hidden fallback
+  (ambiguous source of truth), or including runtime state in editable config.
+
 - **A Codex reviewer runs read-only** (decided 2026-10-15 by the owner, with the planning session,
   from a second trial on the ChatGPT Plus plan). This answers ST-32's open
   questions. Codex's usage is read through `codex app-server`'s `account/rateLimits/read`, with no
@@ -2732,12 +2751,16 @@ shortened where it is long, so that it can be found there with its date.
     hand and tower-workshop-paths' frozen loop, and the flag with it (owner). Considered and not
     chosen: doing so in ST-51, which widens a fix the release waits on and changes the frozen
     loop's callers; and only renaming the option.
-  - **Planned (ST-52):** while a rotation is running on a machine, any later rotation of the same
-    project on that machine is refused, saying so, rather than reviewing the same head again or
-    requesting the same landing. Within one rotation reviews never overlap; two rotations can
-    overlap once something such as a schedule starts them. Rotations on several machines, and
-    several reviewers at once, need a claim every machine can see, and are to be solved later
-    (owner).
+  - **Planned (ST-52):** revised by the crew on 2026-10-27. The 2026-10-24
+    proposal to lock out overlapping rotations of one project is superseded.
+    The new coordinator reserves only automatic review work, whereas manual
+    `review`, `--rereview`, `rotation` and `land` remain independent and
+    may overlap. ST-52's revised ACs in this planning PR reserve a canonical
+    repository/PR/head identity only for automatic coordinator work; the
+    story depends on ST-58 and ST-59. Routine completion, clean/provably idle restart and
+    uncertain-work refusal belong to ST-60; exceptional crashed-worker reconciliation is deferred to draft ST-64.
+    Project fairness belongs to ST-61. Distributed review
+    claims remain later work.
 
 - **Manual landing and review-only installation defaults** (crew, 2026-10-26).
   - Standing permission for unattended landing differs from the crew explicitly requesting one
@@ -2798,15 +2821,138 @@ shortened where it is long, so that it can be found there with its date.
   require the explicit follow-up reconciliation in the roadmap; none is retired by this decision.
   The older release branch and PR #86 are left for the crew's later release-review reconciliation.
 
-- **Installation through a reviewable pull request** (crew, 2026-10-26). "Have `steward init`
-  create a reviewable installation PR instead of requiring the crew to manually commit and open
-  one." For its body: "Do your best with writing the body as the project would expect it."
-  Existing-file safeguards, project-specific work conventions and the separation between
-  installation and local coordinator activation remain. Landing authorization and the review-only
-  default were built first, without adding git writes; this then changed delivery, preserving
-  their results. It revises the earlier instructions to commit and open the installation PR
-  manually, including the closing-message decision of 2026-10-23; it does not change that
-  decision's protection boundary or bootstrap adoption process.
+- **Per-user coordinator foundations and manual independence** (crew, 2026-10-27).
+  - **Planned (ST-57):** explicit per-user local activation is separate from
+    installation. Check the installed revision on fetched `origin/main`, then
+    provision an isolated coordinator-owned detached checkout. Activation data
+    lives outside strict machine settings and project settings; deactivation
+    revokes new automatic admission and retains the checkout for reuse.
+  - **Planned (ST-58):** the coordinator is a detached process with exclusive
+    per-user ownership across projects. Start reports success only after
+    ownership acknowledgement; status distinguishes running, stopping, stopped
+    and uncertain recovery. Graceful stop promptly acknowledges a drain and
+    prohibits admission after acknowledgement while admitted work may finish.
+  - The automatic review operation, `reviewCandidate` in
+    `scripts/dispatch/review-work.mjs`, attempts a single PR/head using the
+    existing reviewer and gate behavior. `listReviewCandidates` discovers
+    supported-base PRs in number order and reports eligibility or a skip reason,
+    sharing admission rules with `rotation` through `review-eligibility.mjs`.
+    It passes `expectedHeadSha` to the actual `reviewPullRequest` boundary,
+    which refuses malformed expectations, moved heads and changed eligibility
+    before a model session starts. It returns the reviewer's result and actual
+    head, retains the existing malformed-result retry, and neither lands nor
+    inspects. Manual review and rotation keep their existing behavior.
+  - 0.1 still requires one automatic reviewer per user, fair bounded scanning,
+    duplicate automatic work prevention, session/usage bounds and conservative
+    restart safety before unattended scheduling starts. Manual commands and
+    external harnesses manage their own concurrency; overlaps may race over
+    current verdicts and are an operator risk. Existing reviewer correctness
+    and runway gate rules still apply.
+  - Shared per-user E-stop is not required for 0.1 but is a release gate
+    before 1.0: terminate registered manual and coordinator-managed local
+    process trees, block new supported commands until explicit reset, and
+    report termination uncertainty. It cannot cancel remote GitHub workflow
+    execution that was already dispatched.
+  - Considered and not chosen: one machine-wide cross-account coordinator or
+    E-stop authority (permissions and installation complexity); manual routing
+    through the scheduler (restricts voluntary parallelism and alternative
+    harnesses); and requiring universal E-stop before automatic review (would
+    hold up the smaller 0.1 goal). Existing bounds and recovery were retained.
+
+- **Automatic-review recovery, fair scheduling and deferred shared E-stop**
+  (crew, 2026-10-27; planning drafts reserved in ST-60–62).
+  - **Planned (ST-60):** revised by the crew, 2026-10-27, following the read-only
+    architecture investigation. For 0.1, handle routine reviewer outcomes while
+    the coordinator remains alive and clean graceful stop/start. Persist actual
+    outcomes through ST-52; distinguish no-model refusals from definitive
+    model-consuming failures for ST-61's unchanged-head retry suppression.
+    Preserve the reviewer's bounded retry inside its original invocation.
+    Clarified by the crew, 2026-10-28: a crash while provably idle also permits
+    restart after exclusive ownership is safely reacquired and complete durable
+    admission/completion state positively establishes no review was in flight.
+    Reserve before any reviewer work; record idle only after definitive completion
+    and durable outcome. Stale owner metadata alone does not block this case;
+    an old idle flag or absent PID alone is insufficient. Clean and provably idle
+    restarts recheck GitHub eligibility, preserve retry suppression and require
+    neither an operator reset nor a machine reboot.
+    Unfinished work, uncertain ownership/termination/posting, an unproven drain or missing/unreadable
+    established completion state reports `recovery-needed` and starts no automatic reviewer.
+    Do not treat a missing PID, elapsed time, moved head or posted verdict alone
+    as permission to clear uncertain execution. Manual commands remain independent.
+  - **Planned (ST-64):** exceptional recovery is a holding draft for a future
+    release, not a 0.1 dependency or a selected mechanism. Its Open questions
+    retain orphaned-worker/descendant handling, process identity and permission
+    failures, interrupted persistence, ambiguous verdict posting, safe targeted
+    operator reconciliation and whether verified full machine reboot is a useful
+    fallback. A Steward restart alone does not prove prior processes terminated.
+    Comprehensive OS containment and automatic crash recovery are not required
+    to deliver the narrowed ST-60.
+  - **Planned (ST-61):** scan only explicitly activated projects. After a safe
+    initial scan, give projects round-robin turns, with at most one
+    coordinator-managed reviewer per OS user; already discovered work does
+    not wait for another scan interval. Use the separately planned ST-63
+    per-user configuration, defaulting to a 15-minute discovery interval
+    with a configurable positive whole-minute value and no arbitrary
+    product ceiling. GitHub discovery failures retry on subsequent scans;
+    no exponential project backoff is in 0.1. Respect usage refusals and
+    their reported resets. A model-consuming review that definitively
+    fails does not automatically retry the unchanged head; a new head is
+    a new candidate, and direct manual commands remain independent.
+    ST-60 supplies routine completion classifications and clean-start validation;
+    uncertain execution blocks scheduling. Exceptional reconciliation in draft
+    ST-64 is not a prerequisite. ST-61 verifies the implemented handoff before dispatch.
+  - **Planned (ST-62):** a per-user shared emergency-stop latch with
+    registered local process trees, including independent manual commands,
+    explicit reset and verified-or-uncertain termination reporting is a
+    release requirement **before 1.0**, not part of the 0.1 automatic
+    review milestone. Neither a local stop nor reset can recall remote
+    GitHub actions already dispatched. Registration, descendant
+    termination and operator reconciliation are not yet designed for
+    implementation. This refines the earlier 2026-10-26 milestone statement
+    that included E-stop in 0.1; PR #93 contains the broader coordinator
+    roadmap reconciliation.
+  - Considered and not chosen: implicit age-based recovery, whole-rotation
+    automatic scheduling, manual admission locks, automatic repeat attempts
+    of a failed model-consuming review on the same head, mandatory project
+    exponential backoff and requiring full E-stop before 0.1. On narrowing ST-60,
+    the crew also deferred exhaustive crash-window handling, arbitrary-descendant
+    termination proofs and OS-specific containment rather than making them 0.1 prerequisites.
+
+  Revised by the crew on 2026-10-27 after three blocked
+  implementation reviews. The installer supports a deliberately restricted Git
+  environment for the initial 0.1 install: it refuses URL rewrite rules, pushurl,
+  enabled per-worktree configuration, unsafe relative or Git-internal hooks paths,
+  ambiguous repository identity and inherited Git overrides that could alter
+  the repository or transport. These are read-only preflight refusals, with
+  remedies, not configurations claimed safe after one-step inspection.
+  Installer-owned worktree Git operations run with hooks disabled beginning with
+  worktree creation; the command output always discloses this and generated PR
+  bodies include the disclosure. A supplied `--pr-body-file` remains verbatim:
+  the command reports the bypass and directs the crew to disclose it before
+  making that PR ready. Accept only effective nonblank `user.name` and
+  `user.email`, with `commit.gpgSign` unset or false; refuse missing identity
+  or enabled signing before any effects. An unused signing key can be present
+  when signing is disabled, without forcing a signing override. The caller's
+  own hooks, identity and files are never changed. Every created target and temporary file
+  must have verifiable invocation ownership: unowned temp collisions are not
+  cleaned up, and generated content is checked against its own bytes and final
+  staged/commit tree. This supersedes ST-56's earlier normal-commit-hook
+  requirement but retains AC-1a's protection for unrelated work and feature
+  branches. Considered and not chosen: continuing to fix arbitrary chained
+  rewrites and hook side effects in the first release, or quietly bypassing
+  failing hooks without changing the story. The implementation is in
+  `scripts/dispatch/init-install.mjs` and `scripts/dispatch/init.mjs`.
+
+- **Installation through a reviewable pull request** (crew, 2026-10-26).
+  "Have `steward init` create a reviewable installation PR instead of
+  requiring the crew to manually commit and open one." For its body: "Do your best with writing
+  the body as the project would expect it." Existing-file safeguards, project-specific work
+  conventions and the separation between installation and local coordinator activation remain.
+  ST-56 follows ST-55, which follows ST-54: those stories deliver landing authorization and
+  review-only defaults first, without adding git writes; ST-56 then changes delivery, preserving
+  their results. Their ACs and IDs are unchanged. This revises the earlier instructions to commit
+  and open the installation PR manually, including the closing-message decision of 2026-10-23;
+  it does not change that decision's protection boundary or bootstrap adoption process.
 
   As built (`scripts/dispatch/init.mjs`, with its git steps in `init-install.mjs` and the body in
   `init-pr-body.mjs`): `init` fetches `origin/main` and takes the commit it points at as the
@@ -2814,9 +2960,10 @@ shortened where it is long, so that it can be found there with its date.
   branch (default `steward/install`, with a naming override) from that commit, creates there
   only the files `origin/main` lacks, stages those files by name, checks that the diff against
   the base is exactly those additions with the contents it generated, commits with the checkout's
-  own git identity and hooks, pushes the branch as a new branch only (a push that expects the
-  branch not to exist, so a concurrent installer's branch is never overwritten), and opens a
-  draft PR against `main`, confirmed by GitHub's answer. An existing branch, local or remote, or
+  own git identity with installation hooks disabled, pushes the branch as a new branch only
+  (a push that expects the branch not to exist, so a concurrent installer's branch is never
+  overwritten), and opens a draft PR against `main`, confirmed by GitHub's answer. An existing
+  branch, local or remote, or
   open PR of that head and base is refused and never adopted as installer-owned. Partial
   installations retain their files and configured checklist path (`init` reads only the
   `rulesFile` of an existing `steward.config.json`), add only missing files, and are reported

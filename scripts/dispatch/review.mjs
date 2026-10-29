@@ -72,6 +72,7 @@ import {
 } from './github.mjs'
 import { renderReviewerPrompt } from './invocation.mjs'
 import { readMachineSettings } from './machine-settings.mjs'
+import { FULL_HEAD_SHA, HONOURED_ASSOCIATIONS, reviewHeadRefusal, reviewTargetRefusal, verdictAtHead } from './review-eligibility.mjs'
 import { parseFrontmatter } from './queue.mjs'
 import { readRules } from './rules.mjs'
 import { readSettings } from './settings.mjs'
@@ -95,11 +96,9 @@ const REMOTE = 'origin'
 // base. Both are written on `main`; the reviewer's checkout and diff are of the base itself.
 const UNIT_AND_RULES_BASE = 'main'
 
-// The author associations the gate honours a marker from: `scripts/land/check-author.mjs`'s, which
-// `apply-verdict.mjs` reads. A restatement so the two read the same; a test compares it to that
-// set and fails on drift.
-export const HONOURED_ASSOCIATIONS = ['OWNER', 'MEMBER', 'COLLABORATOR']
-const SHA_RE = /^[0-9a-f]{40}$/
+// Shared admission uses the gate's author associations, also exposed to existing callers.
+export { HONOURED_ASSOCIATIONS }
+const SHA_RE = FULL_HEAD_SHA
 
 // What {{UNIT}} renders as when no unit was read (reviewer.md, the
 // placeholders). {{UNIT_NOTE}} says why.
@@ -341,6 +340,11 @@ export async function assertReviewableCheckout(dir, sha, repoDir) {
  *                  `process.env`, with every GitHub credential removed
  *   rereview       review a head that already has a verdict, only when the
  *                  governing verdict there is `block`
+ *   expectedHeadSha  optional full SHA binding automatic work to the selected head.
+ *                  Validated here before any model session, together with current
+ *                  automatic eligibility. Changed eligibility returns `head-moved`,
+ *                  retaining `eligibilityStatus` and `reason`; omitted for independent
+ *                  manual review. Rechecks after a session keep their existing results.
  *   scratchRoot    the directory the `tw-review-*` scratch directory is made in;
  *                  defaults to `os.tmpdir()`. Not exposed by the CLI
  *   sessionOptions extra `spawnSession` options (executable, run, timeouts,
@@ -393,12 +397,31 @@ export async function assertReviewableCheckout(dir, sha, repoDir) {
  * The checkout is checked again before the re-run, and if the first session
  * left it changed, there is no second session and nothing is reset.
  */
-export async function reviewPullRequest({
+export async function reviewPullRequest(options) {
+  // Keep manual result shapes unchanged. Automatic results also name the actual head
+  // most recently read, including refusals and failures after a session started.
+  let headSha
+  const result = await executeReview({ ...options, onHead: (head) => { headSha = head } })
+  return options.expectedHeadSha === undefined || headSha === undefined
+    ? result : { ...result, headSha }
+}
+
+// AC-2: the selected candidate is stale even when its SHA is unchanged. Keep the
+// admission reason while giving the coordinator the required head-moved outcome.
+function eligibilityChanged(refusal) {
+  return { ...refusal, status: 'head-moved', eligibilityStatus: refusal.status }
+}
+
+async function executeReview({
   number, ctx, repoDir = process.cwd(), promptTemplate, baseEnv = process.env, sessionOptions = {},
   rereview = false, scratchRoot = tmpdir(), usage = readUsage, choice: named,
   machineSettings = () => readMachineSettings({ env: process.env, homedir: homedir() }),
   codexUsage = readCodexUsage, codexSession = spawnCodexReviewer,
+  expectedHeadSha, onHead,
 }) {
+  if (expectedHeadSha !== undefined && (typeof expectedHeadSha !== 'string' || !FULL_HEAD_SHA.test(expectedHeadSha))) {
+    return { status: 'invalid-expected-head', reason: 'expectedHeadSha must be a full lowercase 40-character SHA' }
+  }
   const template = promptTemplate ?? readFileSync(REVIEWER_PROMPT, 'utf8')
   const { unitLinks, rulesFile } = await readSettings(repoDir)
   const machine = await machineSettings()
@@ -411,6 +434,14 @@ export async function reviewPullRequest({
     }
   }
   const pr = await getPullRequestState(ctx, number)
+  onHead(pr.headSha)
+  if (expectedHeadSha !== undefined) {
+    if (pr.headSha !== expectedHeadSha) {
+      return { status: 'head-moved', headSha: pr.headSha, reason: `the pull request is at ${pr.headSha}, not the expected ${expectedHeadSha}` }
+    }
+    const refusal = reviewTargetRefusal(pr) ?? await reviewHeadRefusal({ ctx, pr: { ...pr, number } })
+    if (refusal) return eligibilityChanged(refusal)
+  }
   if (!SHA_RE.test(pr.headSha) || !pr.headRef || !pr.baseRef) {
     throw new Error(`pull request #${number} did not resolve a head SHA, head branch and base branch`)
   }
@@ -427,7 +458,9 @@ export async function reviewPullRequest({
       }
     }
   } else if (existing) {
-    return { status: 'already-reviewed', headSha: pr.headSha, existing }
+    const refusal = { status: 'already-reviewed', headSha: pr.headSha, existing }
+    return expectedHeadSha === undefined ? refusal
+      : eligibilityChanged({ ...refusal, reason: 'a verdict is already at its head' })
   }
 
   const scratch = await mkdtemp(path.join(scratchRoot, 'tw-review-'))
@@ -446,6 +479,7 @@ export async function reviewPullRequest({
     await git(repoDir, ['fetch', '--prune', REMOTE, `+refs/heads/*:refs/remotes/${REMOTE}/*`])
     const fetchedTip = (await git(repoDir, ['rev-parse', `${REMOTE}/${pr.headRef}`])).trim()
     if (fetchedTip !== pr.headSha) {
+      onHead(fetchedTip)
       return { status: 'head-moved', reason: `${pr.headRef} is at ${fetchedTip}, not the ${pr.headSha} the API reported` }
     }
     // ST-38/AC-2: the session's checkout is the base's tip as fetched, never
@@ -587,6 +621,7 @@ export async function reviewPullRequest({
     // is `cannot-review`, a failure (ST-37/AC-1).
     if (verdict.verdict === null) {
       const now = await getPullRequestState(ctx, number)
+      onHead(now.headSha)
       const status = now.headSha === pr.headSha ? 'cannot-review' : 'no-verdict'
       return { status, headSha: verdict.head, summary: verdict.summary, sessions, ...chosen }
     }
@@ -598,6 +633,7 @@ export async function reviewPullRequest({
       return { status: 'head-moved', reason: `the reviewer reported ${verdict.head}, having been handed ${pr.headSha}`, sessions, ...chosen }
     }
     const current = await getPullRequestState(ctx, number)
+    onHead(current.headSha)
     if (verdict.head !== current.headSha) {
       return {
         status: 'head-moved',
@@ -634,8 +670,7 @@ export async function reviewPullRequest({
 // each in turn.
 async function verdictAt(ctx, number, headSha) {
   const comments = await listPullRequestComments(ctx, number)
-  const found = comments.findLast((c) =>
-    c.marker.kind === 'marker' && c.marker.headSha === headSha && HONOURED_ASSOCIATIONS.includes(c.authorAssociation))
+  const found = verdictAtHead(comments, headSha)
   return found ? { commentId: found.id, author: found.author, verdict: found.marker.verdict } : null
 }
 

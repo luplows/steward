@@ -34,7 +34,9 @@ export function setUpInitFixture() {
   vi.setConfig({ testTimeout: 180000 })
   beforeAll(() => {
     base = mkdtempSync(path.join(tmpdir(), 'steward-init-'))
-    for (const [key, value] of [['GIT_ALLOW_PROTOCOL', 'file'], ['GIT_TERMINAL_PROMPT', '0']]) {
+    const globalConfig = path.join(base, 'empty.gitconfig')
+    writeFileSync(globalConfig, '')
+    for (const [key, value] of [['GIT_ALLOW_PROTOCOL', 'file'], ['GIT_TERMINAL_PROMPT', '0'], ['GIT_CONFIG_GLOBAL', globalConfig], ['GIT_CONFIG_NOSYSTEM', '1']]) {
       savedEnv[key] = process.env[key]
       process.env[key] = value
     }
@@ -241,19 +243,21 @@ export function fakeTerminal(answers = null) {
  * being a folder holding the installation branch's files (made when first read). `git` replaces the
  * runner of every git command (see `watchGit`).
  */
-export async function runInit(args, { cwd, gh = fakeGitHub(), terminal = fakeTerminal(), pkg = makePackage(), machine = path.join(fresh('home'), 'settings.json'), codex = null, exists, git: runner, writeMachineSettings, getToken = async () => 'token', transport } = {}) {
+export async function runInit(args, { cwd, gh = fakeGitHub(), terminal = fakeTerminal(), pkg = makePackage(), machine = path.join(fresh('home'), 'settings.json'), codex = null, exists, git: runner, writeMachineSettings, getToken = async () => 'token', transport, env = {} } = {}) {
   const out = []
   const err = []
   const code = await main(args, {
     cwd,
-    env: { STEWARD_SETTINGS: machine },
+    env: { ...env, STEWARD_SETTINGS: machine },
     homedir: fresh('profile'),
     fetch: gh.fetch,
     getToken,
     terminal,
     findExecutable: () => codex,
     ...(exists ? { exists } : {}),
-    ...(runner ? { git: runner } : {}),
+    // Test-only Git runner retains the file-transport confinement; main's injected env is the
+    // environment under preflight inspection, independently of the runner's safety controls.
+    git: runner ?? defaultGit,
     ...(writeMachineSettings ? { writeMachineSettings } : {}),
     transport: transport ?? ((url) => (REMOTES.has(cwd) && repoFromRemoteUrl(url) !== null ? slashes(REMOTES.get(cwd)) : url)),
     packageRoot: pkg,

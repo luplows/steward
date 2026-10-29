@@ -12,6 +12,7 @@
  */
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { lstatSync, readFileSync, realpathSync } from 'node:fs'
 import path from 'node:path'
 
 /** Thrown for anything `init` refuses before it has written anything; `main` exits 2 with it. */
@@ -49,8 +50,8 @@ const FIXED_CONFIG = [
  * (`git rev-parse --local-env-vars` lists them). One set in the caller's environment would point
  * git at the caller's repository or index from the installation's own worktree, so every git
  * command runs without them and finds its repository from the folder it runs in. The caller's
- * identity variables (`GIT_AUTHOR_*`, `GIT_COMMITTER_*`) are not among them and are kept: the
- * commit is the caller's.
+ * identity variables (`GIT_AUTHOR_*`, `GIT_COMMITTER_*`) are not among them. `main` refuses all
+ * inherited Git overrides before discovery; this sanitisation also protects injected runners.
  */
 export const LOCAL_ENVIRONMENT = [
   'GIT_ALTERNATE_OBJECT_DIRECTORIES',
@@ -90,14 +91,17 @@ export function gitEnvironment(env) {
  * stdout, stderr }`, `status` being `-1` when git could not start. `GIT_OPTIONAL_LOCKS=0` keeps a
  * read from refreshing the caller's index behind its back.
  */
-export function defaultGit(cwd, args, { input } = {}) {
+export function defaultGit(cwd, args, { input, env = process.env, hooksPath } = {}) {
+  // This override belongs only to installer-owned operations, including worktree add. No caller
+  // configuration is changed. Callers doing preflight reads never supply it.
+  if (hooksPath !== undefined) args = ['-c', `core.hooksPath=${hooksPath}`, ...args]
   const result = spawnSync('git', args, {
     cwd,
     input,
     encoding: 'utf8',
     maxBuffer: 1 << 30,
     windowsHide: true,
-    env: gitEnvironment(process.env),
+    env: gitEnvironment(env),
   })
   if (result.error) return { status: -1, stdout: '', stderr: String(result.error.message) }
   return { status: result.status ?? -1, stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
@@ -129,6 +133,10 @@ export function canonicalPath(rel) {
  * one).
  */
 export function openCheckout(run, cwd) {
+  // Check before trusting --show-toplevel: core.worktree can make that name another checkout.
+  const redirected = run(cwd, ['config', '--show-origin', '--get-all', 'core.worktree'])
+  if (redirected.status === 0) throw new Refusal(`core.worktree is set (${redirected.stdout.trim()}): run init from an ordinary checkout without this setting; no fetch was attempted`)
+  if (redirected.status !== 1) throw new Refusal(`cannot inspect effective Git configuration (${redirected.stderr.trim()}): fix the named configuration source, or run init from another checkout`)
   const both = run(cwd, ['rev-parse', '--show-toplevel', 'HEAD^{commit}'])
   if (both.status === 0) {
     const [top, head] = both.stdout.trim().split('\n')
@@ -495,6 +503,7 @@ export function assertBranchName(run, root, name) {
 export function branchCollisions(run, root, branch, worktree, destination) {
   const found = []
   const listed = run(root, ['worktree', 'list', '--porcelain'])
+  if (listed.status !== 0) throw new GitError(['worktree', 'list'], listed)
   const trees = []
   if (listed.status === 0) {
     for (const block of listed.stdout.split(/\r?\n\r?\n/)) {
@@ -502,7 +511,9 @@ export function branchCollisions(run, root, branch, worktree, destination) {
       if (where) trees.push({ where, branch: /^branch refs\/heads\/(.+)$/m.exec(block)?.[1] ?? null })
     }
   }
-  if (run(root, ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`]).status === 0) {
+  const local = run(root, ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`])
+  if (![0, 1].includes(local.status)) throw new GitError(['show-ref', '--verify', `refs/heads/${branch}`], local)
+  if (local.status === 0) {
     const checkedOut = trees.find((t) => t.branch === branch)
     found.push(`the local branch ${branch} already exists${checkedOut ? `, checked out in ${checkedOut.where}` : ''}`)
   }
@@ -579,18 +590,39 @@ export function checkAdditions(run, dir, against, expected) {
     } else if (entry.newMode !== '100644') {
       problems.push(`${rel}: expected a regular file, git reports mode ${entry.newMode}`)
     } else if (entry.newSha !== blobId(expected.get(rel))) {
-      // Git may store a filtered form of the bytes (a project's attributes): ask it what it stores
-      // for these.
-      const stored = gitOut(run, dir, ['hash-object', '--stdin', '--path', rel], { input: expected.get(rel) }).trim()
-      if (stored !== entry.newSha) problems.push(`${rel}: its content is not what was generated`)
+      problems.push(`${rel}: its content is not what was generated`)
     }
   }
   for (const rel of expected.keys()) if (!seen.has(rel)) problems.push(`${rel}: missing from the diff`)
   return problems
 }
 
+/** Compare actual files as well as the entire staged diff, without trusting stat caches or filters. */
+export function checkInventory(run, dir, base, expected) {
+  const problems = checkAdditions(run, dir, ['--cached', base], expected)
+  for (const [rel, content] of expected) {
+    const file = path.join(dir, ...rel.split('/'))
+    try {
+      const info = lstatSync(file)
+      if (!info.isFile() || info.isSymbolicLink() || !readFileSync(file).equals(Buffer.from(content))) {
+        problems.push(`${rel}: its working-file bytes or type are not what was generated`)
+      }
+    } catch (error) {
+      problems.push(`${rel}: cannot verify its working-file bytes (${error.code ?? error.message})`)
+    }
+  }
+  // Detect edits to preserved files and unexpected untracked/ignored entries as well.
+  const status = gitOut(run, dir, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignored'])
+  for (const record of status.split('\0').filter(Boolean)) {
+    if (record.slice(0, 3) !== 'A  ' || !expected.has(record.slice(3))) {
+      problems.push(`${record.slice(3)}: unexpected worktree or index change (${record.slice(0, 2)})`)
+    }
+  }
+  return problems
+}
+
 /**
- * Commits what is staged, with the checkout's configured identity and normal hooks; resolves the
+ * Commits what is staged, with the checkout's configured identity; the caller disables hooks. Resolves the
  * commit's full SHA and its first parent's.
  */
 export function commitStaged(run, dir, message) {
@@ -660,36 +692,111 @@ export function assertSameMain(run, root, destination, base) {
   }
 }
 
-/** Setting names, in a checkout's own worktree configuration, that the installation's new worktree would not read. */
-const WORKTREE_ONLY = /^(user\.|author\.|committer\.|core\.hookspath$|commit\.gpgsign$|tag\.gpgsign$|gpg\.|include|core\.worktree$|core\.bare$|url\.|remote\.|push\.)/
-
-/**
- * Refuses, before anything is made, a checkout whose configuration would send a write elsewhere or
- * change who commits or which hooks run for the installation's worktree: `core.worktree` set at
- * all, and, with `extensions.worktreeConfig`, any identity, signing, hooks, include, remote, url or
- * push setting in the checkout's `config.worktree`, which a new worktree does not read.
- */
-export function assertConfigApplies(run, root) {
-  if (run(root, ['config', '--get-all', 'core.worktree']).status === 0) {
-    throw new Refusal('core.worktree is set in this checkout\'s git configuration, which can send git\'s writes to another folder: clear it (git config --unset core.worktree), or run init from another checkout')
-  }
-  const extension = run(root, ['config', '--bool', '--get', 'extensions.worktreeConfig'])
-  if (extension.status !== 0 || extension.stdout.trim() !== 'true') return
-  const own = run(root, ['config', '--worktree', '--list', '-z'])
-  if (own.status !== 0) {
-    throw new Refusal('init could not read this checkout\'s own worktree configuration (git config --worktree --list failed): fix that, or run init from another checkout')
-  }
-  const keys = own.stdout.split('\0').map((entry) => entry.split('\n')[0]).filter((k) => WORKTREE_ONLY.test(k.toLowerCase()))
+/** Refuse inherited Git overrides before even discovering the repository; never print their values. */
+export function assertGitEnvironment(env) {
+  const keys = Object.keys(env).filter((key) => /^GIT_/i.test(key) && env[key] !== undefined)
   if (keys.length > 0) {
-    throw new Refusal(
-      `this checkout's own worktree configuration (config.worktree) sets ${keys.join(', ')}, which the installation's new worktree would not read, so its commit could be made as someone else or skip your hooks: ` +
-        `clear ${keys.length === 1 ? 'it' : 'them'} (git config --worktree --unset ${keys[0]}), or run init from another checkout`,
-    )
+    throw new Refusal(`unsupported inherited Git environment: ${keys.join(', ')}. Run init from a fresh terminal with these variables unset, outside a Git hook; no fetch or worktree was attempted`)
   }
 }
 
-/** The settings, and the identities git derives from them, that decide who commits and which hooks run. */
-const COMMIT_SETTINGS = ['user.name', 'user.email', 'user.signingkey', 'core.hookspath', 'commit.gpgsign', 'tag.gpgsign', 'gpg.format', 'gpg.program']
+const simpler = 'run init from an ordinary checkout without this setting, or remove it from the named configuration source'
+
+/** Resolve symlinks in an existing path or its nearest existing ancestor. Errors refuse preflight. */
+function physicalPath(file) {
+  try {
+    return realpathSync(file)
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    const parent = path.dirname(file)
+    if (parent === file) throw error
+    return path.join(physicalPath(parent), path.basename(file))
+  }
+}
+
+function inside(file, dir) {
+  const relative = path.relative(dir, file)
+  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))
+}
+
+/**
+ * The 0.1 supported-environment boundary: inspect included configuration with sources and refuse
+ * rewrites, pushurl, worktree configuration, unsafe hooks paths, absent identity or signing.
+ * No configuration is repaired. Called before fetch and rechecked in the installation worktree.
+ */
+export function assertConfigApplies(run, root) {
+  const listed = run(root, ['config', '--null', '--show-origin', '--includes', '--list'])
+  const unknown = (why) => new Refusal(`cannot inspect effective Git configuration: ${why}; ${simpler}`)
+  if (listed.status !== 0) throw unknown(listed.stderr || 'git config --list failed')
+  const fields = listed.stdout.split('\0')
+  if (fields.pop() !== '' || fields.length % 2 !== 0) throw unknown('unrecognised git config output')
+  const settings = []
+  for (let i = 0; i < fields.length; i += 2) {
+    const source = fields[i]
+    const [key, ...value] = fields[i + 1].split('\n')
+    if (!source || !key) throw unknown('a key or source is missing')
+    settings.push({ key: key.toLowerCase(), source, value: value.join('\n') })
+  }
+  const refuse = (entry, why = 'unsupported for init 0.1') => {
+    throw new Refusal(`${entry.key} from ${entry.source}: ${why}; ${simpler}`)
+  }
+  for (const entry of settings) {
+    if (/^url\..*\.(insteadof|pushinsteadof)$/.test(entry.key) || entry.key === 'remote.origin.pushurl' || entry.key === 'core.worktree') refuse(entry)
+    if (entry.key.startsWith('includeif.')) refuse(entry, 'conditional configuration cannot be established for the new branch and worktree during read-only preflight')
+  }
+  const bool = (key) => {
+    const result = run(root, ['config', '--bool', '--get', key])
+    if (result.status === 1) return false
+    if (result.status !== 0 || !['true', 'false'].includes(result.stdout.trim())) throw unknown(`unreadable ${key} from ${settings.findLast((s) => s.key === key.toLowerCase())?.source ?? 'an unknown source'}`)
+    return result.stdout.trim() === 'true'
+  }
+  if (bool('extensions.worktreeConfig')) {
+    refuse(settings.findLast((s) => s.key === 'extensions.worktreeconfig'), 'enabled per-worktree config (config.worktree) is unsupported')
+  }
+  let metadata
+  try {
+    metadata = ['--absolute-git-dir', '--git-common-dir'].map((flag) => {
+      const result = run(root, ['rev-parse', flag])
+      if (result.status !== 0 || !result.stdout.trim()) throw unknown(`git rev-parse ${flag} failed`)
+      return physicalPath(path.resolve(root, result.stdout.trim()))
+    })
+    for (const dir of new Set(metadata)) {
+      const file = path.join(dir, 'config.worktree')
+      try {
+        lstatSync(file)
+        throw new Refusal(`repository config.worktree at ${file} is unsupported even with extensions.worktreeConfig off; ${simpler}`)
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error
+      }
+    }
+    const entry = settings.findLast((s) => s.key === 'core.hookspath')
+    if (entry) {
+      const result = run(root, ['config', '--path', '--get', 'core.hooksPath'])
+      if (result.status !== 0) throw unknown('core.hooksPath cannot be read')
+      const hooks = result.stdout.trim()
+      if (!path.isAbsolute(hooks)) refuse(entry, 'relative core.hooksPath is unsupported')
+      const resolved = physicalPath(hooks)
+      if (metadata.some((dir) => inside(resolved, dir)) || resolved.split(path.sep).some((part) => part.toLowerCase() === '.git')) {
+        refuse(entry, 'core.hooksPath resolves inside Git metadata')
+      }
+    }
+  } catch (error) {
+    if (error instanceof Refusal) throw error
+    throw unknown(error.message)
+  }
+  for (const key of ['user.name', 'user.email']) {
+    const value = run(root, ['config', '--get', key])
+    if (value.status !== 0 || value.stdout.trim() === '') {
+      throw new Refusal(`${key} is missing, blank or unreadable in effective Git configuration; configure it with git config ${key} <your-value> in an ordinary checkout before running init`)
+    }
+  }
+  if (bool('commit.gpgSign')) {
+    refuse(settings.findLast((s) => s.key === 'commit.gpgsign'), 'enabled commit.gpgSign is unsupported; use a checkout with commit.gpgSign false')
+  }
+}
+
+/** The settings, and identities Git derives from them, that decide who commits and whether it signs. */
+const COMMIT_SETTINGS = ['user.name', 'user.email', 'user.signingkey', 'commit.gpgsign', 'tag.gpgsign', 'gpg.format', 'gpg.program']
 
 /**
  * Checks that a commit made in the new worktree `dir` would be made as the checkout at `root` would

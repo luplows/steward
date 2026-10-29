@@ -43,8 +43,8 @@
  *   steward init --yes --land yes  `land: true`: unattended landing explicitly enabled
  */
 import { accessSync, constants, existsSync, realpathSync, statSync } from 'node:fs'
-import { link, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
-import { homedir as osHomedir } from 'node:os'
+import { link, lstat, mkdir, mkdtemp, open, readFile, rm, rmdir, writeFile } from 'node:fs/promises'
+import { homedir as osHomedir, tmpdir } from 'node:os'
 import path from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { fileURLToPath } from 'node:url'
@@ -53,6 +53,7 @@ import { INSPECTION_LABEL, isLabelAlreadyExists } from './inspect.mjs'
 import {
   addWorktree,
   assertConfigApplies,
+  assertGitEnvironment,
   assertSameCommitter,
   assertSameMain,
   assertBranchName,
@@ -61,6 +62,7 @@ import {
   canonicalPath,
   captureBase,
   checkAdditions,
+  checkInventory,
   commitStaged,
   createBaseReader,
   defaultGit,
@@ -80,7 +82,7 @@ import {
   worktreePath,
 } from './init-install.mjs'
 import { composePullRequestBody } from './init-pr-body.mjs'
-import { machineSettingsPath, TOOL_EFFORTS } from './machine-settings.mjs'
+import { machineSettingsPath, readMachineSettings, TOOL_EFFORTS } from './machine-settings.mjs'
 import { isRulesFilePath } from './rules-file-path.mjs'
 import { readSettings } from './settings.mjs'
 import { BREAKER_OVERRIDE_LABEL, REVIEW_BLOCKED_LABEL } from '../land/runway.mjs'
@@ -294,6 +296,8 @@ const OTHER_FLAGS = ['--yes', '--ref', '--codex-path', '--branch', '--pr-title',
 const USAGE = [
   `usage: steward init [--yes] [--ref <commit>] [--codex-path <path>] [--branch <name>] [--pr-title <text>] [--pr-body-file <path>] ${QUESTIONS.map((q) => `[${q.flag} <answer>]`).join(' ')}`,
   'init commits its files on a new branch (steward/install, or --branch), pushes it and opens a draft pull request against main; it changes nothing in your checkout.',
+  'init requires an ordinary GitHub origin: no URL rewrites, pushurl, per-worktree config, relative/Git-internal hooks path or inherited GIT_* overrides; configure nonblank user.name/user.email and leave commit.gpgSign unset or false.',
+  'All installation worktree hooks are disabled, including checkout and commit hooks. Run necessary project checks before approval. A supplied body stays verbatim: add this hook-bypass disclosure before marking the PR ready.',
   '--pr-title replaces the title (Install Steward review gate); --pr-body-file uses a file as the whole body; --pr-template names the template to write the body from when the project has several.',
   'Unattended landing is off unless you turn it on: --yes takes the default of --land, which is no, and only --land yes (or a yes at the question) turns it on.',
   'With land false, `steward land <pr-number>` asks steward to land one pull request that has passed review.',
@@ -443,18 +447,41 @@ export function findOnPath(name, env = process.env, platform = process.platform)
  */
 export async function writeWhole(file, content) {
   const temporary = `${file}.${process.pid}.tmp`
+  let owned = false
+  let handle
   try {
-    await writeFile(temporary, content, { flag: 'wx' })
+    try {
+      handle = await open(temporary, 'wx')
+      owned = true
+    } catch (error) {
+      if (error.code === 'EEXIST') throw new Error(`temporary settings file collision at ${temporary}; it is not owned by this invocation and was left untouched; inspect it before retrying`)
+      throw error
+    }
+    await handle.writeFile(content)
+    await handle.close()
+    handle = null
     await link(temporary, file)
   } finally {
-    await rm(temporary, { force: true })
+    await handle?.close()
+    if (owned) await rm(temporary, { force: true })
   }
 }
 
 /** Creates `rel` under `root` with `content` only when it is not there. Resolves `'wrote'` or `'left'`. */
 async function writeNew(root, rel, content) {
   const target = path.join(root, ...rel.split('/'))
-  await mkdir(path.dirname(target), { recursive: true })
+  // Never follow an unexpected link introduced after Git prepared the worktree.
+  let dir = root
+  for (const part of rel.split('/').slice(0, -1)) {
+    dir = path.join(dir, part)
+    try {
+      await mkdir(dir)
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error
+    }
+    const info = await lstat(dir)
+    if (!info.isDirectory() || info.isSymbolicLink()) throw new Error(`${dir}: not a regular directory; refusing to write ${rel} through it`)
+  }
   try {
     await writeFile(target, content, { flag: 'wx' })
     return 'wrote'
@@ -835,7 +862,7 @@ function failureReport({ error, phase, created, worktree, branch, repo, pullUrl 
  * steward package's root (`packageRoot`, where its `package.json` and `templates/` are), the runner
  * of every git command (`git`, which takes the folder and the argument array and gives `{ status,
  * stdout, stderr }`), `transport` and the output. `transport(url)` maps a GitHub URL that has been
- * checked (the URL a fetch or a push of `origin` goes to, after git's own rewriting) to the URL git
+ * checked (the unambiguous origin URL, with rewrites refused) to the URL git
  * is run against; it is the identity unless a caller of `main` passes another, which only the tests
  * do (to reach a bare repository): neither the command line nor the environment reaches it.
  */
@@ -851,7 +878,7 @@ export async function main(
     findExecutable = (name) => findOnPath(name, env),
     exists = isFile,
     packageRoot = PACKAGE_ROOT,
-    git = defaultGit,
+    git = (dir, args, options) => defaultGit(dir, args, { ...options, env }),
     writeMachineSettings = writeWhole,
     transport = (url) => url,
     out = console.log,
@@ -883,8 +910,10 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   const flags = parseFlags(argv)
 
   // Everything that can refuse comes before the first write.
+  assertGitEnvironment(env)
   const root = openCheckout(runGit, cwd)
   if (root === null) throw new Refusal(`${cwd} is not in a git repository: run init in the project's checkout`)
+  assertConfigApplies(runGit, root)
 
   const ref = flags.values['--ref']
   if (ref !== undefined && !SHA_RE.test(ref)) {
@@ -905,7 +934,6 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   // elsewhere, are settled before anything is made.
   const pushUrl = pushDestination(runGit, root, (url) => repoFromRemoteUrl(url)?.toLowerCase() === repo.toLowerCase())
   const destination = transport(pushUrl)
-  assertConfigApplies(runGit, root)
 
   const branch = flags.values['--branch'] ?? DEFAULT_BRANCH
   assertBranchName(runGit, root, branch)
@@ -1100,6 +1128,8 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   let phase = 'worktree'
   let pullUrl = null
   let machineAttempted = false
+  let hooksDirectory = null
+  const installGit = (dir, args, options) => runGit(dir, args, { ...options, hooksPath: hooksDirectory })
   const settingsResult = baseSettings.present ? 'left' : 'wrote'
   const expected = new Map()
   const labelOut = (line) => {
@@ -1109,8 +1139,15 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   }
   try {
     if (worktree !== null) {
+      out('All Git hooks are disabled in the installation worktree, including checkout, commit and push hooks. The crew must run necessary project-specific checks before approving the installation.')
+      if (suppliedBody !== null) out('Crew action before marking this PR ready: add the hook-bypass disclosure to the supplied PR body. --pr-body-file is preserved verbatim.')
+      hooksDirectory = await mkdtemp(path.join(tmpdir(), 'steward-init-hooks-'))
+      created.push(`folder ${hooksDirectory}: empty hooks directory for this installation`)
       out(`Installing into ${repo} from origin/main at ${base}, on the new branch ${branch}.`)
-      addWorktree(runGit, root, branch, worktree, base)
+      addWorktree(installGit, root, branch, worktree, base)
+      // Recheck configuration after creation and before publication, in case it changed since
+      // preflight. Never publish through a newly introduced unsupported configuration.
+      assertConfigApplies(runGit, worktree)
       assertSameCommitter(runGit, root, worktree)
       created.push(`worktree ${worktree}`, `local branch ${branch} (made from ${base})`)
     }
@@ -1122,8 +1159,9 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
         return
       }
       const result = await writeNew(worktree, t.rel, t.content)
-      out(result === 'wrote' ? `wrote ${t.rel}` : `left ${t.rel}: already there`)
-      if (result === 'wrote') expected.set(t.rel, t.content)
+      if (result !== 'wrote') throw new Error(`${t.rel}: an unexpected path exists in the installation worktree; it was not created by this invocation and was left untouched`)
+      out(`wrote ${t.rel}`)
+      expected.set(t.rel, t.content)
     }
     for (const t of targets.filter((x) => x.group === 'settings' || x.group === 'checklist')) await place(t)
     for (const t of targets.filter((x) => x.group === 'workflow')) await place(t)
@@ -1149,25 +1187,28 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
     if (worktree !== null) {
       if (expected.size === 0) throw new Error('no file was written, though the base lacks some')
       phase = 'stage'
-      stageFiles(runGit, worktree, [...expected.keys()])
+      stageFiles(installGit, worktree, [...expected.keys()])
       phase = 'check'
-      const staged = checkAdditions(runGit, worktree, ['--cached', base], expected)
+      const staged = checkInventory(installGit, worktree, base, expected)
       if (staged.length > 0) throw new Error(`what is staged is not only the installation's additions (${staged.join('; ')})`)
       if (expected.has('steward.config.json')) {
         const read = await readSettings(worktree)
         if (read.repo !== repo) throw new Error(`the settings read back name ${read.repo}, not ${repo}`)
       }
       phase = 'commit'
-      const made = commitStaged(runGit, worktree, COMMIT_MESSAGE)
+      const made = commitStaged(installGit, worktree, COMMIT_MESSAGE)
       commit = made.commit
       created.push(`commit ${commit}`)
       phase = 'verify'
       if (made.parent !== base) throw new Error(`the commit's parent is ${made.parent}, not ${base}`)
-      const committed = checkAdditions(runGit, worktree, [base, commit], expected)
+      const committed = checkAdditions(installGit, worktree, [base, commit], expected)
+      committed.push(...checkInventory(installGit, worktree, base, expected))
       if (committed.length > 0) throw new Error(`the commit is not only the installation's additions (${committed.join('; ')})`)
 
       phase = 'push'
-      pushNewBranch(runGit, worktree, branch, destination)
+      assertConfigApplies(runGit, worktree)
+      assertSameCommitter(runGit, root, worktree)
+      pushNewBranch(installGit, worktree, branch, destination)
       created.push(`branch ${branch} on origin`)
       out(`Pushed ${branch} to origin.`)
 
@@ -1201,7 +1242,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
       }
       out(`Opened the draft pull request ${pullUrl}`)
       try {
-        removeWorktree(runGit, root, worktree)
+        removeWorktree(installGit, root, worktree)
         created.splice(created.indexOf(`worktree ${worktree}`), 1)
         out(`Removed the worktree ${worktree}; the branch ${branch} is kept.`)
       } catch (error) {
@@ -1218,19 +1259,22 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
     // The machine's settings, only when the file is missing.
     phase = 'machine'
     if (machineMissing) {
+      machineAttempted = true
       const madeFolder = await mkdir(path.dirname(machinePath), { recursive: true })
       if (madeFolder !== undefined) created.push(`folder ${madeFolder}`)
-      machineAttempted = true
       try {
         await writeMachineSettings(machinePath, json(machineSettingsBody(answers, codexExecutable)))
+        await readMachineSettings({ env, homedir, exists })
         created.push(`machine settings ${machinePath}`)
         out(`wrote ${machinePath}: the machine's settings`)
       } catch (error) {
         if (error.code !== 'EEXIST') throw error
+        await readMachineSettings({ env, homedir, exists })
         out(`left ${machinePath}: already there`)
       }
     } else {
-      out(`left ${machinePath}: the machine's settings are already there, not read`)
+      await readMachineSettings({ env, homedir, exists })
+      out(`left ${machinePath}: the machine's settings are already there, preserved and valid`)
     }
 
     if (commit !== null) {
@@ -1252,6 +1296,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
     } else {
       out('To have GitHub stop a merge that has not passed review, run `steward protect`.')
     }
+    if (hooksDirectory !== null) await rmdir(hooksDirectory)
     return 0
   } catch (error) {
     // What exists is asked of git, not assumed from the phase that failed.

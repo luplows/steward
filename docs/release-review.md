@@ -67,7 +67,9 @@ A release is cut from `main`, or, as a patch release, from the newest release's 
   where `<commit>` is the release branch's last commit (`git rev-parse origin/release/vX.Y.Z` once
   fetched), so that the workflow files it writes install steward at that commit, since the tag does
   not exist yet (ST-44). `init` pushes a branch and opens the installation as a draft pull request;
-  mark it ready and merge it by hand, as nothing has reviewed it (the gate cannot review the pull
+  use the supported Git environment in the README's installation guidance. Installation hooks
+  are disabled; run necessary project-specific checks and disclose that bypass before approval.
+  Mark it ready and merge it by hand, as nothing has reviewed it (the gate cannot review the pull
   request that installs it), and run `steward protect` in the scratch repository's checkout, from
   steward installed at the same `<commit>`
   (`npx --yes --package=github:luplows/steward#<commit> steward protect`). Then open a test pull

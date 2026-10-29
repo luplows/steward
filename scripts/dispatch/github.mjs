@@ -197,6 +197,8 @@ export function parsePullRequestState(json) {
     headSha: json.head.sha,
     headRef: json.head.ref ?? null,
     baseRef: json.base?.ref ?? null,
+    state: json.state ?? null,
+    authorAssociation: json.author_association ?? null,
     body: json.body ?? '',
     draft: json.draft === true,
     labels: (json.labels ?? []).map((label) => label.name),
