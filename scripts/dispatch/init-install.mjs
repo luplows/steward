@@ -742,6 +742,11 @@ export function assertConfigApplies(run, root) {
   }
   for (const entry of settings) {
     if (/^url\..*\.(insteadof|pushinsteadof)$/.test(entry.key) || entry.key === 'remote.origin.pushurl' || entry.key === 'core.worktree') refuse(entry)
+    // Git resolves a remote operand as a configured name before treating it as a literal URL.
+    // A URL-shaped name could therefore redirect even an origin URL with no rewrite rules.
+    if (/^remote\.(?:[a-z][a-z0-9+.-]*:\/\/|git@[^/]+[:/])/.test(entry.key)) {
+      refuse(entry, 'a URL-shaped remote name can override the validated origin destination')
+    }
     if (entry.key.startsWith('includeif.')) refuse(entry, 'conditional configuration cannot be established for the new branch and worktree during read-only preflight')
   }
   const bool = (key) => {

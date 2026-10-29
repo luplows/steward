@@ -296,10 +296,11 @@ const OTHER_FLAGS = ['--yes', '--ref', '--codex-path', '--branch', '--pr-title',
 const USAGE = [
   `usage: steward init [--yes] [--ref <commit>] [--codex-path <path>] [--branch <name>] [--pr-title <text>] [--pr-body-file <path>] ${QUESTIONS.map((q) => `[${q.flag} <answer>]`).join(' ')}`,
   'init commits its files on a new branch (steward/install, or --branch), pushes it and opens a draft pull request against main; it changes nothing in your checkout.',
-  'init requires an ordinary GitHub origin: no URL rewrites, pushurl, per-worktree config, relative/Git-internal hooks path or inherited GIT_* overrides; configure nonblank user.name/user.email and leave commit.gpgSign unset or false.',
+  'init requires an ordinary GitHub origin: no URL rewrites, URL-shaped remote names, pushurl, per-worktree config, relative/Git-internal hooks path or inherited GIT_* overrides; configure nonblank user.name/user.email and leave commit.gpgSign unset or false.',
   'All installation worktree hooks are disabled, including checkout and commit hooks. Run necessary project checks before approval. A supplied body stays verbatim: add this hook-bypass disclosure before marking the PR ready.',
   '--pr-title replaces the title (Install Steward review gate); --pr-body-file uses a file as the whole body; --pr-template names the template to write the body from when the project has several.',
   'User config is ~/.steward/config.json, or the nonempty STEWARD_CONFIG path. Existing config is preserved and validated; legacy settings.json and STEWARD_SETTINGS are ignored.',
+  'Explicit flag answers are validated even when existing configuration makes their questions unnecessary; valid inactive answers do not change preserved configuration.',
   'Unattended landing is off unless you turn it on: --yes takes the default of --land, which is no, and only --land yes (or a yes at the question) turns it on.',
   'With land false, `steward land <pr-number>` asks steward to land one pull request that has passed review.',
   'examples: steward init --yes                 review only; the project merges',
@@ -331,8 +332,9 @@ export function parseFlags(argv) {
 
 /**
  * Answers every question that applies. A question is answered by its flag; otherwise, under `yes`,
- * by its default; otherwise at the terminal. With no terminal, a question none of these answers is
- * collected as missing, and the result names every one, so that the caller refuses naming them all
+ * by its default; otherwise at the terminal. Explicit answers are parsed even for an inactive
+ * question, but only applicable answers are used. With no terminal, a question none of these
+ * answers is collected as missing, and the result names every one, so the caller names them all
  * and writes nothing. Resolves `{ answers, missing }`.
  */
 export async function gather({ flags, state, terminal }) {
@@ -340,16 +342,18 @@ export async function gather({ flags, state, terminal }) {
   const missing = []
   const here = { ...state, answers }
   for (const q of QUESTIONS) {
-    if (!q.when || q.when(here)) {
-      const given = flags.values[q.flag]
-      if (given !== undefined) {
-        try {
-          answers[q.id] = q.parse(given, here)
-        } catch (error) {
-          if (!(error instanceof Refusal)) throw error
-          throw new Refusal(`${q.flag} ${given}: ${error.message}`)
-        }
-      } else if (flags.yes && q.default !== null) {
+    const applies = !q.when || q.when(here)
+    const given = flags.values[q.flag]
+    if (given !== undefined) {
+      try {
+        const parsed = q.parse(given, here)
+        if (applies) answers[q.id] = parsed
+      } catch (error) {
+        if (!(error instanceof Refusal)) throw error
+        throw new Refusal(`${q.flag} ${given}: ${error.message}`)
+      }
+    } else if (applies) {
+      if (flags.yes && q.default !== null) {
         answers[q.id] = q.parse(q.default, here)
       } else if (terminal.isTTY) {
         for (;;) {

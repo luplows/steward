@@ -106,8 +106,10 @@ npx --yes --package=github:luplows/steward#v<version> steward init
 ```
 
 `init` runs no model. It asks each question at the terminal, showing its default; every question
-has a flag, and `--yes` takes the default of each one no flag answers. With no terminal and a
-question unanswered it refuses, names the question's flag, and writes nothing. It needs the
+has a flag, and `--yes` takes the default of each one no flag answers. Explicit flag answers are
+validated even when their questions are unnecessary; valid inactive answers leave existing
+configuration unchanged. With no terminal and a question unanswered it refuses, names the
+question's flag, and writes nothing. It needs the
 checkout to have a commit, and `origin` to be a GitHub repository with a `main` branch. It fetches
 `origin/main`, makes a worktree of its own beside the checkout (`<checkout>.worktrees/`) on a new
 branch from that commit, and creates there the files that `origin/main` does not have. It never
@@ -146,8 +148,9 @@ request template location, or a directory above them): `init` names each and sto
 writes anything. It also refuses such a file that is marked `assume-unchanged` or `skip-worktree`,
 since `git status` would not show an edit to it, and says how to clear the mark. Before anything is
 made, and before fetching, it refuses every `url.*.insteadOf` or `url.*.pushInsteadOf` rule
-(even unrelated rules), any `remote.origin.pushurl`, enabled `extensions.worktreeConfig` or a
-repository `config.worktree`, conditional `includeIf` configuration whose effect in a new worktree
+(even unrelated rules), URL-shaped remote names that could override the validated origin URL,
+any `remote.origin.pushurl`, enabled `extensions.worktreeConfig` or a repository `config.worktree`,
+conditional `includeIf` configuration whose effect in a new worktree
 cannot be established during read-only preflight, `core.worktree`, relative or Git-internal
 `core.hooksPath`, and inherited `GIT_*` overrides. Run from an ordinary checkout and a fresh terminal without those
 settings; `init` names the unsupported key and its source without changing configuration. The
