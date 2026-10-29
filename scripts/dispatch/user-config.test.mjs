@@ -1,12 +1,16 @@
-import { describe, expect, it } from 'vitest'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { describe, expect, it, vi } from 'vitest'
+import childProcess from 'node:child_process'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import path from 'node:path'
-import { coderChoice, machineSettingsPath, readMachineSettings } from './machine-settings.mjs'
-import { fixtureMachineSettings } from './settings-fixture.mjs'
+import { coderChoice, userConfigPath, readUserConfig } from './user-config.mjs'
+import { fixtureUserConfig, fixtureSettings } from './settings-fixture.mjs'
+import { dispatchCoder, retryStory } from './coder.mjs'
+import { chooseReviewer, reviewPullRequest } from './review.mjs'
+import { firstWithUsage } from './choices.mjs'
 
 async function withTempHome(fn) {
-  const dir = mkdtempSync(path.join(tmpdir(), 'steward-machine-'))
+  const dir = mkdtempSync(path.join(tmpdir(), 'steward-user-config-'))
   try {
     return await fn(dir)
   } finally {
@@ -14,18 +18,18 @@ async function withTempHome(fn) {
   }
 }
 
-/** Writes `contents` as `<home>/.steward/settings.json`, and returns its path. */
+/** Writes `contents` as `<home>/.steward/config.json`, and returns its path. */
 function writeHomeFile(home, contents) {
   mkdirSync(path.join(home, '.steward'), { recursive: true })
-  writeFileSync(path.join(home, '.steward', 'settings.json'), contents)
-  return path.join(home, '.steward', 'settings.json')
+  writeFileSync(path.join(home, '.steward', 'config.json'), contents)
+  return path.join(home, '.steward', 'config.json')
 }
 
 /** Reads `settings` as the file under a temp home and asserts the error names the file and `fragment`. */
 async function expectRejected(settings, fragment) {
   await withTempHome(async (home) => {
     const filePath = writeHomeFile(home, JSON.stringify(settings))
-    const promise = readMachineSettings({ env: {}, homedir: home })
+    const promise = readUserConfig({ env: {}, homedir: home })
     await expect(promise).rejects.toThrow(filePath)
     await expect(promise).rejects.toThrow(fragment)
   })
@@ -33,49 +37,218 @@ async function expectRejected(settings, fragment) {
 
 /** The fixture with `change` applied to a copy. */
 function changed(change) {
-  const settings = fixtureMachineSettings()
+  const settings = fixtureUserConfig()
   change(settings)
   return settings
 }
 
-describe('ST-34/AC-1: where the file is read from', () => {
-  it('ST-34/AC-1: reads <homedir>/.steward/settings.json when STEWARD_SETTINGS is not set', async () => {
+describe('ST-63/AC-1: where the file is read from', () => {
+  it('ST-63/AC-1: reads <homedir>/.steward/config.json when STEWARD_CONFIG is not set', async () => {
     await withTempHome(async (home) => {
-      writeHomeFile(home, JSON.stringify(fixtureMachineSettings()))
-      expect(await readMachineSettings({ env: {}, homedir: home })).toEqual(fixtureMachineSettings())
+      writeHomeFile(home, JSON.stringify(fixtureUserConfig()))
+      expect(await readUserConfig({ env: {}, homedir: home })).toEqual(fixtureUserConfig())
     })
   })
 
-  it('ST-34/AC-1: reads the file STEWARD_SETTINGS names, and not the one under homedir', async () => {
+  it('ST-63/AC-1: reads the file STEWARD_CONFIG names, and not the one under homedir', async () => {
     await withTempHome(async (home) => {
       writeHomeFile(home, '{ not json')
       const named = path.join(home, 'elsewhere.json')
-      writeFileSync(named, JSON.stringify(fixtureMachineSettings()))
-      expect(await readMachineSettings({ env: { STEWARD_SETTINGS: named }, homedir: home })).toEqual(
-        fixtureMachineSettings(),
+      writeFileSync(named, JSON.stringify(fixtureUserConfig()))
+      expect(await readUserConfig({ env: { STEWARD_CONFIG: named }, homedir: home })).toEqual(
+        fixtureUserConfig(),
       )
-      expect(machineSettingsPath({ env: { STEWARD_SETTINGS: named }, homedir: home })).toBe(named)
-      expect(machineSettingsPath({ env: {}, homedir: home })).toBe(path.join(home, '.steward', 'settings.json'))
+      expect(userConfigPath({ env: { STEWARD_CONFIG: named }, homedir: home })).toBe(named)
+      expect(userConfigPath({ env: {}, homedir: home })).toBe(path.join(home, '.steward', 'config.json'))
     })
   })
 
-  it('ST-34/AC-1: a missing file is an error naming it, and nothing is defaulted', async () => {
+  it('ST-63/AC-1: a missing file is an error naming it, and nothing is defaulted', async () => {
     await withTempHome(async (home) => {
-      const filePath = path.join(home, '.steward', 'settings.json')
-      const promise = readMachineSettings({ env: {}, homedir: home })
+      const filePath = path.join(home, '.steward', 'config.json')
+      const promise = readUserConfig({ env: {}, homedir: home })
       await expect(promise).rejects.toThrow(filePath)
       await expect(promise).rejects.toThrow('file not found')
       const named = path.join(home, 'absent.json')
-      await expect(readMachineSettings({ env: { STEWARD_SETTINGS: named }, homedir: home })).rejects.toThrow(named)
+      await expect(readUserConfig({ env: { STEWARD_CONFIG: named }, homedir: home })).rejects.toThrow(named)
     })
   })
 
   it('ST-34/AC-1: invalid JSON, and JSON that is not an object, are errors naming the file', async () => {
     await withTempHome(async (home) => {
       const filePath = writeHomeFile(home, '{ not json')
-      await expect(readMachineSettings({ env: {}, homedir: home })).rejects.toThrow(`${filePath}: invalid JSON`)
+      await expect(readUserConfig({ env: {}, homedir: home })).rejects.toThrow(`${filePath}: invalid JSON`)
       writeHomeFile(home, '[]')
-      await expect(readMachineSettings({ env: {}, homedir: home })).rejects.toThrow(`${filePath}: must be a JSON object`)
+      await expect(readUserConfig({ env: {}, homedir: home })).rejects.toThrow(`${filePath}: must be a JSON object`)
+    })
+  })
+})
+
+describe('ST-63: per-user configuration boundaries', () => {
+  it('ST-63/AC-1: resolves the invoking user home and treats only a nonempty new override as selected', () => {
+    expect(userConfigPath({ env: {} })).toBe(path.join(homedir(), '.steward', 'config.json'))
+    expect(userConfigPath({ env: { STEWARD_CONFIG: '', STEWARD_SETTINGS: 'old.json' }, homedir: 'home' }))
+      .toBe(path.join('home', '.steward', 'config.json'))
+    expect(userConfigPath({ env: { STEWARD_CONFIG: 'relative.json' }, homedir: 'home' })).toBe('relative.json')
+  })
+
+  it('ST-63/AC-1: ignores both legacy inputs even when the canonical file is missing', async () => {
+    await withTempHome(async (home) => {
+      const canonical = writeHomeFile(home, JSON.stringify(fixtureUserConfig()))
+      const old = path.join(home, '.steward', 'settings.json')
+      const legacyOverride = path.join(home, 'legacy.json')
+      writeFileSync(old, 'invalid legacy home file')
+      writeFileSync(legacyOverride, 'invalid legacy override')
+      const env = { STEWARD_SETTINGS: legacyOverride }
+      expect(await readUserConfig({ env, homedir: home })).toEqual(fixtureUserConfig())
+      const selected = path.join(home, 'selected.json')
+      writeFileSync(selected, JSON.stringify(fixtureUserConfig({ coordinator: { scanIntervalMinutes: 1 } })))
+      expect((await readUserConfig({ env: { ...env, STEWARD_CONFIG: selected }, homedir: home })).coordinator)
+        .toEqual({ scanIntervalMinutes: 1 })
+      rmSync(canonical)
+      // Even valid old files must never rescue a missing selected file.
+      writeFileSync(old, JSON.stringify(fixtureUserConfig()))
+      writeFileSync(legacyOverride, JSON.stringify(fixtureUserConfig()))
+      await expect(readUserConfig({ env, homedir: home })).rejects.toThrow(`${canonical}: file not found`)
+      await expect(readUserConfig({ env: { ...env, STEWARD_CONFIG: canonical }, homedir: home }))
+        .rejects.toThrow(`${canonical}: file not found`)
+      expect(readFileSync(old, 'utf8')).toBe(JSON.stringify(fixtureUserConfig()))
+    })
+  })
+
+  it('ST-63/AC-3: only an absent coordinator section receives the 15-minute default', async () => {
+    await withTempHome(async (home) => {
+      const config = changed((s) => delete s.coordinator)
+      writeHomeFile(home, JSON.stringify(config))
+      expect(await readUserConfig({ env: {}, homedir: home })).toEqual({
+        ...config, coordinator: { scanIntervalMinutes: 15 },
+      })
+    })
+  })
+
+  it('ST-63/AC-2: parsed choices, efforts and per-tool budget refusals are unchanged by cadence', async () => {
+    await withTempHome(async (home) => {
+      for (const cadence of [undefined, { scanIntervalMinutes: 10_080 }]) {
+        const config = changed((s) => {
+          delete s.coordinator
+          if (cadence) s.coordinator = cadence
+          s.roles.reviewer.default = 'sol'
+          s.roles.reviewer.available = {
+            sol: { tool: 'codex', model: 'gpt-sol', effort: 'ultra' },
+            terra: { tool: 'codex', model: 'gpt-terra', effort: 'max' },
+            ...s.roles.reviewer.available,
+          }
+          s.tools = { codex: { executable: process.execPath } }
+        })
+        writeHomeFile(home, JSON.stringify(config))
+        const read = await readUserConfig({ env: {}, homedir: home })
+        expect(read.roles).toEqual(config.roles)
+        expect(read.usageLimits).toEqual(config.usageLimits)
+        expect(read.tools).toEqual(config.tools)
+        expect(coderChoice(read, null)).toEqual({ name: 'sonnet', tool: 'claude', model: 'sonnet', effort: 'medium', strength: 1 })
+        expect(chooseReviewer(read, 'sonnet')).toEqual({ name: 'sol', tool: 'codex', model: 'gpt-sol', effort: 'ultra' })
+        const codex = vi.fn(async () => ({ ok: true, session: { percent: 90 }, weekly: { percent: 1 } }))
+        const claude = vi.fn(async () => ({ ok: true, session: { percent: 89 }, weekly: { percent: 89 } }))
+        const picked = await firstWithUsage({
+          candidates: Object.entries(read.roles.reviewer.available).map(([name, choice]) => ({ name, ...choice })),
+          readers: { codex, claude }, cwd: home, limits: read.usageLimits.reviewer,
+        })
+        expect(picked.choice).toEqual({ name: 'opus', tool: 'claude', model: 'opus', effort: 'high' })
+        expect(picked.skipped).toEqual(['sol', 'terra'].map((name) => ({
+          name, status: 'over-usage', window: 'session', percent: 90, limit: 90,
+        })))
+        expect(codex).toHaveBeenCalledTimes(1)
+        expect(claude).toHaveBeenCalledTimes(1)
+      }
+    })
+  })
+
+  it.each([1, 15, 10_080, 1_000_000_000, Math.floor(Number.MAX_SAFE_INTEGER / 60_000)])(
+    'ST-63/AC-3: accepts %s minutes without a product cap', async (scanIntervalMinutes) => {
+      await withTempHome(async (home) => {
+        writeHomeFile(home, JSON.stringify(fixtureUserConfig({ coordinator: { scanIntervalMinutes } })))
+        expect((await readUserConfig({ env: {}, homedir: home })).coordinator).toEqual({ scanIntervalMinutes })
+      })
+    },
+  )
+
+  it.each([0, -1, 1.5, true, false, '15', null, [], {}, Number.MAX_SAFE_INTEGER,
+    Math.floor(Number.MAX_SAFE_INTEGER / 60_000) + 1, Number.MAX_SAFE_INTEGER + 1])(
+    'ST-63/AC-3: rejects invalid or unsafe interval %j with file and key', async (scanIntervalMinutes) => {
+      await expectRejected(fixtureUserConfig({ coordinator: { scanIntervalMinutes } }), "'coordinator.scanIntervalMinutes'")
+    },
+  )
+
+  it.each([null, [], 15, true, '15'])(
+    'ST-63/AC-3: refuses malformed coordinator %j', async (coordinator) => {
+      await expectRejected(fixtureUserConfig({ coordinator }), "'coordinator' must be an object")
+    },
+  )
+
+  it('ST-63/AC-3: requires exactly the cadence key and rejects runtime state keys', async () => {
+    await expectRejected(fixtureUserConfig({ coordinator: {} }), "missing required key 'coordinator.scanIntervalMinutes'")
+    await expectRejected(fixtureUserConfig({ coordinator: { scanIntervalMinutes: 15, enabled: true } }),
+      "unrecognised key 'coordinator.enabled'")
+    await expectRejected({ ...fixtureUserConfig(), state: {} }, "unrecognised key 'state'")
+    await withTempHome(async (home) => {
+      const raw = JSON.stringify(fixtureUserConfig()).replace('"scanIntervalMinutes":15', '"scanIntervalMinutes":1e400')
+      const file = writeHomeFile(home, raw)
+      await expect(readUserConfig({ env: {}, homedir: home })).rejects.toThrow(`${file}: 'coordinator.scanIntervalMinutes'`)
+    })
+  })
+
+  it.each(['missing', 'invalid JSON', 'missing roles', 'missing usageLimits'])(
+    'ST-63/AC-4: manual reviewer, coder and retry fail closed for %s config before any work', async (failure) => {
+      await withTempHome(async (home) => {
+        mkdirSync(path.join(home, 'stories'))
+        writeFileSync(path.join(home, 'stories', 'stories.json'), '{"prefix":"ST"}')
+        writeFileSync(path.join(home, 'steward.config.json'), JSON.stringify(fixtureSettings()))
+        const file = path.join(home, '.steward', 'config.json')
+        if (failure !== 'missing') {
+          const config = fixtureUserConfig()
+          if (failure === 'missing roles') delete config.roles
+          if (failure === 'missing usageLimits') delete config.usageLimits
+          writeHomeFile(home, failure === 'invalid JSON' ? '{bad' : JSON.stringify(config))
+        }
+        vi.stubEnv('STEWARD_CONFIG', file)
+        try {
+          const send = vi.fn()
+          const usage = vi.fn()
+          const options = { repoDir: home, ctx: { send }, usage, baseEnv: {} }
+          await expect(reviewPullRequest({ ...options, number: 1 })).rejects.toThrow(file)
+          await expect(dispatchCoder(options)).rejects.toThrow(file)
+          await expect(retryStory({ ...options, storyId: 'ST-63' })).rejects.toThrow(file)
+          expect(send).not.toHaveBeenCalled()
+          expect(usage).not.toHaveBeenCalled()
+        } finally {
+          vi.unstubAllEnvs()
+        }
+      })
+    },
+  )
+
+  it('ST-63/AC-4, ST-63/AC-5: distinct reads observe edits without state writes, timers or sessions', async () => {
+    await withTempHome(async (home) => {
+      const raw = JSON.stringify(changed((s) => delete s.coordinator))
+      const file = writeHomeFile(home, raw)
+      const before = readdirSync(home, { recursive: true })
+      const starts = ['spawn', 'exec', 'execFile', 'fork'].map((key) => vi.spyOn(childProcess, key))
+      const timers = [vi.spyOn(globalThis, 'setInterval'), vi.spyOn(globalThis, 'setTimeout')]
+      try {
+        const first = await readUserConfig({ env: {}, homedir: home })
+        expect(first.coordinator.scanIntervalMinutes).toBe(15)
+        expect(readFileSync(file, 'utf8')).toBe(raw)
+        const edited = JSON.stringify(fixtureUserConfig({ coordinator: { scanIntervalMinutes: 10_080 } }))
+        writeFileSync(file, edited)
+        const second = await readUserConfig({ env: {}, homedir: home })
+        expect(second.coordinator.scanIntervalMinutes).toBe(10_080)
+        expect(first.coordinator.scanIntervalMinutes).toBe(15)
+        expect(readFileSync(file, 'utf8')).toBe(edited)
+        expect(readdirSync(home, { recursive: true })).toEqual(before)
+        for (const spy of [...starts, ...timers]) expect(spy).not.toHaveBeenCalled()
+      } finally {
+        vi.restoreAllMocks()
+      }
     })
   })
 })
@@ -91,7 +264,7 @@ describe('ST-34/AC-2: the form of the file', () => {
         s.roles.reviewer.default = 'zed'
       })
       writeHomeFile(home, JSON.stringify(settings))
-      const read = await readMachineSettings({ env: {}, homedir: home })
+      const read = await readUserConfig({ env: {}, homedir: home })
       expect(read).toEqual(settings)
       expect(Object.keys(read.roles.reviewer.available)).toEqual(['zed', 'a.b-c_1'])
     })
@@ -99,11 +272,11 @@ describe('ST-34/AC-2: the form of the file', () => {
 
   it.each(['usageLimits', 'roles'])('ST-34/AC-2: rejects a missing %s and an unknown top-level key', async (key) => {
     await expectRejected(changed((s) => delete s[key]), `missing required key '${key}'`)
-    await expectRejected({ ...fixtureMachineSettings(), extra: 1 }, "unrecognised key 'extra'")
+    await expectRejected({ ...fixtureUserConfig(), extra: 1 }, "unrecognised key 'extra'")
   })
 
   it('ST-34/AC-2: usageLimits has the form ST-31 gave it, and is checked', async () => {
-    await expectRejected({ ...fixtureMachineSettings(), usageLimits: [] }, "'usageLimits' must be an object")
+    await expectRejected({ ...fixtureUserConfig(), usageLimits: [] }, "'usageLimits' must be an object")
     await expectRejected(changed((s) => { s.usageLimits.other = {} }), "unrecognised key 'usageLimits.other'")
     await expectRejected(changed((s) => delete s.usageLimits.reviewer), "missing required key 'usageLimits.reviewer'")
     await expectRejected(changed((s) => { s.usageLimits.coder = 70 }), "'usageLimits.coder' must be an object")
@@ -121,12 +294,12 @@ describe('ST-34/AC-2: the form of the file', () => {
     await withTempHome(async (home) => {
       const settings = changed((s) => { s.usageLimits.coder = { session: 1, weekly: 100 } })
       writeHomeFile(home, JSON.stringify(settings))
-      expect((await readMachineSettings({ env: {}, homedir: home })).usageLimits).toEqual(settings.usageLimits)
+      expect((await readUserConfig({ env: {}, homedir: home })).usageLimits).toEqual(settings.usageLimits)
     })
   })
 
   it('ST-34/AC-2: roles must be an object with exactly coder and reviewer', async () => {
-    await expectRejected({ ...fixtureMachineSettings(), roles: [] }, "'roles' must be an object")
+    await expectRejected({ ...fixtureUserConfig(), roles: [] }, "'roles' must be an object")
     await expectRejected(changed((s) => delete s.roles.reviewer), "missing required key 'roles.reviewer'")
     await expectRejected(changed((s) => { s.roles.planner = s.roles.coder }), "unrecognised key 'roles.planner'")
     await expectRejected(changed((s) => { s.roles.coder = 'sonnet' }), "'roles.coder' must be an object")
@@ -187,7 +360,7 @@ describe('ST-34/AC-2: the form of the file', () => {
     await withTempHome(async (home) => {
       for (const good of ['low', 'medium', 'high', 'xhigh', 'max']) {
         writeHomeFile(home, JSON.stringify(changed((s) => { s.roles.coder.available.sonnet.effort = good })))
-        await expect(readMachineSettings({ env: {}, homedir: home })).resolves.toBeTruthy()
+        await expect(readUserConfig({ env: {}, homedir: home })).resolves.toBeTruthy()
       }
     })
     for (const bad of ['ultra', 'High', '', 3, null]) {
@@ -211,8 +384,8 @@ describe('ST-34/AC-2: the form of the file', () => {
 describe('ST-35/AC-5: a coder choice has a strength', () => {
   it('ST-35/AC-5: a valid file keeps the strength of each coder choice, and a reviewer choice has none', async () => {
     await withTempHome(async (home) => {
-      writeHomeFile(home, JSON.stringify(fixtureMachineSettings()))
-      const read = await readMachineSettings({ env: {}, homedir: home })
+      writeHomeFile(home, JSON.stringify(fixtureUserConfig()))
+      const read = await readUserConfig({ env: {}, homedir: home })
       expect(read.roles.coder.available.sonnet.strength).toBe(1)
       expect(read.roles.coder.available.opus.strength).toBe(2)
       expect(read.roles.reviewer.available.opus).not.toHaveProperty('strength')
@@ -236,7 +409,7 @@ describe('ST-35/AC-5: a coder choice has a strength', () => {
   it('ST-35/AC-5: equal strengths are valid', async () => {
     await withTempHome(async (home) => {
       writeHomeFile(home, JSON.stringify(changed((s) => { s.roles.coder.available.opus.strength = 1 })))
-      await expect(readMachineSettings({ env: {}, homedir: home })).resolves.toBeTruthy()
+      await expect(readUserConfig({ env: {}, homedir: home })).resolves.toBeTruthy()
     })
   })
 
@@ -250,7 +423,7 @@ describe('ST-35/AC-5: a coder choice has a strength', () => {
 
 describe('ST-34/AC-4: coderChoice', () => {
   it('ST-34/AC-4: a name is that choice, null is the default, an unknown name is null', () => {
-    const machine = fixtureMachineSettings()
+    const machine = fixtureUserConfig()
     expect(coderChoice(machine, 'opus')).toEqual({ name: 'opus', tool: 'claude', model: 'opus', effort: 'high', strength: 2 })
     expect(coderChoice(machine, null)).toEqual({ name: 'sonnet', tool: 'claude', model: 'sonnet', effort: 'medium', strength: 1 })
     expect(coderChoice(machine, 'haiku')).toBeNull()
@@ -267,7 +440,7 @@ describe('ST-32/AC-1: a Codex choice for the reviewer', () => {
   async function readWith(settings, exists = (p) => p === CODEX) {
     return withTempHome(async (home) => {
       writeHomeFile(home, JSON.stringify(settings))
-      return readMachineSettings({ env: {}, homedir: home, exists })
+      return readUserConfig({ env: {}, homedir: home, exists })
     })
   }
   const withSol = (more = () => {}) => changed((s) => {
@@ -324,7 +497,7 @@ describe('ST-32/AC-1: a Codex choice for the reviewer', () => {
   })
 
   it('ST-32/AC-1: without a Codex choice, tools may be left out', async () => {
-    const read = await readWith(fixtureMachineSettings(), () => { throw new Error('no executable should be checked') })
+    const read = await readWith(fixtureUserConfig(), () => { throw new Error('no executable should be checked') })
     expect(read).not.toHaveProperty('tools')
   })
 
@@ -334,10 +507,10 @@ describe('ST-32/AC-1: a Codex choice for the reviewer', () => {
       writeFileSync(file, '')
       const settings = (executable) => withSol((s) => { s.tools.codex.executable = executable })
       writeHomeFile(home, JSON.stringify(settings(file)))
-      await expect(readMachineSettings({ env: {}, homedir: home })).resolves.toMatchObject({ tools: { codex: { executable: file } } })
+      await expect(readUserConfig({ env: {}, homedir: home })).resolves.toMatchObject({ tools: { codex: { executable: file } } })
       for (const bad of [home, path.join(home, 'no-such-codex.exe')]) {
         writeHomeFile(home, JSON.stringify(settings(bad)))
-        await expect(readMachineSettings({ env: {}, homedir: home }))
+        await expect(readUserConfig({ env: {}, homedir: home }))
           .rejects.toThrow("'tools.codex.executable' names no file that exists")
       }
     })

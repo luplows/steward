@@ -1,6 +1,6 @@
 /**
- * The reviewer run through OpenAI's Codex CLI (ST-32), chosen in the machine's settings: a choice
- * whose `tool` is `"codex"` (`machine-settings.mjs`). Two things a Claude reviewer gets elsewhere
+ * The reviewer run through OpenAI's Codex CLI (ST-32), chosen in the user config: a choice
+ * whose `tool` is `"codex"` (`user-config.mjs`). Two things a Claude reviewer gets elsewhere
  * are done here for Codex:
  *
  * - **Its usage**, read before a session starts, with no model call: `codex app-server` over
@@ -92,7 +92,7 @@ export function rateLimitsRpc({ executable, cwd, timeoutMs, spawnFn = spawn }) {
  * Reads Codex's usage (ST-32/AC-3), in `readUsage`'s shape (`usage.mjs`), so that `checkUsage`
  * applies the reviewer's limits to it as it does to Claude Code's.
  *
- *   executable  the `codex` executable, `tools.codex.executable` in the machine's settings
+ *   executable  the `codex` executable, `tools.codex.executable` in the user config
  *   cwd         the directory the process runs in
  *   rpc         `({ executable, cwd, timeoutMs })`, resolving `rateLimitsRpc`'s result; injectable
  *   timeoutMs   defaults to `CODEX_USAGE_TIMEOUT_MS`

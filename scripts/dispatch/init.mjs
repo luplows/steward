@@ -39,7 +39,7 @@ import { createInterface } from 'node:readline/promises'
 import { fileURLToPath } from 'node:url'
 import { ghAuthToken } from './github.mjs'
 import { INSPECTION_LABEL, isLabelAlreadyExists } from './inspect.mjs'
-import { machineSettingsPath, TOOL_EFFORTS } from './machine-settings.mjs'
+import { userConfigPath, TOOL_EFFORTS } from './user-config.mjs'
 import { isRulesFilePath } from './rules-file-path.mjs'
 import { BREAKER_OVERRIDE_LABEL, REVIEW_BLOCKED_LABEL } from '../land/runway.mjs'
 
@@ -176,7 +176,7 @@ export const QUESTIONS = [
     prompt: "At what share of the plan's 5-hour usage (1 to 100) does steward start no coder session?",
     default: '70',
     parse: parseInteger(1, 100),
-    when: (s) => s.machineMissing,
+    when: (s) => s.userConfigMissing,
   },
   {
     id: 'coderWeeklyLimit',
@@ -184,7 +184,7 @@ export const QUESTIONS = [
     prompt: "At what share of the plan's weekly usage (1 to 100) does steward start no coder session?",
     default: '75',
     parse: parseInteger(1, 100),
-    when: (s) => s.machineMissing,
+    when: (s) => s.userConfigMissing,
   },
   {
     id: 'reviewerSessionLimit',
@@ -192,7 +192,7 @@ export const QUESTIONS = [
     prompt: "At what share of the plan's 5-hour usage (1 to 100) does steward start no reviewer session?",
     default: '90',
     parse: parseInteger(1, 100),
-    when: (s) => s.machineMissing,
+    when: (s) => s.userConfigMissing,
   },
   {
     id: 'reviewerWeeklyLimit',
@@ -200,7 +200,7 @@ export const QUESTIONS = [
     prompt: "At what share of the plan's weekly usage (1 to 100) does steward start no reviewer session?",
     default: '90',
     parse: parseInteger(1, 100),
-    when: (s) => s.machineMissing,
+    when: (s) => s.userConfigMissing,
   },
   {
     id: 'reviewer',
@@ -208,7 +208,7 @@ export const QUESTIONS = [
     prompt: 'Review on Claude (opus), or on the Codex CLI (claude or codex)?',
     default: 'claude',
     parse: parseChoice('claude', 'codex'),
-    when: (s) => s.machineMissing && s.codexExecutable !== null,
+    when: (s) => s.userConfigMissing && s.codexExecutable !== null,
   },
   {
     id: 'codexModel',
@@ -216,7 +216,7 @@ export const QUESTIONS = [
     prompt: "Which model does the Codex reviewer run (as Codex names it)? It has no default.",
     default: null,
     parse: parseNonEmpty,
-    when: (s) => s.machineMissing && s.answers.reviewer === 'codex',
+    when: (s) => s.userConfigMissing && s.answers.reviewer === 'codex',
   },
   {
     id: 'codexEffort',
@@ -224,7 +224,7 @@ export const QUESTIONS = [
     prompt: `Which effort does the Codex reviewer run at (${TOOL_EFFORTS.codex.join(', ')})? It has no default.`,
     default: null,
     parse: parseCodexEffort,
-    when: (s) => s.machineMissing && s.answers.reviewer === 'codex',
+    when: (s) => s.userConfigMissing && s.answers.reviewer === 'codex',
   },
 ]
 
@@ -531,8 +531,8 @@ export function settingsBody(repo, answers) {
   }
 }
 
-/** The body of the machine's settings from the answers; the Claude choices are fixed, the Codex one asked. */
-export function machineSettingsBody(answers, codexExecutable) {
+/** The body of the user config from the answers; the Claude choices are fixed, the Codex one asked. */
+export function userConfigBody(answers, codexExecutable) {
   const claudeReviewers = {
     opus: { tool: 'claude', model: 'opus', effort: 'high' },
     sonnet: { tool: 'claude', model: 'sonnet', effort: 'high' },
@@ -666,8 +666,8 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   }
   const pin = ref?.toLowerCase() ?? `v${version}`
 
-  const machinePath = machineSettingsPath({ env, homedir })
-  const machineMissing = !existsSync(machinePath)
+  const configPath = userConfigPath({ env, homedir })
+  const userConfigMissing = !existsSync(configPath)
   let codexExecutable = null
   const codexPath = flags.values['--codex-path']
   if (codexPath !== undefined) {
@@ -678,11 +678,11 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   } else {
     codexExecutable = findExecutable('codex')
   }
-  if (machineMissing && codexExecutable === null && flags.values['--reviewer'] === 'codex') {
+  if (userConfigMissing && codexExecutable === null && flags.values['--reviewer'] === 'codex') {
     throw new Refusal('--reviewer codex: `codex` is not on the PATH; give its path with --codex-path')
   }
 
-  const { answers, missing } = await gather({ flags, state: { machineMissing, codexExecutable }, terminal })
+  const { answers, missing } = await gather({ flags, state: { userConfigMissing, codexExecutable }, terminal })
   if (missing.length > 0) {
     throw new Refusal(
       `init asks ${missing.length === 1 ? 'a question' : 'questions'} it has no terminal to ask and no answer for. ` +
@@ -745,18 +745,18 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
     await ensureLabels(createInitContext({ repo, fetch, getToken }), out)
   }
 
-  // The machine's settings, only when the file is missing.
-  if (machineMissing) {
-    await mkdir(path.dirname(machinePath), { recursive: true })
+  // The user config, only when the file is missing.
+  if (userConfigMissing) {
+    await mkdir(path.dirname(configPath), { recursive: true })
     try {
-      await writeFile(machinePath, json(machineSettingsBody(answers, codexExecutable)), { flag: 'wx' })
-      out(`wrote ${machinePath}: the machine's settings`)
+      await writeFile(configPath, json(userConfigBody(answers, codexExecutable)), { flag: 'wx' })
+      out(`wrote ${configPath}: the user config`)
     } catch (error) {
       if (error.code !== 'EEXIST') throw error
-      out(`left ${machinePath}: already there`)
+      out(`left ${configPath}: already there`)
     }
   } else {
-    out(`left ${machinePath}: the machine's settings are already there, not read`)
+    out(`left ${configPath}: the user config is already there, not read`)
   }
 
   for (const line of landingNotes(settingsResult, answers, flags)) out(line)

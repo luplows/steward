@@ -4,7 +4,7 @@
  *
  * Which choices are tried, and in what order, is each role's: the reviewer's (AC-2) and the
  * coder's (AC-6) are built by their own scripts. This module only reads the usage and walks the
- * list (`docs/machine-settings.md`, "How the choices are used").
+ * list (`docs/user-config.md`, "How the choices are used").
  */
 import { checkUsage } from './usage.mjs'
 

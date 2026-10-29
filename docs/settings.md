@@ -12,9 +12,9 @@ decisions behind the keys are in [`outline.md`](outline.md), "Defining steward",
   `setup.timeoutMinutes`).
 - A key that becomes required breaks a project until it adds the key.
 - The file is flat apart from `setup` and `check`.
-- What depends on the computer rather than the project, the usage limits and each role's tool,
-  model and effort, is not in this file. It is in the machine's settings, described in
-  [`machine-settings.md`](machine-settings.md). A `usageLimits` key here is an unknown key.
+- What depends on the OS user rather than the project, the usage limits and each role's tool,
+  model and effort, is not in this file. It is in the user config, described in
+  [`user-config.md`](user-config.md). A `usageLimits` key here is an unknown key.
 
 ## Keys
 

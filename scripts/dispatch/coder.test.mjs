@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { fixtureMachineSettings, fixtureSettings } from './settings-fixture.mjs'
+import { fixtureUserConfig, fixtureSettings } from './settings-fixture.mjs'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -26,10 +26,10 @@ const REPO = 'luplows/tower-workshop-paths'
 // ST-31: `dispatchCoder` and `retryStory` read the plan's usage before they start. No test starts a
 // real `claude`, so every call is given a usage well under the limits unless the test passes its own.
 const UNDER_LIMITS = { ok: true, session: { percent: 10, resetsAt: 't1' }, weekly: { percent: 10, resetsAt: 't2' } }
-// ST-34: and the machine's settings are injected, so no test reads a real file.
-const machineOf = (settings = fixtureMachineSettings()) => async () => settings
-const dispatchCoder = (args) => dispatchCoderWith({ usage: async () => UNDER_LIMITS, machineSettings: machineOf(), ...args })
-const retryStory = (args) => retryStoryWith({ usage: async () => UNDER_LIMITS, machineSettings: machineOf(), ...args })
+// ST-34: and the user config is injected, so no test reads a real file.
+const configOf = (settings = fixtureUserConfig()) => async () => settings
+const dispatchCoder = (args) => dispatchCoderWith({ usage: async () => UNDER_LIMITS, userConfig: configOf(), ...args })
+const retryStory = (args) => retryStoryWith({ usage: async () => UNDER_LIMITS, userConfig: configOf(), ...args })
 
 const story = (id, { deps = '', blocked = 'null' } = {}) => `---
 id: ${id}
@@ -1691,10 +1691,10 @@ describe('ST-31/AC-4: no coder session starts while the usage is over the coder\
 
 // ------------------------------------------------ ST-34: the coder runs the choice its story names
 
-describe("ST-34/AC-4: the coder's model and effort come from the machine's settings", () => {
+describe("ST-34/AC-4: the coder's model and effort come from the user config", () => {
   const valueAfter = (args, flag) => args[args.indexOf(flag) + 1]
   const withChoices = () => {
-    const settings = fixtureMachineSettings()
+    const settings = fixtureUserConfig()
     settings.roles.coder.available.deep = { tool: 'claude', model: 'claude-opus-5-5', effort: 'max', strength: 3 }
     return settings
   }
@@ -1710,7 +1710,7 @@ describe("ST-34/AC-4: the coder's model and effort come from the machine's setti
   it('ST-34/AC-4: dispatchCoder runs the choice the story names: its model and its effort', async () => {
     const world = makeWorld()
     setModel(world, 'deep')
-    const { result, fake } = await dispatch(world, ({ cwd }) => (finishStory(cwd), block()), { machineSettings: machineOf(withChoices()) })
+    const { result, fake } = await dispatch(world, ({ cwd }) => (finishStory(cwd), block()), { userConfig: configOf(withChoices()) })
     expect(result.status).toBe('opened')
     expect(valueAfter(fake.calls[0].args, '--model')).toBe('claude-opus-5-5')
     expect(valueAfter(fake.calls[0].args, '--effort')).toBe('max')
@@ -1721,7 +1721,7 @@ describe("ST-34/AC-4: the coder's model and effort come from the machine's setti
     setModel(world, 'null')
     const settings = withChoices()
     settings.roles.coder.default = 'deep'
-    const { result, fake } = await dispatch(world, ({ cwd }) => (finishStory(cwd), block()), { machineSettings: machineOf(settings) })
+    const { result, fake } = await dispatch(world, ({ cwd }) => (finishStory(cwd), block()), { userConfig: configOf(settings) })
     expect(result.status).toBe('opened')
     expect(valueAfter(fake.calls[0].args, '--model')).toBe('claude-opus-5-5')
     expect(valueAfter(fake.calls[0].args, '--effort')).toBe('max')
@@ -1748,7 +1748,7 @@ describe("ST-34/AC-4: the coder's model and effort come from the machine's setti
   it('ST-34/AC-4: retryStory runs the choice the story names, wherever the story file is', async () => {
     const world = makeRetryWorld()
     setModel(world, 'deep', { done: true, branch: RETRY_BRANCH })
-    const { result, fake } = await retry(world, ({ cwd }) => (commitWork(cwd), block()), { machineSettings: machineOf(withChoices()) })
+    const { result, fake } = await retry(world, ({ cwd }) => (commitWork(cwd), block()), { userConfig: configOf(withChoices()) })
     expect(result.status).toBe('retried')
     expect(valueAfter(fake.calls[0].args, '--model')).toBe('claude-opus-5-5')
     expect(valueAfter(fake.calls[0].args, '--effort')).toBe('max')
@@ -1780,13 +1780,13 @@ describe("ST-34/AC-4: the coder's model and effort come from the machine's setti
     expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', `refs/heads/${RETRY_BRANCH}`)).toBeNull()
   })
 
-  it("ST-34/AC-6: the usage check reads the coder's limits from the machine's settings, once per call", async () => {
+  it("ST-63/AC-2, ST-34/AC-6: the usage check reads the coder's limits from the user config, once per call", async () => {
     const world = makeWorld()
-    const settings = fixtureMachineSettings()
+    const settings = fixtureUserConfig()
     settings.usageLimits.coder = { session: 20, weekly: 30 }
     let reads = 0
     const { result, fake } = await dispatch(world, () => { throw new Error('must not spawn') }, {
-      machineSettings: async () => { reads += 1; return settings },
+      userConfig: async () => { reads += 1; return settings },
       usage: async () => ({ ok: true, session: { percent: 25, resetsAt: 's' }, weekly: { percent: 1, resetsAt: 'w' } }),
     })
     expect(result).toMatchObject({ status: 'over-usage', window: 'session', percent: 25, limit: 20 })
@@ -1796,7 +1796,7 @@ describe("ST-34/AC-4: the coder's model and effort come from the machine's setti
     const retryWorld = makeRetryWorld()
     let retryReads = 0
     const retried = await retry(retryWorld, () => { throw new Error('must not spawn') }, {
-      machineSettings: async () => { retryReads += 1; return settings },
+      userConfig: async () => { retryReads += 1; return settings },
       usage: async () => ({ ok: true, session: { percent: 1, resetsAt: 's' }, weekly: { percent: 31, resetsAt: 'w' } }),
     })
     expect(retried.result).toMatchObject({ status: 'over-usage', window: 'weekly', percent: 31, limit: 30 })
@@ -1813,7 +1813,7 @@ describe("ST-35: the coder's choice for a run", () => {
 
   /** The fixture's sonnet (strength 1) and opus (strength 2), and a Codex choice of `strength`. */
   const withCodex = (strength) => {
-    const settings = fixtureMachineSettings()
+    const settings = fixtureUserConfig()
     settings.roles.coder.available.gpt = { tool: 'codex', model: 'gpt-6.1', effort: 'high', strength }
     settings.tools = { codex: { executable: '/x/codex' } }
     return settings
@@ -1879,7 +1879,7 @@ describe("ST-35: the coder's choice for a run", () => {
       const world = makeWorld()
       const codexReads = []
       const { result, fake, gh } = await dispatch(world, refuseToRun, {
-        choice: 'sonnet', machineSettings: machineOf(withCodex(1)), usage: async () => OVER,
+        choice: 'sonnet', userConfig: configOf(withCodex(1)), usage: async () => OVER,
         codexUsage: async (o) => { codexReads.push(o); return UNDER_LIMITS },
       })
       expect(result).toEqual({
@@ -1933,7 +1933,7 @@ describe("ST-35: the coder's choice for a run", () => {
       const world = makeRetryWorld()
       const codexReads = []
       const { result, fake, gh } = await retry(world, refuseToRun, {
-        choice: 'sonnet', machineSettings: machineOf(withCodex(1)), usage: async () => OVER,
+        choice: 'sonnet', userConfig: configOf(withCodex(1)), usage: async () => OVER,
         codexUsage: async (o) => { codexReads.push(o); return UNDER_LIMITS },
       })
       expect(result).toEqual({
@@ -1951,7 +1951,7 @@ describe("ST-35: the coder's choice for a run", () => {
       const claudeReads = []
       const codexReads = []
       const { result, fake } = await dispatch(world, finish, {
-        machineSettings: machineOf(withCodex(1)),
+        userConfig: configOf(withCodex(1)),
         usage: async (o) => { claudeReads.push(o); return OVER },
         codexUsage: async (o) => { codexReads.push(o); return UNDER_LIMITS },
       })
@@ -1967,7 +1967,7 @@ describe("ST-35: the coder's choice for a run", () => {
     it('ST-35/AC-6: usage that cannot be read counts as spent', async () => {
       const world = makeWorld()
       const { result } = await dispatch(world, finish, {
-        machineSettings: machineOf(withCodex(1)), usage: async () => ({ ok: false, reason: 'no report' }),
+        userConfig: configOf(withCodex(1)), usage: async () => ({ ok: false, reason: 'no report' }),
         codexUsage: async () => UNDER_LIMITS,
       })
       expect(result.choice.name).toBe('gpt')
@@ -1979,7 +1979,7 @@ describe("ST-35: the coder's choice for a run", () => {
       setModel(world, 'opus')
       const codexReads = []
       const { result, fake, gh } = await dispatch(world, refuseToRun, {
-        machineSettings: machineOf(withCodex(1)), usage: async () => OVER,
+        userConfig: configOf(withCodex(1)), usage: async () => OVER,
         codexUsage: async (o) => { codexReads.push(o); return UNDER_LIMITS },
       })
       expect(result).toEqual({
@@ -1998,7 +1998,7 @@ describe("ST-35: the coder's choice for a run", () => {
       const world = makeWorld()
       setModel(world, 'null')
       const refused = await dispatch(world, refuseToRun, {
-        machineSettings: machineOf(weaker), usage: spent, codexUsage: async () => UNDER_LIMITS,
+        userConfig: configOf(weaker), usage: spent, codexUsage: async () => UNDER_LIMITS,
       })
       expect(refused.result.status).toBe('over-usage')
       expect(refused.result.skipped.map((entry) => entry.name)).toEqual(['opus'])
@@ -2008,7 +2008,7 @@ describe("ST-35: the coder's choice for a run", () => {
       const equalWorld = makeWorld()
       setModel(equalWorld, 'null')
       const moved = await dispatch(equalWorld, finish, {
-        machineSettings: machineOf(equal), usage: spent, codexUsage: async () => UNDER_LIMITS,
+        userConfig: configOf(equal), usage: spent, codexUsage: async () => UNDER_LIMITS,
       })
       expect(moved.result.status).toBe('opened')
       expect(moved.result.choice).toMatchObject({ name: 'gpt', why: 'usage' })
@@ -2025,7 +2025,7 @@ describe("ST-35: the coder's choice for a run", () => {
     it("ST-35/AC-6: retryStory runs on an available choice of equal strength when the story's is spent", async () => {
       const world = makeRetryWorld()
       const { result, fake } = await retry(world, ({ cwd }) => (commitWork(cwd), block()), {
-        machineSettings: machineOf(withCodex(1)), usage: async () => OVER, codexUsage: async () => UNDER_LIMITS,
+        userConfig: configOf(withCodex(1)), usage: async () => OVER, codexUsage: async () => UNDER_LIMITS,
       })
       expect(result.status).toBe('retried')
       expect(valueAfter(fake.calls[0].args, '--model')).toBe('gpt-6.1')
@@ -2038,7 +2038,7 @@ describe("ST-35: the coder's choice for a run", () => {
       setModel(world, 'opus', { done: true, branch: RETRY_BRANCH })
       const installs = []
       const { result, fake, gh } = await retry(world, refuseToRun, {
-        machineSettings: machineOf(withCodex(1)), usage: async () => OVER, codexUsage: async () => UNDER_LIMITS,
+        userConfig: configOf(withCodex(1)), usage: async () => OVER, codexUsage: async () => UNDER_LIMITS,
         install: async (o) => { installs.push(o) },
       })
       expect(result).toMatchObject({ status: 'over-usage', storyId: 'OQ-98', skipped: [OVER_ENTRY('opus')] })

@@ -1,22 +1,22 @@
-# Machine settings
+# User config
 
-The settings of the computer steward runs on, kept outside any checkout. They hold what depends on
-the computer and the plan it is signed in to, rather than on the project: the usage limits, and
-for each role a default choice of tool, model and effort, with the choices available besides it. A
-project's settings ([`settings.md`](settings.md)) make no assumption about which models a computer
-uses. `readMachineSettings` in
-[`scripts/dispatch/machine-settings.mjs`](../scripts/dispatch/machine-settings.mjs) reads the file
+Configuration for the invoking OS user, kept outside any checkout. It holds the user's usage
+limits, each role's default and available choices of tool, model and effort, and the coordinator
+scan cadence. Each OS account has its own file; no administrator privilege is needed. A project's
+`steward.config.json` ([`settings.md`](settings.md)) remains separate and unchanged.
+`readUserConfig` in
+[`scripts/dispatch/user-config.mjs`](../scripts/dispatch/user-config.mjs) reads the file
 and is the definition of what is valid; this page is the reference to it, and the code wins where
 they differ. The decision behind them is in
-[`agent-workflow-design.md`](agent-workflow-design.md), Part 3, "Decided so far", "The machine
-steward runs on has settings of its own".
+[`agent-workflow-design.md`](agent-workflow-design.md), Part 3, "Decided so far", "Per-user
+configuration naming and coordinator cadence"; the earlier ST-34 decision is retained there as history.
 
 ## The file
 
-- **Path:** `~/.steward/settings.json`, in the user's profile (`<homedir>/.steward/settings.json`).
-- **Override:** when the environment variable `STEWARD_SETTINGS` is set, the file it names is read
-  instead.
-- **Every machine that runs steward needs the file.** Steward holds no default for any value, so a
+- **Path:** `~/.steward/config.json`, using `os.homedir()` for the invoking user on Unix and Windows.
+- **Override:** a nonempty `STEWARD_CONFIG` path selects the file instead. An empty value uses the
+  home path. The override applies to the invoking process and grants no activation permission.
+- **Every user running steward needs a valid file.** Role and usage settings have no defaults, so a
   missing file, invalid JSON, a missing key, an unknown key, or a value of the wrong form is an
   error that names the file and the key with all its parents (for example
   `roles.reviewer.available.opus.effort`, or `roles.coder.available.opus.strength`). Every review
@@ -24,16 +24,43 @@ steward runs on has settings of its own".
 - Each of `reviewPullRequest`, `dispatchCoder` and `retryStory` reads it once per call, before it
   reads the plan's usage.
 
+### Breaking local rename
+
+Existing Steward developers must manually rename `~/.steward/settings.json` to
+`~/.steward/config.json`, or select their file with `STEWARD_CONFIG`. Replace any
+`STEWARD_SETTINGS` environment assignment with `STEWARD_CONFIG`. The old file and variable are
+ignored, even if the new selected file is missing. No automatic migration, compatibility alias or
+fallback is provided. This is a breaking local rename before client adoption, not a claim that
+deployed installations were migrated. Existing role, tool and usage values can be kept as written.
+
 ## Keys
 
-The file is an object with the keys `usageLimits` and `roles`, and `tools` when a choice runs on
-the Codex CLI. It has no other key.
+The file is an object with required `usageLimits` and `roles`, optional `tools` (required when a
+choice runs on the Codex CLI), and optional `coordinator`. No other top-level key is accepted.
 
 | Key | Form | What it is for |
 |---|---|---|
 | `usageLimits` | An object (below) | The share of the plan's usage at or over which steward starts no coder or reviewer session. |
 | `roles` | An object with exactly the keys `coder` and `reviewer` | For each role, the choice it runs by default, and the choices available. |
 | `tools` | An object (below); required when a choice's `tool` is `"codex"`, and may be left out otherwise | What a tool other than Claude Code needs to be started. |
+| `coordinator` | Optional object with exactly `scanIntervalMinutes` (below) | The cadence returned for the planned coordinator. |
+
+### `coordinator`
+
+When this entire section is absent from an otherwise valid file, the reader returns
+`{ "scanIntervalMinutes": 15 }`. When present, it must contain exactly `scanIntervalMinutes`, a
+positive JSON integer. There is no product-imposed upper bound or 60-minute cap: multi-day
+intervals are valid. Values must remain safe integers after conversion to milliseconds
+(`scanIntervalMinutes * 60_000`); `validateCoordinator` in `user-config.mjs` defines that check.
+Zero, negatives, fractions, booleans, malformed objects, missing keys and unknown keys fail with
+the file path and offending key. The default never rescues a missing or invalid whole file.
+
+For example, `"coordinator": { "scanIntervalMinutes": 10080 }` selects a week. A later read sees
+a valid manual edit. The reader starts no scan loop, daemon, reviewer or session and writes no
+activation, ownership, reservation or other state. Future operational state is planned under
+`~/.steward/state/`, separate from this editable file. ST-61 owns scheduling and will consume the
+value at the coordinator's next safe start; runtime watching and configuration-editing commands
+are not implemented here.
 
 ### `usageLimits`
 

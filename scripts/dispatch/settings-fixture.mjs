@@ -19,12 +19,13 @@ export function fixtureSettings(overrides = {}) {
 }
 
 /**
- * Test support: a complete machine-settings body (`machine-settings.mjs`). The choices are named
+ * Test support: a complete user-config body (`user-config.mjs`). The choices are named
  * for their models, so a story's `model: sonnet` names one. The coder's default is `sonnet` and the
  * reviewer's is `opus`; each role has the other as its second choice. The coder's choices have a
  * `strength` (ST-35/AC-5): `opus` is the stronger.
  */
-export const FIXTURE_MACHINE_SETTINGS = {
+export const FIXTURE_USER_CONFIG = {
+  coordinator: { scanIntervalMinutes: 15 },
   usageLimits: {
     coder: { session: 70, weekly: 75 },
     reviewer: { session: 90, weekly: 90 },
@@ -47,6 +48,6 @@ export const FIXTURE_MACHINE_SETTINGS = {
   },
 }
 
-export function fixtureMachineSettings(overrides = {}) {
-  return { ...structuredClone(FIXTURE_MACHINE_SETTINGS), ...overrides }
+export function fixtureUserConfig(overrides = {}) {
+  return { ...structuredClone(FIXTURE_USER_CONFIG), ...overrides }
 }

@@ -11,7 +11,7 @@ import { dispatchCoder } from './coder.mjs'
 import { runRotation } from './rotation.mjs'
 import { reviewPullRequest } from './review.mjs'
 import { listReviewCandidates, reviewCandidate } from './review-work.mjs'
-import { fixtureMachineSettings, fixtureSettings } from './settings-fixture.mjs'
+import { fixtureUserConfig, fixtureSettings } from './settings-fixture.mjs'
 
 const { forbidden } = vi.hoisted(() => ({ forbidden: () => { throw new Error('review-only work attempted an unrelated operation') } }))
 vi.mock('./land.mjs', () => ({ landPullRequest: vi.fn(forbidden) }))
@@ -139,7 +139,7 @@ function session(reply) {
     } }
   }
   return { calls, options: {
-    baseEnv: {}, machineSettings: async () => fixtureMachineSettings(), usage: async () => UNDER,
+    baseEnv: {}, userConfig: async () => fixtureUserConfig(), usage: async () => UNDER,
     sessionOptions: { run, executable: 'stand-in', timeoutMs: 4567, stallMs: 3456, maxBudgetUsd: 1.25 },
   } }
 }
