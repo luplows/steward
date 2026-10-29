@@ -149,6 +149,7 @@ writes anything. It also refuses such a file that is marked `assume-unchanged` o
 since `git status` would not show an edit to it, and says how to clear the mark. Before anything is
 made, and before fetching, it refuses every `url.*.insteadOf` or `url.*.pushInsteadOf` rule
 (even unrelated rules), URL-shaped remote names that could override the validated origin URL,
+local `refs/replace/*` object substitutions,
 any `remote.origin.pushurl`, enabled `extensions.worktreeConfig` or a repository `config.worktree`,
 conditional `includeIf` configuration whose effect in a new worktree
 cannot be established during read-only preflight, `core.worktree`, relative or Git-internal
@@ -158,6 +159,9 @@ origin must unambiguously name one GitHub repository for both fetch and push. Co
 `user.name` and `user.email`, with `commit.gpgSign` unset or false; enabled signing refuses before
 effects. An unused signing key is allowed. It pushes the branch alone (no tags, signing or push
 options) and uses the configured identity without adding attribution.
+
+Installer-owned Git commands disable replacement-object lookup so their base, files and diff
+checks use the original objects GitHub sees. Existing replacement refs are preserved on refusal.
 
 All hooks in the installation worktree are disabled from worktree creation onward, including
 checkout, commit and push hooks. The caller's hook configuration is unchanged. The command and
@@ -170,6 +174,10 @@ that the target user-config file exists and is valid before reporting provisioni
 step fails after it has started, `init` exits 1, says which step and what it has made (found by
 asking git), leaves all of it in place, and says how to finish by hand. When `origin/main` already has every
 file, it says no installation pull request is needed and opens none.
+
+After GitHub confirms the draft, cleanup checks for ignored and untracked files as well as
+tracked changes and index flags that could hide edits. A worktree containing such work, or one
+whose state cannot be checked, is kept for inspection; the finished branch remains available.
 
 `init` asks whether steward may land pull requests unattended, and the default is no, with `--yes`
 too: a new `steward.config.json` has `land: false`, so steward reviews and the project merges. Only

@@ -95,7 +95,9 @@ export function defaultGit(cwd, args, { input, env = process.env, hooksPath } = 
   // This override belongs only to installer-owned operations, including worktree add. No caller
   // configuration is changed. Callers doing preflight reads never supply it.
   if (hooksPath !== undefined) args = ['-c', `core.hooksPath=${hooksPath}`, ...args]
-  const result = spawnSync('git', args, {
+  // Compare and publish the real objects GitHub sees, even if another process installs a local
+  // replacement after the read-only preflight check. The caller's refs/config are never changed.
+  const result = spawnSync('git', ['--no-replace-objects', ...args], {
     cwd,
     input,
     encoding: 'utf8',
@@ -749,6 +751,14 @@ export function assertConfigApplies(run, root) {
     }
     if (entry.key.startsWith('includeif.')) refuse(entry, 'conditional configuration cannot be established for the new branch and worktree during read-only preflight')
   }
+  const replacements = run(root, ['for-each-ref', '--format=%(refname)', 'refs/replace/'])
+  const replacementRemedy = 'run init from an ordinary checkout without local replacement refs; inspect them with git replace --list'
+  if (replacements.status !== 0) {
+    throw new Refusal(`cannot inspect local Git replacement refs (${replacements.stderr.trim()}); ${replacementRemedy}`)
+  }
+  if (replacements.stdout.trim() !== '') {
+    throw new Refusal(`local Git replacement refs are unsupported (${replacements.stdout.trim().split('\n').join(', ')}); ${replacementRemedy}`)
+  }
   const bool = (key) => {
     const result = run(root, ['config', '--bool', '--get', key])
     if (result.status === 1) return false
@@ -823,7 +833,13 @@ export function assertSameCommitter(run, root, dir) {
   same(['var', 'GIT_COMMITTER_IDENT'], 'the committer')
 }
 
-/** Removes the worktree at `dir`, which `git` refuses to do when it holds any change. */
+/** Remove only a worktree verified clean, including files Git's own removal would ignore. */
 export function removeWorktree(run, root, dir) {
+  const status = gitOut(run, dir, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignored', '--ignore-submodules=none'])
+  if (status !== '') throw new Error('the installation worktree is not clean, including untracked or ignored files; nothing was removed')
+  // These flags can hide changed tracked files from both status and worktree remove. A foreign
+  // process may set them while the PR request is pending; do not infer ownership of that work.
+  const marked = gitOut(run, dir, ['ls-files', '-v', '-z']).split('\0').filter((entry) => /^[a-zS] /.test(entry))
+  if (marked.length > 0) throw new Error('the installation worktree has assume-unchanged or skip-worktree entries; nothing was removed')
   gitOut(run, root, ['worktree', 'remove', dir])
 }

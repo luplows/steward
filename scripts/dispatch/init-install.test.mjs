@@ -142,7 +142,7 @@ describe('ST-56/AC-1: the preflight, before anything is made', () => {
     expect(code).toBe(0)
     const inCheckout = watched.calls.filter((c) => !c.cwd.includes('.worktrees'))
     const kinds = new Set(inCheckout.map((c) => c.args[0]))
-    const allowed = ['rev-parse', 'config', 'remote', 'var', 'check-ref-format', 'fetch', 'ls-tree', 'cat-file', 'merge-base', 'diff', 'status', 'ls-files', 'show-ref', 'ls-remote', 'worktree']
+    const allowed = ['rev-parse', 'config', 'remote', 'var', 'check-ref-format', 'fetch', 'ls-tree', 'cat-file', 'merge-base', 'diff', 'status', 'ls-files', 'show-ref', 'ls-remote', 'for-each-ref', 'worktree']
     expect([...kinds].filter((k) => !allowed.includes(k))).toEqual([])
     const worktreeCalls = inCheckout.filter((c) => c.args[0] === 'worktree').map((c) => c.args[1])
     expect([...new Set(worktreeCalls)].sort()).toEqual(['add', 'list', 'remove'])
