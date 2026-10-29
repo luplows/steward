@@ -37,7 +37,7 @@ no GitHub credential: the unit, read from `main`, and the pull request's body,
 as evidence to judge, and the checklist from `main`, so that a pull request
 cannot loosen the rules it is judged by. It is not given the author's session,
 summary or reasoning. ATC starts it as a session of its own, on a different
-model from the coder's, chosen from the machine's settings (`chooseReviewer`,
+model from the coder's, chosen from the user config (`chooseReviewer`,
 `review.mjs`), and posts the verdict it returns. The choice runs it in Claude
 Code or in the Codex CLI (`codex.mjs`), with the same prompt; the section "If
 you are running under the Codex CLI" is the one part for Codex alone. Either
