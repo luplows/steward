@@ -82,7 +82,7 @@ import {
   worktreePath,
 } from './init-install.mjs'
 import { composePullRequestBody } from './init-pr-body.mjs'
-import { machineSettingsPath, readMachineSettings, TOOL_EFFORTS } from './machine-settings.mjs'
+import { userConfigPath, readUserConfig, TOOL_EFFORTS } from './user-config.mjs'
 import { isRulesFilePath } from './rules-file-path.mjs'
 import { readSettings } from './settings.mjs'
 import { BREAKER_OVERRIDE_LABEL, REVIEW_BLOCKED_LABEL } from '../land/runway.mjs'
@@ -222,7 +222,7 @@ export const QUESTIONS = [
     prompt: "At what share of the plan's 5-hour usage (1 to 100) does steward start no coder session?",
     default: '70',
     parse: parseInteger(1, 100),
-    when: (s) => s.machineMissing,
+    when: (s) => s.userConfigMissing,
   },
   {
     id: 'coderWeeklyLimit',
@@ -230,7 +230,7 @@ export const QUESTIONS = [
     prompt: "At what share of the plan's weekly usage (1 to 100) does steward start no coder session?",
     default: '75',
     parse: parseInteger(1, 100),
-    when: (s) => s.machineMissing,
+    when: (s) => s.userConfigMissing,
   },
   {
     id: 'reviewerSessionLimit',
@@ -238,7 +238,7 @@ export const QUESTIONS = [
     prompt: "At what share of the plan's 5-hour usage (1 to 100) does steward start no reviewer session?",
     default: '90',
     parse: parseInteger(1, 100),
-    when: (s) => s.machineMissing,
+    when: (s) => s.userConfigMissing,
   },
   {
     id: 'reviewerWeeklyLimit',
@@ -246,7 +246,7 @@ export const QUESTIONS = [
     prompt: "At what share of the plan's weekly usage (1 to 100) does steward start no reviewer session?",
     default: '90',
     parse: parseInteger(1, 100),
-    when: (s) => s.machineMissing,
+    when: (s) => s.userConfigMissing,
   },
   {
     id: 'reviewer',
@@ -254,7 +254,7 @@ export const QUESTIONS = [
     prompt: 'Review on Claude (opus), or on the Codex CLI (claude or codex)?',
     default: 'claude',
     parse: parseChoice('claude', 'codex'),
-    when: (s) => s.machineMissing && s.codexExecutable !== null,
+    when: (s) => s.userConfigMissing && s.codexExecutable !== null,
   },
   {
     id: 'codexModel',
@@ -262,7 +262,7 @@ export const QUESTIONS = [
     prompt: "Which model does the Codex reviewer run (as Codex names it)? It has no default.",
     default: null,
     parse: parseNonEmpty,
-    when: (s) => s.machineMissing && s.answers.reviewer === 'codex',
+    when: (s) => s.userConfigMissing && s.answers.reviewer === 'codex',
   },
   {
     id: 'codexEffort',
@@ -270,7 +270,7 @@ export const QUESTIONS = [
     prompt: `Which effort does the Codex reviewer run at (${TOOL_EFFORTS.codex.join(', ')})? It has no default.`,
     default: null,
     parse: parseCodexEffort,
-    when: (s) => s.machineMissing && s.answers.reviewer === 'codex',
+    when: (s) => s.userConfigMissing && s.answers.reviewer === 'codex',
   },
   {
     id: 'prTemplate',
@@ -299,6 +299,7 @@ const USAGE = [
   'init requires an ordinary GitHub origin: no URL rewrites, pushurl, per-worktree config, relative/Git-internal hooks path or inherited GIT_* overrides; configure nonblank user.name/user.email and leave commit.gpgSign unset or false.',
   'All installation worktree hooks are disabled, including checkout and commit hooks. Run necessary project checks before approval. A supplied body stays verbatim: add this hook-bypass disclosure before marking the PR ready.',
   '--pr-title replaces the title (Install Steward review gate); --pr-body-file uses a file as the whole body; --pr-template names the template to write the body from when the project has several.',
+  'User config is ~/.steward/config.json, or the nonempty STEWARD_CONFIG path. Existing config is preserved and validated; legacy settings.json and STEWARD_SETTINGS are ignored.',
   'Unattended landing is off unless you turn it on: --yes takes the default of --land, which is no, and only --land yes (or a yes at the question) turns it on.',
   'With land false, `steward land <pr-number>` asks steward to land one pull request that has passed review.',
   'examples: steward init --yes                 review only; the project merges',
@@ -454,7 +455,7 @@ export async function writeWhole(file, content) {
       handle = await open(temporary, 'wx')
       owned = true
     } catch (error) {
-      if (error.code === 'EEXIST') throw new Error(`temporary settings file collision at ${temporary}; it is not owned by this invocation and was left untouched; inspect it before retrying`)
+      if (error.code === 'EEXIST') throw new Error(`temporary user-config file collision at ${temporary}; it is not owned by this invocation and was left untouched; inspect it before retrying`)
       throw error
     }
     await handle.writeFile(content)
@@ -704,8 +705,8 @@ export function settingsBody(repo, answers) {
   }
 }
 
-/** The body of the machine's settings from the answers; the Claude choices are fixed, the Codex one asked. */
-export function machineSettingsBody(answers, codexExecutable) {
+/** The body of the user config from the answers; the Claude choices are fixed, the Codex one asked. */
+export function userConfigBody(answers, codexExecutable) {
   const claudeReviewers = {
     opus: { tool: 'claude', model: 'opus', effort: 'high' },
     sonnet: { tool: 'claude', model: 'sonnet', effort: 'high' },
@@ -798,7 +799,7 @@ const PHASES = {
   push: 'pushing the branch to origin',
   pull: 'opening the draft pull request',
   labels: 'creating the labels',
-  machine: "writing the machine's settings",
+  userConfig: 'writing the user config',
 }
 
 /**
@@ -848,7 +849,7 @@ function failureReport({ error, phase, created, worktree, branch, repo, pullUrl 
   } else {
     lines.push(
       ...(pullUrl ? [`The installation pull request is open: ${pullUrl}`] : []),
-      "The labels and the machine's settings are separate from the pull request: they are not part of it, and neither is rolled back.",
+      "The labels and the user config are separate from the pull request: they are not part of it, and neither is rolled back.",
       'Run init again once the installation has merged: it creates only what is missing, and opens no pull request when nothing is.',
     )
   }
@@ -879,14 +880,14 @@ export async function main(
     exists = isFile,
     packageRoot = PACKAGE_ROOT,
     git = (dir, args, options) => defaultGit(dir, args, { ...options, env }),
-    writeMachineSettings = writeWhole,
+    writeUserConfig = writeWhole,
     transport = (url) => url,
     out = console.log,
     err = console.error,
   } = {},
 ) {
   try {
-    return await run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExecutable, exists, packageRoot, git, writeMachineSettings, transport, out })
+    return await run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExecutable, exists, packageRoot, git, writeUserConfig, transport, out })
   } catch (error) {
     if (error instanceof Refusal) {
       err(error.message)
@@ -906,7 +907,7 @@ export async function main(
 /** The question's prompt, with the choices it offers when it has them. */
 const promptOf = (q, state) => (q.choices ? `${q.prompt} (${q.choices(state).join(', ')})` : q.prompt)
 
-async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExecutable, exists, packageRoot, git: runGit, writeMachineSettings, transport, out }) {
+async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExecutable, exists, packageRoot, git: runGit, writeUserConfig, transport, out }) {
   const flags = parseFlags(argv)
 
   // Everything that can refuse comes before the first write.
@@ -952,8 +953,8 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
     }
   }
 
-  const machinePath = machineSettingsPath({ env, homedir })
-  const machineMissing = !existsSync(machinePath)
+  const configPath = userConfigPath({ env, homedir })
+  const userConfigMissing = !existsSync(configPath)
   let codexExecutable = null
   const codexPath = flags.values['--codex-path']
   if (codexPath !== undefined) {
@@ -964,7 +965,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   } else {
     codexExecutable = findExecutable('codex')
   }
-  if (machineMissing && codexExecutable === null && flags.values['--reviewer'] === 'codex') {
+  if (userConfigMissing && codexExecutable === null && flags.values['--reviewer'] === 'codex') {
     throw new Refusal('--reviewer codex: `codex` is not on the PATH; give its path with --codex-path')
   }
 
@@ -1011,7 +1012,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   const usableTemplates = discovered.filter((t) => !t.endsWith('/'))
   const emptyTemplates = discovered.filter((t) => t.endsWith('/'))
 
-  const state = { machineMissing, codexExecutable, baseRulesFile, templates: usableTemplates, bodySupplied: suppliedBody !== null }
+  const state = { userConfigMissing, codexExecutable, baseRulesFile, templates: usableTemplates, bodySupplied: suppliedBody !== null }
   const { answers, missing } = await gather({ flags, state, terminal })
   if (missing.length > 0) {
     throw new Refusal(
@@ -1127,7 +1128,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   const created = []
   let phase = 'worktree'
   let pullUrl = null
-  let machineAttempted = false
+  let userConfigAttempted = false
   let hooksDirectory = null
   const installGit = (dir, args, options) => runGit(dir, args, { ...options, hooksPath: hooksDirectory })
   const settingsResult = baseSettings.present ? 'left' : 'wrote'
@@ -1256,25 +1257,25 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
     phase = 'labels'
     await ensureLabels(ctx, labelOut)
 
-    // The machine's settings, only when the file is missing.
-    phase = 'machine'
-    if (machineMissing) {
-      machineAttempted = true
-      const madeFolder = await mkdir(path.dirname(machinePath), { recursive: true })
+    // The user config, only when the file is missing.
+    phase = 'userConfig'
+    if (userConfigMissing) {
+      userConfigAttempted = true
+      const madeFolder = await mkdir(path.dirname(configPath), { recursive: true })
       if (madeFolder !== undefined) created.push(`folder ${madeFolder}`)
       try {
-        await writeMachineSettings(machinePath, json(machineSettingsBody(answers, codexExecutable)))
-        await readMachineSettings({ env, homedir, exists })
-        created.push(`machine settings ${machinePath}`)
-        out(`wrote ${machinePath}: the machine's settings`)
+        await writeUserConfig(configPath, json(userConfigBody(answers, codexExecutable)))
+        await readUserConfig({ env, homedir, exists })
+        created.push(`user config ${configPath}`)
+        out(`wrote ${configPath}: the user config`)
       } catch (error) {
         if (error.code !== 'EEXIST') throw error
-        await readMachineSettings({ env, homedir, exists })
-        out(`left ${machinePath}: already there`)
+        await readUserConfig({ env, homedir, exists })
+        out(`left ${configPath}: already there`)
       }
     } else {
-      await readMachineSettings({ env, homedir, exists })
-      out(`left ${machinePath}: the machine's settings are already there, preserved and valid`)
+      await readUserConfig({ env, homedir, exists })
+      out(`left ${configPath}: the user config is already there, preserved and valid`)
     }
 
     if (commit !== null) {
@@ -1301,11 +1302,11 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   } catch (error) {
     // What exists is asked of git, not assumed from the phase that failed.
     const found = worktree === null ? { worktree: false, local: null, remote: null } : inspectInstallation(runGit, root, { dir: worktree, branch, destination })
-    const kept = created.filter((c) => /^(label |folder |machine settings |draft pull request |pull request )/.test(c))
-    if (phase === 'machine' && machineAttempted && !created.some((c) => c.startsWith('machine settings '))) {
+    const kept = created.filter((c) => /^(label |folder |user config |draft pull request |pull request )/.test(c))
+    if (phase === 'userConfig' && userConfigAttempted && !created.some((c) => c.startsWith('user config '))) {
       kept.push(
-        `machine settings ${machinePath}: the write failed, and ${existsSync(machinePath) ? 'a file IS there now' : 'no file is there now'}; ` +
-          (existsSync(machinePath) ? 'inspect it or remove it before running init again, since init treats a file there as the machine\'s settings' : 'nothing to clean up'),
+        `user config ${configPath}: the write failed, and ${existsSync(configPath) ? 'a file IS there now' : 'no file is there now'}; ` +
+          (existsSync(configPath) ? 'inspect it or remove it before running init again, since init treats a file there as the user config' : 'nothing to clean up'),
       )
     }
     const made = []

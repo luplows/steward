@@ -41,7 +41,7 @@ import {
   setUpInitFixture,
   writes,
 } from './init-fixture.mjs'
-import { readMachineSettings } from './machine-settings.mjs'
+import { readUserConfig } from './user-config.mjs'
 import { createLandContext, landPullRequest } from './land.mjs'
 import { readSettings } from './settings.mjs'
 import { runRunway } from '../land/runway.mjs'
@@ -53,7 +53,7 @@ describe('ST-44/AC-1: init never overwrites, and names what it left', () => {
   it('ST-44/AC-1: a second run, once the installation has merged, writes nothing and names every file it wrote the first time', async () => {
     const cwd = makeRepo()
     const gh = fakeGitHub()
-    const machine = path.join(fresh('home'), 'settings.json')
+    const machine = path.join(fresh('home'), 'config.json')
     const pkg = makePackage()
     const first = await runInit(['--yes'], { cwd, gh, machine, pkg })
     expect(first.code).toBe(0)
@@ -66,7 +66,7 @@ describe('ST-44/AC-1: init never overwrites, and names what it left', () => {
     const second = await runInit(['--yes'], { cwd, gh, machine, pkg })
     expect(second.code).toBe(0)
     expect(second.out).not.toMatch(/^wrote /m)
-    for (const rel of wrote.filter((w) => !w.includes("the machine's settings"))) expect(second.out).toContain(`left ${rel}: `)
+    for (const rel of wrote.filter((w) => !w.includes("the user config"))) expect(second.out).toContain(`left ${rel}: `)
     expect(second.out).toContain(`left ${machine}`)
     expect(tree(cwd).map((rel) => [rel, read(cwd, rel)])).toEqual(before)
     expect(readFileSync(machine, 'utf8')).toBe(settingsBefore)
@@ -120,7 +120,7 @@ describe('ST-44/AC-2: asking', () => {
 
   it('ST-44/AC-2: --yes alone takes every default', async () => {
     const cwd = makeRepo()
-    const machine = path.join(fresh('home'), 'settings.json')
+    const machine = path.join(fresh('home'), 'config.json')
     const gh = fakeGitHub()
     const { code, view } = await runInit(['--yes'], { cwd, machine, gh })
     expect(code).toBe(0)
@@ -132,7 +132,7 @@ describe('ST-44/AC-2: asking', () => {
   it('ST-44/AC-2: with no terminal and no answer it refuses, names each question and its flag, and writes nothing', async () => {
     const cwd = makeRepo()
     const gh = fakeGitHub()
-    const machine = path.join(fresh('home'), 'settings.json')
+    const machine = path.join(fresh('home'), 'config.json')
     const before = tree(cwd)
     const { code, err } = await runInit([], { cwd, gh, machine })
     expect(code).toBe(2)
@@ -225,7 +225,7 @@ describe('ST-44/AC-3: steward.config.json', () => {
     for (const origin of [null, 'https://gitlab.com/acme/widgets.git']) {
       const cwd = makeRepo({ origin })
       const gh = fakeGitHub()
-      const machine = path.join(fresh('home'), 'settings.json')
+      const machine = path.join(fresh('home'), 'config.json')
       const { code, err } = await runInit(['--yes'], { cwd, gh, machine })
       expect(code).toBe(2)
       expect(err).toMatch(/origin/)
@@ -415,12 +415,12 @@ describe('ST-44/AC-8: the pull request template', () => {
   })
 })
 
-describe('ST-44/AC-9: the machine\'s settings', () => {
-  it('ST-44/AC-9: a missing file is written from the defaults, and readMachineSettings reads it', async () => {
-    const machine = path.join(fresh('home'), 'sub', 'settings.json')
+describe('ST-44/AC-9: the user config', () => {
+  it('ST-44/AC-9: a missing file is written from the defaults, and readUserConfig reads it', async () => {
+    const machine = path.join(fresh('home'), 'sub', 'config.json')
     const { code } = await runInit(['--yes'], { cwd: makeRepo(), machine })
     expect(code).toBe(0)
-    const settings = await readMachineSettings({ env: { STEWARD_SETTINGS: machine }, homedir: '/nowhere' })
+    const settings = await readUserConfig({ env: { STEWARD_CONFIG: machine }, homedir: '/nowhere' })
     expect(settings.roles.reviewer.default).toBe('opus')
     expect(settings.roles.coder.default).toBe('sonnet')
     expect(settings.roles.coder.available).toMatchObject({
@@ -432,14 +432,14 @@ describe('ST-44/AC-9: the machine\'s settings', () => {
   })
 
   it('ST-44/AC-9: a limit given by flag is written', async () => {
-    const machine = path.join(fresh('home'), 'settings.json')
+    const machine = path.join(fresh('home'), 'config.json')
     await runInit(['--yes', '--coder-session-limit', '50', '--reviewer-weekly-limit', '95'], { cwd: makeRepo(), machine })
-    const { usageLimits } = await readMachineSettings({ env: { STEWARD_SETTINGS: machine }, homedir: '/nowhere' })
+    const { usageLimits } = await readUserConfig({ env: { STEWARD_CONFIG: machine }, homedir: '/nowhere' })
     expect(usageLimits).toEqual({ coder: { session: 50, weekly: 75 }, reviewer: { session: 90, weekly: 95 } })
   })
 
-  it('ST-56/AC-7: an invalid existing machine settings file is preserved but cannot claim successful provisioning', async () => {
-    const machine = path.join(fresh('home'), 'settings.json')
+  it('ST-56/AC-7: an invalid existing user config file is preserved but cannot claim successful provisioning', async () => {
+    const machine = path.join(fresh('home'), 'config.json')
     writeFileSync(machine, 'not even json')
     const before = statSync(machine).mtimeMs
     const terminal = fakeTerminal(['file,issue', '', '', '', ''])
@@ -477,10 +477,10 @@ describe('ST-44/AC-9: the machine\'s settings', () => {
     expect(missing.err).toContain('--codex-effort')
     expect(existsSync(missing.machine)).toBe(false)
 
-    const machine = path.join(fresh('home'), 'settings.json')
+    const machine = path.join(fresh('home'), 'config.json')
     const { code } = await runInit(['--yes', '--reviewer', 'codex', '--codex-model', 'gpt-x', '--codex-effort', 'ultra'], { cwd: makeRepo(), machine, codex: exe })
     expect(code).toBe(0)
-    const settings = await readMachineSettings({ env: { STEWARD_SETTINGS: machine }, homedir: '/nowhere' })
+    const settings = await readUserConfig({ env: { STEWARD_CONFIG: machine }, homedir: '/nowhere' })
     expect(settings.roles.reviewer.default).toBe('codex')
     expect(settings.roles.reviewer.available.codex).toEqual({ tool: 'codex', model: 'gpt-x', effort: 'ultra' })
     expect(settings.tools.codex.executable).toBe(exe)
@@ -489,10 +489,10 @@ describe('ST-44/AC-9: the machine\'s settings', () => {
   it('ST-44/AC-9: --codex-path names the executable when codex is not on the PATH, and must be a file that exists', async () => {
     const exe = path.join(fresh('bin'), 'codex')
     writeFileSync(exe, '')
-    const machine = path.join(fresh('home'), 'settings.json')
+    const machine = path.join(fresh('home'), 'config.json')
     const ok = await runInit(['--yes', '--reviewer', 'codex', '--codex-path', exe, '--codex-model', 'm', '--codex-effort', 'low'], { cwd: makeRepo(), machine })
     expect(ok.code).toBe(0)
-    expect((await readMachineSettings({ env: { STEWARD_SETTINGS: machine }, homedir: '/nowhere' })).tools.codex.executable).toBe(exe)
+    expect((await readUserConfig({ env: { STEWARD_CONFIG: machine }, homedir: '/nowhere' })).tools.codex.executable).toBe(exe)
     const bad = await runInit(['--yes', '--codex-path', path.join(fresh('no-codex'), 'no-such-codex')], { cwd: makeRepo() })
     expect(bad.code).toBe(2)
     expect(bad.err).toMatch(/--codex-path/)
@@ -525,7 +525,7 @@ describe('ST-44/AC-9: the machine\'s settings', () => {
     expect(findOnPath('codex', { PATH: dir }, 'linux')).toBeNull()
   })
 
-  it('ST-44/AC-9: a relative PATH entry gives an absolute executable, which readMachineSettings reads', async () => {
+  it('ST-44/AC-9: a relative PATH entry gives an absolute executable, which readUserConfig reads', async () => {
     const dir = fresh('rel')
     mkdirSync(path.join(dir, 'bin'))
     writeFileSync(path.join(dir, 'bin', 'codex'), '')
@@ -539,10 +539,10 @@ describe('ST-44/AC-9: the machine\'s settings', () => {
       process.chdir(before)
     }
     expect(path.isAbsolute(found)).toBe(true)
-    const machine = path.join(fresh('home'), 'settings.json')
+    const machine = path.join(fresh('home'), 'config.json')
     const { code } = await runInit(['--yes', '--reviewer', 'codex', '--codex-model', 'm', '--codex-effort', 'low'], { cwd: makeRepo(), machine, codex: found })
     expect(code).toBe(0)
-    expect((await readMachineSettings({ env: { STEWARD_SETTINGS: machine }, homedir: '/nowhere' })).tools.codex.executable).toBe(found)
+    expect((await readUserConfig({ env: { STEWARD_CONFIG: machine }, homedir: '/nowhere' })).tools.codex.executable).toBe(found)
   })
 })
 
@@ -553,8 +553,8 @@ describe('ST-44/AC-7 and AC-12: a label that fails to create', () => {
     expect(out).toContain('label review-blocked: found, left as it is')
   })
 
-  it('ST-44/AC-12: a 422 with another error stops init with a non-zero exit, writing no machine settings', async () => {
-    const machine = path.join(fresh('home'), 'settings.json')
+  it('ST-44/AC-12: a 422 with another error stops init with a non-zero exit, writing no user config', async () => {
+    const machine = path.join(fresh('home'), 'config.json')
     const { code, err } = await runInit(['--yes'], { cwd: makeRepo(), gh: fakeGitHub({ labelCreate: 'other' }), machine })
     expect(code).toBe(1)
     expect(err).toMatch(/422/)
@@ -612,7 +612,7 @@ describe('ST-44/AC-11: what it leaves alone', () => {
 describe('ST-44/AC-12: exit codes', () => {
   it('ST-44/AC-12: a failed request to GitHub exits 1, writing nothing more', async () => {
     for (const gh of [fakeGitHub({ labelStatus: 500 })]) {
-      const machine = path.join(fresh('home'), 'settings.json')
+      const machine = path.join(fresh('home'), 'config.json')
       const { code, err } = await runInit(['--yes'], { cwd: makeRepo(), gh, machine })
       expect(code).toBe(1)
       expect(err).toMatch(/init stopped: .*(500|boom)/)
@@ -628,7 +628,7 @@ describe('ST-44/AC-12: exit codes', () => {
   it('ST-44/AC-12: it exits 0 when it finished with everything left alone', async () => {
     const cwd = makeRepo()
     const gh = fakeGitHub({ labels: LABELS.map((l) => l.name) })
-    const machine = path.join(fresh('home'), 'settings.json')
+    const machine = path.join(fresh('home'), 'config.json')
     const pkg = makePackage()
     await runInit(['--yes'], { cwd, gh, machine, pkg })
     mergeInstall(cwd)
@@ -661,7 +661,7 @@ describe('ST-50/AC-1: init no longer touches branch protection', () => {
   it('ST-50/AC-1: --protect-main is refused as an unknown flag, exit 2, nothing written and nothing asked of GitHub', async () => {
     const cwd = makeRepo()
     const gh = fakeGitHub()
-    const machine = path.join(fresh('home'), 'settings.json')
+    const machine = path.join(fresh('home'), 'config.json')
     const { code, err } = await runInit(['--yes', '--protect-main', 'yes'], { cwd, gh, machine })
     expect(code).toBe(2)
     expect(err).toMatch(/--protect-main: not a flag of init/)
@@ -953,7 +953,7 @@ describe('ST-55/AC-3: an existing settings file keeps its authorization', () => 
   it('ST-55/AC-3: two runs of a new installation: once the first has merged, the second leaves every file as the first wrote it', async () => {
     for (const land of ['no', 'yes']) {
       const cwd = makeRepo()
-      const machine = path.join(fresh('home'), 'settings.json')
+      const machine = path.join(fresh('home'), 'config.json')
       const pkg = makePackage()
       const first = await runInit(['--yes', '--land', land], { cwd, machine, pkg })
       const written = Object.fromEntries(branchFiles(cwd).map((rel) => [rel, bytesOn(cwd, rel)]))

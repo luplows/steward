@@ -71,7 +71,7 @@ import {
   WRITABLE_VERDICTS,
 } from './github.mjs'
 import { renderReviewerPrompt } from './invocation.mjs'
-import { readMachineSettings } from './machine-settings.mjs'
+import { readUserConfig } from './user-config.mjs'
 import { FULL_HEAD_SHA, HONOURED_ASSOCIATIONS, reviewHeadRefusal, reviewTargetRefusal, verdictAtHead } from './review-eligibility.mjs'
 import { parseFrontmatter } from './queue.mjs'
 import { readRules } from './rules.mjs'
@@ -361,7 +361,7 @@ export async function assertReviewableCheckout(dir, sha, repoDir) {
  *                  in its place when the choice runs on Codex (ST-32/AC-3)
  *   codexSession   `spawnCodexReviewer`'s shape of call, for a Codex choice
  *                  (ST-32/AC-2); defaults to `spawnCodexReviewer`
- *   machineSettings  `()`, resolving the machine's settings; defaults to `readMachineSettings`
+ *   userConfig  `()`, resolving the user config; defaults to `readUserConfig`
  *                  on the real environment and home directory. Called once (ST-34)
  *
  * Without `choice`, the choices are tried in the order `reviewerCandidates` gives (ST-35/AC-2),
@@ -415,7 +415,7 @@ function eligibilityChanged(refusal) {
 async function executeReview({
   number, ctx, repoDir = process.cwd(), promptTemplate, baseEnv = process.env, sessionOptions = {},
   rereview = false, scratchRoot = tmpdir(), usage = readUsage, choice: named,
-  machineSettings = () => readMachineSettings({ env: process.env, homedir: homedir() }),
+  userConfig = () => readUserConfig({ env: process.env, homedir: homedir() }),
   codexUsage = readCodexUsage, codexSession = spawnCodexReviewer,
   expectedHeadSha, onHead,
 }) {
@@ -424,7 +424,7 @@ async function executeReview({
   }
   const template = promptTemplate ?? readFileSync(REVIEWER_PROMPT, 'utf8')
   const { unitLinks, rulesFile } = await readSettings(repoDir)
-  const machine = await machineSettings()
+  const machine = await userConfig()
   // ST-35/AC-1: a name that is no available choice, before anything is read or started.
   const { available: reviewerChoices } = machine.roles.reviewer
   if (named !== undefined && !Object.hasOwn(reviewerChoices, named)) {

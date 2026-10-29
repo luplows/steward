@@ -16,7 +16,7 @@ crew can inspect and adopt it without manually assembling the commit and pull re
 
 ## Acceptance criteria
 
-- [x] **AC-1** — **Preflight before effects.** Before creating files, labels, machine settings,
+- [x] **AC-1** — **Preflight before effects.** Before creating files, labels, user config,
       a branch or a PR, resolve the checkout and its GitHub `origin`, authenticate, fetch
       `origin/main` and capture its full commit SHA as the installation base. Accept a feature
       branch, detached HEAD or checkout behind/ahead of that base, and unrelated staged,
@@ -47,7 +47,7 @@ crew can inspect and adopt it without manually assembling the commit and pull re
       completed reliably. Never copy local versions into the installation worktree or silently
       ignore a relevant conflict, including on the no-diff path or with a supplied PR body.
 - [x] **AC-1b** — **Explicit supported-Git-environment boundary.** Before fetching or
-      creating any file, label, machine settings, branch, worktree or PR, inspect the
+      creating any file, label, user config, branch, worktree or PR, inspect the
       effective Git configuration and Git-related environment affecting the caller checkout.
       For 0.1, refuse (exit 2) with the unsupported key/source and a concrete way to run in
       a simpler checkout if **any** `url.*.insteadOf` or `url.*.pushInsteadOf` rule is
@@ -101,7 +101,7 @@ crew can inspect and adopt it without manually assembling the commit and pull re
       `--rules-file`, before effects, rather than silently writing an unused checklist.
       Preserve the settings bytes and chosen `land` value. When no repository files are
       missing, exit 0 saying no installation PR is needed; create no branch, empty commit,
-      push or PR. Existing label/machine-settings provisioning may still finish, with its
+      push or PR. Existing label/user-config provisioning may still finish, with its
       normal preservation rules. Rerunning after a merged installation is this no-diff case;
       rerunning while its branch exists is AC-2's refusal, with no duplicate PR.
 - [x] **AC-5** — **Create and report the draft PR.** For a nonempty verified diff, make one
@@ -149,19 +149,19 @@ crew can inspect and adopt it without manually assembling the commit and pull re
       with `none` and flag it for crew confirmation; preserve a supplied body's unit link.
       Do not edit an existing project template or impose steward's story format.
 - [x] **AC-7** — **Bounded failures with recoverable evidence.** A write, hook, commit, push,
-      label, machine-settings or PR-creation failure exits 1 and stops subsequent mutations.
-      A leftover or colliding temporary settings file that this invocation did not create is
+      label, user-config or PR-creation failure exits 1 and stops subsequent mutations.
+      A leftover or colliding temporary user-config file that this invocation did not create is
       **never deleted, overwritten or claimed as owned**; report the collision and refuse
-      provisioning without falsely returning “settings already exist” or success when the
+      provisioning without falsely returning “user config already exists” or success when the
       intended settings file is absent. Check that the intended target is actually present
       and valid before calling settings provisioning successful.
       Report the failed phase and every resource already created: worktree, local branch,
-      commit, remote branch, PR URL if known, labels and machine-settings path. Keep unfinished
+      commit, remote branch, PR URL if known, labels and user-config path. Keep unfinished
       work for inspection, with concrete instructions to finish the push/PR by hand or inspect
       GitHub before retrying an ambiguous network result. Never retry a mutation blindly,
-      delete remote work, remove user work, or roll back labels or machine settings. A rerun
-      does not infer ownership of an existing branch from its name. Labels and local machine
-      settings remain explicitly reported effects outside the PR; neither is claimed atomic
+      delete remote work, remove user work, or roll back labels or user config. A rerun
+      does not infer ownership of an existing branch from its name. Labels and the user config
+      remain explicitly reported effects outside the PR; neither is claimed atomic
       with it. Install nothing into a project's dependencies and run no project setup/check.
 - [x] **AC-8** — **Adoption and activation remain separate.** Keep ST-55's new-install
       review-only default, explicit unattended opt-in, existing-setting preservation and
@@ -174,8 +174,8 @@ crew can inspect and adopt it without manually assembling the commit and pull re
       execution permission. Recommend optional `steward protect` only after adoption; do not
       invent or run an activation command that has not been delivered.
 - [x] **AC-9** — **Evidence and documentation.** Add Vitest cases named `ST-56/AC-N` using
-      temporary real git repositories/worktrees and a bare remote, with GitHub and machine
-      settings injected. Show successful installation from clean main, ahead/behind/divergent
+      temporary real git repositories/worktrees and a bare remote, with GitHub and user config
+      injected. Show successful installation from clean main, ahead/behind/divergent
       feature branches and detached HEAD with unrelated committed or staged/unstaged/untracked/
       ignored work; include unrelated in-progress merge/rebase state. Prove the installation
       commit's parent is the captured fetched base and caller HEAD/index/files stay unchanged.
@@ -187,7 +187,7 @@ crew can inspect and adopt it without manually assembling the commit and pull re
       true/false authorization, a partial addition, no-diff rerun, and failures at each mutation
       phase. Use a two-stage Git URL rewrite that redirects an apparently valid `origin` on its
       second application, a linked-worktree `.git` file with `core.hooksPath=.git/hooks`, a
-      `post-checkout` hook creating the checklist, and an unowned `settings.json.<pid>.tmp`
+      `post-checkout` hook creating the checklist, and an unowned `config.json.<pid>.tmp`
       collision to prove the new refusals and ownership checks. Include positive evidence that
       valid `user.name`/`user.email` with unset or false `commit.gpgSign` succeeds even
       when an unused signing key is configured; missing identity and enabled signing refuse
@@ -198,8 +198,9 @@ crew can inspect and adopt it without manually assembling the commit and pull re
       Update the old no-commit/no-push and labels-only assertions to test this bounded contract;
       retain the independent overwrite, pinning, template, settings and protection safeguards.
       Tests send no real GitHub writes or agent invocations. Update README installation guidance,
-      command help, affected settings/machine-settings and release-walkthrough guidance, and
-      resolve every **Planned** marker naming ST-56 in `docs/` to the delivered behaviour.
+      command help, affected project-settings and user-config guidance, and release-walkthrough
+      instructions. Resolve every **Planned** marker naming ST-56 in `docs/` to the
+      delivered behaviour.
 
 ## Out of scope
 
@@ -211,7 +212,7 @@ crew can inspect and adopt it without manually assembling the commit and pull re
 - Parsing project planning prose, migrating unit conventions, creating adoption issues or
   stories, adding CI, running a client's tests, or installing in client repositories now.
 - Merging the installation, granting a gate exception, setting protection, **running hooks in
-  the installer-owned worktree**, adding credentials/secrets, or changing the machine-settings
+  the installer-owned worktree**, adding credentials/secrets, or changing the user-config
   schema. Supporting complex URL rewrites, pushurl, per-worktree Git configuration, repository
   environment overrides, **enabled commit signing**, or custom hook execution is separate
   future compatibility work.
@@ -235,7 +236,7 @@ crew can inspect and adopt it without manually assembling the commit and pull re
   fetched base and relevant-path checks protect installation without requiring a clean caller.
 - `scripts/dispatch/init.mjs`: `run`, `writeNew`, `findPullRequestTemplates`, `ensureLabels`,
   `createInitContext` and `assertAllowedRequest`; current git calls only read root/origin.
-- `scripts/dispatch/init.test.mjs`: ST-44's overwrite, pinning, machine settings and no-commit
+- `scripts/dispatch/init.test.mjs`: ST-44's overwrite, pinning, user config and no-commit
   tests; ST-50's protection exclusions and closing-message tests. No PR is created today.
 - `scripts/dispatch/rules-file-path.mjs`: existing checklist-path validation.
 - ST-55 precedes this story, and ST-54 precedes ST-55. ST-55's no-commit constraint applies

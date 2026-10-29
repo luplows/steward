@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { fixtureMachineSettings, fixtureSettings } from './settings-fixture.mjs'
+import { fixtureUserConfig, fixtureSettings } from './settings-fixture.mjs'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { readdirSync } from 'node:fs'
@@ -24,10 +24,10 @@ const REPO = 'luplows/tower-workshop-paths'
 // ST-31: `reviewPullRequest` reads the plan's usage before it starts. No test starts a real
 // `claude`, so every call is given a usage well under the limits unless the test passes its own.
 const UNDER_LIMITS = { ok: true, session: { percent: 10, resetsAt: 't1' }, weekly: { percent: 10, resetsAt: 't2' } }
-// ST-34: and the machine's settings are injected, so no test reads a real file.
-const machineOf = (settings = fixtureMachineSettings()) => async () => settings
+// ST-34: and the user config is injected, so no test reads a real file.
+const configOf = (settings = fixtureUserConfig()) => async () => settings
 const reviewPullRequest = (args) => reviewPullRequestWith({
-  usage: async () => UNDER_LIMITS, machineSettings: machineOf(), ...args,
+  usage: async () => UNDER_LIMITS, userConfig: configOf(), ...args,
 })
 
 // The fixture repository's checklist, on its main (ST-21): three sections, one
@@ -235,12 +235,12 @@ function standIn(reply) {
 // running anything else has pushed past the 5 s default. Passed to the tests that call review().
 const REVIEW_TEST_TIMEOUT = 30_000
 
-const review = (branch, { states, comments, body, base, reply, baseEnv = {}, repoDir, rereview, scratchRoot, machineSettings, choice, extra } = {}) => {
+const review = (branch, { states, comments, body, base, reply, baseEnv = {}, repoDir, rereview, scratchRoot, userConfig, choice, extra } = {}) => {
   const github = fakeGitHub({ branch, states: states ?? [shas[branch]], comments, body, base })
   const session = standIn(reply ?? verdictText(shas[branch]))
   const done = reviewPullRequest({
     number: 7, ctx: github.ctx, repoDir: repoDir ?? dirtyClone(), baseEnv, rereview, scratchRoot,
-    sessionOptions: session.sessionOptions, ...(machineSettings && { machineSettings: machineOf(machineSettings) }),
+    sessionOptions: session.sessionOptions, ...(userConfig && { userConfig: configOf(userConfig) }),
     ...(choice !== undefined && { choice }), ...extra,
   })
   return { done, github, session }
@@ -248,7 +248,7 @@ const review = (branch, { states, comments, body, base, reply, baseEnv = {}, rep
 
 const modelOf = (args) => args[args.indexOf('--model') + 1]
 const effortOf = (args) => args[args.indexOf('--effort') + 1]
-const ROLE_DEFAULT_REVIEWER = fixtureMachineSettings().roles.reviewer.available.opus.model
+const ROLE_DEFAULT_REVIEWER = fixtureUserConfig().roles.reviewer.available.opus.model
 
 // ------------------------------------------------------------------- tests
 
@@ -728,20 +728,20 @@ describe('OQ-69/AC-7: the reviewer is never the coder\'s model', () => {
 
   it("OQ-69/AC-7, ST-34/AC-5: chooseReviewer never returns a choice with the coder's model, however it is spelled", () => {
     for (const declared of ['sonnet', 'opus', 'claude-opus-5-5', 'claude-sonnet-5', 'OPUS', null]) {
-      const chosen = chooseReviewer(fixtureMachineSettings(), declared)
+      const chosen = chooseReviewer(fixtureUserConfig(), declared)
       if (declared) {
         const [a, b] = [chosen.model.toLowerCase(), declared.toLowerCase()]
         expect(a.includes(b) || b.includes(a)).toBe(false)
       }
     }
     // A model that is neither choice's is not the coder's: the default stands.
-    expect(chooseReviewer(fixtureMachineSettings(), 'haiku').name).toBe('opus')
+    expect(chooseReviewer(fixtureUserConfig(), 'haiku').name).toBe('opus')
   })
 })
 
-describe("ST-34/AC-5, AC-6: the reviewer's choice comes from the machine's settings", () => {
+describe("ST-34/AC-5, AC-6: the reviewer's choice comes from the user config", () => {
   const machine = (change) => {
-    const settings = fixtureMachineSettings()
+    const settings = fixtureUserConfig()
     change(settings)
     return settings
   }
@@ -750,22 +750,22 @@ describe("ST-34/AC-5, AC-6: the reviewer's choice comes from the machine's setti
     const settings = machine((s) => {
       s.roles.reviewer.available.opus = { tool: 'claude', model: 'opus', effort: 'xhigh' }
     })
-    const run = review('story/OQ-99-thing', { body: 'Unit: stories/OQ-99-thing.md', machineSettings: settings })
+    const run = review('story/OQ-99-thing', { body: 'Unit: stories/OQ-99-thing.md', userConfig: settings })
     await run.done
     expect(modelOf(run.session.calls[0].args)).toBe('opus')
     expect(effortOf(run.session.calls[0].args)).toBe('xhigh')
   }, REVIEW_TEST_TIMEOUT)
 
-  it("ST-34/AC-6: moves to the next differing choice, with its effort, when the story names a coder choice of the default's model", async () => {
+  it("ST-63/AC-2, ST-34/AC-6: moves to the next differing choice, with its effort, when the story names a coder choice of the default's model", async () => {
     const run = review('story/OQ-98-other', { body: 'Unit: stories/OQ-98-other.md' })
     await run.done
     expect(modelOf(run.session.calls[0].args)).toBe('sonnet')
     expect(effortOf(run.session.calls[0].args)).toBe('high')
   }, REVIEW_TEST_TIMEOUT)
 
-  it("ST-34/AC-6: for a model: null story, moves off the model of the coder's default when it is the reviewer default's", async () => {
+  it("ST-63/AC-2, ST-34/AC-6: for a model: null story, moves off the model of the coder's default when it is the reviewer default's", async () => {
     const opusCoder = machine((s) => { s.roles.coder.default = 'opus' })
-    const moved = review('story/OQ-96-null', { body: 'Unit: stories/OQ-96-null.md', machineSettings: opusCoder })
+    const moved = review('story/OQ-96-null', { body: 'Unit: stories/OQ-96-null.md', userConfig: opusCoder })
     await moved.done
     expect(modelOf(moved.session.calls[0].args)).toBe('sonnet')
 
@@ -799,7 +799,7 @@ describe("ST-34/AC-5, AC-6: the reviewer's choice comes from the machine's setti
     expect(chooseReviewer(settings, 'haiku').name).toBe('first')
   })
 
-  it('ST-34/AC-6: returns reviewer-unavailable when no choice differs, starting no session and posting nothing', async () => {
+  it('ST-63/AC-2, ST-34/AC-6: returns reviewer-unavailable when no choice differs, starting no session and posting nothing', async () => {
     const settings = machine((s) => {
       s.roles.reviewer.available = { opus: { tool: 'claude', model: 'opus', effort: 'high' } }
     })
@@ -807,7 +807,7 @@ describe("ST-34/AC-5, AC-6: the reviewer's choice comes from the machine's setti
     const session = standIn(verdictText(shas['story/OQ-98-other']))
     const result = await reviewPullRequest({
       number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, sessionOptions: session.sessionOptions,
-      machineSettings: machineOf(settings),
+      userConfig: configOf(settings),
     })
     expect(result.status).toBe('reviewer-unavailable')
     expect(result.reason).toContain('opus')
@@ -1367,7 +1367,7 @@ describe('ST-31/AC-3: no reviewer session starts while the usage is over the rev
     const calls = []
     const result = await reviewPullRequestWith({
       number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, sessionOptions: session.sessionOptions,
-      machineSettings: machineOf(),
+      userConfig: configOf(),
       usage: async (o) => { calls.push(o); return usage(o) },
       ...options,
     })
@@ -1390,12 +1390,12 @@ describe('ST-31/AC-3: no reviewer session starts while the usage is over the rev
     expect(calls).toHaveLength(1)
   }, REVIEW_TEST_TIMEOUT)
 
-  it("ST-34/AC-6: the limit is the reviewer's in the machine's settings, read once per call", async () => {
+  it("ST-63/AC-2, ST-34/AC-6: the limit is the reviewer's in the user config, read once per call", async () => {
     let reads = 0
-    const settings = fixtureMachineSettings()
+    const settings = fixtureUserConfig()
     settings.usageLimits.reviewer = { session: 50, weekly: 60 }
     const { result, session } = await refused(usageOf(55, 10), {
-      machineSettings: async () => { reads += 1; return settings },
+      userConfig: async () => { reads += 1; return settings },
     })
     expect(result).toMatchObject({ status: 'over-usage', window: 'session', percent: 55, limit: 50 })
     expect(session.calls).toEqual([])
@@ -1433,7 +1433,7 @@ describe('ST-31/AC-3: no reviewer session starts while the usage is over the rev
       let reads = 0
       const done = reviewPullRequestWith({
         number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, sessionOptions: stand.sessionOptions,
-        usage: async () => { reads += 1; return UNDER_LIMITS }, machineSettings: machineOf(),
+        usage: async () => { reads += 1; return UNDER_LIMITS }, userConfig: configOf(),
       }).then((result) => ({ result, reads }))
       return { done, session: stand }
     })()
@@ -1456,7 +1456,7 @@ describe('ST-31/AC-3: no reviewer session starts while the usage is over the rev
     })
     const result = await reviewPullRequestWith({
       number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {},
-      usage: async (o) => { calls.push(o); return UNDER_LIMITS }, machineSettings: machineOf(),
+      usage: async (o) => { calls.push(o); return UNDER_LIMITS }, userConfig: configOf(),
     })
     expect(result.status).toBe('already-reviewed')
     expect(calls).toEqual([])
@@ -1465,8 +1465,8 @@ describe('ST-31/AC-3: no reviewer session starts while the usage is over the rev
 
 describe('ST-32/AC-2, AC-3, AC-5: a reviewer whose choice runs on Codex', () => {
   const CODEX = 'C:/Program Files/Codex/codex.exe'
-  const codexMachine = () => {
-    const settings = fixtureMachineSettings()
+  const codexConfig = () => {
+    const settings = fixtureUserConfig()
     settings.roles.reviewer.available = {
       'sol-6.1': { tool: 'codex', model: 'gpt-6.1-sol', effort: 'high' },
       ...settings.roles.reviewer.available,
@@ -1501,7 +1501,7 @@ describe('ST-32/AC-2, AC-3, AC-5: a reviewer whose choice runs on Codex', () => 
     const claude = standIn(verdictText(shas[branch]))
     const usageCalls = []
     const done = reviewPullRequestWith({
-      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv, machineSettings: machineOf(codexMachine()),
+      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv, userConfig: configOf(codexConfig()),
       sessionOptions: claude.sessionOptions, codexSession: stand.codexSession,
       usage: usage ?? (async () => { throw new Error("Claude Code's usage was read for a Codex choice") }),
       codexUsage: codexUsage ?? (async (o) => { usageCalls.push(o); return UNDER_LIMITS }),
@@ -1689,7 +1689,7 @@ describe('ST-32/AC-2, AC-3, AC-5: a reviewer whose choice runs on Codex', () => 
     const github = fakeGitHub({ branch: 'story/OQ-99-thing', states: [shas['story/OQ-99-thing']] })
     const claude = standIn(verdictText(shas['story/OQ-99-thing']))
     const result = await reviewPullRequestWith({
-      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, machineSettings: machineOf(),
+      number: 7, ctx: github.ctx, repoDir: dirtyClone(), baseEnv: {}, userConfig: configOf(),
       sessionOptions: claude.sessionOptions, usage: async () => UNDER_LIMITS,
       codexSession: async () => { throw new Error('a Codex session was started for a Claude choice') },
       codexUsage: async () => { throw new Error("Codex's usage was read for a Claude choice") },
@@ -1766,7 +1766,7 @@ describe('ST-35/AC-3: the choice a review ran, and why', () => {
 
 describe('ST-35/AC-8: the reviewer differs from the models on the Coder: line', () => {
   const withThird = () => {
-    const settings = fixtureMachineSettings()
+    const settings = fixtureUserConfig()
     settings.roles.reviewer.available.haiku = { tool: 'claude', model: 'haiku', effort: 'low' }
     return settings
   }
@@ -1780,7 +1780,7 @@ describe('ST-35/AC-8: the reviewer differs from the models on the Coder: line', 
   }, REVIEW_TEST_TIMEOUT)
 
   it('ST-35/AC-8: two names, both models avoided', async () => {
-    const run = review('story/OQ-99-thing', { body: bodyWith('Coder: sonnet, opus'), machineSettings: withThird() })
+    const run = review('story/OQ-99-thing', { body: bodyWith('Coder: sonnet, opus'), userConfig: withThird() })
     await run.done
     expect(modelOf(run.session.calls[0].args)).toBe('haiku')
     // With only those two reviewer choices, none differs from both.

@@ -19,7 +19,7 @@ export const REPO = 'acme/widgets'
 // (init is given a `transport` that maps the checked GitHub address to it, as `main`'s own option;
 // the checkout's git configuration still names GitHub, and `GIT_ALLOW_PROTOCOL` lets git use nothing
 // but the file transport, so a fetch or push that was not routed there fails instead of reaching
-// github.com), with GitHub's answers injected, the machine's settings in a
+// github.com), with GitHub's answers injected, the user config in a
 // temporary file and the terminal injected: nothing for real.
 let base
 const savedEnv = {}
@@ -243,13 +243,13 @@ export function fakeTerminal(answers = null) {
  * being a folder holding the installation branch's files (made when first read). `git` replaces the
  * runner of every git command (see `watchGit`).
  */
-export async function runInit(args, { cwd, gh = fakeGitHub(), terminal = fakeTerminal(), pkg = makePackage(), machine = path.join(fresh('home'), 'settings.json'), codex = null, exists, git: runner, writeMachineSettings, getToken = async () => 'token', transport, env = {} } = {}) {
+export async function runInit(args, { cwd, gh = fakeGitHub(), terminal = fakeTerminal(), pkg = makePackage(), machine = path.join(fresh('home'), 'config.json'), homedir = fresh('profile'), codex = null, exists, git: runner, writeUserConfig, getToken = async () => 'token', transport, env = {} } = {}) {
   const out = []
   const err = []
   const code = await main(args, {
     cwd,
-    env: { ...env, STEWARD_SETTINGS: machine },
-    homedir: fresh('profile'),
+    env: { STEWARD_CONFIG: machine, ...env },
+    homedir,
     fetch: gh.fetch,
     getToken,
     terminal,
@@ -258,7 +258,7 @@ export async function runInit(args, { cwd, gh = fakeGitHub(), terminal = fakeTer
     // Test-only Git runner retains the file-transport confinement; main's injected env is the
     // environment under preflight inspection, independently of the runner's safety controls.
     git: runner ?? defaultGit,
-    ...(writeMachineSettings ? { writeMachineSettings } : {}),
+    ...(writeUserConfig ? { writeUserConfig } : {}),
     transport: transport ?? ((url) => (REMOTES.has(cwd) && repoFromRemoteUrl(url) !== null ? slashes(REMOTES.get(cwd)) : url)),
     packageRoot: pkg,
     out: (line) => out.push(line),

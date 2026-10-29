@@ -116,7 +116,7 @@ pushes its branch and opens its pull request, as its prompt says.
 | [`docs/outline.md`](docs/outline.md) | Steward's product outline: who it is for, why, what it must never do, and the owner's decisions defining it. |
 | [`docs/glossary.md`](docs/glossary.md) | The words steward uses, and what each one means. |
 | [`docs/settings.md`](docs/settings.md) | The keys of a project's `steward.config.json`: each key's form, what it is for, and what `init` writes. |
-| [`docs/machine-settings.md`](docs/machine-settings.md) | The keys of the machine's settings file, `~/.steward/settings.json`: the usage limits, and each role's default and available choices of tool, model and effort. |
+| [`docs/user-config.md`](docs/user-config.md) | Per-OS-user `~/.steward/config.json`: usage limits, role choices, tool paths and coordinator cadence. |
 | [`REVIEW.md`](REVIEW.md) | The enumerated checklist a pull request is reviewed against. |
 | [`stories/README.md`](stories/README.md) | Story schema, status derivation, ordering, readiness test. |
 | [`docs/planning-session.md`](docs/planning-session.md) | Instructions for the planning session, including how a story pull request is handed over. |

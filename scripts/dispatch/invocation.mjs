@@ -40,7 +40,7 @@ export const ROLES = ['coder', 'reviewer']
 export const SHELL_TIMEOUT_MS = '600000'
 
 // Each role's budget, from docs/agent-workflow-design.md, "Invocation shape"; the caller can
-// override it. The model and the effort are the machine's settings (`machine-settings.mjs`, ST-34),
+// override it. The model and the effort are the user config (`user-config.mjs`, ST-34),
 // which the caller passes.
 export const ROLE_DEFAULTS = {
   coder: { maxBudgetUsd: 6 },
@@ -314,7 +314,7 @@ export function renderReviewerPrompt({ promptTemplate, repo, unit, branch, pr, r
  *                   (`source` is 'review' or 'ci'; `storyMoved` is false when the story file is still under stories/)
  *   baseEnv         the environment to derive the process environment from
  *   emptyGhConfigDir  coder only: see `coderEnv`
- *   model, effort  required: the role's choice from the machine's settings (ST-34)
+ *   model, effort  required: the role's choice from the user config (ST-34)
  *   maxBudgetUsd   optional override of `ROLE_DEFAULTS`
  *
  * Returns `{ args, env, prompt }`. `prompt` is for stdin (OQ-65) and appears

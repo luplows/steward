@@ -2,7 +2,7 @@
 
 // ST-56: `steward init` installs through a draft pull request. Every test uses temporary real git
 // repositories with a temporary bare repository as `origin` (init-fixture.mjs), GitHub's answers
-// injected, and the machine's settings in a temporary file: no real repository, no `gh`, no request
+// injected, and the user config in a temporary file: no real repository, no `gh`, no request
 // to api.github.com.
 
 import { describe, expect, it } from 'vitest'
@@ -158,7 +158,7 @@ describe('ST-56/AC-1: the preflight, before anything is made', () => {
     git(cwd, 'init', '-q', '-b', 'main')
     git(cwd, 'remote', 'add', 'origin', 'https://github.com/acme/widgets.git')
     const gh = fakeGitHub()
-    const machine = path.join(fresh('home'), 'settings.json')
+    const machine = path.join(fresh('home'), 'config.json')
     const { code, err } = await runInit(['--yes'], { cwd, gh, machine })
     expect(code).toBe(2)
     expect(err).toMatch(/no readable HEAD commit/)
@@ -194,7 +194,7 @@ describe('ST-56/AC-1: the preflight, before anything is made', () => {
   it('ST-56/AC-1: a sign-in that fails exits 1, claims no missing repository and no installation, and makes nothing', async () => {
     const cwd = makeRepo()
     const gh = fakeGitHub()
-    const machine = path.join(fresh('home'), 'settings.json')
+    const machine = path.join(fresh('home'), 'config.json')
     const { code, err, out } = await runInit(['--yes'], {
       cwd,
       gh,
@@ -215,7 +215,7 @@ describe('ST-56/AC-1: the preflight, before anything is made', () => {
   it('ST-56/AC-1: a request to GitHub that fails or is not authorized exits 1 and makes nothing', async () => {
     for (const gh of [fakeGitHub({ pullListStatus: 401 }), fakeGitHub({ pullListStatus: 500 }), fakeGitHub({ throwOn: (m, rest) => m === 'GET' && rest.startsWith('/pulls?') })]) {
       const cwd = makeRepo()
-      const machine = path.join(fresh('home'), 'settings.json')
+      const machine = path.join(fresh('home'), 'config.json')
       const { code, err, out } = await runInit(['--yes'], { cwd, gh, machine })
       expect(code).toBe(1)
       expect(err).toMatch(/init stopped: /)
@@ -466,7 +466,7 @@ describe('ST-56/AC-1a: the checkout\'s own changes to what the installation adds
     c.setup(cwd)
     const before = callerState(cwd)
     const gh = fakeGitHub()
-    const machine = path.join(fresh('home'), 'settings.json')
+    const machine = path.join(fresh('home'), 'config.json')
     const { code, err, out } = await runInit(['--yes', ...(c.args ?? [])], { cwd, gh, machine })
     expect(code).toBe(2)
     expect(err).toContain(`  ${c.path}: `)
@@ -638,7 +638,7 @@ describe('ST-56/AC-2: one isolated installation branch', () => {
     const remoteBefore = bareRef(cwd, 'refs/heads/steward/install')
     const before = callerState(cwd)
     const gh = fakeGitHub()
-    const machine = path.join(fresh('home'), 'settings.json')
+    const machine = path.join(fresh('home'), 'config.json')
     const { code, err } = await runInit(['--yes'], { cwd, gh, machine })
     expect(code).toBe(2)
     expect(err).toMatch(taken[name].says)
@@ -675,7 +675,7 @@ describe('ST-56/AC-2: one isolated installation branch', () => {
       },
     })
     const gh = fakeGitHub()
-    const machine = path.join(fresh('home'), 'settings.json')
+    const machine = path.join(fresh('home'), 'config.json')
     const { code, err } = await runInit(['--yes'], { cwd, gh, machine, git: watched })
     expect(code).toBe(1)
     expect(err).toMatch(/It stopped while pushing the branch to origin/)
@@ -873,7 +873,7 @@ describe('ST-56/AC-4: existing and partial installations', () => {
   ])('ST-56/AC-4: %s is refused, exit 2, before anything is made, so that no unused checklist is written', async (_name, text, says, args) => {
     const cwd = makeRepo({ files: { 'steward.config.json': text ?? settingsText() } })
     const gh = fakeGitHub()
-    const machine = path.join(fresh('home'), 'settings.json')
+    const machine = path.join(fresh('home'), 'config.json')
     const before = callerState(cwd)
     const { code, err } = await runInit(['--yes', ...args], { cwd, gh, machine })
     expect(code).toBe(2)
@@ -884,7 +884,7 @@ describe('ST-56/AC-4: existing and partial installations', () => {
     expect(existsSync(machine)).toBe(false)
   })
 
-  it('ST-56/AC-4: when nothing is missing it says no installation pull request is needed, makes no branch, commit, push or pull request, and still finishes the labels and machine settings', async () => {
+  it('ST-56/AC-4: when nothing is missing it says no installation pull request is needed, makes no branch, commit, push or pull request, and still finishes the labels and user config', async () => {
     const cwd = makeRepo()
     expect((await runInit(['--yes'], { cwd })).code).toBe(0)
     mergeInstall(cwd)
@@ -893,12 +893,12 @@ describe('ST-56/AC-4: existing and partial installations', () => {
     const before = callerState(cwd)
     const watched = watchGit()
     const gh = fakeGitHub()
-    const machine = path.join(fresh('home'), 'settings.json')
+    const machine = path.join(fresh('home'), 'config.json')
     const { code, out, err } = await runInit(['--yes'], { cwd, gh, machine, git: watched })
     expect(err).toBe('')
     expect(code).toBe(0)
     expect(out).toMatch(/No installation pull request is needed: everything steward installs is already on origin\/main/)
-    expect(out).not.toMatch(/^wrote (?!.*machine)/m)
+    expect(out.split('\n').filter((line) => line.startsWith('wrote '))).toEqual([`wrote ${machine}: the user config`])
     expect(watched.calls.some((c) => ['add', 'commit', 'push'].includes(c.args[0]) || isGit(c.args, 'worktree', 'add'))).toBe(false)
     expect(git(cwd, 'branch', '--list')).toBe(branchesBefore)
     expect(git(remoteOf(cwd), 'for-each-ref', '--format=%(refname) %(objectname)')).toBe(remoteBefore)
@@ -949,7 +949,7 @@ describe('ST-56/AC-5: the draft pull request', () => {
     for (const pullCreate of ['notDraft', 'ok200']) {
       const cwd = makeRepo()
       const gh = fakeGitHub({ pullCreate })
-      const machine = path.join(fresh('home'), 'settings.json')
+      const machine = path.join(fresh('home'), 'config.json')
       const { code, out, err } = await runInit(['--yes'], { cwd, gh, machine })
       expect(code, pullCreate).toBe(1)
       expect(err).toMatch(/did not confirm an open draft pull request from steward\/install into main/)
@@ -1288,7 +1288,7 @@ describe('ST-56/AC-7: bounded failures with recoverable evidence', () => {
   /**
    * Runs init expecting exit 1 and returns the result with the paths of what it should have made.
    */
-  async function failAt({ gh = fakeGitHub(), git: runner, machine = path.join(fresh('home'), 'settings.json'), prepare = () => {} } = {}) {
+  async function failAt({ gh = fakeGitHub(), git: runner, machine = path.join(fresh('home'), 'config.json'), prepare = () => {} } = {}) {
     const cwd = makeRepo({ files: BASE_FILES })
     prepare(cwd)
     const result = await runInit(['--yes'], { cwd, gh, machine, git: runner })
@@ -1378,13 +1378,13 @@ describe('ST-56/AC-7: bounded failures with recoverable evidence', () => {
     expect(existsSync(r.worktree)).toBe(true)
   })
 
-  it('ST-56/AC-7: a label that fails after the pull request names the pull request and the labels already made, rolls nothing back, and writes no machine settings', async () => {
+  it('ST-56/AC-7: a label that fails after the pull request names the pull request and the labels already made, rolls nothing back, and writes no user config', async () => {
     const gh = fakeGitHub({ labelStatus: 500 })
     const r = await failAt({ gh })
     expect(r.err).toMatch(/It stopped while creating the labels\./)
     expect(r.err).toContain(`draft pull request https://github.com/${REPO}/pull/41`)
     expect(r.err).toContain(`The installation pull request is open: https://github.com/${REPO}/pull/41`)
-    expect(r.err).toContain("The labels and the machine's settings are separate from the pull request: they are not part of it, and neither is rolled back.")
+    expect(r.err).toContain("The labels and the user config are separate from the pull request: they are not part of it, and neither is rolled back.")
     expect(r.err).toContain('Run init again once the installation has merged')
     expect(gh.requests.filter((r2) => r2.method === 'DELETE' || r2.method === 'PATCH')).toEqual([])
     expect(existsSync(r.machine)).toBe(false)
@@ -1394,12 +1394,12 @@ describe('ST-56/AC-7: bounded failures with recoverable evidence', () => {
     expect(r.err).not.toContain(`worktree ${r.worktree}`)
   })
 
-  it('ST-56/AC-7: machine settings that cannot be written are reported with the pull request and the labels already made, and nothing is rolled back', async () => {
+  it('ST-56/AC-7: user config that cannot be written are reported with the pull request and the labels already made, and nothing is rolled back', async () => {
     const blocker = path.join(fresh('home'), 'a-file')
     writeFileSync(blocker, 'x')
     const gh = fakeGitHub()
-    const r = await failAt({ gh, machine: path.join(blocker, 'settings.json') })
-    expect(r.err).toMatch(/It stopped while writing the machine's settings\./)
+    const r = await failAt({ gh, machine: path.join(blocker, 'config.json') })
+    expect(r.err).toMatch(/It stopped while writing the user config\./)
     expect(r.err).toContain(`draft pull request https://github.com/${REPO}/pull/41`)
     expect(r.err).toContain('  label review-blocked')
     expect(r.err).toContain('  label inspection')
@@ -1572,7 +1572,7 @@ describe('ST-56/AC-9: the request allowlist, the source and the documents', () =
     expect(walkthrough).not.toMatch(/merge by hand the pull\s+request `init` leaves/)
     expect(walkthrough).toMatch(/`init` pushes a branch and opens the installation as a draft pull request/)
     expect(readFileSync(path.join(ROOT, 'docs/settings.md'), 'utf8')).toMatch(/draft pull request/)
-    expect(readFileSync(path.join(ROOT, 'docs/machine-settings.md'), 'utf8')).toMatch(/Made by `steward init`/)
+    expect(readFileSync(path.join(ROOT, 'docs/user-config.md'), 'utf8')).toMatch(/Made by `steward init`/)
     const marked = []
     const walk = (dir) => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -2016,23 +2016,23 @@ describe('ST-56/AC-5 (review 2): who commits and which hooks run in the new work
   })
 })
 
-describe('ST-56/AC-7 (review 2): the machine settings file', () => {
+describe('ST-56/AC-7 (review 2): the user config file', () => {
   it('ST-56/AC-7: a write that fails and leaves a file is reported with its path, that a file is there, and what to do; the pull request and labels are reported too', async () => {
     const home = fresh('home')
-    const machine = path.join(home, 'sub', 'settings.json')
+    const machine = path.join(home, 'sub', 'config.json')
     const gh = fakeGitHub()
     const { code, err } = await runInit(['--yes'], {
       cwd: makeRepo(),
       gh,
       machine,
-      writeMachineSettings: async (file) => {
+      writeUserConfig: async (file) => {
         writeFileSync(file, '{ "usageLim')
         throw Object.assign(new Error('ENOSPC: no space left on device'), { code: 'ENOSPC' })
       },
     })
     expect(code).toBe(1)
-    expect(err).toMatch(/It stopped while writing the machine's settings\./)
-    expect(err).toContain(`machine settings ${machine}: the write failed, and a file IS there now; inspect it or remove it before running init again`)
+    expect(err).toMatch(/It stopped while writing the user config\./)
+    expect(err).toContain(`user config ${machine}: the write failed, and a file IS there now; inspect it or remove it before running init again`)
     expect(err).toMatch(/folder .*home-\d+.sub\n/)
     expect(err).toContain('draft pull request ')
     expect(err).toContain('  label review-blocked')
@@ -2040,30 +2040,30 @@ describe('ST-56/AC-7 (review 2): the machine settings file', () => {
   })
 
   it('ST-56/AC-7: a write that fails and leaves nothing says no file is there', async () => {
-    const machine = path.join(fresh('home'), 'settings.json')
+    const machine = path.join(fresh('home'), 'config.json')
     const { code, err } = await runInit(['--yes'], {
       cwd: makeRepo(),
       machine,
-      writeMachineSettings: async () => {
+      writeUserConfig: async () => {
         throw Object.assign(new Error('EACCES'), { code: 'EACCES' })
       },
     })
     expect(code).toBe(1)
-    expect(err).toContain(`machine settings ${machine}: the write failed, and no file is there now`)
+    expect(err).toContain(`user config ${machine}: the write failed, and no file is there now`)
   })
 
   it('ST-56/AC-7: the real writer is create-only and whole: it leaves no temporary file, and an existing file is kept', async () => {
     const dir = fresh('whole')
-    const file = path.join(dir, 'settings.json')
+    const file = path.join(dir, 'config.json')
     await writeWhole(file, '{"a":1}\n')
     expect(readFileSync(file, 'utf8')).toBe('{"a":1}\n')
     await expect(writeWhole(file, 'other')).rejects.toMatchObject({ code: 'EEXIST' })
     expect(readFileSync(file, 'utf8')).toBe('{"a":1}\n')
-    expect(readdirSync(dir)).toEqual(['settings.json'])
+    expect(readdirSync(dir)).toEqual(['config.json'])
     // A failure before the link leaves nothing under the final name.
-    const blocked = path.join(dir, 'no-such-folder', 'settings.json')
+    const blocked = path.join(dir, 'no-such-folder', 'config.json')
     await expect(writeWhole(blocked, 'x')).rejects.toThrow()
     expect(existsSync(blocked)).toBe(false)
-    expect(readdirSync(dir)).toEqual(['settings.json'])
+    expect(readdirSync(dir)).toEqual(['config.json'])
   })
 })

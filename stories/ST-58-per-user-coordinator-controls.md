@@ -32,7 +32,7 @@ As a developer, I want one local coordinator that I can start, inspect and grace
 ## Constraints
 
 - One coordinator per OS user, across that user's terminal sessions and activated repositories. Other OS users are independent.
-- No credential or filesystem isolation claim; existing machine settings remain authoritative for tool choices and usage limits.
+- No credential or filesystem isolation claim; the implemented per-user `~/.steward/config.json` (ST-63) remains authoritative for tool choices and usage limits.
 
 ## Context
 

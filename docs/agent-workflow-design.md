@@ -277,7 +277,7 @@ or not, with a reason for each not applied, so a section skipped wrongly is visi
 — noticing that a test named `AC-3` doesn't exercise AC-3 is adversarial reading. And author and
 reviewer sharing a model family means correlated blind spots: context isolation decorrelates
 *knowledge*, not *reasoning style*. Opus-reviews-Sonnet buys both at once. The reviewer's tool,
-model and effort come from the machine's settings (`docs/machine-settings.md`): its default
+model and effort come from the user config (`docs/user-config.md`): its default
 choice, or, when that choice's model is the coder's, the first other choice in the file's order
 whose model differs; with none that differs, there is no review (`reviewer-unavailable`;
 `chooseReviewer`, `review.mjs`). A choice whose `tool` is `"codex"` runs it through the Codex
@@ -724,15 +724,15 @@ identity — but "read the script and see it cannot fabricate" is a real improve
 orchestrating agent."
 
 ATC reads the plan's usage before it starts a coder or a reviewer session, and starts none when
-either window, the 5-hour one or the weekly one, is at or over the limit the machine's settings
-give that role (`usageLimits`). When the usage cannot be read, it starts nothing. Claude Code
+either window, the 5-hour one or the weekly one, is at or over the limit the user config
+gives that role (`usageLimits`). When the usage cannot be read, it starts nothing. Claude Code
 reports the usage, with no model call, to `claude -p /usage --output-format stream-json --verbose`.
 The weekly
 window is read from its `weekly_all` row alone, and a row without a numeric percent counts as
 unreadable (`scripts/dispatch/usage.mjs`; "Trials and measurements", "Reading the plan's usage from
 a script"; Part 3, "Decided so far", 2026-10-15). `reviewPullRequest`, `dispatchCoder` and
 `retryStory` each make the check, and return `over-usage` or `usage-unknown` without starting a
-session. The limits are the machine's settings' (`docs/machine-settings.md`), read once per call
+session. The limits come from the user config (`docs/user-config.md`), read once per call
 before the check. A reviewer reads the usage of the tool its choice runs on, after its choice is
 made and before its checkout: a Codex reviewer's is read with no model call, through
 `codex app-server`'s `account/rateLimits/read` (`readCodexUsage`, `codex.mjs`), against the same
@@ -2302,7 +2302,9 @@ shortened where it is long, so that it can be found there with its date.
   request, is to be explored, to check by mutating the code that the tests test something useful
   (**Planned (ST-36)**, a spike).
 - **The machine steward runs on has settings of its own** (decided 2026-10-15 by the owner, with the
-  planning session; built in ST-34 and ST-35). Which tool, model and effort runs each role is the
+  planning session; built in ST-34 and ST-35). **Historical naming and path: revised by the crew,
+  2026-10-27, in "Per-user configuration naming and coordinator cadence" below.** Which tool,
+  model and effort runs each role is the
   computer's, not the project's, so that a project's settings make no assumption about the models a
   machine uses. The machine's settings are a file outside any checkout, `~/.steward/settings.json`
   in the user's profile, which an environment variable, `STEWARD_SETTINGS`, can point elsewhere. For
@@ -2319,14 +2321,16 @@ shortened where it is long, so that it can be found there with its date.
   controller's reset to `origin/main` before every rotation makes fragile; and the environment
   variable alone.
 - **Per-user configuration naming and coordinator cadence** (crew, 2026-10-27).
-  **Planned (ST-63):** rename the existing per-user “machine settings” file to
-  `~/.steward/config.json` with `STEWARD_CONFIG` as its only environment override;
-  rename the reader and documentation to “user config”. Preserve required
-  `usageLimits`, `roles` and optional `tools` semantics. Add optional
-  `coordinator.scanIntervalMinutes`, default 15, accepting any positive whole
-  minute count that remains safely representable in milliseconds. A missing
+  The per-user configuration file is `~/.steward/config.json` with a nonempty
+  `STEWARD_CONFIG` path as its only environment override; its reader and
+  documentation use “user config”. Required `usageLimits`, `roles` and optional
+  `tools` retain their semantics. Optional `coordinator.scanIntervalMinutes`
+  defaults to 15 only when its section is absent from an otherwise valid file,
+  accepting any positive whole minute count that remains safely representable in milliseconds. A missing
   configuration file still fails, and no automatic migration or old-name
-  fallback is provided before any clients have been installed. Editable
+  fallback is provided before any clients have been installed. Developers must
+  manually rename their local file and update environment assignments
+  (`docs/user-config.md`). Editable
   configuration remains separate from planned per-user operational state under
   `~/.steward/state/`. Existing model selection and manual commands do not
   acquire coordinator admission. ST-61 will consume the setting but owns the
@@ -2825,7 +2829,7 @@ shortened where it is long, so that it can be found there with its date.
   - **Planned (ST-57):** explicit per-user local activation is separate from
     installation. Check the installed revision on fetched `origin/main`, then
     provision an isolated coordinator-owned detached checkout. Activation data
-    lives outside strict machine settings and project settings; deactivation
+    lives outside strict user config and project settings; deactivation
     revokes new automatic admission and retains the checkout for reuse.
   - **Planned (ST-58):** the coordinator is a detached process with exclusive
     per-user ownership across projects. Start reports success only after
@@ -2890,8 +2894,8 @@ shortened where it is long, so that it can be found there with its date.
   - **Planned (ST-61):** scan only explicitly activated projects. After a safe
     initial scan, give projects round-robin turns, with at most one
     coordinator-managed reviewer per OS user; already discovered work does
-    not wait for another scan interval. Use the separately planned ST-63
-    per-user configuration, defaulting to a 15-minute discovery interval
+    not wait for another scan interval. Use the per-user configuration
+    (`docs/user-config.md`), defaulting to a 15-minute discovery interval
     with a configurable positive whole-minute value and no arbitrary
     product ceiling. GitHub discovery failures retry on subsequent scans;
     no exponential project backoff is in 0.1. Respect usage refusals and
@@ -2969,7 +2973,7 @@ shortened where it is long, so that it can be found there with its date.
   `rulesFile` of an existing `steward.config.json`), add only missing files, and are reported
   without a compatibility claim. A local-only file at a target refuses; an installation with
   nothing missing opens no empty PR. Failures stop further writes and name what was made and how
-  to finish by hand, without automatic rollback or resume. Labels and missing machine settings
+  to finish by hand, without automatic rollback or resume. Labels and missing user config
   remain separately reported effects outside the PR, made after it.
 
   Revised by the crew, 2026-10-27: unrelated work in the caller's checkout must not prevent
@@ -3078,7 +3082,8 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   `stories/_TEMPLATE.md`). The reviewer's is `opus` (`ROLE_DEFAULTS`, `invocation.mjs`), unless
   that matches the story's model by name, in which case it is `sonnet` (`chooseReviewerModel`,
   `review.mjs`). "Different" is decided by comparing those names. **Since 2026-10-16 (ST-34):**
-  both come from the machine's settings (`docs/machine-settings.md`). The coder runs the choice
+  both come from per-user configuration (now `docs/user-config.md`, revised 2026-10-27).
+  The coder runs the choice
   its story's `model:` names, or the coder's default when it is `null`; the reviewer runs its
   default unless that choice's model is the coder's, and then the first other choice whose model
   differs (`chooseReviewer`, `review.mjs`), still compared by name.

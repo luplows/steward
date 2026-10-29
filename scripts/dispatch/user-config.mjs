@@ -1,28 +1,26 @@
 #!/usr/bin/env node
 /**
- * Reads and validates the machine's settings (ST-34): what depends on the computer steward runs on,
- * not on the project -- the usage limits, which describe the crew's plan, and for each role a
- * default choice of tool, model and effort with the choices available besides it
- * (`docs/machine-settings.md`; `docs/agent-workflow-design.md`, "The machine steward runs on has
- * settings of its own").
+ * Reads and validates per-OS-user configuration (ST-63): the usage limits, which describe the
+ * crew member's plan, and each role's default and available choices of tool, model and effort
+ * (`docs/user-config.md`).
  *
- * Like `readSettings`, it holds no default for any value: a machine without the file, or with an
- * incomplete one, fails rather than running with one assumed. Its callers are the dispatch scripts,
- * each reading it once per call.
+ * Required role and usage settings have no defaults. Only an absent coordinator section gets
+ * the default cadence; a missing or invalid file fails. Reading starts no work and writes no state.
  */
 import { statSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
+import { homedir as osHomedir } from 'node:os'
 import path from 'node:path'
 import { validateUsageLimits } from './settings.mjs'
 
-const SETTINGS_ENV = 'STEWARD_SETTINGS'
-const SETTINGS_DIR = '.steward'
-const SETTINGS_FILENAME = 'settings.json'
+const CONFIG_ENV = 'STEWARD_CONFIG'
+const CONFIG_DIR = '.steward'
+const CONFIG_FILENAME = 'config.json'
 
 const TOP_KEYS = ['usageLimits', 'roles']
 // `tools` holds what a tool other than Claude Code needs; required only when a choice names one.
-const OPTIONAL_TOP_KEYS = ['tools']
-export const MACHINE_ROLES = ['coder', 'reviewer']
+const OPTIONAL_TOP_KEYS = ['tools', 'coordinator']
+export const USER_ROLES = ['coder', 'reviewer']
 const ROLE_KEYS = ['default', 'available']
 const CHOICE_KEYS = ['tool', 'model', 'effort']
 // A coder's choice also has a `strength` (ST-35/AC-5); a reviewer's has none.
@@ -42,11 +40,11 @@ const TOOL_KEYS = { codex: ['executable'] }
 /** Whether `value` is a plain object: not null, not an array. */
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
 
-/** The file the settings are read from: `env.STEWARD_SETTINGS` when set, else `<homedir>/.steward/settings.json`. */
-export function machineSettingsPath({ env, homedir }) {
-  const named = env?.[SETTINGS_ENV]
+/** The config path: nonempty `env.STEWARD_CONFIG`, else the invoking OS user's home. */
+export function userConfigPath({ env = process.env, homedir = osHomedir() } = {}) {
+  const named = env?.[CONFIG_ENV]
   if (typeof named === 'string' && named !== '') return named
-  return path.join(homedir, SETTINGS_DIR, SETTINGS_FILENAME)
+  return path.join(homedir, CONFIG_DIR, CONFIG_FILENAME)
 }
 
 /** Throws unless `object` has exactly `keys`, naming `name` and the key. */
@@ -152,15 +150,31 @@ function validateTools(filePath, value, used, fileExists) {
   return value === undefined ? undefined : tools
 }
 
+/** Validates the optional coordinator cadence without starting a timer or writing state. */
+function validateCoordinator(filePath, value) {
+  if (value === undefined) return { scanIntervalMinutes: 15 }
+  if (!isObject(value)) {
+    throw new Error(`${filePath}: 'coordinator' must be an object with 'scanIntervalMinutes', got ${JSON.stringify(value)}`)
+  }
+  checkKeys(filePath, 'coordinator', value, ['scanIntervalMinutes'])
+  const { scanIntervalMinutes } = value
+  if (!Number.isSafeInteger(scanIntervalMinutes) || scanIntervalMinutes < 1 ||
+      !Number.isSafeInteger(scanIntervalMinutes * 60_000)) {
+    throw new Error(`${filePath}: 'coordinator.scanIntervalMinutes' must be a positive integer safely representable in milliseconds, got ${JSON.stringify(scanIntervalMinutes)}`)
+  }
+  return { scanIntervalMinutes }
+}
+
 /**
- * Reads and validates the machine's settings: `{ usageLimits, roles }`, where `roles.<role>` is
+ * Reads and validates the user config: `{ usageLimits, roles, coordinator }`, where `roles.<role>` is
  * `{ default, available }`, `available` keeping the file's order (each coder choice also has its
- * `strength`, ST-35/AC-5), and `tools` when the file has it. Throws, naming the file and the key with all its parents, on a missing file, invalid JSON, a
+ * `strength`, ST-35/AC-5), and `tools` when the file has it. Throws, naming the file and the key
+ * with all its parents, on a missing file, invalid JSON, a
  * missing or unknown key, or a value of the wrong form. `exists` says whether a tool's executable
  * names a file, not a directory; injectable for tests.
  */
-export async function readMachineSettings({ env, homedir, exists = isFile }) {
-  const filePath = machineSettingsPath({ env, homedir })
+export async function readUserConfig({ env, homedir, exists = isFile } = {}) {
+  const filePath = userConfigPath({ env, homedir })
 
   let raw
   try {
@@ -190,15 +204,16 @@ export async function readMachineSettings({ env, homedir, exists = isFile }) {
   if (!isObject(data.roles)) {
     throw new Error(`${filePath}: 'roles' must be an object with 'coder' and 'reviewer', got ${JSON.stringify(data.roles)}`)
   }
-  checkKeys(filePath, 'roles', data.roles, MACHINE_ROLES)
+  checkKeys(filePath, 'roles', data.roles, USER_ROLES)
   const roles = {}
-  for (const role of MACHINE_ROLES) {
+  for (const role of USER_ROLES) {
     roles[role] = validateRole(filePath, `roles.${role}`, data.roles[role], ROLE_TOOLS[role], role === 'coder')
   }
 
-  const used = new Set(MACHINE_ROLES.flatMap((role) => Object.values(roles[role].available).map((c) => c.tool)))
+  const used = new Set(USER_ROLES.flatMap((role) => Object.values(roles[role].available).map((c) => c.tool)))
   const tools = validateTools(filePath, data.tools, used, exists)
-  return tools === undefined ? { usageLimits, roles } : { usageLimits, roles, tools }
+  const coordinator = validateCoordinator(filePath, data.coordinator)
+  return tools === undefined ? { usageLimits, roles, coordinator } : { usageLimits, roles, tools, coordinator }
 }
 
 /**
@@ -206,8 +221,8 @@ export async function readMachineSettings({ env, homedir, exists = isFile }) {
  * `roles.coder.available`, or the coder's `default` when `name` is `null`. Resolves
  * `{ name, tool, model, effort, strength }`, or `null` when `name` is not an available choice.
  */
-export function coderChoice(machine, name) {
-  const { available, default: fallback } = machine.roles.coder
+export function coderChoice(config, name) {
+  const { available, default: fallback } = config.roles.coder
   const key = name === null ? fallback : name
   if (typeof key !== 'string' || !Object.hasOwn(available, key)) return null
   return { name: key, ...available[key] }

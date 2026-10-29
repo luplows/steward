@@ -76,7 +76,7 @@ function validateCommand(filePath, name, value) {
 
 /**
  * Validates `usageLimits`: { coder, reviewer }, each { session, weekly }, integers 1 to 100.
- * The machine's settings hold it (ST-34); `machine-settings.mjs` calls this.
+ * The user config holds it (ST-34); `user-config.mjs` calls this.
  */
 export function validateUsageLimits(filePath, value) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {

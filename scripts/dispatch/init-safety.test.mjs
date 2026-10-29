@@ -1,9 +1,11 @@
 // @vitest-environment node
 // Post-review ST-56 contract: real Git repositories and bare remotes, no GitHub writes.
 import { expect, it } from 'vitest'
-import { cpSync, existsSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { writeWhole } from './init.mjs'
+import { readUserConfig } from './user-config.mjs'
+import { fixtureUserConfig } from './settings-fixture.mjs'
 import {
   bareRef, callerState, fakeGitHub, failing, fresh, git, GITHUB_URL, hook, isGit,
   makeRepo, pullWrites, readOn, remoteOf, REMOTES, runInit, setUpInitFixture, slashes,
@@ -11,6 +13,83 @@ import {
 } from './init-fixture.mjs'
 
 setUpInitFixture()
+
+it.each([undefined, ''])('ST-56/AC-7: user config uses the OS home with STEWARD_CONFIG=%s and ignores both legacy names', async (override) => {
+  const cwd = makeRepo()
+  const before = callerState(cwd)
+  const home = fresh('user-home')
+  mkdirSync(path.join(home, '.steward'))
+  const legacy = path.join(home, '.steward', 'settings.json')
+  const legacyOverride = path.join(fresh('legacy-override'), 'settings.json')
+  writeFileSync(legacy, 'legacy home bytes\n')
+  writeFileSync(legacyOverride, 'legacy override bytes\n')
+  const config = path.join(home, '.steward', 'config.json')
+  const r = await runInit(['--yes'], { cwd, machine: config, homedir: home, env: {
+    STEWARD_CONFIG: override, STEWARD_SETTINGS: legacyOverride,
+  } })
+  expect(r.code, r.err).toBe(0)
+  expect(r.out).toContain(`wrote ${config}: the user config`)
+  const actual = JSON.parse(readFileSync(config, 'utf8'))
+  expect(actual).not.toHaveProperty('coordinator')
+  expect((await readUserConfig({ env: { STEWARD_CONFIG: override }, homedir: home })).coordinator).toEqual({ scanIntervalMinutes: 15 })
+  expect(readFileSync(legacy, 'utf8')).toBe('legacy home bytes\n')
+  expect(readFileSync(legacyOverride, 'utf8')).toBe('legacy override bytes\n')
+  expect(callerState(cwd)).toEqual(before)
+})
+
+it('ST-56/AC-7: a nonempty STEWARD_CONFIG selects the only provisioned file and keeps the home config intact', async () => {
+  const cwd = makeRepo()
+  const home = fresh('user-home')
+  mkdirSync(path.join(home, '.steward'))
+  const homeConfig = path.join(home, '.steward', 'config.json')
+  writeFileSync(homeConfig, 'unselected home bytes\n')
+  const config = path.join(fresh('selected'), 'nested', 'config.json')
+  const r = await runInit(['--yes'], { cwd, homedir: home, env: { STEWARD_CONFIG: config, STEWARD_SETTINGS: homeConfig } })
+  expect(r.code, r.err).toBe(0)
+  expect(r.out).toContain(`wrote ${config}: the user config`)
+  expect(existsSync(r.machine)).toBe(false)
+  expect((await readUserConfig({ env: { STEWARD_CONFIG: config } })).roles.coder.default).toBe('sonnet')
+  expect(readFileSync(homeConfig, 'utf8')).toBe('unselected home bytes\n')
+})
+
+it.each([undefined, { scanIntervalMinutes: 10080 }])('ST-56/AC-4: existing user config preserves optional coordinator %j byte-for-byte', async (coordinator) => {
+  const config = path.join(fresh('selected'), 'config.json')
+  const body = fixtureUserConfig()
+  if (coordinator === undefined) delete body.coordinator
+  else body.coordinator = coordinator
+  const bytes = JSON.stringify(body, null, 4) + '\n'
+  writeFileSync(config, bytes)
+  const modified = statSync(config).mtimeMs
+  const r = await runInit(['--yes'], { cwd: makeRepo(), machine: config })
+  expect(r.code, r.err).toBe(0)
+  expect(r.out).toContain(`left ${config}: the user config is already there, preserved and valid`)
+  expect(readFileSync(config, 'utf8')).toBe(bytes)
+  expect(statSync(config).mtimeMs).toBe(modified)
+  expect((await readUserConfig({ env: { STEWARD_CONFIG: config } })).coordinator).toEqual(coordinator ?? { scanIntervalMinutes: 15 })
+})
+
+it.each([{ scanIntervalMinutes: 0 }, { scanIntervalMinutes: 15, enabled: true }])('ST-56/AC-7: invalid existing user-config coordinator %j is preserved and reported as a provisioning failure', async (coordinator) => {
+  const cwd = makeRepo()
+  const before = callerState(cwd)
+  const config = path.join(fresh('selected'), 'config.json')
+  const bytes = JSON.stringify(fixtureUserConfig({ coordinator })) + '\n'
+  writeFileSync(config, bytes)
+  const modified = statSync(config).mtimeMs
+  const r = await runInit(['--yes'], { cwd, machine: config })
+  expect(r.code, r.err).toBe(1)
+  expect(r.err).toContain(config)
+  expect(r.err).toContain('coordinator.')
+  expect(r.err).toContain('It stopped while writing the user config.')
+  expect(r.err).toContain('The installation pull request is open:')
+  expect(r.err).toContain('label inspection')
+  expect(r.out).not.toContain(`left ${config}`)
+  expect(r.out).not.toContain(`wrote ${config}`)
+  expect(readFileSync(config, 'utf8')).toBe(bytes)
+  expect(statSync(config).mtimeMs).toBe(modified)
+  expect(r.err).toContain('local branch steward/install at ')
+  expect(r.err).toContain('branch steward/install on origin at ')
+  expect(callerState(cwd)).toEqual(before)
+})
 
 async function refused(cwd, { key, env, runner = watchGit() } = {}) {
   const before = callerState(cwd)
@@ -258,28 +337,36 @@ it('ST-56/AC-3: a clean filter changing generated staged bytes is rejected rathe
 
 it('ST-56/AC-7: an unowned predictable temporary file is never removed or called successful settings provisioning', async () => {
   const cwd = makeRepo()
-  const machine = path.join(fresh('settings'), 'settings.json')
+  const machine = path.join(fresh('settings'), 'config.json')
   const temporary = `${machine}.${process.pid}.tmp`
   writeFileSync(temporary, 'unowned bytes\n')
-  await expect(writeWhole(machine, 'new bytes')).rejects.toThrow('temporary settings file collision')
+  await expect(writeWhole(machine, 'new bytes')).rejects.toThrow('temporary user-config file collision')
   expect(readFileSync(temporary, 'utf8')).toBe('unowned bytes\n')
   const r = await runInit(['--yes'], { cwd, machine })
   expect(r.code, r.err).toBe(1)
   expect(r.err).toContain(temporary)
   expect(r.err).toContain('not owned by this invocation')
-  expect(r.err).toContain(`machine settings ${machine}: the write failed, and no file is there now`)
+  expect(r.err).toContain(`user config ${machine}: the write failed, and no file is there now`)
   expect(r.out).not.toContain(`left ${machine}`)
   expect(existsSync(machine)).toBe(false)
   expect(readFileSync(temporary, 'utf8')).toBe('unowned bytes\n')
 })
 
 it.each(['no-file', 'partial-file', 'colliding-partial'])('ST-56/AC-7: a writer reporting %s cannot produce false success', async (kind) => {
-  const machine = path.join(fresh('settings'), 'settings.json')
-  const r = await runInit(['--yes'], { cwd: makeRepo(), machine, writeMachineSettings: async () => {
+  const machine = path.join(fresh('settings'), 'config.json')
+  const r = await runInit(['--yes'], { cwd: makeRepo(), machine, writeUserConfig: async () => {
     if (kind !== 'no-file') writeFileSync(machine, '{partial')
     if (kind === 'colliding-partial') throw Object.assign(new Error('target collision'), { code: 'EEXIST' })
   } })
   expect(r.code, r.err).toBe(1)
-  expect(r.err).toContain("It stopped while writing the machine's settings")
-  expect(r.out).not.toMatch(/wrote .*settings.json|left .*settings.json/)
+  expect(r.err).toContain("It stopped while writing the user config")
+  expect(r.out).not.toContain(`wrote ${machine}`)
+  expect(r.out).not.toContain(`left ${machine}`)
+  if (kind === 'no-file') {
+    expect(existsSync(machine)).toBe(false)
+    expect(r.err).toContain('file not found')
+  } else {
+    expect(readFileSync(machine, 'utf8')).toBe('{partial')
+    expect(r.err).toContain('invalid JSON')
+  }
 })
