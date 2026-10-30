@@ -135,6 +135,8 @@ more than one names the one to use with `--pr-template <path>`, and `--yes` cann
 project with none gets steward's own). Its `Unit:` line is set to `none` for the crew to confirm,
 and it lists the files added and left, the steward version, the checks `init` actually ran and what
 the crew still has to do. It claims no test run and no check of files that were already there.
+The generator version and installation workflow target are named even when a partial install adds
+no workflows; existing workflows and their pins are preserved and are not validated.
 `--pr-title <text>` replaces the title (`Install Steward review gate`), `--pr-body-file <path>` uses
 a file as the whole body, and `--branch <name>` replaces the branch name `steward/install`. `init`
 never reuses, moves or deletes an existing branch or pull request of that name: it names it and
@@ -159,6 +161,8 @@ origin must unambiguously name one GitHub repository for both fetch and push. Co
 `user.name` and `user.email`, with `commit.gpgSign` unset or false; enabled signing refuses before
 effects. An unused signing key is allowed. It pushes the branch alone (no tags, signing or push
 options) and uses the configured identity without adding attribution.
+The push names the verified commit's full SHA, so a later local branch advance cannot change what
+is published.
 
 Installer-owned Git commands disable replacement-object lookup so their base, files and diff
 checks use the original objects GitHub sees. Existing replacement refs are preserved on refusal.
@@ -177,7 +181,8 @@ file, it says no installation pull request is needed and opens none.
 
 After GitHub confirms the draft, cleanup checks for ignored and untracked files as well as
 tracked changes and index flags that could hide edits. A worktree containing such work, or one
-whose state cannot be checked, is kept for inspection; the finished branch remains available.
+whose state cannot be checked or whose HEAD has advanced beyond the verified commit, is kept for
+inspection; the finished branch remains available.
 
 `init` asks whether steward may land pull requests unattended, and the default is no, with `--yes`
 too: a new `steward.config.json` has `land: false`, so steward reviews and the project merges. Only

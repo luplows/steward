@@ -1214,7 +1214,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
       phase = 'push'
       assertConfigApplies(runGit, worktree)
       assertSameCommitter(runGit, root, worktree)
-      pushNewBranch(installGit, worktree, branch, destination)
+      pushNewBranch(installGit, worktree, branch, destination, commit)
       created.push(`branch ${branch} on origin`)
       out(`Pushed ${branch} to origin.`)
 
@@ -1224,6 +1224,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
         repo,
         branch,
         baseSha: base,
+        version,
         pin: ref ? `at commit ${pin}` : `${pin}`,
         workflowsAdded: [...expected.keys()].some((rel) => rel.startsWith('.github/workflows/')),
         added: targets.filter((t) => expected.has(t.rel)).map((t) => ({ rel: t.rel, note: t.note })),
@@ -1248,7 +1249,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
       }
       out(`Opened the draft pull request ${pullUrl}`)
       try {
-        removeWorktree(installGit, root, worktree)
+        removeWorktree(installGit, root, worktree, commit)
         created.splice(created.indexOf(`worktree ${worktree}`), 1)
         out(`Removed the worktree ${worktree}; the branch ${branch} is kept.`)
       } catch (error) {
@@ -1315,15 +1316,18 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
       )
     }
     const made = []
+    // A concurrent branch advance must not replace the invocation's own commit in the evidence.
+    const ownCommits = created.filter((resource) => resource.startsWith('commit '))
     if (found.worktree === true || (found.worktree === undefined && created.some((c) => c.startsWith('worktree ')))) made.push(`worktree ${worktree}`)
     if (typeof found.local === 'string') {
       made.push(`local branch ${branch} at ${found.local}`)
-      if (found.local !== base) made.push(`commit ${found.local}`)
+      if (found.local !== base && ownCommits.length === 0) made.push(`commit ${found.local}`)
     }
+    made.push(...ownCommits)
     if (typeof found.remote === 'string') {
       made.push(
         `branch ${branch} on origin at ${found.remote}` +
-          (found.remote === found.local && found.local !== base ? '' : " (not this run's commit: look at what is there before pushing)"),
+          (ownCommits.includes(`commit ${found.remote}`) ? '' : " (not this run's commit: look at what is there before pushing)"),
       )
     }
     if (worktree !== null && (found.local === undefined || found.remote === undefined)) {

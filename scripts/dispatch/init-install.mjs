@@ -634,13 +634,15 @@ export function commitStaged(run, dir, message) {
 }
 
 /**
- * Pushes `branch` to `destination` (the URL `pushDestination` found, not the remote's name, so that
+ * Pushes the verified `commit` to `branch` at `destination` (the URL `pushDestination` found, so that
  * no `remote.origin.*` push setting applies) as a new branch only: the lease expects the branch not
  * to exist there, so a branch another run created in the meantime makes the push fail instead of
  * being updated. The explicit refspec is the only ref sent: tags are not followed, the push is not
  * signed and submodules are not pushed, whatever the caller's `push.*` settings say.
+ * The mutable local branch is never the source: it may advance after commit verification.
  */
-export function pushNewBranch(run, dir, branch, destination) {
+export function pushNewBranch(run, dir, branch, destination, commit) {
+  if (!FULL_SHA.test(commit ?? '')) throw new Error('publication requires the verified commit\'s full SHA')
   gitOut(run, dir, [
     'push',
     '--no-follow-tags',
@@ -648,7 +650,7 @@ export function pushNewBranch(run, dir, branch, destination) {
     '--no-push-option',
     '--recurse-submodules=no',
     destination,
-    `refs/heads/${branch}:refs/heads/${branch}`,
+    `${commit}:refs/heads/${branch}`,
     `--force-with-lease=refs/heads/${branch}:`,
   ])
 }
@@ -834,7 +836,10 @@ export function assertSameCommitter(run, root, dir) {
 }
 
 /** Remove only a worktree verified clean, including files Git's own removal would ignore. */
-export function removeWorktree(run, root, dir) {
+export function removeWorktree(run, root, dir, commit) {
+  if (!FULL_SHA.test(commit ?? '')) throw new Error('cleanup requires the verified commit\'s full SHA')
+  const head = gitOut(run, dir, ['rev-parse', '--verify', 'HEAD^{commit}']).trim()
+  if (head !== commit) throw new Error(`the installation worktree HEAD is now ${head}, not the verified commit ${commit}; nothing was removed`)
   const status = gitOut(run, dir, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--ignored', '--ignore-submodules=none'])
   if (status !== '') throw new Error('the installation worktree is not clean, including untracked or ignored files; nothing was removed')
   // These flags can hide changed tracked files from both status and worktree remove. A foreign
