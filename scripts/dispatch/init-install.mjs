@@ -625,12 +625,12 @@ export function checkInventory(run, dir, base, expected) {
 
 /**
  * Commits what is staged, with the checkout's configured identity; the caller disables hooks. Resolves the
- * commit's full SHA and its first parent's.
+ * commit's full SHA and every parent, so verification cannot miss imported merge history.
  */
 export function commitStaged(run, dir, message) {
   gitOut(run, dir, ['commit', '--quiet', '-m', message])
-  const [commit, parent] = gitOut(run, dir, ['rev-parse', 'HEAD', 'HEAD^']).trim().split('\n')
-  return { commit, parent }
+  const [commit, ...parents] = gitOut(run, dir, ['rev-list', '--parents', '-n', '1', 'HEAD']).trim().split(' ')
+  return { commit, parents }
 }
 
 /**

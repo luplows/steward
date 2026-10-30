@@ -1206,7 +1206,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
       commit = made.commit
       created.push(`commit ${commit}`)
       phase = 'verify'
-      if (made.parent !== base) throw new Error(`the commit's parent is ${made.parent}, not ${base}`)
+      if (made.parents.length !== 1 || made.parents[0] !== base) throw new Error(`the commit's parents are ${made.parents.join(', ') || 'none'}, expected only ${base}`)
       const committed = checkAdditions(installGit, worktree, [base, commit], expected)
       committed.push(...checkInventory(installGit, worktree, base, expected))
       if (committed.length > 0) throw new Error(`the commit is not only the installation's additions (${committed.join('; ')})`)

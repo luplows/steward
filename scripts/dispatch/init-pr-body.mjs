@@ -25,16 +25,16 @@ const list = (items) => items.map((item) => `- ${item}`)
 
 const headingTitle = (match) => match[2].trim().replace(/[ \t]+/g, ' ')
 
-/** End of a same-line code span, whose closing backtick run must have the same length. */
-function codeSpanEnd(line, from, length) {
-  for (let next = line.indexOf('`', from); next !== -1;) {
-    let end = next + 1
-    while (line[end] === '`') end++
-    if (end - next === length) return end
-    next = line.indexOf('`', end)
-  }
-  return -1
+/** Quote literal Git names and project headings without letting their backticks open HTML. */
+function code(value) {
+  if (/[\r\n]/.test(value)) value = JSON.stringify(value)
+  const delimiter = (value.match(/`+/g) ?? []).reduce((best, run) => run.length >= best.length ? `${run}\`` : best, '`')
+  const pad = value.trim() !== '' && /^[ `]|[ `]$/.test(value) ? ' ' : ''
+  return `${delimiter}${pad}${value}${pad}${delimiter}`
 }
+
+// Consume escaped pairs and complete same-line code spans before recognizing HTML comments.
+const INLINE = /\\.|(`+)(?!`).*?(?<!`)\1(?!`)|`+|<!--.*?(?:-->|$)/g
 
 /**
  * Read visible template lines without editing their source. HTML comments span lines; fenced
@@ -56,31 +56,21 @@ function templateVisibility(lines) {
       fence = { char: opening[1][0], length: opening[1].length }
       return { text: '', comments: [], heading: null }
     }
-    let text = ''
     const comments = []
-    for (let cursor = 0; cursor < line.length;) {
-      if (comment) {
-        const closing = line.indexOf('-->', cursor)
-        const end = closing === -1 ? line.length : closing + 3
-        comments.push(line.slice(cursor, end))
-        cursor = end
-        comment = closing === -1
-      } else if (line.startsWith('<!--', cursor)) {
-        comment = true
-      } else if (line[cursor] === '\\' && cursor + 1 < line.length) {
-        text += line.slice(cursor, cursor + 2)
-        cursor += 2
-      } else if (line[cursor] === '`') {
-        let end = cursor + 1
-        while (line[end] === '`') end++
-        const closing = codeSpanEnd(line, end, end - cursor)
-        end = closing === -1 ? end : closing
-        text += line.slice(cursor, end)
-        cursor = end
-      } else {
-        text += line[cursor++]
-      }
+    let text = line
+    if (comment) {
+      const closing = line.indexOf('-->')
+      const end = closing === -1 ? line.length : closing + 3
+      comments.push(line.slice(0, end))
+      text = line.slice(end)
+      comment = closing === -1
     }
+    text = text.replace(INLINE, (token) => {
+      if (!token.startsWith('<!--')) return token
+      comments.push(token)
+      comment = !token.endsWith('-->')
+      return ''
+    })
     // A comment ending before a hash on the same line must not invent an ATX heading.
     const heading = safe[index] && /^ {0,3}#{1,6}[ \t]/.test(line) ? HEADING.exec(text) : null
     return { text, comments, heading }
@@ -157,25 +147,23 @@ export function composePullRequestBody({ skeleton, facts }) {
     const end = safeBoundary(lines.length)
     add(end, [...summary, ...(end < lines.length ? [''] : [])])
   }
-  // Plan against the original template, then insert backwards so examples and comments keep
-  // their bytes and cannot become section boundaries as generated content is added.
-  for (const [index, content] of [...insertions].sort(([a], [b]) => b - a)) {
-    lines.splice(index, 0, ...content)
-  }
-  return `${lines.join(eol)}${eol}`
+  // Render original lines once; generated content is never scanned as part of the template.
+  const body = lines.flatMap((line, index) => [...(insertions.get(index) ?? []), line])
+  body.push(...(insertions.get(lines.length) ?? []))
+  return `${body.join(eol)}${eol}`
 }
 
 function changedBlock(facts, { unitFound, others, unchecked }) {
   const { repo, branch, baseSha, version, pin, workflowsAdded, added, preserved, land, emptyTemplates = [] } = facts
   const left = [
-    ...preserved.map((p) => `\`${p}\``),
-    ...emptyTemplates.map((dir) => `\`${dir}\`: an empty template directory, which counts as no pull request template`),
+    ...preserved.map(code),
+    ...emptyTemplates.map((dir) => `${code(dir)}: an empty template directory, which counts as no pull request template`),
   ]
   const out = [
-    `This pull request installs steward's review gate in ${repo}. \`steward init\` made it on branch \`${branch}\`, from \`main\` at commit \`${baseSha}\`. It adds files only: it changes none that already exist.`,
+    `This pull request installs steward's review gate in ${repo}. \`steward init\` made it on branch ${code(branch)}, from \`main\` at commit ${code(baseSha)}. It adds files only: it changes none that already exist.`,
     '',
     'Added:',
-    ...list(added.map((a) => `\`${a.rel}\`: ${a.note}`)),
+    ...list(added.map((a) => `${code(a.rel)}: ${a.note}`)),
     '',
     left.length === 0 ? 'Left as they were: none, since every file steward installs was missing.' : 'Left as they were (already in the project):',
     ...list(left),
@@ -194,7 +182,7 @@ function changedBlock(facts, { unitFound, others, unchecked }) {
       'Review the added files and confirm they suit this project.',
       ...(unitFound ? ['Confirm the `Unit:` line above. The installer set it to `none`, since this pull request implements no unit of the project\'s.'] : []),
       ...(others.length > 0
-        ? [`Complete what this project's template asks of a pull request beyond the sections steward fills: ${others.map((h) => `\`${h}\``).join(', ')}.`]
+        ? [`Complete what this project's template asks of a pull request beyond the sections steward fills: ${others.map(code).join(', ')}.`]
         : []),
       ...(unchecked > 0 ? [`Tick or remove the ${unchecked} unchecked item${unchecked === 1 ? '' : 's'} in the template above that the installer could not decide.`] : []),
       ...(preserved.length > 0

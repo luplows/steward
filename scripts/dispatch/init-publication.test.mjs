@@ -12,6 +12,34 @@ setUpInitFixture()
 
 const indexBytes = (cwd) => readFileSync(path.resolve(cwd, git(cwd, 'rev-parse', '--git-path', 'index')))
 
+it('ST-56/AC-3/AC-5: an interleaved merge commit cannot import another parent with an otherwise exact installation tree', async () => {
+  const cwd = makeRepo()
+  const before = callerState(cwd)
+  const index = indexBytes(cwd)
+  const base = bareRef(cwd, 'refs/heads/main')
+  const foreign = git(cwd, 'commit-tree', `${base}^{tree}`, '-p', base, '-m', 'foreign history')
+  let merge = null
+  const runner = watchGit({ after: (args, dir, result) => {
+    if (args[0] === 'commit' && result.status === 0) {
+      const tree = git(dir, 'rev-parse', 'HEAD^{tree}')
+      merge = git(dir, 'commit-tree', tree, '-p', base, '-p', foreign, '-m', 'concurrent merge')
+      git(dir, 'update-ref', 'HEAD', merge)
+    }
+  } })
+  const r = await runInit(['--yes'], { cwd, git: runner })
+  expect(r.code, r.err).toBe(1)
+  expect(r.err).toContain('parents')
+  expect(r.err).toContain(base)
+  expect(r.err).toContain(foreign)
+  expect(r.err).toContain('It stopped while checking the installation commit.')
+  expect(runner.calls.some(({ args }) => args[0] === 'push')).toBe(false)
+  expect(pullWrites(r.gh)).toEqual([])
+  expect(bareRef(cwd, 'refs/heads/steward/install')).toBe('')
+  expect(git(cwd, 'rev-parse', 'steward/install')).toBe(merge)
+  expect(callerState(cwd)).toEqual(before)
+  expect(indexBytes(cwd)).toEqual(index)
+})
+
 it.each(['during-config', 'before-push'])('ST-56/AC-3/AC-5: a local branch advance %s cannot replace the verified publication', async (when) => {
   const cwd = makeRepo()
   const before = callerState(cwd)
