@@ -44,7 +44,8 @@ change before the story is ready.
 - Any new safeguard beyond those AC-2's threat model names.
 - Concurrent installers on the same branch name beyond the create-only push and the open pull
   request check; another local process changing the clone while `init` runs; adversarial global
-  or system Git configuration. To be confirmed by the crew (Open questions).
+  or system Git configuration; filenames the platform cannot check out. To be confirmed by the
+  crew (Open questions).
 - Activation, the coordinator, protection and landing, which stay as ST-55, ST-56 and ST-57 left
   them.
 
@@ -72,15 +73,25 @@ change before the story is ready.
 
 ## Open questions
 
-- **Clone or worktree?** A fresh clone avoids the caller's local configuration, replacement refs,
-  per-worktree configuration, hooks and worktree bookkeeping. Global and system Git configuration
-  (`url.*.insteadOf`, `init.templateDir`, credential helpers) still reach a clone. Does the crew
-  want the clone, with `GIT_CONFIG_NOSYSTEM` and an empty `init.templateDir`, or a narrower
-  worktree contract?
-- **The threat model's exact bounds.** Which of AC-2's exclusions does the crew confirm, and
-  which refusals stay (for example URL rewrites, which still change where a clone fetches from)?
-- **AC-1a.** With the installation in a clone, should `init` still refuse relevant uncommitted
-  changes in the caller's checkout, so the crew is not surprised, or ignore the caller's
-  checkout apart from reading `origin`?
-- **When.** Is this for 0.1, after #92 lands, or later? Should #92 land first, as `depends_on`
-  says, or should ST-56 be narrowed to this instead?
+- **Clone or worktree.** Answered in part (crew, 2026-10-30): "init sets up a clean worktree and
+  goes from there", and a clean checkout of its own is acceptable too. The planning session
+  recommends the clone: a worktree, however clean, shares the caller's `.git` (its configuration,
+  refs, replacement refs, hooks and worktree bookkeeping), through which most of #92's blocks
+  came, while a clone has its own and only global and system Git configuration
+  (`url.*.insteadOf`, `init.templateDir`, credential helpers) still reach it. Still to confirm:
+  the clone, as AC-1 drafts it, or a clean worktree, with AC-1 rewritten.
+- **The threat model's exact bounds.** Proposed, for the crew to confirm: the installer only adds
+  files and opens a draft pull request, which the crew and the gate review before anything lands,
+  so it need prove no more than that. In scope: one member of the crew running one `init` from
+  an ordinary checkout, with clear refusals for a wrong directory, existing files, an existing
+  installation branch or pull request, an `origin` that is not one GitHub repository, a URL
+  rewrite that sends `origin` elsewhere (it would still reach a clone), missing identity or
+  enabled signing, and a failure part-way, which keeps its evidence. Out of scope: the
+  exclusions listed under Out of scope.
+- **AC-1a.** Proposed, for the crew to confirm: no check of the caller's checkout beyond reading
+  its root and `origin`. The installation is made from the fetched `origin/main` in its own
+  clone and touches none of the caller's files, so a refusal on uncommitted changes adds
+  friction and code and protects nothing. The closing output says the installation was made from
+  `origin/main` at its SHA and that the checkout was not changed.
+- **When.** The crew is inclined to 0.2 (2026-10-30), and decides once #92's place in the release
+  is settled. Whether #92 lands first, as `depends_on` says, follows from that.
