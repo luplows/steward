@@ -686,10 +686,36 @@ describe('ST-56/AC-2: one isolated installation branch', () => {
     expect(pushes).toHaveLength(1)
     expect(pushes[0].args.slice(0, 5)).toEqual(['push', '--no-follow-tags', '--no-signed', '--no-push-option', '--recurse-submodules=no'])
     expect(path.resolve(pushes[0].args[5])).toBe(path.resolve(remoteOf(cwd)))
-    expect(pushes[0].args.slice(6)).toEqual([`${git(cwd, 'rev-parse', 'steward/install')}:refs/heads/steward/install`, '--force-with-lease=refs/heads/steward/install:'])
+    expect(pushes[0].args.slice(6)).toEqual([`${git(cwd, 'rev-parse', 'steward/install')}:refs/heads/steward/install`, '--force-with-lease=refs/heads/steward/install:', '--porcelain'])
     expect(pushes[0].args.some((a) => a === '--force' || a === '-f' || a === '--delete' || a.startsWith('+'))).toBe(false)
     expect(writes(gh)).toEqual([])
     expect(existsSync(machine)).toBe(false)
+  })
+
+  it('ST-56/AC-2: a branch another process made on origin at the very same commit is a collision: the push is not this run\'s, and no pull request is opened', async () => {
+    const cwd = makeRepo()
+    let racer = null
+    const watched = watchGit({
+      before: (args, dir) => {
+        if (args[0] === 'push') {
+          // The identical commit, pushed by someone else just before this run's push.
+          racer = args[6].split(':')[0]
+          git(dir, 'push', '-q', args[5], `${racer}:refs/heads/steward/install`)
+        }
+        return undefined
+      },
+    })
+    const gh = fakeGitHub()
+    const machine = path.join(fresh('home'), 'config.json')
+    const { code, err } = await runInit(['--yes'], { cwd, gh, machine, git: watched })
+    expect(code).toBe(1)
+    expect(err).toContain("the push did not create the branch steward/install on origin (git reported '=\t")
+    expect(err).toMatch(/It stopped while pushing the branch to origin/)
+    expect(bareRef(cwd, 'refs/heads/steward/install')).toBe(racer)
+    expect(watched.calls.filter((c) => c.args[0] === 'push')).toHaveLength(1)
+    expect(writes(gh)).toEqual([])
+    expect(existsSync(machine)).toBe(false)
+    expect(existsSync(worktreeOf(cwd))).toBe(true)
   })
 
   it('ST-56/AC-2: it leaves the checkout\'s HEAD, branch, index and files unchanged on every failure too', async () => {

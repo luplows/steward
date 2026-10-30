@@ -660,19 +660,31 @@ export function commitStaged(run, dir, message) {
  * being updated. The explicit refspec is the only ref sent: tags are not followed, the push is not
  * signed and submodules are not pushed, whatever the caller's `push.*` settings say.
  * The mutable local branch is never the source: it may advance after commit verification.
+ * A push that succeeds without creating the branch (git reports a branch already there at the same
+ * commit as up to date, and applies no lease) is a collision: only a new-ref status (`*`) in the
+ * `--porcelain` output counts as this run's publication.
  */
 export function pushNewBranch(run, dir, branch, destination, commit) {
   if (!FULL_SHA.test(commit ?? '')) throw new Error('publication requires the verified commit\'s full SHA')
-  gitOut(run, dir, [
+  const refspec = `${commit}:refs/heads/${branch}`
+  const out = gitOut(run, dir, [
     'push',
     '--no-follow-tags',
     '--no-signed',
     '--no-push-option',
     '--recurse-submodules=no',
     destination,
-    `${commit}:refs/heads/${branch}`,
+    refspec,
     `--force-with-lease=refs/heads/${branch}:`,
+    '--porcelain',
   ])
+  const status = out.split('\n').find((line) => line.split('\t')[1] === refspec)
+  if (status?.[0] !== '*') {
+    throw new Error(
+      `the push did not create the branch ${branch} on origin (git reported ${status === undefined ? 'no status for it' : `'${status.trim()}'`}): ` +
+        'another process may have created it; it was not this run\'s publication',
+    )
+  }
 }
 
 /**
