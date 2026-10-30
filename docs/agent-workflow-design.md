@@ -2990,7 +2990,8 @@ shortened where it is long, so that it can be found there with its date.
   retained; advanced PR-body customization may be split later if evidence warrants it.
 
   The project template is the body skeleton; known installation facts fill it and project-specific
-  unknowns are identified for the crew before readiness. Multiple templates require a choice.
+  unknowns are identified for the crew before readiness. Multiple templates require a choice,
+  asked only once the installation is found to have something to add.
   Title and complete-body overrides accommodate a project's native work links and wording.
   No model infers authorization from project prose, no client story schema is imposed, and no
   tests or validation are claimed without actual results. The installer never marks the PR ready,

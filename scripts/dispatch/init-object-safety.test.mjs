@@ -3,7 +3,7 @@
 import { expect, it } from 'vitest'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { defaultGit } from './init-install.mjs'
+import { defaultGit, literalGit } from './init-install.mjs'
 import {
   bareRef, branchFiles, callerState, failing, fakeGitHub, git, isGit, makeRepo,
   pullWrites, remoteOf, runInit, setUpInitFixture, watchGit, writes,
@@ -75,10 +75,12 @@ it('ST-56/AC-3: installer Git reads original objects even if a replacement appea
   const cwd = makeRepo()
   const { base, originalBytes } = replaceObject(cwd)
   expect(git(cwd, 'show', `${base}:package.json`)).toContain('substituted')
-  const read = defaultGit(cwd, ['show', `${base}:package.json`])
+  // The runner init sends every command through.
+  const installerGit = literalGit(defaultGit)
+  const read = installerGit(cwd, ['show', `${base}:package.json`])
   expect(read.status, read.stderr).toBe(0)
   expect(read.stdout).toBe(originalBytes)
-  const tree = defaultGit(cwd, ['ls-tree', '--name-only', base])
+  const tree = installerGit(cwd, ['ls-tree', '--name-only', base])
   expect(tree.status, tree.stderr).toBe(0)
   expect(tree.stdout).not.toContain('foreign-only.txt')
   // No caller configuration or replacement ref was changed to obtain the original view.

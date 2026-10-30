@@ -20,8 +20,11 @@
  *
  * Every question has a flag, `--yes` takes the default of every question no flag answers, and with
  * no terminal a question with neither is refused, before anything is written (`QUESTIONS`). The
- * `land` question defaults to no: a new installation reviews and does not land unattended, and only
- * a yes at the question or `--land yes` writes `land: true`. `--yes` is not that yes.
+ * question that only shapes the pull request, which template its body is written from, is asked
+ * only once `init` has found something missing, so that a project with nothing missing is not asked
+ * it (`PULL_REQUEST_QUESTIONS`). The `land` question defaults to no: a new installation reviews
+ * and does not land unattended, and only a yes at the question or `--land yes` writes `land: true`.
+ * `--yes` is not that yes.
  *
  * It does nothing about branch protection: `steward protect` (`protect.mjs`) sets it, as a step of
  * its own once the gate is on `main`, and `init`'s closing message recommends it. It never marks
@@ -69,6 +72,7 @@ import {
   discoverTemplates,
   findLocalConflicts,
   inspectInstallation,
+  literalGit,
   openCheckout,
   originUrls,
   parentDirectories,
@@ -285,13 +289,22 @@ export const QUESTIONS = [
       if (!s.templates.includes(value)) throw new Refusal(`answer one of: ${s.templates.join(', ')}`)
       return value
     },
-    when: (s) => s.templates.length > 1 && !s.bodySupplied,
+    // Asked only once the plan has found something missing, so that a pull request is to be opened
+    // (`prNeeded`).
+    when: (s) => s.prNeeded && s.templates.length > 1 && !s.bodySupplied,
   },
 ]
 
+/**
+ * The questions whose answers only shape the installation pull request. `init` asks them after it
+ * has worked out what is missing, and not at all when nothing is: then there is no pull request.
+ */
+const PULL_REQUEST_QUESTIONS = QUESTIONS.filter((q) => q.id === 'prTemplate')
+const INSTALL_QUESTIONS = QUESTIONS.filter((q) => !PULL_REQUEST_QUESTIONS.includes(q))
+
 // `--yes`, `--ref`, `--codex-path` (where `codex` is when it is not on the PATH) and the flags that
 // shape the installation pull request are not questions (`--pr-template` is one only when the
-// project has several).
+// project has several templates and the installation has something to add).
 const OTHER_FLAGS = ['--yes', '--ref', '--codex-path', '--branch', '--pr-title', '--pr-body-file']
 const USAGE = [
   `usage: steward init [--yes] [--ref <commit>] [--codex-path <path>] [--branch <name>] [--pr-title <text>] [--pr-body-file <path>] ${QUESTIONS.map((q) => `[${q.flag} <answer>]`).join(' ')}`,
@@ -336,13 +349,14 @@ export function parseFlags(argv) {
  * by its default; otherwise at the terminal. Explicit answers are parsed even for an inactive
  * question, but only applicable answers are used. With no terminal, a question none of these
  * answers is collected as missing, and the result names every one, so the caller names them all
- * and writes nothing. Resolves `{ answers, missing }`.
+ * and writes nothing. Asks `questions`, every question unless a subset is given. Resolves
+ * `{ answers, missing }`.
  */
-export async function gather({ flags, state, terminal }) {
+export async function gather({ flags, state, terminal, questions = QUESTIONS }) {
   const answers = {}
   const missing = []
   const here = { ...state, answers }
-  for (const q of QUESTIONS) {
+  for (const q of questions) {
     const applies = !q.when || q.when(here)
     const given = flags.values[q.flag]
     if (given !== undefined) {
@@ -867,10 +881,12 @@ function failureReport({ error, phase, created, worktree, branch, repo, pullUrl 
  * `findExecutable` (where `codex` is on the PATH), `exists` (whether a path names a file), the
  * steward package's root (`packageRoot`, where its `package.json` and `templates/` are), the runner
  * of every git command (`git`, which takes the folder and the argument array and gives `{ status,
- * stdout, stderr }`), `transport` and the output. `transport(url)` maps a GitHub URL that has been
- * checked (the unambiguous origin URL, with rewrites refused) to the URL git
- * is run against; it is the identity unless a caller of `main` passes another, which only the tests
- * do (to reach a bare repository): neither the command line nor the environment reaches it.
+ * stdout, stderr }`, and is given every argument array with `--literal-pathspecs` and
+ * `--no-replace-objects` in front, by `literalGit`), `transport` and the output. `transport(url)`
+ * maps a GitHub URL that has been checked (the unambiguous origin URL, with rewrites refused) to
+ * the URL git is run against; it is the identity unless a caller of `main` passes another, which
+ * only the tests do (to reach a bare repository): neither the command line nor the environment
+ * reaches it.
  */
 export async function main(
   argv,
@@ -912,8 +928,22 @@ export async function main(
 /** The question's prompt, with the choices it offers when it has them. */
 const promptOf = (q, state) => (q.choices ? `${q.prompt} (${q.choices(state).join(', ')})` : q.prompt)
 
-async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExecutable, exists, packageRoot, git: runGit, writeUserConfig, transport, out }) {
+/** Refuses, naming every one, when `missing` holds questions that had no answer and no terminal. */
+function refuseUnanswered(missing, state, answers) {
+  if (missing.length === 0) return
+  throw new Refusal(
+    `init asks ${missing.length === 1 ? 'a question' : 'questions'} it has no terminal to ask and no answer for. ` +
+      `Answer with the flag${missing.length === 1 ? '' : 's'}, or pass --yes for the defaults (none covers a question with no default):\n` +
+      missing.map((q) => `  ${q.flag}: ${promptOf(q, { ...state, answers })}${q.default === null ? ' (no default)' : ` (default ${q.default})`}`).join('\n') +
+      '\nNothing was written.',
+  )
+}
+
+async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExecutable, exists, packageRoot, git, writeUserConfig, transport, out }) {
   const flags = parseFlags(argv)
+  // Every git command below, of the preflight and of the installation, goes through this one
+  // runner, which reads paths and objects literally (`literalGit`).
+  const runGit = literalGit(git)
 
   // Everything that can refuse comes before the first write.
   assertGitEnvironment(env)
@@ -1017,45 +1047,12 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   const usableTemplates = discovered.filter((t) => !t.endsWith('/'))
   const emptyTemplates = discovered.filter((t) => t.endsWith('/'))
 
-  const state = { userConfigMissing, codexExecutable, baseRulesFile, templates: usableTemplates, bodySupplied: suppliedBody !== null }
-  const { answers, missing } = await gather({ flags, state, terminal })
-  if (missing.length > 0) {
-    throw new Refusal(
-      `init asks ${missing.length === 1 ? 'a question' : 'questions'} it has no terminal to ask and no answer for. ` +
-        `Answer with the flag${missing.length === 1 ? '' : 's'}, or pass --yes for the defaults (none covers a question with no default):\n` +
-        missing.map((q) => `  ${q.flag}: ${promptOf(q, { ...state, answers })}${q.default === null ? ' (no default)' : ` (default ${q.default})`}`).join('\n') +
-        '\nNothing was written.',
-    )
-  }
-
-  // The pull request's body skeleton: the project's template (chosen when it has several), or
-  // steward's.
-  let chosenTemplate = null
-  if (suppliedBody === null) {
-    const wanted = flags.values['--pr-template'] === undefined ? undefined : canonicalPath(flags.values['--pr-template'].trim())
-    if (wanted !== undefined && !usableTemplates.includes(wanted)) {
-      throw new Refusal(
-        `--pr-template ${wanted}: not one of the project's pull request templates` +
-          (usableTemplates.length === 0 ? ' (it has none)' : `: ${usableTemplates.join(', ')}`),
-      )
-    }
-    chosenTemplate = wanted ?? answers.prTemplate ?? (usableTemplates.length === 1 ? usableTemplates[0] : null)
-  }
+  // The answers that decide what is installed. The pull request's own questions wait for the plan
+  // below, which says whether there is a pull request to open at all.
+  const state = { userConfigMissing, codexExecutable, baseRulesFile, templates: usableTemplates, bodySupplied: suppliedBody !== null, prNeeded: false }
+  const { answers, missing } = await gather({ flags, state, terminal, questions: INSTALL_QUESTIONS })
+  refuseUnanswered(missing, state, answers)
   const templateTexts = reader.texts(usableTemplates)
-  let skeleton = ''
-  if (suppliedBody === null) {
-    if (chosenTemplate === null) {
-      skeleton = await readFile(path.join(packageRoot, 'templates', 'pull_request_template.md'), 'utf8')
-    } else {
-      skeleton = templateTexts.get(chosenTemplate)
-      if (skeleton === null) {
-        throw new Refusal(
-          `${chosenTemplate} on origin/main is a symbolic link, so the body cannot be written from it: ` +
-            'choose another template with --pr-template, or give the whole body with --pr-body-file',
-        )
-      }
-    }
-  }
 
   // What the installation adds, from the base and the answers: each target is created only if the
   // base lacks it.
@@ -1107,9 +1104,44 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
     )
   }
 
+  // Only now that the plan is made is it known whether a pull request is needed: with nothing
+  // missing there is none, and no answer that shapes only the pull request is required. A
+  // --pr-template that was given is still checked either way, as every explicit answer is.
+  const prNeeded = toWrite.length > 0
+  const wanted = flags.values['--pr-template'] === undefined ? undefined : canonicalPath(flags.values['--pr-template'].trim())
+  if (wanted !== undefined && !usableTemplates.includes(wanted)) {
+    throw new Refusal(
+      `--pr-template ${wanted}: not one of the project's pull request templates` +
+        (usableTemplates.length === 0 ? ' (it has none)' : `: ${usableTemplates.join(', ')}`),
+    )
+  }
+  const symbolicLink = (rel) =>
+    new Refusal(
+      `${rel} on origin/main is a symbolic link, so the body cannot be written from it: ` +
+        'choose another template with --pr-template, or give the whole body with --pr-body-file',
+    )
+  if (wanted !== undefined && templateTexts.get(wanted) === null) throw symbolicLink(wanted)
+  const prState = { ...state, prNeeded }
+  const forPull = await gather({ flags, state: prState, terminal, questions: PULL_REQUEST_QUESTIONS })
+  refuseUnanswered(forPull.missing, prState, answers)
+  Object.assign(answers, forPull.answers)
+
+  // The pull request's body skeleton: the project's template (chosen when it has several), or
+  // steward's.
+  let skeleton = ''
+  if (prNeeded && suppliedBody === null) {
+    const chosenTemplate = wanted ?? answers.prTemplate ?? (usableTemplates.length === 1 ? usableTemplates[0] : null)
+    if (chosenTemplate === null) {
+      skeleton = await readFile(path.join(packageRoot, 'templates', 'pull_request_template.md'), 'utf8')
+    } else {
+      skeleton = templateTexts.get(chosenTemplate)
+      if (skeleton === null) throw symbolicLink(chosenTemplate)
+    }
+  }
+
   // A branch or pull request of that name already there is never reused: it is named, and init
   // stops.
-  const worktree = toWrite.length === 0 ? null : worktreePath(root, branch)
+  const worktree = prNeeded ? worktreePath(root, branch) : null
   if (worktree !== null) {
     let found
     try {

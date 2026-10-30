@@ -311,7 +311,7 @@ it.each(['after-stage', 'after-commit'])('ST-56/AC-3: working-file substitution 
   const cwd = makeRepo()
   const before = callerState(cwd)
   const runner = watchGit({ after: (args, dir, result) => {
-    if (result.status === 0 && (when === 'after-stage' ? isGit(args, '--literal-pathspecs', 'add') : args[0] === 'commit')) {
+    if (result.status === 0 && (when === 'after-stage' ? isGit(args, 'add') : args[0] === 'commit')) {
       writeFileSync(path.join(dir, 'REVIEW.md'), 'substituted bytes\n')
     }
   } })

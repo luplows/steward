@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { main, repoFromRemoteUrl } from './init.mjs'
-import { defaultGit } from './init-install.mjs'
+import { defaultGit, LITERAL_GIT_OPTIONS } from './init-install.mjs'
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 export const CLI = path.join(ROOT, 'scripts', 'dispatch', 'cli.mjs')
@@ -282,17 +282,23 @@ export async function runInit(args, { cwd, gh = fakeGitHub(), terminal = fakeTer
 }
 
 /**
- * A git runner that runs the real one and records every call as `{ cwd, args }`. `before(args,
- * cwd)` may return a result to give in place of running the command (`{ status, stdout, stderr }`);
- * `after` is called with the command's real result and may change it by returning another.
+ * A git runner that runs the real one and records every call as `{ cwd, argv, args }`: `argv` is
+ * the whole argument array init gave, and `args` the same without the `LITERAL_GIT_OPTIONS` init
+ * puts in front of every command (when they are there), so that a test can match on the git command
+ * itself.
+ * `before(args, cwd)` may return a result to give in place of running the command (`{ status,
+ * stdout, stderr }`); `after` is called with the command's real result and may change it by
+ * returning another.
  */
 export function watchGit({ before = () => undefined, after = () => undefined } = {}) {
   const calls = []
-  const runner = (cwd, args, options) => {
-    calls.push({ cwd, args })
+  const runner = (cwd, argv, options) => {
+    const prefixed = LITERAL_GIT_OPTIONS.every((option, i) => argv[i] === option)
+    const args = prefixed ? argv.slice(LITERAL_GIT_OPTIONS.length) : argv
+    calls.push({ cwd, argv, args })
     const instead = before(args, cwd)
     if (instead !== undefined) return instead
-    const real = defaultGit(cwd, args, options)
+    const real = defaultGit(cwd, argv, options)
     return after(args, cwd, real) ?? real
   }
   runner.calls = calls

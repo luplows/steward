@@ -132,9 +132,12 @@ or rolled back with it.
 
 The pull request's body is written from the project's own pull request template (a project with
 more than one names the one to use with `--pr-template <path>`, and `--yes` cannot choose; a
-project with none gets steward's own). Its `Unit:` line is set to `none` for the crew to confirm,
-and it lists the files added and left, the steward version, the checks `init` actually ran and what
-the crew still has to do. It claims no test run and no check of files that were already there.
+project with none gets steward's own). That choice is asked for only when something is missing:
+with nothing to add there is no pull request, so none is needed, though a `--pr-template` that is
+given must still name one of the project's templates. The body's `Unit:` line is set to `none` for
+the crew to confirm, and it lists the files added and left, the steward version, the checks `init`
+actually ran and what the crew still has to do. It claims no test run and no check of files that
+were already there.
 The generator version and installation workflow target are named even when a partial install adds
 no workflows; existing workflows and their pins are preserved and are not validated.
 Template comments and fenced examples are preserved as guidance. Generated facts use visible
@@ -166,8 +169,10 @@ options) and uses the configured identity without adding attribution.
 The push names the verified commit's full SHA, so a later local branch advance cannot change what
 is published.
 
-Installer-owned Git commands disable replacement-object lookup so their base, files and diff
-checks use the original objects GitHub sees. Existing replacement refs are preserved on refusal.
+Every Git command `init` runs reads paths and objects literally: paths as the names they are (a
+checklist named `docs/[r]eview.md` or `:(literal)REVIEW.md` is that file, not a pattern), and the
+original objects GitHub sees rather than any local replacement, for the base, files and diff
+checks. Existing replacement refs are preserved on refusal.
 
 All hooks in the installation worktree are disabled from worktree creation onward, including
 checkout, commit and push hooks. The caller's hook configuration is unchanged. The command and

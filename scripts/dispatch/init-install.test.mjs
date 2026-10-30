@@ -806,10 +806,10 @@ describe('ST-56/AC-3: only the installation diff', () => {
       EXPECTED_NEW.filter((f) => f !== 'REVIEW.md' && f !== '.github/workflows/review-gate.yml').map((f) => `A\t${f}`),
     )
     expect(out).toContain('left .github/workflows/review-gate.yml: already there')
-    const adds = watched.calls.filter((c) => c.args[0] === '--literal-pathspecs' && c.args[1] === 'add')
+    const adds = watched.calls.filter((c) => isGit(c.args, 'add'))
     expect(adds).toHaveLength(1)
-    expect(adds[0].args.slice(0, 3)).toEqual(['--literal-pathspecs', 'add', '--'])
-    expect(adds[0].args.slice(3).sort()).toEqual(EXPECTED_NEW.filter((f) => f !== 'REVIEW.md' && f !== '.github/workflows/review-gate.yml'))
+    expect(adds[0].argv.slice(0, 4)).toEqual(['--literal-pathspecs', '--no-replace-objects', 'add', '--'])
+    expect(adds[0].args.slice(2).sort()).toEqual(EXPECTED_NEW.filter((f) => f !== 'REVIEW.md' && f !== '.github/workflows/review-gate.yml'))
   })
 })
 
@@ -1333,7 +1333,7 @@ describe('ST-56/AC-7: bounded failures with recoverable evidence', () => {
   })
 
   it('ST-56/AC-7: a file that cannot be staged stops before the commit', async () => {
-    const watched = watchGit({ before: (args) => (args[0] === '--literal-pathspecs' && args[1] === 'add' ? failing('fatal: simulated failure', 128) : undefined) })
+    const watched = watchGit({ before: (args) => (isGit(args, 'add') ? failing('fatal: simulated failure', 128) : undefined) })
     const r = await failAt({ git: watched })
     expect(r.err).toMatch(/It stopped while staging the installation files\./)
     expect(watched.calls.some((c) => c.args[0] === 'commit' || c.args[0] === 'push')).toBe(false)
@@ -1550,7 +1550,7 @@ describe('ST-56/AC-9: the request allowlist, the source and the documents', () =
     }
     const install = codeOf('init-install.mjs')
     expect([...install.matchAll(/spawnSync\(([^,]+),/g)].map((m) => m[1])).toEqual(["'git'"])
-    expect(install).toContain("['--literal-pathspecs', 'add', '--', ...rels]")
+    expect(install).toContain("['add', '--', ...rels]")
     expect(install).toContain('`--force-with-lease=refs/heads/${branch}:`')
     expect(install).toContain("'commit', '--quiet', '-m', message")
     expect(install).not.toMatch(/'add',\s*'(-A|\.)'/)

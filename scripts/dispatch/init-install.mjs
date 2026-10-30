@@ -4,11 +4,13 @@
  * installation adds, and the steps that make the installation commit on a branch of its own.
  *
  * Every git command is an argument array run through an injectable runner (`defaultGit`), never a
- * shell string, so that a test can fail or interleave any one command. Nothing here stages,
- * stashes, resets, cleans, checks out, commits or moves a branch in the caller's checkout: the only
- * writes to it are the ones `git fetch` and `git worktree add` make to the repository's own
- * bookkeeping. The installation itself is made in a worktree of its own, from the commit
- * `origin/main` had when `init` fetched it (`captureBase`).
+ * shell string, so that a test can fail or interleave any one command; `init` hands every function
+ * here that runner wrapped by `literalGit`, so that every command reads paths and objects
+ * literally.
+ * Nothing here stages, stashes, resets, cleans, checks out, commits or moves a branch in the
+ * caller's checkout: the only writes to it are the ones `git fetch` and `git worktree add` make to
+ * the repository's own bookkeeping. The installation itself is made in a worktree of its own, from
+ * the commit `origin/main` had when `init` fetched it (`captureBase`).
  */
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -87,17 +89,35 @@ export function gitEnvironment(env) {
 }
 
 /**
+ * The global options every installer Git command carries, put in front of it by `literalGit`:
+ * `--literal-pathspecs`, so that a path read from the repository or the settings (a checklist named
+ * `:(literal)REVIEW.md` or `docs/[r]eview.md`) names that one path and is never read as pathspec
+ * magic or a wildcard; and `--no-replace-objects`, so that the objects compared and published are
+ * the real ones GitHub sees, even if another process installs a local replacement after the
+ * read-only preflight check. The caller's refs and configuration are never changed for either.
+ */
+export const LITERAL_GIT_OPTIONS = ['--literal-pathspecs', '--no-replace-objects']
+
+/**
+ * The one runner every installer Git command goes through: `run` (the injectable runner,
+ * `defaultGit` unless a test passes another) with `LITERAL_GIT_OPTIONS` in front of every argument
+ * array, so that no command can be written without them.
+ */
+export function literalGit(run) {
+  return (cwd, args, options) => run(cwd, [...LITERAL_GIT_OPTIONS, ...args], options)
+}
+
+/**
  * Runs `git` with `args` in `cwd` without a shell and resolves nothing it did not throw: `{ status,
  * stdout, stderr }`, `status` being `-1` when git could not start. `GIT_OPTIONAL_LOCKS=0` keeps a
- * read from refreshing the caller's index behind its back.
+ * read from refreshing the caller's index behind its back. `init` runs it only through
+ * `literalGit`.
  */
 export function defaultGit(cwd, args, { input, env = process.env, hooksPath } = {}) {
   // This override belongs only to installer-owned operations, including worktree add. No caller
   // configuration is changed. Callers doing preflight reads never supply it.
   if (hooksPath !== undefined) args = ['-c', `core.hooksPath=${hooksPath}`, ...args]
-  // Compare and publish the real objects GitHub sees, even if another process installs a local
-  // replacement after the read-only preflight check. The caller's refs/config are never changed.
-  const result = spawnSync('git', ['--no-replace-objects', ...args], {
+  const result = spawnSync('git', args, {
     cwd,
     input,
     encoding: 'utf8',
@@ -432,7 +452,7 @@ export function findLocalConflicts(run, root, base, relevant) {
   }
   const listInside = (dir, ignored) => {
     try {
-      return gitOut(run, root, ['--literal-pathspecs', 'ls-files', '--others', ...(ignored ? ['--ignored'] : []), '--exclude-standard', '-z', '--', dir])
+      return gitOut(run, root, ['ls-files', '--others', ...(ignored ? ['--ignored'] : []), '--exclude-standard', '-z', '--', dir])
         .split('\0')
         .filter((p) => p !== '')
     } catch (error) {
@@ -562,7 +582,7 @@ export function addWorktree(run, root, branch, dir, base) {
 
 /** Stages exactly the files `rels`, each by its own path. */
 export function stageFiles(run, dir, rels) {
-  gitOut(run, dir, ['--literal-pathspecs', 'add', '--', ...rels])
+  gitOut(run, dir, ['add', '--', ...rels])
 }
 
 /** The blob id git gives `content`, as a SHA-1 repository does. */
