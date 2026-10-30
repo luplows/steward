@@ -931,7 +931,7 @@ describe('ST-55/AC-3: an existing settings file keeps its authorization', () => 
     expect(out).not.toMatch(/wrote steward\.config\.json/)
     // It does not claim its land setting was set, changed or enabled.
     expect(out).not.toMatch(/land set to (true|false)|explicitly enabled|will not land any unattended|took the default/)
-    expect(out).toMatch(/An existing steward\.config\.json governs its own landing authorization: init did not read it or change its land setting/)
+    expect(out).toMatch(/An existing steward\.config\.json governs its own landing authorization: init read only its rulesFile, to find the existing checklist, and did not change its land setting/)
   })
 
   it('ST-55/AC-3: answering the question at the terminal does not change an existing file either', async () => {

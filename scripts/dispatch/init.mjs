@@ -763,8 +763,8 @@ export function userConfigBody(answers, codexExecutable) {
 export function landingNotes(settingsResult, answers, flags) {
   if (settingsResult === 'left') {
     return [
-      'An existing steward.config.json governs its own landing authorization: init did not read it or change its land setting, ' +
-        'so whether steward lands unattended is whatever that file already says.',
+      'An existing steward.config.json governs its own landing authorization: init read only its rulesFile, to find the existing checklist, ' +
+        'and did not change its land setting, so whether steward lands unattended is whatever that file already says.',
     ]
   }
   if (answers.land === true) {
