@@ -629,7 +629,7 @@ export function checkInventory(run, dir, base, expected) {
  */
 export function commitStaged(run, dir, message) {
   gitOut(run, dir, ['commit', '--quiet', '-m', message])
-  const [commit, ...parents] = gitOut(run, dir, ['rev-list', '--parents', '-n', '1', 'HEAD']).trim().split(' ')
+  const [commit, ...parents] = gitOut(run, dir, ['rev-list', '--parents', '--max-count=1', 'HEAD']).trim().split(' ')
   return { commit, parents }
 }
 
