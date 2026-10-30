@@ -38,6 +38,12 @@ change before the story is ready.
       the draft pull request, and the failure report with retained evidence.
 - [ ] **AC-5** — **Documentation.** `README.md`, `init`'s help and the design record describe the
       clone and the threat model, and every **Planned (ST-65)** marker is resolved.
+- [ ] **AC-6** — **Output written for a person.** Everything `init` prints, its questions,
+      refusals, failure report and closing message, is written for the member of the crew running
+      it: what happened, what was and was not changed, and what to do next, in the glossary's
+      words. Internal names (functions, phases as the code names them, Git plumbing) appear only
+      where the person needs them to act, such as a path, a branch or a command to run. Tests
+      assert the closing message of a successful installation, a no-diff run and a failed push.
 
 ## Out of scope
 
@@ -70,6 +76,8 @@ change before the story is ready.
   then.
 - `docs/planning-session.md`, "Writing it": a safety AC names a bounded threat model (added with
   this story).
+- Crew decision, 2026-10-30: the audience of `init`'s output is a person (AC-6). ST-56's tenth
+  review blocked #92 on a closing message that had become false, at `init.mjs:766` at `1c2fe25`.
 
 ## Open questions
 
