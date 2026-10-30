@@ -18,26 +18,83 @@ const SECTIONS = [
   { key: 'docs', title: 'Docs check', pattern: /^docs check$/i },
 ]
 
-const HEADING = /^(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$/
+const HEADING = /^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$/
 const UNIT_LINE = /^[ \t]*Unit:.*$/
 
 const list = (items) => items.map((item) => `- ${item}`)
 
-/** The headings of `lines` that are not one of the three the installer fills, as written. */
-function otherHeadings(lines) {
-  const found = []
-  for (const line of lines) {
-    const match = HEADING.exec(line)
-    if (match && !SECTIONS.some((s) => s.pattern.test(match[2].trim()))) found.push(line.trim())
+const headingTitle = (match) => match[2].trim().replace(/[ \t]+/g, ' ')
+
+/** End of a same-line code span, whose closing backtick run must have the same length. */
+function codeSpanEnd(line, from, length) {
+  for (let next = line.indexOf('`', from); next !== -1;) {
+    let end = next + 1
+    while (line[end] === '`') end++
+    if (end - next === length) return end
+    next = line.indexOf('`', end)
   }
-  return found
+  return -1
+}
+
+/**
+ * Read visible template lines without editing their source. HTML comments span lines; fenced
+ * examples are opaque, and escaped/inline-code comment markers do not open HTML comments.
+ * `safe[i]` records boundaries at which generated Markdown cannot fall inside either block.
+ */
+function templateVisibility(lines) {
+  let comment = false
+  let fence = null
+  const safe = []
+  const visible = lines.map((line, index) => {
+    safe[index] = !comment && fence === null
+    if (fence !== null) {
+      if (new RegExp(`^ {0,3}${fence.char}{${fence.length},}[ \\t]*$`).test(line)) fence = null
+      return { text: '', comments: [], heading: null }
+    }
+    const opening = !comment && /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line)
+    if (opening && !(opening[1][0] === '`' && opening[2].includes('`'))) {
+      fence = { char: opening[1][0], length: opening[1].length }
+      return { text: '', comments: [], heading: null }
+    }
+    let text = ''
+    const comments = []
+    for (let cursor = 0; cursor < line.length;) {
+      if (comment) {
+        const closing = line.indexOf('-->', cursor)
+        const end = closing === -1 ? line.length : closing + 3
+        comments.push(line.slice(cursor, end))
+        cursor = end
+        comment = closing === -1
+      } else if (line.startsWith('<!--', cursor)) {
+        comment = true
+      } else if (line[cursor] === '\\' && cursor + 1 < line.length) {
+        text += line.slice(cursor, cursor + 2)
+        cursor += 2
+      } else if (line[cursor] === '`') {
+        let end = cursor + 1
+        while (line[end] === '`') end++
+        const closing = codeSpanEnd(line, end, end - cursor)
+        end = closing === -1 ? end : closing
+        text += line.slice(cursor, end)
+        cursor = end
+      } else {
+        text += line[cursor++]
+      }
+    }
+    // A comment ending before a hash on the same line must not invent an ATX heading.
+    const heading = safe[index] && /^ {0,3}#{1,6}[ \t]/.test(line) ? HEADING.exec(text) : null
+    return { text, comments, heading }
+  })
+  safe[lines.length] = !comment && fence === null
+  return { visible, safe }
 }
 
 /**
  * The pull request body: `skeleton` (the text of the project's template, or of steward's) with its
  * `Unit:` line set to `none`, each of its What changed, Verification and Docs check sections that
  * it has completed after its own prompts, and, for any of the three it lacks, a labelled
- * "Installation summary" section at the end that holds that part.
+ * "Installation summary" section that holds that part. Generated blocks are placed outside
+ * comments/examples; an unfinished trailing block stays after the generated facts.
  *
  * `facts`: `repo`, `branch`, `baseSha`; `version` (the running installer package's version),
  * `pin` (the installation workflow target, as text, even when workflows were preserved) and
@@ -51,11 +108,13 @@ export function composePullRequestBody({ skeleton, facts }) {
   const lines = skeleton.split(/\r?\n/)
   while (lines.length > 0 && lines.at(-1) === '') lines.pop()
 
-  const unitIndex = lines.findIndex((l) => UNIT_LINE.test(l))
-  if (unitIndex !== -1) lines[unitIndex] = 'Unit: none'
+  const { visible, safe } = templateVisibility(lines)
+  const unitIndex = lines.findIndex((line, index) => safe[index] && UNIT_LINE.test(line) && UNIT_LINE.test(visible[index].text))
+  if (unitIndex !== -1) lines[unitIndex] = 'Unit: none' + visible[unitIndex].comments.map((text) => ` ${text}`).join('')
 
-  const unchecked = lines.filter((l) => /^[ \t]*[-*][ \t]+\[ \]/.test(l)).length
-  const others = otherHeadings(lines)
+  const unchecked = visible.filter(({ text }) => /^[ \t]*[-*][ \t]+\[ \]/.test(text)).length
+  const others = visible.filter(({ heading }) => heading && !SECTIONS.some((section) => section.pattern.test(headingTitle(heading))))
+    .map(({ text }) => text.trim())
   const blocks = {
     changed: changedBlock(facts, { unitFound: unitIndex !== -1, others, unchecked }),
     verification: verificationBlock(facts),
@@ -63,34 +122,45 @@ export function composePullRequestBody({ skeleton, facts }) {
   }
 
   const missing = []
+  const insertions = new Map()
+  const add = (index, content) => insertions.set(index, [...(insertions.get(index) ?? []), ...content])
+  const safeBoundary = (index, minimum = 0) => {
+    while (index >= minimum && !safe[index]) index--
+    return index
+  }
   for (const section of SECTIONS) {
-    const headingIndex = lines.findIndex((l) => {
-      const match = HEADING.exec(l)
-      return match !== null && section.pattern.test(match[2].trim())
-    })
+    const headingIndex = visible.findIndex(({ heading }) => heading && section.pattern.test(headingTitle(heading)))
     if (headingIndex === -1) {
       missing.push(section)
       continue
     }
     let end = lines.length
     for (let i = headingIndex + 1; i < lines.length; i++) {
-      if (HEADING.test(lines[i])) {
+      if (visible[i].heading) {
         end = i
         break
       }
     }
     while (end > headingIndex + 1 && lines[end - 1].trim() === '') end--
-    lines.splice(end, 0, '', ...blocks[section.key])
-    // The next heading, when there is one, keeps a blank line before it.
-    if (end + 1 + blocks[section.key].length < lines.length && lines[end + 1 + blocks[section.key].length].trim() !== '') {
-      lines.splice(end + 1 + blocks[section.key].length, 0, '')
+    end = safeBoundary(end, headingIndex + 1)
+    if (end <= headingIndex) {
+      missing.push(section)
+      continue
     }
+    add(end, ['', ...blocks[section.key], ...(end < lines.length && lines[end].trim() !== '' ? [''] : [])])
   }
 
   if (missing.length > 0) {
-    lines.push('', '## Installation summary', '')
-    lines.push('This section holds what `steward init` knows about the installation, because the template above has no section for it.')
-    for (const section of missing) lines.push('', `**${section.title}**`, '', ...blocks[section.key])
+    const summary = ['', '## Installation summary', '',
+      'This section holds what `steward init` knows about the installation, because the template above has no section for it.']
+    for (const section of missing) summary.push('', `**${section.title}**`, '', ...blocks[section.key])
+    const end = safeBoundary(lines.length)
+    add(end, [...summary, ...(end < lines.length ? [''] : [])])
+  }
+  // Plan against the original template, then insert backwards so examples and comments keep
+  // their bytes and cannot become section boundaries as generated content is added.
+  for (const [index, content] of [...insertions].sort(([a], [b]) => b - a)) {
+    lines.splice(index, 0, ...content)
   }
   return `${lines.join(eol)}${eol}`
 }

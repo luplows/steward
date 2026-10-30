@@ -137,6 +137,8 @@ and it lists the files added and left, the steward version, the checks `init` ac
 the crew still has to do. It claims no test run and no check of files that were already there.
 The generator version and installation workflow target are named even when a partial install adds
 no workflows; existing workflows and their pins are preserved and are not validated.
+Template comments and fenced examples are preserved as guidance. Generated facts use visible
+headings or a visible installation summary, so commented example headings cannot hide them.
 `--pr-title <text>` replaces the title (`Install Steward review gate`), `--pr-body-file <path>` uses
 a file as the whole body, and `--branch <name>` replaces the branch name `steward/install`. `init`
 never reuses, moves or deletes an existing branch or pull request of that name: it names it and
