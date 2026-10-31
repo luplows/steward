@@ -137,6 +137,9 @@ The threat model is one member of the crew running one `init` from an ordinary c
   configured; URL rewrites are no longer refused; the clone is always kept, with a note to remove
   it; files `init` did not change are ignored; a rerun after a partial failure needs the branch
   removed by hand. Crew decision, 2026-10-30: `init`'s output is written for a person (AC-7a).
+- Crew decision, 2026-10-31: the body is a generated section followed by the template (AC-6);
+  0.1 keeps `--branch` and `--pr-template`, and `--pr-title` and `--pr-body-file` are deferred
+  to ST-65, since the crew can edit the draft's title and body on GitHub.
 - `scripts/dispatch/init.mjs` on `main`: `run`, `originRepo`, `repoFromRemoteUrl`,
   `findPullRequestTemplates`, `writeNew`, `ensureLabels`, `createInitContext` and
   `landingNotes`. Today it writes into the caller's checkout, and the crew commits and opens the
@@ -147,6 +150,4 @@ The threat model is one member of the crew running one `init` from an ordinary c
 
 ## Open questions
 
-- **Flags.** The planning session recommends keeping `--branch` and `--pr-template` and deferring
-  `--pr-title` and `--pr-body-file` to 0.2 (ST-65), since the crew can edit the draft's title and
-  body on GitHub. Does the crew agree?
+*(none)*

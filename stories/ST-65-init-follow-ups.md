@@ -47,8 +47,8 @@ Candidates for 0.2, for the crew to choose among:
 
 - **Remove the clone after a success.** In 0.1 the clone is always kept and the closing message
   asks the person to remove it (crew, 2026-10-31).
-- **`--pr-title` and `--pr-body-file`**, if the crew defers them from ST-56: a title for projects
-  with naming conventions, and a whole body supplied from a file.
+- **`--pr-title` and `--pr-body-file`**, deferred from ST-56 (crew, 2026-10-31): a title for
+  projects with naming conventions, and a whole body supplied from a file.
 - **Fill the template's sections** with the installation's facts, instead of a generated section
   above the template.
 - **A rerun that resumes its own branch** after a partial failure, instead of the branch being
