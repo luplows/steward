@@ -12,244 +12,147 @@ blocked: null
 
 As a developer installing steward into an existing GitHub project, I want `steward init` to
 commit its installation on a separate branch and open a reviewable pull request, so that the
-crew can inspect and adopt it without manually assembling the commit and pull request.
+crew can inspect and adopt it without manually assembling the commit and pull request. It is a
+command one person runs once per project: it covers the happy path, says plainly what it did,
+and stops cleanly when something goes wrong, rather than defending against every Git setup.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — **Preflight before effects.** Before creating files, labels, user config,
-      a branch or a PR, resolve the checkout and its GitHub `origin`, authenticate, fetch
-      `origin/main` and capture its full commit SHA as the installation base. Accept a feature
-      branch, detached HEAD or checkout behind/ahead of that base, and unrelated staged,
-      unstaged, untracked or ignored work. An in-progress merge/rebase alone is not a refusal;
-      AC-1a defines the relevant conflicts. Never stage, stash, reset, clean, rebase, commit or
-      overwrite the caller's work. Refuse an unreadable/unborn HEAD or invalid checkout with
-      exit 2, naming the reason and actionable remedy. Missing/non-GitHub origin,
-      missing `main`, invalid flags/answers, and unanswered non-interactive questions also
-      refuse before effects. Failed authentication/network requests exit 1, without claiming
-      a missing repository or a successful installation. Fetching refs is allowed in preflight.
-      AC-1b's unsupported-Git-environment refusal must happen before any fetch or worktree creation.
-- [ ] **AC-1a** — **Relevant local conflicts.** Before effects, derive installation targets
-      and template selection from the captured base and explicit answers, not the caller's
-      feature files. Relevant paths are `steward.config.json`, the checklist path selected
-      from the base settings or new-install answers, the gate/runway workflows, inspection's
-      workflow when requested, and every PR-template file/directory location discovered by
-      the existing template finder (including locations where adding/removing a template
-      would change discovery). Include ancestor paths whose type or symlink changes affect
-      access to those paths. Inspect committed caller changes since its merge base with the
-      captured base, staged changes relative to HEAD, unstaged changes relative to the index,
-      and untracked/ignored entries. Refuse with exit 2 if any such change affects a relevant
-      path, including an addition, modification, deletion, either side of a rename, type change,
-      symlink or unmerged index entry. Check each layer independently: a staged change undone
-      in working files still counts. Upstream-only changes since the merge base do not count
-      as caller changes. With no common ancestor, compare caller HEAD directly with the base
-      for relevant differences. Name each conflict and advise resolving it or using another
-      checkout; never suggest discarding unrelated work. Refuse if the comparison cannot be
-      completed reliably. Never copy local versions into the installation worktree or silently
-      ignore a relevant conflict, including on the no-diff path or with a supplied PR body.
-- [ ] **AC-1b** — **Explicit supported-Git-environment boundary.** Before fetching or
-      creating any file, label, user config, branch, worktree or PR, inspect the
-      effective Git configuration and Git-related environment affecting the caller checkout.
-      For 0.1, refuse (exit 2) with the unsupported key/source and a concrete way to run in
-      a simpler checkout if **any** `url.*.insteadOf` or `url.*.pushInsteadOf` rule is
-      configured, even one that appears unrelated to `origin`; never try to validate just a
-      single step of a possibly chained rewrite. Also refuse any `remote.origin.pushurl`
-      (including multiple values), enabled per-worktree config (`extensions.worktreeConfig`
-      or a repository `config.worktree`), any relative `core.hooksPath` or hooks path
-      resolving inside a Git metadata directory, and inherited `GIT_*` environment
-      variables that can alter repository discovery, configuration, transport, identity or
-      hooks. Unknown or uninspectable effective configuration refuses rather than
-      assuming an ordinary origin. The preflight must bind `origin` to one unambiguous
-      GitHub repository and ensure the fetch and create-only push have that same destination;
-      never re-feed a once-rewritten URL into Git as if it were the unchanged original.
-      Tests cover chained `insteadOf`, `pushInsteadOf`, multiple `pushurl` values,
-      per-worktree config, relative `.git/hooks` in both ordinary and linked worktrees,
-      inherited Git overrides, and an ordinary valid GitHub origin; every refusal produces
-      no mutation and no network write.
-- [ ] **AC-2** — **One isolated installation branch.** Work in a new worktree beside the main
-      checkout, under `<checkout>.worktrees/`, from that captured base SHA. Default branch:
-      `steward/install`; `--branch <name>` permits the project's naming convention. Validate
-      the name as a git branch, refuse `main` and `release/` names, and refuse any existing
-      local or remote branch of that name, including one checked out in another worktree.
-      Look for an existing open PR with that exact repository/head/base and print its URL on
-      refusal. Do not reuse, move, append to, delete or force-update an existing branch or PR.
-      The initial push must atomically require that the remote branch does not exist, so a
-      concurrent installer cannot overwrite it. Use a hook-disabled Git environment for the
-      installation worktree beginning with `git worktree add`, not only for the commit;
-      a post-checkout hook must not create installation targets before they are inventoried.
-      Leave the caller's HEAD, branch, index and working files unchanged on success and every
-      failure.
-- [ ] **AC-3** — **Only the installation diff.** Preserve the installer's create-only file
-      writes and reporting of files left alone, pinned workflows and optional inspection.
-      Only repository files newly created by this invocation may be staged and committed:
-      `steward.config.json`, the chosen checklist, the thin gate/runway/optional inspection
-      workflows, and a PR template only when none exists. Stage explicit paths, never `add -A`.
-      Record each path and generated byte content this invocation actually created. Reject a
-      pre-existing path or one created by any other process after the worktree was prepared;
-      do not adopt it as a generated file. Before commit and push, verify the installed worktree
-      and staged tree match that recorded inventory byte-for-byte, and check that the resulting
-      commit's diff against the captured base contains only those additions with their generated
-      contents. Unexpected or substituted edits stop the operation.
-      An ignored or otherwise local-only file at an installation target in the caller's
-      checkout causes a named preflight refusal, rather than being overwritten, copied or
-      silently replaced by a generated version in the worktree. Never overwrite a tracked
-      file, repin an existing workflow or import unrelated local commits/files into the PR.
-- [ ] **AC-4** — **Existing and partial installations.** For a partially installed base, add
-      only missing files and report every preserved file, even if its contents are invalid or
-      different from the package's. If `steward.config.json` exists, read only its `rulesFile`
-      to choose the checklist target; validate that path with the existing rules-file path
-      validator. Refuse malformed JSON, a missing/invalid `rulesFile`, or a conflicting explicit
-      `--rules-file`, before effects, rather than silently writing an unused checklist.
-      Preserve the settings bytes and chosen `land` value. When no repository files are
-      missing, exit 0 saying no installation PR is needed; create no branch, empty commit,
-      push or PR. Existing label/user-config provisioning may still finish, with its
-      normal preservation rules. Rerunning after a merged installation is this no-diff case;
-      rerunning while its branch exists is AC-2's refusal, with no duplicate PR.
-- [ ] **AC-5** — **Create and report the draft PR.** For a nonempty verified diff, make one
-      installation commit, push only the new branch to `origin`, then create one **draft** PR
-      against `main` in that same repository. Print the repository, branch, base, full commit
-      SHA and returned PR URL. Do not report completion until GitHub confirms the PR and its
-      draft state. For 0.1, an accepted ordinary commit identity has effective Git
-      `user.name` and `user.email` both present and nonblank; `commit.gpgSign` must be absent
-      or effectively `false`. Refuse an absent/blank identity, unreadable signing setting or
-      enabled `commit.gpgSign` (including `true` expressed through Git's accepted boolean
-      forms) **before effects**, naming the key and a remedy. Configured signing keys or GPG
-      tool paths are permitted when signing is disabled, because they do not sign this commit;
-      no identity/signature override is supplied, no new author or attribution is invented,
-      and Git's effective identity is used. **Disable all Git hooks in the installation
-      worktree**, including checkout and commit hooks, by using a known empty hooks location
-      for every installer-owned Git operation; never disable hooks in the caller's checkout.
-      Always explain the bypassed installation hooks in command output so the crew can run
-      necessary project-specific checks before approving. Include the disclosure in the
-      **generated** PR body; AC-6 governs an explicitly supplied verbatim body instead.
-      Keep the finished branch;
-      remove only the invocation's clean worktree after confirmed success.
-- [ ] **AC-6** — **Write the body as the project expects.** Use the existing project PR
-      template as the body skeleton, retaining its headings and project-specific prompts.
-      With one template select it; with several, require `--pr-template <repository-path>`
-      naming one discovered template (an interactive question with no default, or a flag;
-      `--yes` cannot choose for the crew). An empty template directory counts as no usable
-      template and is reported. With no usable template, use the package's template.
-      Populate the body with the generated-file list, preserved-file list, steward version or
-      explicit pin, actual installer checks and their outcomes, and remaining crew actions.
-      Fill the standard What changed, Verification and Docs check sections when present;
-      otherwise include these facts in a clearly labelled installation summary within the
-      chosen skeleton. Do not claim tests ran, that preserved files were validated, or that
-      an existing installation is compatible. Identify project-specific requirements the
-      deterministic installer cannot complete as crew follow-up before readiness; do not
-      invent issue links, story IDs or completed work. Offer `--pr-title <text>` and
-      `--pr-body-file <path>` overrides; read the latter before effects and use its contents
-      verbatim, without requiring steward's headings or a `Unit:` schema. With
-      `--pr-body-file`, never append the hook disclosure to the supplied body or refuse it
-      solely because the disclosure is absent. Instead, print the hook-bypass disclosure
-      and a specific instruction to add it to the PR body before marking the installation
-      ready; report this outstanding crew action even when the supplied body has no such
-      wording. Template selection applies only without a supplied body; that override
-      needs no template choice. The default
-      title is `Install Steward review gate`. In the generated body, fill an existing `Unit:` line
-      with `none` and flag it for crew confirmation; preserve a supplied body's unit link.
-      Do not edit an existing project template or impose steward's story format.
-- [ ] **AC-7** — **Bounded failures with recoverable evidence.** A write, hook, commit, push,
-      label, user-config or PR-creation failure exits 1 and stops subsequent mutations.
-      A leftover or colliding temporary user-config file that this invocation did not create is
-      **never deleted, overwritten or claimed as owned**; report the collision and refuse
-      provisioning without falsely returning “user config already exists” or success when the
-      intended settings file is absent. Check that the intended target is actually present
-      and valid before calling settings provisioning successful.
-      Report the failed phase and every resource already created: worktree, local branch,
-      commit, remote branch, PR URL if known, labels and user-config path. Keep unfinished
-      work for inspection, with concrete instructions to finish the push/PR by hand or inspect
-      GitHub before retrying an ambiguous network result. Never retry a mutation blindly,
-      delete remote work, remove user work, or roll back labels or user config. A rerun
-      does not infer ownership of an existing branch from its name. Labels and the user config
-      remain explicitly reported effects outside the PR; neither is claimed atomic
-      with it. Install nothing into a project's dependencies and run no project setup/check.
-- [ ] **AC-8** — **Adoption and activation remain separate.** Keep ST-55's new-install
-      review-only default, explicit unattended opt-in, existing-setting preservation and
-      explanation of ST-54's manual gated landing path. Never start a reviewer, coder,
-      rotation, coordinator or scheduler, register/enable a project locally, request landing,
-      enable auto-merge or alter branch protection. Output and generated PR body explain that
-      the crew reviews and merges the installation through the project's existing process;
-      a fresh install cannot review itself under the gate it introduces. Where a gate already
-      exists, its existing rules still apply: init bypasses none. Merging grants no local
-      execution permission. Recommend optional `steward protect` only after adoption; do not
-      invent or run an activation command that has not been delivered.
-- [ ] **AC-9** — **Evidence and documentation.** Add Vitest cases named `ST-56/AC-N` using
-      temporary real git repositories/worktrees and a bare remote, with GitHub and user config
-      injected. Show successful installation from clean main, ahead/behind/divergent
-      feature branches and detached HEAD with unrelated committed or staged/unstaged/untracked/
-      ignored work; include unrelated in-progress merge/rebase state. Prove the installation
-      commit's parent is the captured fetched base and caller HEAD/index/files stay unchanged.
-      Refuse relevant conflicts in each AC-1a layer, including deletion, rename source and
-      destination, type/symlink changes, unmerged entries and cancelling index/worktree edits.
-      Cover upstream-only differences, no common ancestor, comparison failure, ignored target
-      collisions, template-discovery changes, no-diff conflicts and local/remote branch collisions,
-      a racing push, malformed/conflicting partial settings, preservation of custom rules and
-      true/false authorization, a partial addition, no-diff rerun, and failures at each mutation
-      phase. Use a two-stage Git URL rewrite that redirects an apparently valid `origin` on its
-      second application, a linked-worktree `.git` file with `core.hooksPath=.git/hooks`, a
-      `post-checkout` hook creating the checklist, and an unowned `config.json.<pid>.tmp`
-      collision to prove the new refusals and ownership checks. Include positive evidence that
-      valid `user.name`/`user.email` with unset or false `commit.gpgSign` succeeds even
-      when an unused signing key is configured; missing identity and enabled signing refuse
-      before effects. Verify generated PR bodies disclose skipped hooks, and a supplied
-      `--pr-body-file` lacking the disclosure is preserved byte-for-byte while command
-      output explicitly reports both the bypass and the crew action. Assert exact commit/diff
-      contents, draft PR arguments/body, no mutation after failure and unchanged caller state. Cover one/multiple/empty templates and both overrides.
-      Update the old no-commit/no-push and labels-only assertions to test this bounded contract;
-      retain the independent overwrite, pinning, template, settings and protection safeguards.
-      Tests send no real GitHub writes or agent invocations. Update README installation guidance,
-      command help, affected project-settings and user-config guidance, and release-walkthrough
-      instructions. Resolve every **Planned** marker naming ST-56 in `docs/` to the
-      delivered behaviour.
+- [ ] **AC-1** — **Read only the checkout's root and `origin`.** `init` reads the caller's
+      checkout root and `origin`'s URL, and nothing else about the checkout. `origin` must name
+      one GitHub repository, and the GitHub credential must work; otherwise `init` exits 2,
+      saying which, before any write. `init` fetches nothing into the caller's repository and
+      writes nothing there: its branch, index, working files, ignored files, refs and
+      configuration are the same afterwards. Tests start from a checkout on a feature branch with
+      staged, unstaged and untracked changes, and show its files, `git status --porcelain=v1
+      --ignored` and `git for-each-ref` output unchanged after a successful installation, a
+      no-diff run and a failed push.
+- [ ] **AC-1a** — **The caller's own work is not examined.** `init` neither looks at nor refuses
+      because of the caller's uncommitted, unrelated or conflicting work, including local edits
+      to files the installation adds; the installation comes from `origin`'s `main`. A test
+      with local edits to an installation target in the caller's checkout shows the installation
+      made from `origin`'s `main` and the caller's edits untouched.
+- [ ] **AC-1b** — **Git runs as configured.** `init` refuses no Git configuration or environment
+      (URL rewrites, hooks, signing, identity and the like) and changes none. It runs Git as the
+      user's own configuration makes it run, and a Git command that fails is AC-7's failure,
+      reported with Git's own message. A test whose commit hook rejects the commit shows AC-7's
+      report.
+- [ ] **AC-2** — **A fresh clone and a new branch.** `init` clones `origin`'s `main` into a new
+      temporary directory it creates, and takes `main`'s commit there as the installation's
+      base. Everything `init` reads about what the project already has (existing installation
+      files, the existing `steward.config.json`'s `rulesFile`, pull request templates) is read
+      from that clone, and every file it adds is written there, on a new branch from the base:
+      `steward/install`, or `--branch <name>`. `init` exits 2 if that branch already exists on
+      `origin` or a pull request is open from it, naming which. This refusal, and AC-6's, come
+      after the clone is made and before any installation file is written, any commit, push,
+      label, user config or pull request; the clone is the only thing written before them, and it
+      is kept, with its path printed, as after every run (AC-7a).
+- [ ] **AC-3** — **Only the installation's files.** `init` stages exactly the files it wrote and
+      makes one commit of them on the branch. Tests show the commit's only parent is the base and
+      its changes are exactly those files.
+- [ ] **AC-4** — **Additions only, and nothing when nothing is missing.** Each installation file
+      is written only where the base lacks it, and a file the base has is left byte for byte.
+      From an existing `steward.config.json`, `init` reads only `rulesFile`, to find the
+      existing checklist, and never changes its `land` setting. When nothing is missing, `init`
+      exits 0 saying the installation is already complete, and creates no branch, commit, push or
+      pull request; labels and user config are still provisioned as `init` provisions them today.
+- [ ] **AC-5** — **One push, one draft pull request.** `init` pushes the branch to `origin` and
+      opens one **draft** pull request from it against `main` in the same repository, then
+      prints the repository, branch, base commit, installation commit and the pull request's URL.
+      It never marks the pull request ready, merges it, requests landing or changes protection.
+- [ ] **AC-6** — **The pull request's body.** The pull request's title names steward and its
+      version. Its body is a generated installation section followed by the project's pull
+      request template unchanged, for the crew to fill. The generated section lists the files
+      added and the files left as they were and steward's version or pin. For landing, it gives
+      the `land` value `init` wrote, or, when `steward.config.json` was preserved, says that the
+      existing file governs landing and that `init` did not read it for that (AC-4). It says what
+      to check before marking the pull request ready: that the gate cannot review the pull
+      request that installs it, and that `steward protect` comes after it merges. With one
+      template that one is used; with several, `--pr-template <path>` chooses, and is required
+      only when a pull request is to be opened (exit 2, naming the templates, at the point AC-2
+      gives); with none, steward's own template is used. Nothing is inserted inside the
+      template's text.
+- [ ] **AC-7** — **A failure stops and says what is left.** When a step after the clone fails,
+      `init` stops, exits 1, and says in plain words which step failed, Git's or GitHub's message,
+      what now exists (the clone's path, whether the branch is on `origin`, the pull request's
+      URL if one was opened) and what to do next, such as deleting the branch by hand before a
+      rerun, or rerunning with another `--branch`. It retries nothing, deletes nothing on `origin`
+      and rolls back no label or user config.
+- [ ] **AC-7a** — **Output written for a person.** Everything `init` prints, its questions,
+      refusals, failure report and closing message, is written for the member of the crew running
+      it: what happened, what was and was not changed, and what to do next, in the glossary's
+      words. Internal names (functions, the code's names for steps, Git plumbing) appear only
+      where the person needs them to act, such as a path, a branch or a command to run. The clone
+      is always kept, and the closing message gives its path and asks the person to remove it
+      when done. Tests assert the closing message of a successful installation, a no-diff run and
+      a failed push.
+- [ ] **AC-8** — **Adoption and activation remain separate.** ST-55's review-only default and
+      explicit `--land yes` opt-in are unchanged. Neither `init` nor merging its pull request
+      activates a project, starts the coordinator or starts a review, rotation or landing
+      (ST-57/AC-6).
+- [ ] **AC-9** — **Tests and documentation.** Vitest cases named `ST-56/AC-N` use temporary real
+      Git repositories and a local bare repository standing in for `origin`, reached through a
+      URL mapping that only tests pass. GitHub is injected; no test writes to GitHub or starts a
+      model. They cover a full installation, a partial one, a no-diff run, each refusal of AC-1,
+      AC-2 and AC-6, a rejected commit, a failed push and a failed pull request request.
+      `README.md`'s installation steps, `init`'s help, `docs/settings.md` and every other
+      document describing how `init` delivers its files say what this story delivers, and every
+      **Planned** marker naming ST-56 in `docs/` is resolved.
 
 ## Out of scope
 
-- Implementing or revising ST-54's manual landing authorization, ST-55's defaults, or ST-53's
-  waiting policy. This story consumes them and changes only installation delivery.
-- Coordinator activation, discovery, scheduling, stop/status controls, coding or fixing.
-- Arbitrary base branches, fork/upstream PRs, non-GitHub installation, upgrades, repairing or
-  migrating existing files, repinning, or automatic recovery/reuse of an existing branch.
-- Parsing project planning prose, migrating unit conventions, creating adoption issues or
-  stories, adding CI, running a client's tests, or installing in client repositories now.
-- Merging the installation, granting a gate exception, setting protection, **running hooks in
-  the installer-owned worktree**, adding credentials/secrets, or changing the user-config
-  schema. Supporting complex URL rewrites, pushurl, per-worktree Git configuration, repository
-  environment overrides, **enabled commit signing**, or custom hook execution is separate
-  future compatibility work.
+The threat model is one member of the crew running one `init` from an ordinary checkout
+(Constraints). Outside it, and not to be guarded against, for 0.1:
+
+- Other processes or installers changing `origin`, the clone or the caller's checkout while `init`
+  runs. A branch created on `origin` after AC-2's check is whatever `git push` reports.
+- Unusual or adversarial Git configuration: URL rewrites, hooks, signing, filters, replacement
+  refs, `init.templateDir` and the like (AC-1b).
+- File names the platform cannot check out.
+- Removing the clone after a success; a rerun that resumes its own branch; filling the
+  template's sections; `--pr-title` and `--pr-body-file`. These are ST-65's candidates for 0.2.
+- Implementing or revising ST-54's manual landing authorization, ST-55's defaults or ST-53's
+  waiting policy; changing which files `init` installs (ST-44), its questions, its labels or the
+  user config schema.
+- Coordinator activation, discovery, scheduling, coding or fixing; merging the installation,
+  granting a gate exception or setting protection.
+- Arbitrary base branches, fork or upstream pull requests, non-GitHub installation, upgrades,
+  repairing or migrating existing files, and repinning.
 
 ## Constraints
 
-- Node 24, ESM, no new runtime dependencies or model calls. Keep git operations as argument
-  arrays without shell interpolation; scope the GitHub request allowlist to the installation's
-  repository and operations. No push to main, release branches or tags, and no force overwrite.
-- Existing files remain create-only. The narrow read of an existing project's `rulesFile`
-  selects its native checklist; it does not migrate settings or validate preserved file content.
-- Any rejection of unsupported Git configuration is a **read-only preflight refusal**; never
-  “normalize” or repair the caller's repository configuration. Hook bypass is restricted to the
-  installer-owned worktree and must not be represented as running the project's commit checks.
+- **Threat model:** one member of the crew, one run, an ordinary checkout. The pull request is a
+  draft that the crew and the project's own process review before anything lands; `init` need
+  prove no more than that it only adds files there and changes nothing else.
+- Start from `main`'s `init`, fresh. #92, the earlier implementation of this story, is closed and
+  is not the starting point.
+- Node 24, ESM, no new runtime dependencies or model calls. Git runs as argument arrays without a
+  shell. The GitHub requests stay within the installation's repository and operations. No push
+  to `main`, a release branch or a tag, and no force push.
 
 ## Context
 
 - Crew request, 2026-10-26: init creates a reviewable installation PR; write its body as the
   project expects. Design doc, "Installation through a reviewable pull request"; roadmap 0.1.
-- Crew decision, 2026-10-27: allow unrelated local work and feature branches; the captured
-  fetched base and relevant-path checks protect installation without requiring a clean caller.
-- `scripts/dispatch/init.mjs`: `run`, `writeNew`, `findPullRequestTemplates`, `ensureLabels`,
-  `createInitContext` and `assertAllowedRequest`; current git calls only read root/origin.
-- `scripts/dispatch/init.test.mjs`: ST-44's overwrite, pinning, user config and no-commit
-  tests; ST-50's protection exclusions and closing-message tests. No PR is created today.
-- `scripts/dispatch/rules-file-path.mjs`: existing checklist-path validation.
-- ST-55 precedes this story, and ST-54 precedes ST-55. ST-55's no-commit constraint applies
-  to its own implementation; this story deliberately supersedes that delivery contract later.
-  Neither story's acceptance criteria or stable IDs are changed here.
-- Crew decision, 2026-10-27, following three blocked reviews of implementation PR #92:
-  narrow ST-56 from arbitrary Git-configuration compatibility to an explicit, observable
-  supported subset. Prefer refusing complex remotes, worktree configuration, hooks and
-  environment overrides over trying to prove them safe through one-step stand-in checks;
-  installer-owned hooks are intentionally disabled and must be disclosed. Keep the useful
-  independent caller-work protections in AC-1a.
-- Size: one installer transaction and its refusal/reporting paths. Keep recovery manual and
-  existing branches immutable to avoid a second resume/ownership mechanism in this story.
+- Crew decision, 2026-10-31: rescope this story to the happy path, "way too resilient and focused
+  on the edge cases" as it was. The contract of 2026-10-27 (a restricted Git environment, hooks
+  disabled, caller-work comparisons, invocation-owned temporary files) is replaced by this one.
+  #92 implemented that contract, was blocked eleven times and is closed; `git log` of this file
+  holds the earlier versions.
+- Crew decisions, 2026-10-31: the installation is made in a fresh clone; Git runs as
+  configured; URL rewrites are no longer refused; the clone is always kept, with a note to remove
+  it; files `init` did not change are ignored; a rerun after a partial failure needs the branch
+  removed by hand. Crew decision, 2026-10-30: `init`'s output is written for a person (AC-7a).
+- Crew decision, 2026-10-31: the body is a generated section followed by the template (AC-6);
+  0.1 keeps `--branch` and `--pr-template`, and `--pr-title` and `--pr-body-file` are deferred
+  to ST-65, since the crew can edit the draft's title and body on GitHub.
+- `scripts/dispatch/init.mjs` on `main`: `run`, `originRepo`, `repoFromRemoteUrl`,
+  `findPullRequestTemplates`, `writeNew`, `ensureLabels`, `createInitContext` and
+  `landingNotes`. Today it writes into the caller's checkout, and the crew commits and opens the
+  pull request by hand (`README.md`, installation steps).
+- ST-55 precedes this story, and ST-54 precedes ST-55. Neither story's acceptance criteria or
+  stable ids are changed here.
+- `docs/planning-session.md`, "Writing it": a safety criterion names a bounded threat model.
 
 ## Open questions
 

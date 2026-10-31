@@ -35,6 +35,12 @@ pull request" section included, except where this file says otherwise.
   request, marked as not yet built.
 - Record each decision as the crew's statement, dated, with the options considered, and correct
   every other copy of a claim it revises.
+- Bound every safety acceptance criterion by a stated threat model: whose use it protects, and
+  against what, such as one member of the crew running one command from an ordinary checkout.
+  Name what it does not cover under **Out of scope**. A criterion promising safety under any
+  configuration, or against any concurrent process, cannot be finished: a review can always find
+  one more case, and each fix adds code for the next review to search (crew, 2026-10-30, after
+  ST-56's reviews).
 - Before opening the pull request, run `node scripts/lint-stories.mjs` and
   `node scripts/dispatch/queue.mjs`. The story should lint with no blocking violation, and the
   queue should show the status you intend: `draft` while its Open questions section holds

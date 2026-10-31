@@ -2919,7 +2919,8 @@ shortened where it is long, so that it can be found there with its date.
     the crew also deferred exhaustive crash-window handling, arbitrary-descendant
     termination proofs and OS-specific containment rather than making them 0.1 prerequisites.
 
-  **Planned (ST-56):** revised by the crew on 2026-10-27 after three blocked
+  **Superseded by the crew's rescope of ST-56, 2026-10-31, below.**
+  Revised by the crew on 2026-10-27 after three blocked
   implementation reviews. The installer supports a deliberately restricted Git
   environment for the initial 0.1 install: it refuses URL rewrite rules, pushurl,
   enabled per-worktree configuration, unsafe relative or Git-internal hooks paths,
@@ -2955,6 +2956,7 @@ shortened where it is long, so that it can be found there with its date.
   and open the installation PR manually, including the closing-message decision of 2026-10-23;
   it does not change that decision's protection boundary or bootstrap adoption process.
 
+  **Superseded by the crew's rescope of ST-56, 2026-10-31, below.**
   The planning session's conservative implementation contract is specified in ST-56 for crew
   review in the planning PR: an installation base captured from a fresh fetch of `origin/main`,
   a new worktree beside the checkout, a separate branch (default `steward/install`, with a naming
@@ -2966,7 +2968,8 @@ shortened where it is long, so that it can be found there with its date.
   further writes and retain named recovery evidence, without automatic rollback or resume.
   Labels and missing user config remain separately reported effects outside the PR.
 
-  **Planned (ST-56):** revised by the crew, 2026-10-27: unrelated work in the caller's checkout
+  **Superseded by the crew's rescope of ST-56, 2026-10-31, below.**
+  Revised by the crew, 2026-10-27: unrelated work in the caller's checkout
   must not prevent adoption. Feature branches, detached HEAD, and unrelated committed, staged,
   unstaged, untracked or ignored work are allowed; the installation uses the captured fetched
   base SHA and leaves caller state untouched. Refuse relevant local changes to installation
@@ -2979,6 +2982,7 @@ shortened where it is long, so that it can be found there with its date.
   isolated in its own worktree. Manual recovery and the single-transaction story size are retained;
   advanced PR-body customization may be split later if implementation evidence warrants it.
 
+  **Superseded by the crew's rescope of ST-56, 2026-10-31, below.**
   The project template is the body skeleton; known installation facts fill it and project-specific
   unknowns are identified for the crew before readiness. Multiple templates require a choice.
   Title and complete-body overrides accommodate a project's native work links and wording.
@@ -2995,6 +2999,25 @@ shortened where it is long, so that it can be found there with its date.
   avoids these, retaining a bounded first installation transaction. Coordinator activation and
   automatic scheduling remain separate roadmap stories. Nothing here authorizes installation in
   either client project or changes the release branch.
+
+  **Planned (ST-56):** rescoped by the crew, 2026-10-31, to the happy path: "we are building
+  something right now that is way too resilient and focused on the edge cases." The story keeps
+  its number and acceptance-criterion ids, and stays in 0.1. Its threat model is one member of
+  the crew running one `init` from an ordinary checkout. `init` reads only the caller's root and
+  `origin`, makes the installation in a fresh clone of `origin`'s `main`, adds only missing
+  files, and makes one commit, one push and one draft pull request, with Git running as the
+  user's own configuration makes it run. URL rewrites and other Git setups are no longer refused,
+  and the caller's own work is not examined. The body is a generated installation section followed
+  by the project's template unchanged. A failure stops and says what is left; the clone is always
+  kept, and the closing message asks the person to remove it. Other processes, concurrent
+  installers and unusual Git configuration are not guarded against: the draft pull request,
+  reviewed before anything lands, is the backstop. The four passages above marked superseded are
+  kept as the record of the contract #92 implemented; #92 was blocked eleven times and is closed.
+  Follow-ups are candidates for 0.2, held in draft ST-65. Considered and not chosen: narrowing the
+  earlier contract one acceptance criterion at a time (proposed after its eleventh block, on
+  cleanup deleting another process's edits); retiring ST-56 for a new story, which would have
+  changed every citation of it; a clean worktree of the caller's repository, which shares that
+  repository's configuration, refs and hooks.
 
 ### The move, in order
 
