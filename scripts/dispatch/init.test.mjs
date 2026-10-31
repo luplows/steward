@@ -1547,10 +1547,22 @@ describe('ST-56/AC-6: the pull request\'s title and body', () => {
     const generated = body.slice(0, body.length - template.length)
     expect(generated).toContain(`steward 9.8.7, pinned to \`${SHA}\``)
     expect(generated).toMatch(/Files added:\n- `steward\.config\.json`\n- `\.github\/workflows\/review-gate\.yml`/)
-    expect(generated).toMatch(/Files left as they were:\n- `REVIEW\.md`\n/)
+    expect(generated).toMatch(/Files left as they were:\n- `REVIEW\.md`\n- `\.github\/pull_request_template\.md`\n\n/)
     expect(generated).toMatch(/Landing: steward\.config\.json has land set to false/)
     expect(generated).toMatch(/The gate cannot review the pull request that installs it/)
     expect(generated).toMatch(/`steward protect`.* comes after this pull request merges/)
+  })
+
+  it('ST-56/AC-6: an existing template that is the only file left is listed as left, as the output reports it', async () => {
+    const cwd = makeRepo({ files: { 'docs/pull_request_template.md': 'Unit:\n' } })
+    const gh = fakeGitHub()
+    const { code, out } = await runInit(['--yes'], { cwd, gh })
+    expect(code).toBe(0)
+    const listed = /Files left as they were:\n((?:- .+\n)+)\n/.exec(opened(gh).body)[1]
+    expect(listed).toBe('- `docs/pull_request_template.md`\n')
+
+    // The closing output names the same files as left (the user config is new here, so written).
+    expect([...out.matchAll(/^left (\S+): /gm)].map((m) => m[1])).toEqual(['docs/pull_request_template.md'])
   })
 
   it('ST-56/AC-6: with no template in the project, the body follows steward\'s own', async () => {

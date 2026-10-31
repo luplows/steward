@@ -1026,7 +1026,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   )
   progress.pushed = true
   const templateText = await readFile(bodyTemplate === null ? template('pull_request_template.md') : path.join(clone, ...bodyTemplate.split('/')), 'utf8')
-  const body = pullBody({ version, pin, added, left, landing, template: templateText })
+  const body = pullBody({ version, pin, added, left: [...left, ...templates], landing, template: templateText })
   const pull = await step('opening the draft pull request', 'GitHub', async () => {
     const response = await ctx.send(buildCreateDraftPull(repo, { branch, title, body }))
     if (!ok(response)) throw new Error(githubSaid(response))
