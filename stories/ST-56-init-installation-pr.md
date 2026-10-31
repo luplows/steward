@@ -42,8 +42,11 @@ and stops cleanly when something goes wrong, rather than defending against every
       base. Everything `init` reads about what the project already has (existing installation
       files, the existing `steward.config.json`'s `rulesFile`, pull request templates) is read
       from that clone, and every file it adds is written there, on a new branch from the base:
-      `steward/install`, or `--branch <name>`. Before writing anything, `init` exits 2 if that
-      branch already exists on `origin` or a pull request is open from it, naming which.
+      `steward/install`, or `--branch <name>`. `init` exits 2 if that branch already exists on
+      `origin` or a pull request is open from it, naming which. This refusal, and AC-6's, come
+      after the clone is made and before any installation file is written, any commit, push,
+      label, user config or pull request; the clone is the only thing written before them, and it
+      is kept, with its path printed, as after every run (AC-7a).
 - [ ] **AC-3** — **Only the installation's files.** `init` stages exactly the files it wrote and
       makes one commit of them on the branch. Tests show the commit's only parent is the base and
       its changes are exactly those files.
@@ -60,12 +63,15 @@ and stops cleanly when something goes wrong, rather than defending against every
 - [ ] **AC-6** — **The pull request's body.** The pull request's title names steward and its
       version. Its body is a generated installation section followed by the project's pull
       request template unchanged, for the crew to fill. The generated section lists the files
-      added and the files left as they were, steward's version or pin and the `land` setting, and
-      says what to check before marking it ready: that the gate cannot review the pull request
-      that installs it, and that `steward protect` comes after it merges. With one template that
-      one is used; with several, `--pr-template <path>` chooses, and is required only when a pull
-      request is to be opened (exit 2 before any write, naming the templates); with none,
-      steward's own template is used. Nothing is inserted inside the template's text.
+      added and the files left as they were and steward's version or pin. For landing, it gives
+      the `land` value `init` wrote, or, when `steward.config.json` was preserved, says that the
+      existing file governs landing and that `init` did not read it for that (AC-4). It says what
+      to check before marking the pull request ready: that the gate cannot review the pull
+      request that installs it, and that `steward protect` comes after it merges. With one
+      template that one is used; with several, `--pr-template <path>` chooses, and is required
+      only when a pull request is to be opened (exit 2, naming the templates, at the point AC-2
+      gives); with none, steward's own template is used. Nothing is inserted inside the
+      template's text.
 - [ ] **AC-7** — **A failure stops and says what is left.** When a step after the clone fails,
       `init` stops, exits 1, and says in plain words which step failed, Git's or GitHub's message,
       what now exists (the clone's path, whether the branch is on `origin`, the pull request's
