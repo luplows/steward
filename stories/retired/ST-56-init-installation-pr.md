@@ -230,6 +230,14 @@ crew can inspect and adopt it without manually assembling the commit and pull re
 
 ## Context
 
+**Retired on 2026-10-31** (crew, with the planning session): replaced by ST-65, a rewrite for
+one member of the crew running one installation, made in a fresh clone. This story's contract
+promised safety across the caller's whole Git environment and against concurrent processes, and
+its implementation, #92, was blocked eleven times, each time on a new case inside those promises
+(the last, at `4a20f72`, another process editing a clean-filtered file in the installation
+worktree before cleanup). The crew judged the result too resilient and too focused on edge
+cases for a command run once per project. #92 is not landed.
+
 - Crew request, 2026-10-26: init creates a reviewable installation PR; write its body as the
   project expects. Design doc, "Installation through a reviewable pull request"; roadmap 0.1.
 - Crew decision, 2026-10-27: allow unrelated local work and feature branches; the captured

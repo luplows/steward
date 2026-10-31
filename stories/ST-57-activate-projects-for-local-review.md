@@ -19,14 +19,14 @@ As a developer, I want to explicitly register which installed projects Steward m
 - [ ] **AC-3** — Activation state is stored atomically in the current OS user's Steward data directory, separate from the implemented strict `~/.steward/config.json` per-user model/usage configuration and from repository `steward.config.json`. It includes the canonical repository identity and a path for its owned checkout, but no credentials. Repeating activation for the same repository and same checkout is idempotent; a second ambiguous registration for that repository is refused rather than scheduled twice. Tests include aliases/symlinks to the same checkout.
 - [ ] **AC-4** — `steward project list` reports all activated repositories, their source and owned checkout paths, and any invalid/missing checkout without starting a review. A malformed activation record fails visibly; it is never treated as permission to schedule unknown projects.
 - [ ] **AC-5** — `steward project deactivate <owner/name>` atomically revokes the project's activation; once the command reports success, no subsequent **automatic admission** may begin for that project, including while the coordinator is running. An already admitted review may finish. Deactivation does not stop the coordinator, delete the coordinator-owned review checkout, or change the caller's files. A missing repository is reported as not activated without changing other registrations. Tests exercise deactivation concurrent with an admission attempt; ST-52/ST-61 consume the authoritative activation state at admission.
-- [ ] **AC-6** — `steward init`, including its eventual ST-56 installation-PR path, never implicitly activates a project, starts the coordinator, or creates an activation record. Tests distinguish an installed but inactive project from an activated one.
+- [ ] **AC-6** — `steward init`, including its eventual ST-65 installation-PR path, never implicitly activates a project, starts the coordinator, or creates an activation record. Tests distinguish an installed but inactive project from an activated one.
 - [ ] **AC-7** — `steward project list` and the documented interface use `steward project activate <checkout-path>` and `steward project deactivate <owner/name>`. The documentation states the per-user persistent-record location, the fetched-main installation requirement, the activation boundary, and that a deactivated project's managed checkout is **retained for reuse** and never automatically cleaned up. The planned design-of-record marker for this story is resolved by its implementing PR.
 
 ## Out of scope
 
 - Starting, stopping or scheduling the coordinator; those belong to ST-58 and ST-61.
 - Migrating existing per-user/project configuration schemas or implicitly activating existing installations.
-- Deleting unrecognized worktrees, manipulating the caller's current branch, or opening installation PRs (ST-56).
+- Deleting unrecognized worktrees, manipulating the caller's current branch, or opening installation PRs (ST-65).
 - Cross-account project activation, shared credentials, and emergency stop.
 
 ## Constraints
@@ -38,7 +38,7 @@ As a developer, I want to explicitly register which installed projects Steward m
 
 - `scripts/dispatch/settings.mjs` validates project settings, and `scripts/dispatch/user-config.mjs` strictly validates current per-user model/usage configuration (ST-63).
 - `scripts/dispatch/rotation.mjs` currently insists on a dedicated detached controller worktree; `scripts/dispatch/review.mjs` prepares a separate temporary reviewer checkout. The new activation checkout must not be the developer's working checkout.
-- ST-56 (in draft PR #90 when drafted) defines reviewable installation PRs, separately from local activation; it is not an implementation dependency for this local state mechanism.
+- ST-65, which replaced ST-56 (retired 2026-10-31; in draft PR #90 when this story was drafted), defines reviewable installation PRs, separately from local activation; it is not an implementation dependency for this local state mechanism.
 - Crew decision, 2026-10-27: coordinator scope is per OS user; manual commands are independent of automatic scheduling.
 - Suggested size: medium; no scheduling or process owner implementation in this story.
 
