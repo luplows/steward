@@ -142,8 +142,8 @@ alone. The order is:
    checklist from `main`.
 4. Optionally, run `steward protect`, once that pull request has merged.
 
-Planned: [ST-65](stories/ST-65-init-installation-pr.md) makes `init` commit its installation on
-a separate branch, in a fresh clone, and open a draft PR using the project's template. The manual
+Planned for 0.1: [ST-56](stories/ST-56-init-installation-pr.md) makes `init` commit its
+installation on a separate branch and open a draft PR using the project's template. The manual
 steps above describe the current command. Installation and explicit local activation remain
 separate; the planned PR creates no permission to run a local coordinator.
 

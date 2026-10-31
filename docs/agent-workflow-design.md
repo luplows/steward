@@ -85,7 +85,7 @@ do not yet exist. The implemented review rotation is still started by hand; the 
 explicit activation and automatic scheduling are roadmap work, not delivered behaviour.
 `migration-plan.md` preserves the earlier migration plan and is not the version roadmap.
 
-**Planned (ST-65):** `steward init` delivers repository installation files through a draft
+**Planned (ST-56):** `steward init` delivers repository installation files through a draft
 installation PR instead of leaving the crew to commit and open it. It preserves existing files
 and project conventions, and neither creating nor merging that PR activates a project locally.
 See "Installation through a reviewable pull request", Part 3, for its transaction boundaries.
@@ -2557,7 +2557,7 @@ shortened where it is long, so that it can be found there with its date.
     branch protection" to "switches them on alone" above: the command `steward protect` does it,
     once the gate is on `main`; see "One Node version for all of steward, and protection apart
     from `init`", below.
-    **Planned (ST-65):** revision requested by the crew on 2026-10-26: the earlier no-commit
+    **Planned (ST-56):** revision requested by the crew on 2026-10-26: the earlier no-commit
     delivery is replaced, after ST-55, by an isolated installation branch, commit, push and
     draft PR. No existing-file or activation safeguard is relaxed; see "Installation through
     a reviewable pull request", below. Until then the crew still commits and opens the PR.
@@ -2919,7 +2919,7 @@ shortened where it is long, so that it can be found there with its date.
     the crew also deferred exhaustive crash-window handling, arbitrary-descendant
     termination proofs and OS-specific containment rather than making them 0.1 prerequisites.
 
-  **Retired with ST-56 (crew, 2026-10-31); superseded by ST-65, below.**
+  **Superseded by the crew's rescope of ST-56, 2026-10-31, below.**
   Revised by the crew on 2026-10-27 after three blocked
   implementation reviews. The installer supports a deliberately restricted Git
   environment for the initial 0.1 install: it refuses URL rewrite rules, pushurl,
@@ -2946,18 +2946,17 @@ shortened where it is long, so that it can be found there with its date.
   not behavior already implemented in PR #92.
 
 - **Installation through a reviewable pull request** (crew, 2026-10-26).
-  **Planned (ST-65):** "Have `steward init` create a reviewable installation PR instead of
+  **Planned (ST-56):** "Have `steward init` create a reviewable installation PR instead of
   requiring the crew to manually commit and open one." For its body: "Do your best with writing
   the body as the project would expect it." Existing-file safeguards, project-specific work
   conventions and the separation between installation and local coordinator activation remain.
   ST-56 follows ST-55, which follows ST-54: those stories deliver landing authorization and
   review-only defaults first, without adding git writes; ST-56 then changes delivery, preserving
-  their results. (ST-65 replaced ST-56 on 2026-10-31, below, and keeps that order.) Their ACs
-  and IDs are unchanged. This revises the earlier instructions to commit
+  their results. Their ACs and IDs are unchanged. This revises the earlier instructions to commit
   and open the installation PR manually, including the closing-message decision of 2026-10-23;
   it does not change that decision's protection boundary or bootstrap adoption process.
 
-  **Retired with ST-56 (crew, 2026-10-31); superseded by ST-65, below.**
+  **Superseded by the crew's rescope of ST-56, 2026-10-31, below.**
   The planning session's conservative implementation contract is specified in ST-56 for crew
   review in the planning PR: an installation base captured from a fresh fetch of `origin/main`,
   a new worktree beside the checkout, a separate branch (default `steward/install`, with a naming
@@ -2969,7 +2968,7 @@ shortened where it is long, so that it can be found there with its date.
   further writes and retain named recovery evidence, without automatic rollback or resume.
   Labels and missing user config remain separately reported effects outside the PR.
 
-  **Retired with ST-56 (crew, 2026-10-31); superseded by ST-65, below.**
+  **Superseded by the crew's rescope of ST-56, 2026-10-31, below.**
   Revised by the crew, 2026-10-27: unrelated work in the caller's checkout
   must not prevent adoption. Feature branches, detached HEAD, and unrelated committed, staged,
   unstaged, untracked or ignored work are allowed; the installation uses the captured fetched
@@ -2983,7 +2982,7 @@ shortened where it is long, so that it can be found there with its date.
   isolated in its own worktree. Manual recovery and the single-transaction story size are retained;
   advanced PR-body customization may be split later if implementation evidence warrants it.
 
-  **Retired with ST-56 (crew, 2026-10-31); superseded by ST-65, below.**
+  **Superseded by the crew's rescope of ST-56, 2026-10-31, below.**
   The project template is the body skeleton; known installation facts fill it and project-specific
   unknowns are identified for the crew before readiness. Multiple templates require a choice.
   Title and complete-body overrides accommodate a project's native work links and wording.
@@ -3001,22 +3000,24 @@ shortened where it is long, so that it can be found there with its date.
   automatic scheduling remain separate roadmap stories. Nothing here authorizes installation in
   either client project or changes the release branch.
 
-  **Planned (ST-65):** rewritten by the crew, 2026-10-31: "we are building something right now
-  that is way too resilient and focused on the edge cases." ST-56 is retired and ST-65 replaces
-  it, for one member of the crew running one `init` from an ordinary checkout. `init` reads only
-  the caller's root and `origin`, makes the installation in a fresh clone of `origin`'s `main`
-  that it owns, adds only missing files, and makes one commit, one push and one draft pull
-  request, with Git running as the user's own configuration makes it run. A failure stops,
-  keeps the clone and says what is left. The body is a generated installation section followed by
-  the project's template unchanged. Other processes, concurrent installers, unusual or
-  adversarial Git configuration, and the caller's uncommitted work are outside its threat model,
-  and are not guarded against: the draft pull request, reviewed before anything lands, is the
-  backstop. The retired passages above, marked so, are kept as the record of what was tried.
-  Considered and not chosen: narrowing ST-56 one acceptance criterion at a time (proposed after
-  its eleventh block, on cleanup deleting another process's edits); keeping ST-56 with a list of
-  out-of-scope cases; a clean worktree of the caller's repository, which shares that
-  repository's configuration, refs and hooks. #92, ST-56's implementation, was blocked eleven
-  times and is not landed.
+  **Planned (ST-56):** rescoped by the crew, 2026-10-31, to the happy path: "we are building
+  something right now that is way too resilient and focused on the edge cases." The story keeps
+  its number and acceptance-criterion ids, and stays in 0.1. Its threat model is one member of
+  the crew running one `init` from an ordinary checkout. `init` reads only the caller's root and
+  `origin`, makes the installation in a fresh clone of `origin`'s `main`, adds only missing
+  files, and makes one commit, one push and one draft pull request, with Git running as the
+  user's own configuration makes it run. URL rewrites and other Git setups are no longer refused,
+  and the caller's own work is not examined. The body is a generated installation section followed
+  by the project's template unchanged. A failure stops and says what is left; the clone is always
+  kept, and the closing message asks the person to remove it. Other processes, concurrent
+  installers and unusual Git configuration are not guarded against: the draft pull request,
+  reviewed before anything lands, is the backstop. The four passages above marked superseded are
+  kept as the record of the contract #92 implemented; #92 was blocked eleven times and is closed.
+  Follow-ups are candidates for 0.2, held in draft ST-65. Considered and not chosen: narrowing the
+  earlier contract one acceptance criterion at a time (proposed after its eleventh block, on
+  cleanup deleting another process's edits); retiring ST-56 for a new story, which would have
+  changed every citation of it; a clean worktree of the caller's repository, which shares that
+  repository's configuration, refs and hooks.
 
 ### The move, in order
 
