@@ -18,7 +18,7 @@ and stops cleanly when something goes wrong, rather than defending against every
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — **Read only the checkout's root and `origin`.** `init` reads the caller's
+- [x] **AC-1** — **Read only the checkout's root and `origin`.** `init` reads the caller's
       checkout root and `origin`'s URL, and nothing else about the checkout. `origin` must name
       one GitHub repository, and the GitHub credential must work; otherwise `init` exits 2,
       saying which, before any write. `init` fetches nothing into the caller's repository and
@@ -27,17 +27,17 @@ and stops cleanly when something goes wrong, rather than defending against every
       staged, unstaged and untracked changes, and show its files, `git status --porcelain=v1
       --ignored` and `git for-each-ref` output unchanged after a successful installation, a
       no-diff run and a failed push.
-- [ ] **AC-1a** — **The caller's own work is not examined.** `init` neither looks at nor refuses
+- [x] **AC-1a** — **The caller's own work is not examined.** `init` neither looks at nor refuses
       because of the caller's uncommitted, unrelated or conflicting work, including local edits
       to files the installation adds; the installation comes from `origin`'s `main`. A test
       with local edits to an installation target in the caller's checkout shows the installation
       made from `origin`'s `main` and the caller's edits untouched.
-- [ ] **AC-1b** — **Git runs as configured.** `init` refuses no Git configuration or environment
+- [x] **AC-1b** — **Git runs as configured.** `init` refuses no Git configuration or environment
       (URL rewrites, hooks, signing, identity and the like) and changes none. It runs Git as the
       user's own configuration makes it run, and a Git command that fails is AC-7's failure,
       reported with Git's own message. A test whose commit hook rejects the commit shows AC-7's
       report.
-- [ ] **AC-2** — **A fresh clone and a new branch.** `init` clones `origin`'s `main` into a new
+- [x] **AC-2** — **A fresh clone and a new branch.** `init` clones `origin`'s `main` into a new
       temporary directory it creates, and takes `main`'s commit there as the installation's
       base. Everything `init` reads about what the project already has (existing installation
       files, the existing `steward.config.json`'s `rulesFile`, pull request templates) is read
@@ -47,20 +47,20 @@ and stops cleanly when something goes wrong, rather than defending against every
       after the clone is made and before any installation file is written, any commit, push,
       label, user config or pull request; the clone is the only thing written before them, and it
       is kept, with its path printed, as after every run (AC-7a).
-- [ ] **AC-3** — **Only the installation's files.** `init` stages exactly the files it wrote and
+- [x] **AC-3** — **Only the installation's files.** `init` stages exactly the files it wrote and
       makes one commit of them on the branch. Tests show the commit's only parent is the base and
       its changes are exactly those files.
-- [ ] **AC-4** — **Additions only, and nothing when nothing is missing.** Each installation file
+- [x] **AC-4** — **Additions only, and nothing when nothing is missing.** Each installation file
       is written only where the base lacks it, and a file the base has is left byte for byte.
       From an existing `steward.config.json`, `init` reads only `rulesFile`, to find the
       existing checklist, and never changes its `land` setting. When nothing is missing, `init`
       exits 0 saying the installation is already complete, and creates no branch, commit, push or
       pull request; labels and user config are still provisioned as `init` provisions them today.
-- [ ] **AC-5** — **One push, one draft pull request.** `init` pushes the branch to `origin` and
+- [x] **AC-5** — **One push, one draft pull request.** `init` pushes the branch to `origin` and
       opens one **draft** pull request from it against `main` in the same repository, then
       prints the repository, branch, base commit, installation commit and the pull request's URL.
       It never marks the pull request ready, merges it, requests landing or changes protection.
-- [ ] **AC-6** — **The pull request's body.** The pull request's title names steward and its
+- [x] **AC-6** — **The pull request's body.** The pull request's title names steward and its
       version. Its body is a generated installation section followed by the project's pull
       request template unchanged, for the crew to fill. The generated section lists the files
       added and the files left as they were and steward's version or pin. For landing, it gives
@@ -72,13 +72,13 @@ and stops cleanly when something goes wrong, rather than defending against every
       only when a pull request is to be opened (exit 2, naming the templates, at the point AC-2
       gives); with none, steward's own template is used. Nothing is inserted inside the
       template's text.
-- [ ] **AC-7** — **A failure stops and says what is left.** When a step after the clone fails,
+- [x] **AC-7** — **A failure stops and says what is left.** When a step after the clone fails,
       `init` stops, exits 1, and says in plain words which step failed, Git's or GitHub's message,
       what now exists (the clone's path, whether the branch is on `origin`, the pull request's
       URL if one was opened) and what to do next, such as deleting the branch by hand before a
       rerun, or rerunning with another `--branch`. It retries nothing, deletes nothing on `origin`
       and rolls back no label or user config.
-- [ ] **AC-7a** — **Output written for a person.** Everything `init` prints, its questions,
+- [x] **AC-7a** — **Output written for a person.** Everything `init` prints, its questions,
       refusals, failure report and closing message, is written for the member of the crew running
       it: what happened, what was and was not changed, and what to do next, in the glossary's
       words. Internal names (functions, the code's names for steps, Git plumbing) appear only
@@ -86,11 +86,11 @@ and stops cleanly when something goes wrong, rather than defending against every
       is always kept, and the closing message gives its path and asks the person to remove it
       when done. Tests assert the closing message of a successful installation, a no-diff run and
       a failed push.
-- [ ] **AC-8** — **Adoption and activation remain separate.** ST-55's review-only default and
+- [x] **AC-8** — **Adoption and activation remain separate.** ST-55's review-only default and
       explicit `--land yes` opt-in are unchanged. Neither `init` nor merging its pull request
       activates a project, starts the coordinator or starts a review, rotation or landing
       (ST-57/AC-6).
-- [ ] **AC-9** — **Tests and documentation.** Vitest cases named `ST-56/AC-N` use temporary real
+- [x] **AC-9** — **Tests and documentation.** Vitest cases named `ST-56/AC-N` use temporary real
       Git repositories and a local bare repository standing in for `origin`, reached through a
       URL mapping that only tests pass. GitHub is injected; no test writes to GitHub or starts a
       model. They cover a full installation, a partial one, a no-diff run, each refusal of AC-1,
