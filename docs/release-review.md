@@ -62,13 +62,14 @@ A release is cut from `main`, or, as a patch release, from the newest release's 
 - Group the batch by **capability**, as a project using steward meets it, not by pull request or
   story. For each capability: what it does now that it did not before, in plain words, and the
   pull requests that built it.
-- **Run it as a project would**, from the release branch. On a new, empty scratch repository the
-  crew provides: run `init --ref <commit>`, where `<commit>` is the release branch's last commit
+- **Run it as a project would**, from the release branch. On a new scratch repository the crew
+  provides, with one commit on `main` (`init` clones `main`, so it needs one): run
+  `init --ref <commit>`, where `<commit>` is the release branch's last commit
   (`git rev-parse origin/release/vX.Y.Z` once fetched), so that the workflow files it writes install
-  steward at that commit, since the tag does not exist yet (ST-44). Then merge by hand the pull
-  request `init` leaves, as nothing has reviewed it (the gate cannot review the pull request that
-  installs it), and run `steward protect` in the scratch repository's checkout, from steward
-  installed at the same `<commit>`
+  steward at that commit, since the tag does not exist yet (ST-44). Then mark ready and merge by
+  hand the draft pull request `init` opens, as nothing has reviewed it (the gate cannot review the
+  pull request that installs it), and run `steward protect` in the scratch repository's
+  checkout, from steward installed at the same `<commit>`
   (`npx --yes --package=github:luplows/steward#<commit> steward protect`). Then open a test pull
   request there, and have it reviewed and landed, with protection set, with the commands the
   release documents. Report each command and its result, `protect`'s included. Run it again at the new last commit whenever a fix or a revert lands into

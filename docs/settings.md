@@ -20,7 +20,7 @@ decisions behind the keys are in [`outline.md`](outline.md), "Defining steward",
 
 | Key | Form | What it is for | What `init` writes |
 |---|---|---|---|
-| `repo` | `owner/name` | The project's GitHub repository. | The `origin` remote's repository, from an `https` or an `ssh` URL. With no `origin` that reads as a GitHub repository, no file is written. |
+| `repo` | `owner/name` | The project's GitHub repository. | The `origin` remote's repository, from an `https` or an `ssh` URL. With no `origin` that reads as a GitHub repository, `init` refuses and writes nothing. |
 | `setup` | `null`, or an object (below) | The command that prepares a worktree for a coder session. Nothing is run before a review. | `null`. |
 | `check` | `null`, or an object (below) | The command that checks a change, which the coder runs. | `null`. |
 | `landWhen` | `"all-checks"`, or a non-empty array of distinct, non-empty check names | Which checks must be green before steward lands a pull request. | `"all-checks"`. |
@@ -31,8 +31,11 @@ decisions behind the keys are in [`outline.md`](outline.md), "Defining steward",
 
 `steward init` (`scripts/dispatch/init.mjs`) writes the file, as the last column says: a question
 it asks at the terminal has a flag and, under `--yes`, its default (`QUESTIONS` there), and a file
-that is already there is left as it is. The decision is in `agent-workflow-design.md`, Part 3,
-"Decided so far". Steward's own file (below) shows values that work here.
+that `main` already has is left as it is. It writes the file in a clone of `origin`'s `main` and
+delivers it through a draft pull request, with the installation's other files; from a file `main`
+already has, it reads only `rulesFile`, to find the checklist. The decision is in
+`agent-workflow-design.md`, Part 3, "Decided so far". Steward's own file (below) shows values that
+work here.
 
 ## `land`
 

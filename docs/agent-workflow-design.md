@@ -85,10 +85,11 @@ do not yet exist. The implemented review rotation is still started by hand; the 
 explicit activation and automatic scheduling are roadmap work, not delivered behaviour.
 `migration-plan.md` preserves the earlier migration plan and is not the version roadmap.
 
-**Planned (ST-56):** `steward init` delivers repository installation files through a draft
-installation PR instead of leaving the crew to commit and open it. It preserves existing files
-and project conventions, and neither creating nor merging that PR activates a project locally.
-See "Installation through a reviewable pull request", Part 3, for its transaction boundaries.
+`steward init` delivers repository installation files through a draft installation pull
+request, made in a fresh clone of `origin`'s `main`, instead of leaving the crew to commit and
+open it. It adds only the files `main` lacks, follows the project's pull request template, and
+neither creating nor merging that pull request activates a project locally. See "Installation
+through a reviewable pull request", Part 3, for what it does and does not guard against.
 
 The roadmap schedules the ST-6 isolation investigation and its resulting implementation for 0.4,
 deliberately after the first coding and fixing slices. Earlier releases retain their resource
@@ -2557,10 +2558,11 @@ shortened where it is long, so that it can be found there with its date.
     branch protection" to "switches them on alone" above: the command `steward protect` does it,
     once the gate is on `main`; see "One Node version for all of steward, and protection apart
     from `init`", below.
-    **Planned (ST-56):** revision requested by the crew on 2026-10-26: the earlier no-commit
-    delivery is replaced, after ST-55, by an isolated installation branch, commit, push and
-    draft PR. No existing-file or activation safeguard is relaxed; see "Installation through
-    a reviewable pull request", below. Until then the crew still commits and opens the PR.
+    **Since 2026-10-31:** revision requested by the crew on 2026-10-26, and rescoped on
+    2026-10-31: the no-commit delivery, "it commits nothing" above, is replaced by a branch of
+    its own, one commit, one push and a draft pull request, made in a fresh clone of `origin`'s
+    `main`, after ST-55. No existing-file or activation safeguard is relaxed; see "Installation
+    through a reviewable pull request", below.
 
   The first release, `v0.1.0`, is cut by a release review session, whose instructions are a
   separate pull request.
@@ -2946,7 +2948,7 @@ shortened where it is long, so that it can be found there with its date.
   not behavior already implemented in PR #92.
 
 - **Installation through a reviewable pull request** (crew, 2026-10-26).
-  **Planned (ST-56):** "Have `steward init` create a reviewable installation PR instead of
+  "Have `steward init` create a reviewable installation PR instead of
   requiring the crew to manually commit and open one." For its body: "Do your best with writing
   the body as the project would expect it." Existing-file safeguards, project-specific work
   conventions and the separation between installation and local coordinator activation remain.
@@ -3000,7 +3002,7 @@ shortened where it is long, so that it can be found there with its date.
   automatic scheduling remain separate roadmap stories. Nothing here authorizes installation in
   either client project or changes the release branch.
 
-  **Planned (ST-56):** rescoped by the crew, 2026-10-31, to the happy path: "we are building
+  Rescoped by the crew, 2026-10-31, to the happy path: "we are building
   something right now that is way too resilient and focused on the edge cases." The story keeps
   its number and acceptance-criterion ids, and stays in 0.1. Its threat model is one member of
   the crew running one `init` from an ordinary checkout. `init` reads only the caller's root and
