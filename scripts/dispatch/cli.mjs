@@ -35,6 +35,7 @@ export const COMMANDS = {
   init: path.join(DISPATCH_DIR, 'init.mjs'),
   protect: path.join(DISPATCH_DIR, 'protect.mjs'),
   project: path.join(DISPATCH_DIR, 'project.mjs'),
+  coordinator: path.join(DISPATCH_DIR, 'coordinator.mjs'),
   verdicts: path.join(SCRIPTS_DIR, 'report', 'review-verdicts.mjs'),
   // The gate's and the runway's parts, run by the workflow files (ST-42).
   'mark-pending': path.join(LAND_DIR, 'mark-pending.mjs'),

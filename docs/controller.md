@@ -24,10 +24,13 @@ enough, are in [`agent-workflow-design.md`](agent-workflow-design.md), "The cont
 
 ## Manual work and planned automatic coordination
 
-- The 0.1 coordinator is planned, not yet built. When available, it will
-  schedule automatic reviews only; explicit controller commands such as
-  `rotation`, `review.mjs --rereview` and manual `land` will remain direct.
-  This does not change whose request authorizes an operation below.
+- The 0.1 coordinator can be started, inspected and stopped
+  (`steward coordinator start`, `status`, `stop`), but schedules nothing yet.
+  When its scheduling is built, it will schedule automatic reviews only;
+  explicit controller commands such as `rotation`, `review.mjs --rereview` and
+  manual `land` remain direct, and never ask the coordinator, whether it is
+  running, stopping or stopped. This does not change whose request authorizes
+  an operation below.
 - Direct manual commands may overlap coordinator work or other manual commands.
   The crew or external harness owns the resulting duplicate-usage and
   potentially competing-verdict risk. Graceful coordinator stop is not E-stop.
