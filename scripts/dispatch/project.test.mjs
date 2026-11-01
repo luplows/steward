@@ -155,7 +155,7 @@ describe('ST-57/AC-1: activation checks main, not the caller\'s branch', () => {
     expect(refused.code).toBe(1)
     expect(refused.err).toContain(`${REPO} was not activated: steward is not installed on origin's main.`)
     expect(refused.err).toContain('steward.config.json is missing or not valid: file not found')
-    expect(refused.err).toContain('.github/workflows/review-gate.yml is not there')
+    expect(refused.err).toContain('.github/workflows/review-gate.yml is not a file there')
     expect(refused.err).toContain('Nothing was recorded.')
     expect(existsSync(projectsPath(home))).toBe(false)
     const owned = ownedCheckoutPath(home, REPO)
@@ -174,9 +174,9 @@ describe('ST-57/AC-1: activation checks main, not the caller\'s branch', () => {
   it('ST-57/AC-1: each check that fails on main is named, and nothing is recorded', async () => {
     const cases = [
       [{ ...installation('acme/other') }, 'steward.config.json names the repository acme/other, not acme/widgets'],
-      [{ ...installation(), 'REVIEW.md': undefined }, 'the checklist steward.config.json names, REVIEW.md, is not there'],
+      [{ ...installation(), 'REVIEW.md': undefined }, 'the checklist steward.config.json names, REVIEW.md, is not a file there'],
       [{ ...installation(), 'steward.config.json': '{ not json' }, 'steward.config.json is missing or not valid: invalid JSON'],
-      [{ ...installation(), '.github/workflows/review-gate.yml': undefined }, '.github/workflows/review-gate.yml is not there'],
+      [{ ...installation(), '.github/workflows/review-gate.yml': undefined }, '.github/workflows/review-gate.yml is not a file there'],
     ]
     for (const [onMain, said] of cases) {
       const home = fresh('home')
@@ -186,6 +186,25 @@ describe('ST-57/AC-1: activation checks main, not the caller\'s branch', () => {
       expect(result.err).toContain(said)
       expect(existsSync(projectsPath(home))).toBe(false)
     }
+  })
+
+  /** Activates a repository whose main has `files`, and expects a refusal saying `said`. */
+  const refusedWith = async (files, said) => {
+    const home = fresh('home')
+    const result = await run(['activate', makeRepo({ files })], { home })
+    expect(result.code).toBe(1)
+    expect(result.err).toContain(said)
+    expect(existsSync(projectsPath(home))).toBe(false)
+  }
+
+  it('ST-57/AC-1: a directory on main at the checklist\'s path is refused', async () => {
+    const { 'REVIEW.md': _, ...rest } = installation()
+    await refusedWith({ ...rest, 'REVIEW.md/keep.txt': 'x\n' }, 'the checklist steward.config.json names, REVIEW.md, is not a file there')
+  })
+
+  it('ST-57/AC-1: a directory on main at the gate workflow\'s path is refused', async () => {
+    const { '.github/workflows/review-gate.yml': _, ...rest } = installation()
+    await refusedWith({ ...rest, '.github/workflows/review-gate.yml/keep.txt': 'x\n' }, '.github/workflows/review-gate.yml is not a file there')
   })
 
   it('ST-57/AC-1: a path that is not a checkout, a checkout with no origin and an origin not on GitHub are refused', async () => {
@@ -277,8 +296,27 @@ describe('ST-57/AC-4: listing', () => {
       `  checkout:            ${toplevel(first)}`,
       `  the owned checkout:  ${ownedCheckoutPath(home, REPO)}`,
       'acme/gadgets',
-      `  checkout:            ${secondRoot}  (missing: no Git checkout is there now)`,
+      `  checkout:            ${secondRoot}  (missing: nothing is there now)`,
       `  the owned checkout:  ${ownedCheckoutPath(home, 'acme/gadgets')}  (missing: activating the project again clones it)`,
+    ])
+  })
+
+  it('ST-57/AC-4: a checkout or owned checkout whose .git is broken is listed as invalid', async () => {
+    const home = fresh('home')
+    const cwd = makeRepo({ files: installation() })
+    expect((await run(['activate', cwd], { home })).code).toBe(0)
+    const root = toplevel(cwd)
+    const owned = ownedCheckoutPath(home, REPO)
+    rmSync(path.join(cwd, '.git', 'HEAD'))
+    rmSync(path.join(owned, '.git', 'HEAD'))
+
+    const listed = await run(['list'], { home })
+    expect(listed.code).toBe(0)
+    expect(listed.out.split('\n')).toEqual([
+      `Activated on this machine (${projectsPath(home)}):`,
+      REPO,
+      `  checkout:            ${root}  (invalid: not a usable Git checkout)`,
+      `  the owned checkout:  ${owned}  (invalid: not a usable Git checkout)`,
     ])
   })
 

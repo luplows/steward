@@ -43,7 +43,7 @@ const USAGE = [
   '',
   'activate    lets steward review that checkout\'s GitHub repository unattended on this machine,',
   '            once steward is installed on origin\'s main there',
-  'list        the activated repositories, their checkouts, and any checkout that is missing',
+  'list        the activated repositories, their checkouts, and any checkout that is missing or invalid',
   'deactivate  takes that permission away again; the owned checkout of it is kept',
 ].join('\n')
 
@@ -54,6 +54,18 @@ export const ownedCheckoutPath = (homedir, repo) => path.join(stateDir({ homedir
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
 /** Whether `dir` is the root of a Git checkout: it has a `.git`. */
 const isCheckout = (dir) => existsSync(path.join(dir, '.git'))
+/** What `list` says of `dir`: nothing for a usable Git checkout's root, else missing or invalid. */
+const checkoutNote = (dir, missing) => {
+  if (!existsSync(dir)) return `  (missing: ${missing})`
+  return gitRoot(dir) === path.resolve(dir) ? '' : '  (invalid: not a usable Git checkout)'
+}
+const isFile = (file) => {
+  try {
+    return statSync(file).isFile()
+  } catch {
+    return false
+  }
+}
 const isDirectory = (dir) => {
   try {
     return statSync(dir).isDirectory()
@@ -113,13 +125,13 @@ export async function installationProblems(owned, repo) {
     if (settings.repo !== repo) {
       problems.push(`steward.config.json names the repository ${settings.repo}, not ${repo}`)
     }
-    if (!existsSync(path.join(owned, ...settings.rulesFile.split('/')))) {
-      problems.push(`the checklist steward.config.json names, ${settings.rulesFile}, is not there`)
+    if (!isFile(path.join(owned, ...settings.rulesFile.split('/')))) {
+      problems.push(`the checklist steward.config.json names, ${settings.rulesFile}, is not a file there`)
     }
   } catch (error) {
     problems.push(`steward.config.json is missing or not valid: ${error.message.replace(`${path.join(owned, 'steward.config.json')}: `, '')}`)
   }
-  if (!existsSync(path.join(owned, ...GATE_WORKFLOW.split('/')))) problems.push(`${GATE_WORKFLOW} is not there`)
+  if (!isFile(path.join(owned, ...GATE_WORKFLOW.split('/')))) problems.push(`${GATE_WORKFLOW} is not a file there`)
   return problems
 }
 
@@ -192,8 +204,8 @@ async function list({ homedir, out }) {
   out(`Activated on this machine (${file}):`)
   for (const { repo, checkout, ownedCheckout } of projects) {
     out(repo)
-    out(`  checkout:            ${checkout}${isCheckout(checkout) ? '' : '  (missing: no Git checkout is there now)'}`)
-    out(`  the owned checkout:  ${ownedCheckout}${isCheckout(ownedCheckout) ? '' : '  (missing: activating the project again clones it)'}`)
+    out(`  checkout:            ${checkout}${checkoutNote(checkout, 'nothing is there now')}`)
+    out(`  the owned checkout:  ${ownedCheckout}${checkoutNote(ownedCheckout, 'activating the project again clones it')}`)
   }
   return 0
 }

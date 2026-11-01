@@ -198,14 +198,15 @@ and changes nothing in that checkout: not its branch, its files or its refs. It 
 installation on `origin`'s `main`, not on the branch the checkout is on, in a checkout of its own,
 the owned checkout, a clone of `origin` at `~/.steward/state/checkouts/<owner>/<name>`, detached at
 `origin`'s `main`: cloned when it is not there, fetched and checked out when it is. `main` must have
-a valid `steward.config.json` whose `repo` is that repository, the checklist it names, and
-`.github/workflows/review-gate.yml`. When it does, `activate` records the project in
+a valid `steward.config.json` whose `repo` is that repository, and files at the checklist's path it
+names and at `.github/workflows/review-gate.yml`. When it does, `activate` records the project in
 `~/.steward/state/projects.json`, one record per repository holding the repository, the root of
 the checkout it was given and the owned checkout, and no credentials; activating it again, from
 any checkout of it, updates that record and reuses the owned checkout. When it does not,
 `activate` names each check that failed, records nothing, keeps the owned checkout for the next
-attempt and exits 1. `list` reads the records, and marks a checkout that is no longer there; a
-records file it cannot read fails visibly, and counts as permission for no project.
+attempt and exits 1. `list` reads the records, and marks a checkout that is no longer there as
+missing, and one that is not a usable Git checkout as invalid; a records file it cannot read fails
+visibly, and counts as permission for no project.
 `deactivate` removes the repository's record. The owned checkout is retained for reuse, by a later
 activation, and is never cleaned up automatically: remove it by hand if you no longer want it.
 None of these commands starts a review or a coordinator.
