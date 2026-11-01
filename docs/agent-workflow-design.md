@@ -2826,15 +2826,25 @@ shortened where it is long, so that it can be found there with its date.
 
 - **Per-user coordinator foundations and manual independence** (crew, 2026-10-27).
   - **Planned (ST-57):** explicit per-user local activation is separate from
-    installation. Check the installed revision on fetched `origin/main`, then
-    provision an isolated coordinator-owned detached checkout. Activation data
-    lives outside strict user config and project settings; deactivation
-    revokes new automatic admission and retains the checkout for reuse.
-  - **Planned (ST-58):** the coordinator is a detached process with exclusive
-    per-user ownership across projects. Start reports success only after
-    ownership acknowledgement; status distinguishes running, stopping, stopped
-    and uncertain recovery. Graceful stop promptly acknowledges a drain and
-    prohibits admission after acknowledgement while admitted work may finish.
+    installation. Activation reads only the caller's root and `origin`, and
+    checks the installation at `origin`'s `main` in a coordinator-owned
+    clone, `~/.steward/state/checkouts/<owner>/<name>`. One record per repository,
+    in `~/.steward/state/projects.json`, outside the user config and project
+    settings; deactivation removes the record, so automatic admission no longer
+    finds it, and retains the checkout for reuse.
+  - **Planned (ST-58):** the coordinator is a detached process, one per OS user
+    across projects, known by its record `~/.steward/state/coordinator.json`. Start
+    reports success only after the process acknowledges it is running, and
+    reports `already-running` when the recorded process is running; status
+    distinguishes running, stopping and stopped. Graceful stop promptly
+    acknowledges a drain and prohibits admission after acknowledgement while
+    admitted work may finish.
+  - Rescoped by the crew, 2026-10-31: ST-57 and ST-58 cover one member of the
+    crew running one command at a time. Racing commands, symlinked paths, an
+    OS-level exclusive lock and reused process ids are out of scope;
+    `recovery-needed` and the idle proof are ST-60's. Considered: keeping
+    both stories' guarantees against concurrent processes, as ST-56's were
+    until #101.
   - The automatic review operation, `reviewCandidate` in
     `scripts/dispatch/review-work.mjs`, attempts a single PR/head using the
     existing reviewer and gate behavior. `listReviewCandidates` discovers
