@@ -43,7 +43,7 @@ choice runs on the Codex CLI), and optional `coordinator`. No other top-level ke
 | `usageLimits` | An object (below) | The share of the plan's usage at or over which steward starts no coder or reviewer session. |
 | `roles` | An object with exactly the keys `coder` and `reviewer` | For each role, the choice it runs by default, and the choices available. |
 | `tools` | An object (below); required when a choice's `tool` is `"codex"`, and may be left out otherwise | What a tool other than Claude Code needs to be started. |
-| `coordinator` | Optional object with exactly `scanIntervalMinutes` (below) | The cadence returned for the planned coordinator. |
+| `coordinator` | Optional object with exactly `scanIntervalMinutes` (below) | The cadence returned for the coordinator's planned scheduling. |
 
 ### `coordinator`
 
@@ -60,7 +60,9 @@ a valid manual edit. The reader starts no scan loop, daemon, reviewer or session
 activation, ownership, reservation or other state. Operational state is kept under
 `~/.steward/state/`, separate from this editable file: activation records in
 `~/.steward/state/projects.json` and owned checkouts under `~/.steward/state/checkouts/`
-(`scripts/dispatch/project.mjs`, README "Activating a project"). `STEWARD_CONFIG` does not move
+(`scripts/dispatch/project.mjs`, README "Activating a project"), and the coordinator's record,
+`~/.steward/state/coordinator.json`, and a stop request for it, `~/.steward/state/coordinator.stop`
+(`scripts/dispatch/coordinator.mjs`, README "The coordinator"). `STEWARD_CONFIG` does not move
 that folder. ST-61 owns scheduling and will consume the
 value at the coordinator's next safe start; runtime watching and configuration-editing commands
 are not implemented here.

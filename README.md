@@ -147,9 +147,10 @@ asks for one landing of one pull request that has passed review, through the sam
 there as it is, byte for byte, whatever its `land` says or what `--yes` or `--land` are given, and
 its closing output says that file governs its own landing authorization. Merging the installation
 pull request starts nothing on any machine. Running steward on a machine without starting each
-command by hand (a local coordinator, with start, stop and status controls) is planned
+command by hand (a local coordinator scheduling reviews) is planned
 ([`docs/outline.md`](docs/outline.md), "Product roadmap") and not built; the commands in this
-README are what exists now, activation among them ([below](#activating-a-project)).
+README are what exists now, activation among them ([below](#activating-a-project)), and the
+coordinator's start, status and stop controls ([below](#the-coordinator)).
 
 It never marks its pull request ready or merges it, does not touch the project's `package.json`,
 its CI or its stories, and does nothing about branch protection. Set up this way, a project uses
@@ -210,6 +211,41 @@ visibly, and counts as permission for no project.
 `deactivate` removes the repository's record. The owned checkout is retained for reuse, by a later
 activation, and is never cleaned up automatically: remove it by hand if you no longer want it.
 None of these commands starts a review or a coordinator.
+
+### The coordinator
+
+The coordinator is one long-running process per OS user, across that user's terminals and
+activated projects, that will schedule their automatic reviews. It schedules nothing yet: for now
+it can be started, inspected and gracefully stopped, and stays idle until it is stopped.
+
+```sh
+steward coordinator start            # start it in the background
+steward coordinator status [--json]  # running, stopping or stopped
+steward coordinator stop             # admit no more work; exit once admitted work has finished
+```
+
+`start` launches the coordinator detached, so it keeps running after the terminal that started it
+closes, and reports `started` only once the new process has written its record,
+`~/.steward/state/coordinator.json`: its process id, start time and state, and no credentials.
+If the process ends, or writes no record in time, `start` says it did not start and exits 1. When
+the recorded process is running, `start` starts nothing, reports `already-running` with its process
+id and start time, and exits 1. When the record's process is no longer running, `start` says so,
+replaces the record and starts a new coordinator. `status` starts nothing; it reports `running`,
+`stopping` or `stopped`, with the process id and start time when there is a record, and `--json`
+prints the same as one JSON object. A record whose process is gone is reported as `stopped`, noting
+that the previous coordinator ended without removing its record.
+
+`stop` leaves a stop request, `~/.steward/state/coordinator.stop`, which the coordinator looks for
+a few times a second. On seeing it, the coordinator admits no more work, and that is the
+acknowledgement `stop` waits for. With no admitted work running, the coordinator removes its record
+and exits, and `stop` reports `stopped`. Otherwise `stop` returns at once, reporting `stopping`,
+without waiting for that work; the coordinator removes its record and exits once the work has
+finished, and `status` then reports `stopped`. Running `stop` again, or when nothing is running, is
+harmless. A graceful stop terminates nothing, and is not the shared emergency stop (E-stop) planned
+before 1.0, which will terminate running work and block new commands.
+
+Manual commands, `review`, `rotation` and `land` among them, never ask the coordinator, and run the
+same whether it is running, stopping or stopped.
 
 ## Contributing
 

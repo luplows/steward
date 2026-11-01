@@ -81,10 +81,12 @@ are under "The outline's reasoning", in Part 3.
 
 The crew's product roadmap of 2026-10-26 is in `outline.md`, "Product roadmap", the authority
 for versions 0.1 through 1.0. It is a set of agreed outcomes awaiting refinement where stories
-do not yet exist. The implemented review rotation is still started by hand; the local coordinator
-and automatic scheduling are roadmap work, not delivered behaviour. Explicit activation
-(`steward project`, `scripts/dispatch/project.mjs`) is built: it records which installed projects
-the coordinator may review, and starts nothing.
+do not yet exist. The implemented review rotation is still started by hand; automatic scheduling
+is roadmap work, not delivered behaviour. Explicit activation (`steward project`,
+`scripts/dispatch/project.mjs`) is built: it records which installed projects the coordinator may
+review, and starts nothing. The local coordinator's start, status and stop controls
+(`steward coordinator`, `scripts/dispatch/coordinator.mjs`) are built; the coordinator they start
+schedules nothing yet.
 `migration-plan.md` preserves the earlier migration plan and is not the version roadmap.
 
 `steward init` delivers repository installation files through a draft installation pull
@@ -2839,13 +2841,25 @@ shortened where it is long, so that it can be found there with its date.
   - **Planned (ST-52, ST-61):** automatic admission reads the records at each
     admission, so a deactivated project is not admitted afterwards; an already
     admitted review may finish.
-  - **Planned (ST-58):** the coordinator is a detached process, one per OS user
-    across projects, known by its record `~/.steward/state/coordinator.json`. Start
-    reports success only after the process acknowledges it is running, and
-    reports `already-running` when the recorded process is running; status
-    distinguishes running, stopping and stopped. Graceful stop promptly
-    acknowledges a drain and prohibits admission after acknowledgement while
-    admitted work may finish.
+  - The coordinator is a detached process, one per OS user across projects,
+    known by its record `~/.steward/state/coordinator.json`: its process id,
+    start time and state (`running` or `stopping`), and no credentials
+    (`scripts/dispatch/coordinator.mjs`). `steward coordinator start` launches
+    it and reports `started` only once the process has written that record,
+    which is its acknowledgement that it is running; it reports
+    `already-running`, starting nothing, when the recorded process is running,
+    and replaces a record whose process is no longer running, saying so.
+    `steward coordinator status` distinguishes running, stopping and stopped,
+    as text or with `--json`, and reports a record whose process has gone as
+    stopped. `steward coordinator stop` reaches the coordinator through a stop
+    request, the file `~/.steward/state/coordinator.stop`, which it polls for.
+    On seeing it the coordinator admits no more work: that acknowledgement is
+    the admission boundary. With no admitted work it removes its record and
+    exits, and `stop` reports `stopped`; otherwise it marks its record
+    `stopping`, `stop` returns at once reporting `stopping`, and the
+    coordinator removes its record and exits once that work has finished. It
+    schedules nothing yet. Graceful stop is not the shared E-stop below: it
+    terminates nothing and blocks no manual command.
   - Rescoped by the crew, 2026-10-31: ST-57 and ST-58 cover one member of the
     crew running one command at a time. Racing commands, symlinked paths, an
     OS-level exclusive lock and reused process ids are out of scope;

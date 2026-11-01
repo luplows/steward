@@ -19,9 +19,12 @@ Where a file defines the thing, the entry names it, and the file is the authorit
   yet run. *Formerly: Session B.*
 - **controller** — the session asked to run steward's dispatch scripts by hand, doing ATC's work
   (`docs/controller.md`). *Formerly: the dispatcher session.*
-- **coordinator** — planned for 0.1: the per-OS-user authority for scheduling
-  explicitly activated projects' automatic reviews, not manual commands
-  (`docs/outline.md`, Product roadmap).
+- **coordinator** — the per-OS-user authority for scheduling explicitly activated projects'
+  automatic reviews, not manual commands (`docs/outline.md`, Product roadmap): a detached
+  process started, inspected and gracefully stopped with
+  `steward coordinator start`, `status` and `stop`, and known by its record,
+  `~/.steward/state/coordinator.json` (`scripts/dispatch/coordinator.mjs`). Its scheduling is
+  planned for 0.1 and not yet built.
 - **activation** — one OS user's permission for unattended local review of an installed project,
   given by `steward project activate` and taken away by `steward project deactivate`, and kept as
   a record in `~/.steward/state/projects.json` (`scripts/dispatch/project.mjs`). Installation
