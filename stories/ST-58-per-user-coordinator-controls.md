@@ -26,7 +26,7 @@ against two of them racing or every way a process can die.
       story itself introduces no scheduling or reviewer dispatch; when ST-61 later adds scheduling,
       startup may initiate an immediate scan.
 - [ ] **AC-2** — **One coordinator, by its record.** The running coordinator keeps a record at
-      `~/.steward/coordinator.json` with its process id and start time, and no credentials. A
+      `~/.steward/state/coordinator.json` with its process id and start time, and no credentials. A
       `start` while the recorded process is running starts nothing and reports `already-running`
       with that process id and start time, exiting nonzero. Tests start one coordinator, then a
       second `start`, and show one process and the `already-running` report.
@@ -92,7 +92,7 @@ for 0.1:
 
 - `scripts/dispatch/cli.mjs` currently launches individual modules in their own processes and
   supports direct module invocation; that behavior is preserved.
-- ST-57 supplies the activated-project record, at `~/.steward/projects.json`. ST-60 supplies
+- ST-57 supplies the activated-project record, at `~/.steward/state/projects.json`. ST-60 supplies
   routine completion, clean/provably idle restart and a protective refusal for uncertain execution
   or ownership; draft ST-64 holds future exceptional reconciliation.
 - Crew decision, 2026-10-27: graceful stop remains in 0.1; E-stop is required before 1.0, not for

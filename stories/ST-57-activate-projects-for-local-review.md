@@ -29,14 +29,14 @@ every Git setup or a second command running at the same time.
       project whose installation is only on a feature branch of the caller's checkout refused, and
       one installed on `main` activated.
 - [ ] **AC-2** — **A checkout of its own; the caller's is not touched.** The coordinator-owned
-      checkout is a clone of `origin` at
-      `~/.steward/checkouts/<owner>/<name>`, detached at `origin`'s `main`. Activation clones it
-      when it is absent and fetches and checks out `origin`'s `main` there when it is present.
-      Activation fetches nothing into the caller's checkout and writes nothing there. A test starts
-      from a caller's checkout on a feature branch with staged, unstaged and untracked changes, and
-      shows its files and `git status --porcelain=v1` output unchanged after activation.
+      checkout is a clone of `origin` at `~/.steward/state/checkouts/<owner>/<name>`, detached at
+      `origin`'s `main`. Activation clones it when it is absent, and fetches and checks out
+      `origin`'s `main` there when it is present. Activation fetches nothing into the caller's
+      checkout and writes nothing there. A test starts from a caller's checkout on a feature branch
+      with staged, unstaged and untracked changes, and shows its files and
+      `git status --porcelain=v1` output unchanged after activation.
 - [ ] **AC-3** — **One record per repository.** Activations are kept in
-      `~/.steward/projects.json`, separate from the user config (`~/.steward/config.json`) and
+      `~/.steward/state/projects.json`, separate from the user config (`~/.steward/config.json`) and
       from any project's `steward.config.json`. Each record holds the repository (`owner/name`),
       the checkout path the person gave, and the owned checkout's path, and no credentials.
       Activating a repository that is already activated, from any checkout of it, keeps one record
@@ -47,8 +47,8 @@ every Git setup or a second command running at the same time.
       activation record fails visibly; it is never treated as permission to schedule unknown
       projects.
 - [ ] **AC-5** — **Deactivation removes the record.** `steward project deactivate <owner/name>`
-      removes that repository's record from `~/.steward/projects.json` and says so. It does not
-      stop the coordinator, delete the owned checkout or change the caller's files. A repository
+      removes that repository's record from `~/.steward/state/projects.json` and says so. It does
+      not stop the coordinator, delete the owned checkout or change the caller's files. A repository
       with no record is reported as not activated, and the other records are left as they were.
       ST-52 and ST-61 read the records at each automatic admission, so a deactivated project is not
       admitted afterwards; an already admitted review may finish.
@@ -109,8 +109,9 @@ against, for 0.1:
 - Crew decision, 2026-10-31: rescope this story to the happy path under the threat model in
   Constraints, as ST-56 was in #101. The atomic writes, alias and symlink tests, refused ambiguous
   registration, and the test of deactivation concurrent with an admission are dropped; the owned
-  checkout is a clone kept at `~/.steward/checkouts/<owner>/<name>` and the records at
-  `~/.steward/projects.json`. `git log` of this file holds the earlier version.
+  checkout is a clone kept at `~/.steward/state/checkouts/<owner>/<name>` and the records at
+  `~/.steward/state/projects.json`, inside the `~/.steward/state/` that ST-63 planned for
+  operational state (`docs/user-config.md`). `git log` of this file holds the earlier version.
 - `docs/planning-session.md`, "Writing it": a safety criterion names a bounded threat model.
 - Suggested size: medium; no scheduling or process owner implementation in this story.
 

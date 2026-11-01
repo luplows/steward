@@ -2828,12 +2828,12 @@ shortened where it is long, so that it can be found there with its date.
   - **Planned (ST-57):** explicit per-user local activation is separate from
     installation. Activation reads only the caller's root and `origin`, and
     checks the installation at `origin`'s `main` in a coordinator-owned
-    clone, `~/.steward/checkouts/<owner>/<name>`. One record per repository,
-    in `~/.steward/projects.json`, outside the user config and project
+    clone, `~/.steward/state/checkouts/<owner>/<name>`. One record per repository,
+    in `~/.steward/state/projects.json`, outside the user config and project
     settings; deactivation removes the record, so automatic admission no longer
     finds it, and retains the checkout for reuse.
   - **Planned (ST-58):** the coordinator is a detached process, one per OS user
-    across projects, known by its record `~/.steward/coordinator.json`. Start
+    across projects, known by its record `~/.steward/state/coordinator.json`. Start
     reports success only after the process acknowledges it is running, and
     reports `already-running` when the recorded process is running; status
     distinguishes running, stopping and stopped. Graceful stop promptly
