@@ -18,7 +18,7 @@ every Git setup or a second command running at the same time.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — **Activation checks `main`, not the caller's branch.**
+- [x] **AC-1** — **Activation checks `main`, not the caller's branch.**
       `steward project activate <checkout-path>` reads only the checkout's root and `origin`'s URL
       from the caller's checkout. `origin` must name one GitHub repository. The installation is
       checked in the coordinator-owned checkout (AC-2) at `origin`'s `main`: a readable, valid
@@ -28,34 +28,34 @@ every Git setup or a second command running at the same time.
       activation; an owned checkout it already made is kept for the next attempt. Tests show a
       project whose installation is only on a feature branch of the caller's checkout refused, and
       one installed on `main` activated.
-- [ ] **AC-2** — **A checkout of its own; the caller's is not touched.** The coordinator-owned
+- [x] **AC-2** — **A checkout of its own; the caller's is not touched.** The coordinator-owned
       checkout is a clone of `origin` at `~/.steward/state/checkouts/<owner>/<name>`, detached at
       `origin`'s `main`. Activation clones it when it is absent, and fetches and checks out
       `origin`'s `main` there when it is present. Activation fetches nothing into the caller's
       checkout and writes nothing there. A test starts from a caller's checkout on a feature branch
       with staged, unstaged and untracked changes, and shows its files and
       `git status --porcelain=v1` output unchanged after activation.
-- [ ] **AC-3** — **One record per repository.** Activations are kept in
+- [x] **AC-3** — **One record per repository.** Activations are kept in
       `~/.steward/state/projects.json`, separate from the user config (`~/.steward/config.json`) and
       from any project's `steward.config.json`. Each record holds the repository (`owner/name`),
       the checkout path the person gave, and the owned checkout's path, and no credentials.
       Activating a repository that is already activated, from any checkout of it, keeps one record
       for it and reuses its owned checkout. A test activates the same repository twice and shows
       one record.
-- [ ] **AC-4** — `steward project list` reports all activated repositories, their source and owned
+- [x] **AC-4** — `steward project list` reports all activated repositories, their source and owned
       checkout paths, and any invalid/missing checkout without starting a review. A malformed
       activation record fails visibly; it is never treated as permission to schedule unknown
       projects.
-- [ ] **AC-5** — **Deactivation removes the record.** `steward project deactivate <owner/name>`
+- [x] **AC-5** — **Deactivation removes the record.** `steward project deactivate <owner/name>`
       removes that repository's record from `~/.steward/state/projects.json` and says so. It does
       not stop the coordinator, delete the owned checkout or change the caller's files. A repository
       with no record is reported as not activated, and the other records are left as they were.
       ST-52 and ST-61 read the records at each automatic admission, so a deactivated project is not
       admitted afterwards; an already admitted review may finish.
-- [ ] **AC-6** — `steward init` never activates a project, starts the coordinator, or creates an
+- [x] **AC-6** — `steward init` never activates a project, starts the coordinator, or creates an
       activation record, including when it opens its installation pull request (ST-56). Tests
       distinguish an installed but inactive project from an activated one.
-- [ ] **AC-7** — `steward project list` and the documented interface use
+- [x] **AC-7** — `steward project list` and the documented interface use
       `steward project activate <checkout-path>` and `steward project deactivate <owner/name>`.
       The documentation states where the records and owned checkouts are kept, that the
       installation must be on `origin`'s `main`, the activation boundary, and that a deactivated

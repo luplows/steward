@@ -15,7 +15,7 @@ import { isRulesFilePath } from './rules-file-path.mjs'
 
 const SETTINGS_FILENAME = 'steward.config.json'
 
-const REPO_RE = /^[^/\s]+\/[^/\s]+$/
+export const REPO_RE = /^[^/\s]+\/[^/\s]+$/
 
 const COMMAND_KEYS = ['command', 'timeoutMinutes']
 const LAND_WHEN_ALL = 'all-checks'

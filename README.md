@@ -60,8 +60,8 @@ exports `listReviewCandidates` and `reviewCandidate`: discovery reports eligible
 and skip reasons in PR-number order; execution attempts one named pair through the existing
 reviewer. It binds the expected full head SHA at reviewer admission and starts no model if the
 head or eligibility changed. This operation only reviews, with either value of `land`; it requests
-no landing and runs no coding or inspection. Automatic scheduling and local activation remain
-planned work.
+no landing and runs no coding or inspection. Automatic scheduling remains planned work; local
+activation, which says which projects it may review, is built ([below](#activating-a-project)).
 
 In another project, the crew runs steward from the package at the tag the project's workflow files
 pin, the form those files use, from the project's checkout:
@@ -147,9 +147,9 @@ asks for one landing of one pull request that has passed review, through the sam
 there as it is, byte for byte, whatever its `land` says or what `--yes` or `--land` are given, and
 its closing output says that file governs its own landing authorization. Merging the installation
 pull request starts nothing on any machine. Running steward on a machine without starting each
-command by hand (a local coordinator, with activation, stop and status controls) is planned
+command by hand (a local coordinator, with start, stop and status controls) is planned
 ([`docs/outline.md`](docs/outline.md), "Product roadmap") and not built; the commands in this
-README are what exists now.
+README are what exists now, activation among them ([below](#activating-a-project)).
 
 It never marks its pull request ready or merges it, does not touch the project's `package.json`,
 its CI or its stories, and does nothing about branch protection. Set up this way, a project uses
@@ -164,8 +164,8 @@ use alone. The order is:
 4. Optionally, run `steward protect`, once that pull request has merged.
 5. Remove the folder `init` cloned into, which its closing message names.
 
-Installation and explicit local activation remain separate: the installation pull request creates
-no permission to run a local coordinator.
+Installation and explicit local activation are separate: see
+[Activating a project](#activating-a-project).
 
 `steward protect` sets branch protection on `main` so that GitHub stops a merge that has not passed
 review. It asks no question, takes no flag but `--repo owner/name` (the repository is otherwise the
@@ -179,6 +179,36 @@ with `enforce_admins` on. Protection already there is kept, and only those two a
 project's own CI checks are the crew's to add. Where GitHub offers none, as on a private repository
 on GitHub Free, or the account cannot set it, it says so plainly, says that nothing on GitHub then
 enforces the gate, and exits 1.
+
+### Activating a project
+
+Installation and explicit local activation are separate: the installation pull request, and
+`init`, create no permission for steward to review the project unattended on any machine. Each
+member of the crew who wants that on their own machine activates the project there, as their own
+OS user:
+
+```sh
+steward project activate <checkout-path>   # permit unattended review of that checkout's repository
+steward project list                       # the activated repositories and their checkouts
+steward project deactivate <owner/name>    # take that permission away again
+```
+
+`activate` reads only the checkout's root and `origin`'s URL, which must name a GitHub repository,
+and changes nothing in that checkout: not its branch, its files or its refs. It checks the
+installation on `origin`'s `main`, not on the branch the checkout is on, in a checkout of its own,
+the owned checkout, a clone of `origin` at `~/.steward/state/checkouts/<owner>/<name>`, detached at
+`origin`'s `main`: cloned when it is not there, fetched and checked out when it is. `main` must have
+a valid `steward.config.json` whose `repo` is that repository, the checklist it names, and
+`.github/workflows/review-gate.yml`. When it does, `activate` records the project in
+`~/.steward/state/projects.json`, one record per repository holding the repository, the root of
+the checkout it was given and the owned checkout, and no credentials; activating it again, from
+any checkout of it, updates that record and reuses the owned checkout. When it does not,
+`activate` names each check that failed, records nothing, keeps the owned checkout for the next
+attempt and exits 1. `list` reads the records, and marks a checkout that is no longer there; a
+records file it cannot read fails visibly, and counts as permission for no project.
+`deactivate` removes the repository's record. The owned checkout is retained for reuse, by a later
+activation, and is never cleaned up automatically: remove it by hand if you no longer want it.
+None of these commands starts a review or a coordinator.
 
 ## Contributing
 

@@ -57,8 +57,11 @@ the file path and offending key. The default never rescues a missing or invalid 
 
 For example, `"coordinator": { "scanIntervalMinutes": 10080 }` selects a week. A later read sees
 a valid manual edit. The reader starts no scan loop, daemon, reviewer or session and writes no
-activation, ownership, reservation or other state. Future operational state is planned under
-`~/.steward/state/`, separate from this editable file. ST-61 owns scheduling and will consume the
+activation, ownership, reservation or other state. Operational state is kept under
+`~/.steward/state/`, separate from this editable file: activation records in
+`~/.steward/state/projects.json` and owned checkouts under `~/.steward/state/checkouts/`
+(`scripts/dispatch/project.mjs`, README "Activating a project"). `STEWARD_CONFIG` does not move
+that folder. ST-61 owns scheduling and will consume the
 value at the coordinator's next safe start; runtime watching and configuration-editing commands
 are not implemented here.
 

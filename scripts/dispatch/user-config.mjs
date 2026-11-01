@@ -47,6 +47,14 @@ export function userConfigPath({ env = process.env, homedir = osHomedir() } = {}
   return path.join(homedir, CONFIG_DIR, CONFIG_FILENAME)
 }
 
+/**
+ * The folder for steward's own operational state, `~/.steward/state/` in the invoking OS user's
+ * home (ST-57). `STEWARD_CONFIG` does not move it: that override selects the user config only.
+ */
+export function stateDir({ homedir = osHomedir() } = {}) {
+  return path.join(homedir, CONFIG_DIR, 'state')
+}
+
 /** Throws unless `object` has exactly `keys`, naming `name` and the key. */
 function checkKeys(filePath, name, object, keys) {
   for (const key of Object.keys(object)) {

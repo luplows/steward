@@ -20,6 +20,7 @@ import {
   QUESTIONS,
   repoFromRemoteUrl,
 } from './init.mjs'
+import { main as projectMain, projectsPath } from './project.mjs'
 import { readUserConfig } from './user-config.mjs'
 import { createLandContext, landPullRequest } from './land.mjs'
 import { readSettings } from './settings.mjs'
@@ -180,7 +181,7 @@ function fakeTerminal(answers = null) {
  * being the clone it made, or `undefined`. Git reaches `origin`'s URL only through the mapping to
  * the checkout's bare repository; any other URL fails.
  */
-async function runInit(args, { cwd, gh = fakeGitHub(), terminal = fakeTerminal(), pkg = makePackage(), machine = path.join(fresh('home'), 'config.json'), codex = null, exists, getToken = async () => 'token' } = {}) {
+async function runInit(args, { cwd, gh = fakeGitHub(), terminal = fakeTerminal(), pkg = makePackage(), machine = path.join(fresh('home'), 'config.json'), codex = null, exists, getToken = async () => 'token', homedir = fresh('profile') } = {}) {
   const out = []
   const err = []
   const tmpRoot = fresh('tmp')
@@ -188,7 +189,7 @@ async function runInit(args, { cwd, gh = fakeGitHub(), terminal = fakeTerminal()
   const code = await main(args, {
     cwd,
     env: { STEWARD_CONFIG: machine },
-    homedir: fresh('profile'),
+    homedir,
     fetch: gh.fetch,
     getToken,
     terminal,
@@ -1673,5 +1674,49 @@ describe('ST-56/AC-9: documentation', () => {
     expect(err).toMatch(/--branch <name>/)
     expect(err).toMatch(/--pr-template <path>/)
     expect(err).toMatch(/opens a draft pull request/)
+  })
+})
+
+describe('ST-57/AC-6: init never activates a project', () => {
+  /** Runs `steward project <args>` with `homedir`, reaching `cwd`'s origin through its bare repository. */
+  const project = async (args, cwd, homedir) => {
+    const out = []
+    const err = []
+    const code = await projectMain(args, {
+      cwd,
+      homedir,
+      cloneUrl: (url) => {
+        if (url !== ORIGINS.get(cwd).url) throw new Error(`no test mapping for ${url}`)
+        return ORIGINS.get(cwd).bare
+      },
+      out: (line) => out.push(line),
+      err: (line) => err.push(line),
+    })
+    return { code, out: out.join('\n'), err: err.join('\n') }
+  }
+
+  it('ST-57/AC-6: an installed project is inactive until `steward project activate`, and init writes no activation record', async () => {
+    for (const args of [['--yes'], ['--yes', '--land', 'yes']]) {
+      const cwd = makeRepo()
+      const homedir = fresh('profile')
+      const installedRun = await runInit(args, { cwd, homedir })
+      expect(installedRun.code).toBe(0)
+      adopt(cwd)
+      const noDiff = await runInit(args, { cwd, homedir })
+      expect(noDiff.out).toMatch(/already complete/)
+      expect(existsSync(path.join(homedir, '.steward', 'state'))).toBe(false)
+      expect(`${installedRun.out}\n${noDiff.out}`).not.toMatch(/activat/i)
+
+      const inactive = await project(['list'], cwd, homedir)
+      expect(inactive.out).toBe(`No project is activated (${projectsPath(homedir)} lists none).`)
+
+      const activated = await project(['activate', cwd], cwd, homedir)
+      expect(activated.err).toBe('')
+      expect(activated.code).toBe(0)
+      expect((await project(['list'], cwd, homedir)).out.split('\n').slice(0, 2)).toEqual([
+        `Activated on this machine (${projectsPath(homedir)}):`,
+        REPO,
+      ])
+    }
   })
 })
