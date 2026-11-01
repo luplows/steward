@@ -324,7 +324,7 @@ export async function gather({ flags, state, terminal }) {
  * Runs git in `cwd`, with no shell, as the user's own configuration makes it run. A git command
  * that fails throws an error whose message is what Git said.
  */
-function git(cwd, args) {
+export function git(cwd, args) {
   try {
     return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
   } catch (error) {
@@ -333,7 +333,7 @@ function git(cwd, args) {
 }
 
 /** The checkout's root, or `null` when `cwd` is not in a git repository. */
-function gitRoot(cwd) {
+export function gitRoot(cwd) {
   try {
     return path.resolve(git(cwd, ['rev-parse', '--show-toplevel']))
   } catch {

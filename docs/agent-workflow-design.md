@@ -81,8 +81,10 @@ are under "The outline's reasoning", in Part 3.
 
 The crew's product roadmap of 2026-10-26 is in `outline.md`, "Product roadmap", the authority
 for versions 0.1 through 1.0. It is a set of agreed outcomes awaiting refinement where stories
-do not yet exist. The implemented review rotation is still started by hand; the local coordinator,
-explicit activation and automatic scheduling are roadmap work, not delivered behaviour.
+do not yet exist. The implemented review rotation is still started by hand; the local coordinator
+and automatic scheduling are roadmap work, not delivered behaviour. Explicit activation
+(`steward project`, `scripts/dispatch/project.mjs`) is built: it records which installed projects
+the coordinator may review, and starts nothing.
 `migration-plan.md` preserves the earlier migration plan and is not the version roadmap.
 
 `steward init` delivers repository installation files through a draft installation pull
@@ -2825,13 +2827,18 @@ shortened where it is long, so that it can be found there with its date.
   The older release branch and PR #86 are left for the crew's later release-review reconciliation.
 
 - **Per-user coordinator foundations and manual independence** (crew, 2026-10-27).
-  - **Planned (ST-57):** explicit per-user local activation is separate from
-    installation. Activation reads only the caller's root and `origin`, and
-    checks the installation at `origin`'s `main` in a coordinator-owned
-    clone, `~/.steward/state/checkouts/<owner>/<name>`. One record per repository,
-    in `~/.steward/state/projects.json`, outside the user config and project
-    settings; deactivation removes the record, so automatic admission no longer
-    finds it, and retains the checkout for reuse.
+  - Explicit per-user local activation is separate from installation:
+    `steward project activate <checkout-path>`, `list` and
+    `deactivate <owner/name>` (`scripts/dispatch/project.mjs`). Activation reads
+    only the caller's root and `origin`, and checks the installation at
+    `origin`'s `main` in a coordinator-owned clone, the owned checkout,
+    `~/.steward/state/checkouts/<owner>/<name>`, detached at `origin`'s `main`.
+    One record per repository, in `~/.steward/state/projects.json`, outside the
+    user config and project settings; deactivation removes the record and
+    retains the owned checkout for reuse, never cleaning it up automatically.
+  - **Planned (ST-52, ST-61):** automatic admission reads the records at each
+    admission, so a deactivated project is not admitted afterwards; an already
+    admitted review may finish.
   - **Planned (ST-58):** the coordinator is a detached process, one per OS user
     across projects, known by its record `~/.steward/state/coordinator.json`. Start
     reports success only after the process acknowledges it is running, and

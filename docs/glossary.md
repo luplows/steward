@@ -22,8 +22,13 @@ Where a file defines the thing, the entry names it, and the file is the authorit
 - **coordinator** — planned for 0.1: the per-OS-user authority for scheduling
   explicitly activated projects' automatic reviews, not manual commands
   (`docs/outline.md`, Product roadmap).
-- **activation** — planned per-user permission for unattended local review of
-  an installed project; installation alone grants none (`docs/outline.md`).
+- **activation** — one OS user's permission for unattended local review of an installed project,
+  given by `steward project activate` and taken away by `steward project deactivate`, and kept as
+  a record in `~/.steward/state/projects.json` (`scripts/dispatch/project.mjs`). Installation
+  alone grants none.
+- **owned checkout** — steward's own clone of an activated project,
+  `~/.steward/state/checkouts/<owner>/<name>`, detached at `origin`'s `main`, never the person's
+  working checkout. Kept for reuse after deactivation.
 - **coder** — a session ATC starts to implement a unit. It commits; ATC pushes its branch and opens
   its flight.
 - **reviewer** — a session ATC starts to judge one flight at one head. It returns a verdict and
