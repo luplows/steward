@@ -21,7 +21,7 @@ Provisional only. This story is a holding draft, not implementation-ready.
 
 ## Out of scope
 
-- Routine failures under a living coordinator, clean stop/start and provably idle restart after safely reacquiring ownership (ST-60).
+- Routine failures under a living coordinator, clean stop/start and carrying on after an interruption, with an interrupted review counted as failed (ST-60).
 - Shared E-stop and universal manual-process registration (ST-62).
 - Cross-user or distributed ownership unless separately authorized.
 
@@ -32,7 +32,7 @@ Provisional only. This story is a holding draft, not implementation-ready.
 ## Context
 
 - Crew decision, 2026-10-27: keep 0.1 focused on expected failures; retain these questions as a draft for a future release, without choosing its release number or mechanism.
-- ST-60 permits provably idle restart, but leaves uncertain work visible as `recovery-needed` and blocks automatic admission. ST-52 retains its nonterminal reservation.
+- Crew decision, 2026-11-02: ST-60 no longer refuses on uncertain work. Its `start` counts an interrupted review as failed and carries on, accepting that a reviewer which outlived its coordinator may still post a verdict. This story's questions are what a future release would add to that.
 - The read-only architecture investigation found that current timeout and tree-kill handling depends on a living supervisor; a missing root PID or a posted verdict does not establish descendant termination.
 
 ## Open questions
@@ -41,6 +41,6 @@ Provisional only. This story is a holding draft, not implementation-ready.
 - What is the required termination boundary, and what positive evidence can establish it on Windows and other supported platforms? How should PID reuse, lost ancestry and permission failures be reported?
 - Is a dedicated worker or OS containment worthwhile? If needed, how are child creation/identity-recording races closed without building a universal process registry?
 - How should a verdict POST accepted by GitHub but not durably acknowledged locally be reconciled without duplicate posting or another paid review? Is attempt metadata needed?
-- What targeted operator recovery action may clear `recovery-needed`, and what evidence must it require? Is a verified full machine reboot an acceptable fallback? A Steward process restart alone is not such evidence.
+- Should the crew be able to have an interrupted head reviewed again automatically, and what evidence would that require?
 - When may safely interrupted work be retried, and how does that interact with ST-61's unchanged-head suppression after a model-consuming failure?
 - Which future release needs this capability, and should the eventual work be split by failure case or platform?
