@@ -61,7 +61,8 @@ time, on one machine (Constraints). Outside it, and not to be guarded against, f
   `threw`, and GitHub's verdict still governs the head (ST-59).
 - A second interruption during `start`'s own write, and hand-edited state.
 - A `recovery-needed` refusal, an idle proof, an operator recovery command and a machine reboot as
-  evidence (draft ST-64 keeps the questions).
+  evidence: the crew dropped these on 2026-11-02 (Context). Draft ST-64 holds what a future release
+  might add.
 - Killing sessions on demand, shared E-stop or registration of independent manual commands (ST-62).
 - Scheduler retry budgets, backoff or retry-reset commands; ST-61 keeps its existing policy.
 
