@@ -247,6 +247,16 @@ before 1.0, which will terminate running work and block new commands.
 Manual commands, `review`, `rotation` and `land` among them, never ask the coordinator, and run the
 same whether it is running, stopping or stopped.
 
+So that a later scan will not start, and pay for, a review already started, the coordinator will
+note each automatic review in `~/.steward/state/reviews.json` before starting it, and how it ended
+afterwards (`admitReview`,
+[`scripts/dispatch/review-admission.mjs`](scripts/dispatch/review-admission.mjs), built ahead of the
+scheduling that will call it). A repository, pull request and full head with a `running` entry is
+not started again; a new head is a new review. This prevents duplicate
+coordinator-dispatched work only, and is not a lock. Manual commands neither read nor write that
+file, so a manual review may overlap an automatic one, or another manual one, and the possible
+duplicate costs and verdict races are the crew's to manage.
+
 ## Contributing
 
 For everyone:

@@ -34,6 +34,8 @@ enough, are in [`agent-workflow-design.md`](agent-workflow-design.md), "The cont
 - Direct manual commands may overlap coordinator work or other manual commands.
   The crew or external harness owns the resulting duplicate-usage and
   potentially competing-verdict risk. Graceful coordinator stop is not E-stop.
+- The coordinator's record of its reviews, `~/.steward/state/reviews.json`, prevents
+  duplicate coordinator-dispatched work only. Manual commands neither read nor write it.
 
 ## Where you run
 

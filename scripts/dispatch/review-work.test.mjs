@@ -10,6 +10,7 @@ import { landPullRequest } from './land.mjs'
 import { dispatchCoder } from './coder.mjs'
 import { runRotation } from './rotation.mjs'
 import { reviewPullRequest } from './review.mjs'
+import { reviewsPath } from './review-admission.mjs'
 import { listReviewCandidates, reviewCandidate } from './review-work.mjs'
 import { fixtureUserConfig, fixtureSettings } from './settings-fixture.mjs'
 
@@ -319,6 +320,32 @@ describe('ST-59 review-only work', () => {
     expect(s.calls).toEqual([])
     expect(g.requests).toEqual([])
   })
+
+  for (const [name, comments, options] of [
+    ['review', () => [], {}],
+    ['review --rereview', () => [comment(head, 'block')], { rereview: true }],
+  ]) {
+    it(`ST-52/AC-5: a manual ${name} of a head with a running entry reaches its normal review logic`, async () => {
+      const home = mkdtempSync(path.join(root, 'home-'))
+      const file = reviewsPath(home)
+      mkdirSync(path.dirname(file), { recursive: true })
+      const held = `${JSON.stringify({ reviews: [{ repo: REPO, number: 1, headSha: head, state: 'running', startedAt: '2026-11-02T10:00:00.000Z' }] })}\n`
+      writeFileSync(file, held)
+      // os.homedir() reads these, so a manual review that looked for the record would find this one.
+      vi.stubEnv('USERPROFILE', home)
+      vi.stubEnv('HOME', home)
+      try {
+        const g = github([pr(1)], { 1: comments }), s = session()
+        const result = await reviewPullRequest({ ...s.options, ...options, number: 1, ctx: g.ctx, repoDir: clone() })
+        expect(result).toMatchObject({ status: 'recorded', verdict: 'pass', sessions: 1 })
+        expect(s.calls).toHaveLength(1)
+        expect(g.posted).toHaveLength(1)
+        expect(readFileSync(file, 'utf8')).toBe(held)
+      } finally {
+        vi.unstubAllEnvs()
+      }
+    }, 30_000)
+  }
 
   it('ST-59/AC-6: the bounded-review design marker is resolved', () => {
     const design = readFileSync(new URL('../../docs/agent-workflow-design.md', import.meta.url), 'utf8')
