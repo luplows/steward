@@ -84,8 +84,9 @@ function writeEntry(file, entry) {
  * - `{ status: 'admission-closed' }`: `admit` refused it, a stop having been acknowledged. Nothing
  *   was written or started.
  * - `{ status: 'record-failed', file, reason, entry?, reviewed? }`: the record could not be read or
- *   written. Without `entry`, no review started. With it, the review ended as `entry` says, and the
- *   file still has it `running`.
+ *   written. Without `entry`, no review started. With it, the review has ended, and the returned
+ *   `entry` is what says how. What the file then holds is uncertain: it may still have the entry
+ *   `running`, or it may be malformed.
  */
 export async function admitReview({ homedir, admit, candidate, repoDir, ctx, reviewOptions, review = reviewCandidate, now = () => new Date() }) {
   const identity = { repo: candidate.repo, number: candidate.number, headSha: candidate.expectedHeadSha }
