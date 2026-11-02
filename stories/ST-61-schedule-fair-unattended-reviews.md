@@ -10,52 +10,115 @@ blocked: null
 
 ## Intent
 
-As a developer with several activated projects, I want a single coordinator to discover and fairly review eligible pull-request heads unattended, while bounding model usage, so that review progresses without manual rotations or repeated costly failures.
+As a developer with several activated projects, I want a single coordinator to discover and fairly
+review eligible pull-request heads unattended, while bounding model usage, so that review
+progresses without manual rotations or repeated costly failures.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — Once ST-58 reports the coordinator `started` and ST-60 allows scheduling after a clean restart or positively proven idle interruption, the coordinator scans only the activated projects established by ST-57. It does not scan an installed-but-inactive project. Corrupt or unreadable activation state prevents automatic admission and surfaces a reason; it cannot cause implicit activation. Candidate selection uses ST-59's current-head, trust, draft, block and existing-verdict checks, rather than a second independently drifting eligibility implementation. Tests cover an initial scan, an inactive project, unreadable activation state and recovery-not-cleared refusal.
-
-- [ ] **AC-2** — A project turn admits at most one eligible PR/head through ST-52 and then yields to the next eligible activated project, in deterministic round-robin order by canonical repository identity. Candidate order within a project follows ST-59. With two projects continuously holding eligible heads, two successive admitted review turns cannot belong to the same project while the other remains eligible. Tests cover two projects with multiple candidates, one empty project, activation-list changes and continued alternation after restart.
-
-- [ ] **AC-3** — Across all the invoking OS user's activated projects, only **one coordinator-managed reviewer operation** may be active at a time. The coordinator starts no second automatic review until the preceding operation is known to have ended; uncertain survival causes ST-60's `recovery-needed` refusal and prevents further automatic admission; exceptional reconciliation is future work in draft ST-64. Direct manual `review`, `--rereview`, `rotation` and `land` commands neither consume this automatic slot nor advance the scheduler cursor. Tests hold an automatic reviewer open, attempt a second automatic admission and separately exercise direct manual work.
-
-- [ ] **AC-4** — The scan interval governs discovery of newly eligible work, **not the delay between review turns already discovered**. On safe startup, scan immediately. As capacity becomes available, dispatch known eligible candidates in fair turns, validating the intended head again through ST-59 before any model session. When no admissible candidates remain, do not start a model session or busy-loop; perform the next discovery scan after the configured interval. Tests using a controllable clock show consecutive known reviews without an extra interval, idle waiting and discovery on a later scan.
-
-- [ ] **AC-5** — The per-user configuration supplies `coordinator.scanIntervalMinutes`, defaulting to **15** when that optional setting is absent. Accept any positive whole number of minutes that can be represented safely by the scheduler; impose **no arbitrary product maximum**. Reject zero, negative values, fractions, nonnumeric values and overflow rather than silently substituting a default. Configuration is persisted outside project `steward.config.json`, validated before scheduling, and reported as the effective interval by `coordinator status`. A change takes effect on the next coordinator start. Tests cover default, long intervals, invalid values, persistence and restart. **ST-63 already supplies `~/.steward/config.json`, the `STEWARD_CONFIG` override and validated interval; this story consumes that contract without replacing its reader. A configuration-editing command remains separate.**
-
-- [ ] **AC-6** — Discovery and model-start refusals have distinct, observable outcomes. A project's GitHub discovery failure does not prevent other projects from progressing and is retried on that project's next normal scan; this story introduces **no exponential project-failure backoff**. When GitHub returns an actionable rate-limit reset/retry time, the coordinator does not retry before it. When the existing reviewer returns `over-usage`, no model session is started; the coordinator honors the returned reset time when valid and rechecks actual usage before starting again. With `usage-unknown`, no model session starts on that refusal and usage is rechecked on a later scan. Tests prove these refusals cannot cause an immediate retry loop or multiply model sessions.
-
-- [ ] **AC-7** — Once an automatic review has **started a model session** and definitively ends without a usable recorded review result (such as `session-failed`, `malformed-verdict` or `cannot-review`), the coordinator durably marks that **repository/PR/head** as requiring operator attention and does **not automatically rerun that unchanged head** on later scans or after restart. A new PR head is independently eligible. A manual invocation remains available under its existing authorization and review rules, but does not silently clear automatic retry suppression; a governing recorded verdict makes the head no longer pending. ST-59's existing bounded malformed-output retry *within that original invocation* is preserved. Ambiguous termination or posting enters ST-60's `recovery-needed` refusal instead of being classified as safely finished; 0.1 does not automatically reconcile it. Tests cover repeated scans, restart, changed head, manual independence, and no extra model session.
-
-- [ ] **AC-8** — The scheduler durably records its next-project cursor at the automatic admission boundary and restores a deterministic fair order after clean restart. A changed activation set is reconciled without treating checkout aliases as extra projects. An acknowledged graceful stop admits no new automatic work and allows the current admitted review to finish; deactivation similarly forbids later admission for that project. Read-only `coordinator status` surfaces active project/PR/full head, effective scan interval, next scan when known, last outcome, and usage/retry-suppressed reasons without leaking credentials. Tests inject interrupted turns, deactivation during review, graceful stop and restarted coordination.
-
-- [ ] **AC-9** — Automatic scheduler work never calls `landPullRequest`, the runway, `runRotation`, inspection, the coder or the fixer, regardless of project `land` settings. Review verdicts continue through the existing head-bound gate. Integration tests use two activated projects with differing issue/file unit-link conventions and an inactive project. The implementing PR documents the fairness and scanning behavior and resolves the ST-61 planned design marker.
+- [ ] **AC-1** — **Only activated projects.** Once `start` has reported `started`, the coordinator
+      scans only the projects in ST-57's records, read with `readProjects` at each scan and again
+      before each admission. Unreadable records prevent automatic admission and `status` gives the
+      reason; they never cause implicit activation. Candidate selection uses ST-59's
+      `listReviewCandidates`, not a second eligibility check. Each turn brings the project's owned
+      checkout to `origin`'s `main`, as activation does, and passes it as `repoDir`. Tests cover an
+      initial scan, an inactive project and unreadable records.
+- [ ] **AC-2** — **Fair turns.** A project's turn admits at most one eligible PR/head through
+      ST-52, then yields to the next project with an eligible head, in round-robin order by
+      `owner/name`. Candidate order within a project follows ST-59. With two projects holding
+      eligible heads, two successive reviews do not belong to the same project. The position is
+      kept in memory: a restart begins a new round. Tests cover two projects with several
+      candidates, one empty project and a project activated or deactivated between turns.
+- [ ] **AC-3** — **One review at a time.** The coordinator awaits each review before starting the
+      next, so at most one coordinator-managed review runs at a time across all of the OS user's
+      activated projects. Direct manual `review`, `--rereview`, `rotation` and `land` commands
+      neither count towards this nor change the scheduler's position. Tests hold a stand-in review
+      open and show no second one started.
+- [ ] **AC-4** — **Scanning.** The scan interval governs discovery of new work, **not the delay
+      between reviews already discovered**. On start, scan immediately. Run known eligible
+      candidates in fair turns, with ST-59 checking the intended head again before any model
+      session. When none remain, start no session and do not busy-loop; scan again after the
+      configured interval. Tests using a controllable clock show consecutive known reviews with no
+      added interval, idle waiting and discovery on a later scan.
+- [ ] **AC-5** — **The interval.** `start` reads `coordinator.scanIntervalMinutes` through
+      `readUserConfig` (`scripts/dispatch/user-config.mjs`, ST-63) and refuses, starting nothing,
+      when it throws. `coordinator status` reports the effective interval. A change takes effect
+      at the next start. Tests cover the default, a configured interval and a refused
+      configuration.
+- [ ] **AC-6** — **Failures and refusals do not loop.** A project's GitHub discovery failure is
+      reported, does not stop other projects, and is retried at that project's next normal scan.
+      When a review returns `over-usage` or `usage-unknown`, no model session has started: the
+      coordinator starts no more reviews until the next scan, where the reviewer's own usage check
+      runs again. Other no-model refusals end that head's turn, and it may be considered again at a
+      later scan. Tests show that none of these starts an immediate retry or an extra model
+      session.
+- [ ] **AC-7** — **A failed head is not paid for twice.** A head that ST-60 counts as a
+      model-consuming failure, `interrupted` included, is not reviewed again automatically, on
+      later scans or after restart, and `status` lists it. A new head of that PR is eligible. A
+      manual review remains available under its existing rules, and a verdict it records makes the
+      head no longer pending. The reviewer's bounded retry within its own invocation is unchanged.
+      Tests cover repeated scans, restart, a changed head and no extra model session.
+- [ ] **AC-8** — **Stop, deactivation and status.** After a stop's acknowledgement no new review is
+      admitted, and the current one may finish (ST-58). A project deactivated during a review is
+      not admitted afterwards, and the review under way may finish. `coordinator status` shows the
+      active project, PR and full head, the effective interval, the next scan when known, the last
+      outcome, and the usage or failure reasons above, without credentials. Tests cover a stop and
+      a deactivation during a stand-in review, and `status`'s fields.
+- [ ] **AC-9** — Automatic scheduler work never calls `landPullRequest`, the runway,
+      `runRotation`, inspection, the coder or the fixer, regardless of project `land` settings.
+      Verdicts continue through the existing head-bound gate. Tests use two activated projects with differing issue
+      and file unit-link conventions, and an inactive project. The implementing PR documents the
+      fairness and scanning behaviour and resolves the ST-61 planned design markers.
 
 ## Out of scope
 
-- Exponential backoff, bounded scheduler-level automatic retry of a model-consuming failure, programmable same-head retry budgets, operator retry-reset commands or circuit breakers. These may be planned separately if operational evidence supports them.
+The threat model is one member of the crew, one coordinator (ST-58), one automatic review at a
+time, on one machine (Constraints). Outside it, and not to be guarded against, for 0.1:
+
+- Fair order across a restart; a durable scheduler position; another process changing the records
+  or state files during a scan.
+- Waiting for a rate limit's or a usage window's reset time; the next scan's check is enough.
+- Exponential backoff, scheduler-level retry of a model-consuming failure, same-head retry
+  budgets, retry-reset commands or circuit breakers.
 - Automatic landing, coding, fixing, inspection scheduling, or launching the legacy scheduled loop.
-- Cross-user or cross-machine concurrency; more than one automatic reviewer slot; manual command concurrency management; universal E-stop or credential isolation.
-- Process-liveness reconciliation and ambiguous posted-verdict recovery (draft ST-64); 0.1 retains ST-60's protective refusal.
-- Changing ST-63's per-user `config.json` file name, `STEWARD_CONFIG` override or validation contract, or adding a configuration-editing command.
+- More than one automatic reviewer slot; manual command concurrency; cross-user or cross-machine
+  concurrency; universal E-stop or credential isolation.
+- Changing ST-63's per-user configuration, or adding a configuration-editing command.
 
 ## Constraints
 
-- Use ST-57 activation, ST-58 owner/stop behavior, ST-59 bounded candidate/reviewer operation, ST-52 automatic admission and ST-60 routine completion/clean-start validation. Do not build a parallel reviewer, GitHub verdict ledger or whole-rotation scheduler.
-- GitHub is authoritative for the PR's current head and governing verdict; discovered candidates are provisional and are rechecked at the review boundary.
-- Preserve the existing reviewer usage checks, tool selection, timeout/stall bounds and single-invocation malformed-output retry. Direct manual commands remain independent even when automatic retry of a head is suppressed.
+- **Threat model:** one member of the crew, one coordinator, one automatic review at a time. Bounds
+  on usage come from this story's turns and from the reviewer's existing checks.
+- Use ST-57's records, ST-58's owner and stop, ST-59's candidates and review, ST-52's record and
+  ST-60's count. Do not build a parallel reviewer, a GitHub verdict ledger or a whole-rotation
+  scheduler.
+- GitHub is authoritative for the PR's current head and governing verdict; discovered candidates
+  are provisional and are rechecked at the review boundary.
+- Preserve the reviewer's usage checks, tool selection, timeout and stall bounds and its
+  single-invocation malformed-output retry.
+- Node 24, ESM, no new runtime dependencies. Tests use a temporary home directory, stand-in reviews
+  and an injected clock; no test writes to GitHub or starts a model.
 
 ## Context
 
-- Crew decision, 2026-10-27: one coordinator and one automatic reviewer per OS user; fair activated-project turns; no unattended landing in 0.1; manual calls bypass coordinator slots; shared E-stop is deferred until before 1.0.
-- Crew decision, 2026-10-27: 15-minute scan default, configurable positive whole-minute interval without a product maximum; discovery interval is not the inter-review delay.
-- Crew decision, 2026-10-27: no exponential project-failure backoff in this scheduling story; a failed model-consuming review is not automatically retried on its unchanged head in 0.1. Reviewer's own bounded retry remains.
-- `scripts/dispatch/review.mjs` already reports named usage and session outcomes; `scripts/dispatch/usage.mjs` provides usage reset timestamps where available. `scripts/dispatch/rotation.mjs` includes landing and inspection, so a whole rotation is not a review-only automatic turn.
-- Crew decision, 2026-10-27: ST-60 supplies routine outcomes, clean/provably idle restart and refusal on uncertain execution; exceptional recovery is deferred to draft ST-64 and does not block this story. ST-63 is implemented on `main`: `scripts/dispatch/user-config.mjs` provides `readUserConfig` and the validated 15-minute default. ST-61 consumes these interfaces rather than reimplementing configuration parsing.
-- Suggested size: medium/large integration story; automatic retry/backoff is intentionally excluded.
+- Crew decisions, 2026-10-27: one coordinator and one automatic reviewer per OS user; fair
+  activated-project turns; no unattended landing in 0.1; manual calls bypass coordinator slots;
+  shared E-stop is deferred until before 1.0. A 15-minute scan default, a configurable positive
+  whole-minute interval with no product maximum, and a discovery interval that is not the
+  inter-review delay. No exponential backoff, and no automatic retry of a failed model-consuming
+  review on its unchanged head.
+- Crew decision, 2026-11-02: rescope this story to the happy path under the threat model in
+  Constraints, as ST-57 and ST-58 were in #103. The durable fair-order cursor, honouring GitHub's
+  and the usage window's reset times, and the test of checkout aliases are dropped, and this story
+  no longer refuses on `recovery-needed` (ST-60). Its two open questions asked to confirm ST-60's
+  and ST-63's interfaces before dispatch: ST-60/AC-1 and AC-2, and ST-63's `readUserConfig`, now
+  name them. `git log` of this file holds the earlier version.
+- `scripts/dispatch/review.mjs` already reports named usage and session outcomes, and fetches into
+  its `repoDir`. `scripts/dispatch/rotation.mjs` includes landing and inspection, so a whole
+  rotation is not a review-only automatic turn.
+- `docs/planning-session.md`, "Writing it": a safety criterion names a bounded threat model.
+- Suggested size: medium.
 
 ## Open questions
 
-- Confirm the implemented ST-60 completion/startup interface before dispatch: recorded verdict, no-model refusal, definitive model-consuming failure and `recovery-needed` must reach the scheduler without losing retry suppression. Exceptional automatic reconciliation is not required.
-- Confirm the coordinator startup integration consumes ST-63's implemented `readUserConfig` contract and effective scan interval, including refusal on invalid configuration, before clearing this question.
+*(none)*

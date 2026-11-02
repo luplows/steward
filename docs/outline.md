@@ -118,17 +118,17 @@ The milestone includes review-only installation defaults (ST-55), explicit manua
 landing (ST-54), and one authoritative automatic coordinator **per OS user**, for projects
 the user has explicitly activated. It supports start, status and graceful stop; one automatic
 reviewer at a time per user; bounded resource use and fair scanning; duplicate automatic
-work prevention and safe restart. Independent manual review, rotation and landing commands
+work prevention and restart. Independent manual review, rotation and landing commands
 do not join the coordinator's admission or concurrency policy, and may overlap.
-**Shared E-stop is not a 0.1 requirement**, but resource/session bounds and restart safety are.
-Revised by the crew, 2026-10-27: 0.1 handles routine reviewer outcomes under a living
-coordinator and clean graceful stop/start (ST-60). Clarified by the crew, 2026-10-28:
-an idle interruption also permits restart when exclusive ownership is safely reacquired
-and durable admission/completion state positively proves no review was in flight. Stale
-owner metadata alone is not a permanent block. Unexpected interruption with uncertain
-work reports `recovery-needed` and refuses automatic admission. Comprehensive exceptional
-recovery is held in draft ST-64 for a future release; OS containment, descendant reconstruction
-and reboot verification are not 0.1 prerequisites.
+**Shared E-stop is not a 0.1 requirement**, but resource/session bounds and restart are.
+Revised by the crew, 2026-11-02: 0.1 counts each automatic review's ending under a living
+coordinator, and a restart carries on whatever came before it (ST-60). A review interrupted by
+the coordinator's death counts as failed: that head is not reviewed again automatically, and the
+crew accepts that a reviewer which outlived its coordinator may still post a verdict. This
+replaces the `recovery-needed` refusal and durable idle proof decided on 2026-10-27 and
+2026-10-28, which left no way to clear the refusal. Comprehensive exceptional recovery is held in
+draft ST-64 for a future release; OS containment, descendant reconstruction and reboot
+verification are not 0.1 prerequisites.
 
 Validate on two existing client projects with different unit conventions, preserving their native
 planning practices (ST-48). Review and every landing still use the existing gate. **Unattended
@@ -188,8 +188,8 @@ is retired or silently replaced. Reconcile the remaining overlaps before dispatc
 
 | Existing work | Relationship to the roadmap and next planning action |
 |---|---|
-| ST-48 | Retains crew-only two-client installation and gate validation. Refine its dependencies/evidence after ST-56 and the automatic scheduler exist, including activation and unattended review; manual evidence alone does not prove all of 0.1.0. |
-| ST-52 | Revised in this PR: durable per-user reservations apply only to coordinator-dispatched automatic reviews, not manual rotations or reviews. The story depends on ST-58 and ST-59; it does not implement routine completion and clean/provably idle restart (ST-60), exceptional recovery (draft ST-64), scheduling (ST-61) or a second rotation lock. |
+| ST-48 | Retains crew-only two-client installation and gate validation. Amended by the crew, 2026-11-02, to cover the installation pull request, activation and automatic review, and to wait on ST-54, ST-56, ST-57 and ST-61; manual evidence alone does not prove all of 0.1.0. |
+| ST-52 | Revised in this PR: durable per-user reservations apply only to coordinator-dispatched automatic reviews, not manual rotations or reviews. The story depends on ST-58 and ST-59; it does not implement counting outcomes and restart (ST-60), exceptional recovery (draft ST-64), scheduling (ST-61) or a second rotation lock. |
 | ST-6 | Schedule the owner-run investigation and the implementation it recommends for 0.4. Reconcile earlier coder/scheduler dependencies when those stories are refined; deferring isolation does not mean it already exists. |
 | ST-11 / ST-12 | Held stories address the old loop's scheduler and retry pause/resume. Reconcile their useful requirements with the new coordinator, resource bounds and restart contracts; do not start the frozen coder loop to satisfy automatic review. |
 | ST-2 | Starvation promotion conflicts with approval-order scheduling of explicit handoffs. Decide its disposition with the crew before refining the coding queue; do not dispatch it as the 0.2 scheduling rule. Steward's current story queue stays tier/id ordered until separately changed. |

@@ -2579,7 +2579,9 @@ shortened where it is long, so that it can be found there with its date.
   correct pull-request head and a successful review-gated landing; at least one also demonstrates
   that a blocking verdict prevents landing. Procedures, evidence, outcomes and defects are recorded
   separately for each project. Repairs are separate follow-up work, and a defect that prevents a
-  demonstration leaves that demonstration outstanding until a rerun succeeds. This is crew-only
+  demonstration leaves that demonstration outstanding until a rerun succeeds. Amended by the crew,
+  2026-11-02, for the redefined 0.1.0: each project also shows the installation pull request,
+  activation and automatic review (ST-48/AC-2, AC-4a). This is crew-only
   work, grounded in the queue, and does not enable automated coding. Considered and not chosen:
   validating only steward itself or a scratch project, which misses existing client conventions;
   migrating client units to steward's stories; copying steward's scripts into clients; and folding
@@ -2764,10 +2766,11 @@ shortened where it is long, so that it can be found there with its date.
     `review`, `--rereview`, `rotation` and `land` remain independent and
     may overlap. ST-52's revised ACs in this planning PR reserve a canonical
     repository/PR/head identity only for automatic coordinator work; the
-    story depends on ST-58 and ST-59. Routine completion, clean/provably idle restart and
-    uncertain-work refusal belong to ST-60; exceptional crashed-worker reconciliation is deferred to draft ST-64.
-    Project fairness belongs to ST-61. Distributed review
-    claims remain later work.
+    story depends on ST-58 and ST-59. Rescoped by the crew, 2026-11-02: the reservation is an
+    entry in `~/.steward/state/reviews.json` that the one coordinator writes before a review and
+    moves to `ended` after it. Counting outcomes and restart belong to ST-60; exceptional
+    crashed-worker reconciliation is deferred to draft ST-64. Project fairness belongs to ST-61.
+    Distributed review claims remain later work.
 
 - **Manual landing and review-only installation defaults** (crew, 2026-10-26).
   - Standing permission for unattended landing differs from the crew explicitly requesting one
@@ -2838,7 +2841,7 @@ shortened where it is long, so that it can be found there with its date.
     One record per repository, in `~/.steward/state/projects.json`, outside the
     user config and project settings; deactivation removes the record and
     retains the owned checkout for reuse, never cleaning it up automatically.
-  - **Planned (ST-52, ST-61):** automatic admission reads the records at each
+  - **Planned (ST-61):** automatic admission reads the records at each
     admission, so a deactivated project is not admitted afterwards; an already
     admitted review may finish.
   - The coordinator is a detached process, one per OS user across projects,
@@ -2896,45 +2899,49 @@ shortened where it is long, so that it can be found there with its date.
 - **Automatic-review recovery, fair scheduling and deferred shared E-stop**
   (crew, 2026-10-27; planning drafts reserved in ST-60–62).
   - **Planned (ST-60):** revised by the crew, 2026-10-27, following the read-only
-    architecture investigation. For 0.1, handle routine reviewer outcomes while
-    the coordinator remains alive and clean graceful stop/start. Persist actual
-    outcomes through ST-52; distinguish no-model refusals from definitive
-    model-consuming failures for ST-61's unchanged-head retry suppression.
-    Preserve the reviewer's bounded retry inside its original invocation.
-    Clarified by the crew, 2026-10-28: a crash while provably idle also permits
-    restart after exclusive ownership is safely reacquired and complete durable
-    admission/completion state positively establishes no review was in flight.
-    Reserve before any reviewer work; record idle only after definitive completion
-    and durable outcome. Stale owner metadata alone does not block this case;
-    an old idle flag or absent PID alone is insufficient. Clean and provably idle
-    restarts recheck GitHub eligibility, preserve retry suppression and require
-    neither an operator reset nor a machine reboot.
-    Unfinished work, uncertain ownership/termination/posting, an unproven drain or missing/unreadable
-    established completion state reports `recovery-needed` and starts no automatic reviewer.
-    Do not treat a missing PID, elapsed time, moved head or posted verdict alone
-    as permission to clear uncertain execution. Manual commands remain independent.
+    architecture investigation, and by the crew, 2026-11-02. For 0.1, count each
+    automatic review from its ST-52 entry as a verdict, a no-model refusal or a
+    model-consuming failure, for ST-61's unchanged-head retry suppression. Preserve
+    the reviewer's bounded retry inside its original invocation. Under a living
+    coordinator a review that returned or threw has ended, since the reviewer awaits
+    a session that resolves only after its process ends. After a clean stop, or an
+    interruption while idle, `start` carries on. A `running` entry found at `start`
+    means the coordinator died during that review: `start` counts it as failed
+    (`interrupted`), says so and carries on, and that head is not reviewed again
+    automatically. Restarts recheck GitHub eligibility, preserve retry suppression
+    and require neither an operator reset nor a machine reboot. The crew accepts
+    that a reviewer which outlived its coordinator may still post a verdict, which
+    the gate binds to its head. Manual commands remain independent.
+    This reverses the crew's 2026-10-27 and 2026-10-28 decisions, that uncertain work
+    reports `recovery-needed` and refuses, and that restart needs a durable idle
+    proof. Those left no way to clear the refusal before draft ST-64, so one crash
+    during a review turned automatic review off for good. Considered and not chosen:
+    keeping the refusal, cleared by a new `steward coordinator clear` command or by
+    removing the entry by hand.
   - **Planned (ST-64):** exceptional recovery is a holding draft for a future
     release, not a 0.1 dependency or a selected mechanism. Its Open questions
     retain orphaned-worker/descendant handling, process identity and permission
     failures, interrupted persistence, ambiguous verdict posting, safe targeted
     operator reconciliation and whether verified full machine reboot is a useful
     fallback. A Steward restart alone does not prove prior processes terminated.
-    Comprehensive OS containment and automatic crash recovery are not required
+    Comprehensive OS containment and proving a process has ended are not required
     to deliver the narrowed ST-60.
   - **Planned (ST-61):** scan only explicitly activated projects. After a safe
     initial scan, give projects round-robin turns, with at most one
     coordinator-managed reviewer per OS user; already discovered work does
-    not wait for another scan interval. Use the per-user configuration
+    not wait for another scan interval. Rescoped by the crew, 2026-11-02: the
+    round-robin position is kept in memory, and a restart begins a new round. Use the
+    per-user configuration
     (`docs/user-config.md`), defaulting to a 15-minute discovery interval
     with a configurable positive whole-minute value and no arbitrary
     product ceiling. GitHub discovery failures retry on subsequent scans;
-    no exponential project backoff is in 0.1. Respect usage refusals and
-    their reported resets. A model-consuming review that definitively
+    no exponential project backoff is in 0.1. A usage refusal starts no more
+    reviews until the next scan, where the reviewer checks usage again, rather than
+    waiting for a reported reset (crew, 2026-11-02). A model-consuming review that definitively
     fails does not automatically retry the unchanged head; a new head is
     a new candidate, and direct manual commands remain independent.
-    ST-60 supplies routine completion classifications and clean-start validation;
-    uncertain execution blocks scheduling. Exceptional reconciliation in draft
-    ST-64 is not a prerequisite. ST-61 verifies the implemented handoff before dispatch.
+    ST-60 supplies the count of each review. Exceptional reconciliation in draft
+    ST-64 is not a prerequisite.
   - **Planned (ST-62):** a per-user shared emergency-stop latch with
     registered local process trees, including independent manual commands,
     explicit reset and verified-or-uncertain termination reporting is a
@@ -2945,8 +2952,8 @@ shortened where it is long, so that it can be found there with its date.
     implementation. This refines the earlier 2026-10-26 milestone statement
     that included E-stop in 0.1; PR #93 contains the broader coordinator
     roadmap reconciliation.
-  - Considered and not chosen: implicit age-based recovery, whole-rotation
-    automatic scheduling, manual admission locks, automatic repeat attempts
+  - Considered and not chosen: whole-rotation automatic scheduling, manual admission locks,
+    automatic repeat attempts
     of a failed model-consuming review on the same head, mandatory project
     exponential backoff and requiring full E-stop before 0.1. On narrowing ST-60,
     the crew also deferred exhaustive crash-window handling, arbitrary-descendant
