@@ -197,9 +197,9 @@ is retired or silently replaced. Reconcile the remaining overlaps before dispatc
 
 ST-57 (activation), ST-58 (coordinator controls), ST-59 (bounded review-only work)
 and the revised ST-52 (automatic review admission) define the first coordinator units.
-Coordinator recovery, fair scheduling, the ST-48 evidence amendment, deferred E-stop,
-durable handoff and fixing require separate refinement. No future mechanism is claimed
-implemented here.
+The crew refined coordinator recovery, fair scheduling and the ST-48 evidence amendment on
+2026-11-02 (ST-60, ST-61, ST-48). Deferred E-stop, durable handoff and fixing require separate
+refinement. No future mechanism is claimed implemented here.
 
 ### Release preparation
 

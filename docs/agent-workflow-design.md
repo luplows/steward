@@ -2921,9 +2921,9 @@ shortened where it is long, so that it can be found there with its date.
   - **Planned (ST-64):** exceptional recovery is a holding draft for a future
     release, not a 0.1 dependency or a selected mechanism. Its Open questions
     retain orphaned-worker/descendant handling, process identity and permission
-    failures, interrupted persistence, ambiguous verdict posting, safe targeted
-    operator reconciliation and whether verified full machine reboot is a useful
-    fallback. A Steward restart alone does not prove prior processes terminated.
+    failures, interrupted persistence, ambiguous verdict posting and whether an
+    interrupted head may be reviewed again automatically.
+    A Steward restart alone does not prove prior processes terminated.
     Comprehensive OS containment and proving a process has ended are not required
     to deliver the narrowed ST-60.
   - **Planned (ST-61):** scan only explicitly activated projects. After a safe
