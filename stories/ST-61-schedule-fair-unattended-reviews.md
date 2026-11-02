@@ -66,9 +66,10 @@ progresses without manual rotations or repeated costly failures.
       a deactivation during a stand-in review, and `status`'s fields.
 - [ ] **AC-9** — Automatic scheduler work never calls `landPullRequest`, the runway,
       `runRotation`, inspection, the coder or the fixer, regardless of project `land` settings.
-      Verdicts continue through the existing head-bound gate. Tests use two activated projects with differing issue
-      and file unit-link conventions, and an inactive project. The implementing PR documents the
-      fairness and scanning behaviour and resolves the ST-61 planned design markers.
+      Verdicts continue through the existing head-bound gate. Tests use two activated projects
+      with differing issue and file unit-link conventions, and an inactive project. The
+      implementing PR documents the fairness and scanning behaviour and resolves the ST-61
+      planned design markers.
 
 ## Out of scope
 
