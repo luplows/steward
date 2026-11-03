@@ -237,8 +237,9 @@ coordinator. A record whose process is gone is reported by `status` as `stopped`
 previous coordinator ended without removing its record.
 
 On starting, the coordinator scans at once. A scan reads the activation records and lists each
-activated project's candidates (`listReviewCandidates`). It then reviews the eligible heads it found
-in fair, round-robin turns by `owner/name`: each turn belongs to the next project with a head left,
+activated project's candidates (`listReviewCandidates`), keeping one entry for each pull request and
+head. It then reviews the eligible heads it found in fair, round-robin turns by `owner/name`: each
+turn belongs to the next project with a head left,
 brings that project's owned checkout to `origin`'s `main`, reads the records again just before
 admitting, reviews one head and awaits it, so one automatic review runs at a time across the OS
 user's projects. The interval governs the discovery of new work, not the delay between reviews

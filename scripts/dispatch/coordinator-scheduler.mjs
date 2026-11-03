@@ -4,8 +4,9 @@
  * `docs/agent-workflow-design.md`, Part 3, "Decided so far", "Automatic-review recovery, fair
  * scheduling and deferred shared E-stop".
  *
- * A scan reads the records and lists each project's candidates. Turns then run through what the
- * scan found, with no added delay: each turn belongs to the next project, by `owner/name`, that has
+ * A scan reads the records and lists each project's candidates, queueing one entry for each pull
+ * request and head, however many times discovery lists it. Turns then run through what the scan
+ * found, with no added delay: each turn belongs to the next project, by `owner/name`, that has
  * a head left, brings that project's owned checkout to `origin`'s `main`, reads the records again
  * just before admitting, and awaits one review, unless `reviewEnding` now counts that head as a
  * model-consuming failure, which the scan checks too. When no head is left, the scheduler waits the
@@ -112,9 +113,15 @@ export async function scheduleReviews({
         problems.set(repo, withoutCredentials(`discovery failed: ${error.message}`))
         continue
       }
-      // A throw here, from a record of reviews that cannot be read, ends the coordinator.
-      const eligible = listed.filter(({ status, repo: from, number, expectedHeadSha: headSha }) =>
-        status === 'eligible' && reviewEnding({ homedir, repo: from, number, headSha }) !== 'model-consuming-failure')
+      // Discovery can list a head twice, and a second entry would be an immediate retry. A throw
+      // here, from a record of reviews that cannot be read, ends the coordinator.
+      const seen = new Set()
+      const eligible = listed.filter(({ status, repo: from, number, expectedHeadSha: headSha }) => {
+        const identity = JSON.stringify([from, number, headSha])
+        if (status !== 'eligible' || seen.has(identity)) return false
+        seen.add(identity)
+        return reviewEnding({ homedir, repo: from, number, headSha }) !== 'model-consuming-failure'
+      })
       if (eligible.length > 0) queues.set(repo, eligible)
     }
     for (const repo of problems.keys()) {
@@ -171,8 +178,8 @@ export async function scheduleReviews({
       const queue = queues.get(repo)
       const candidate = queue.shift()
       if (queue.length === 0) queues.delete(repo)
-      // The scan's filter saw this head before this pass's reviews ended, and discovery can list a
-      // head twice. A throw here, as in the scan, ends the coordinator.
+      // What the scan read of this head's ending may be out of date by now. A throw here, as in the
+      // scan, ends the coordinator.
       const { number, expectedHeadSha: headSha } = candidate
       if (reviewEnding({ homedir, repo, number, headSha }) === 'model-consuming-failure') continue
       report({ active: { repo, number: candidate.number, headSha: candidate.expectedHeadSha } })

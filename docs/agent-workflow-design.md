@@ -2960,8 +2960,9 @@ shortened where it is long, so that it can be found there with its date.
     Comprehensive OS containment and proving a process has ended are not required
     to deliver the narrowed ST-60.
   - The scheduler (`scripts/dispatch/coordinator-scheduler.mjs`), which `coordinator.mjs run`
-    starts, scans only explicitly activated projects. It scans at once on starting, then gives
-    projects round-robin turns by `owner/name`, each admitting at most one eligible head and
+    starts, scans only explicitly activated projects, queueing one entry for each repository, pull
+    request and full head, however many times discovery lists it. It scans at once on starting, then
+    gives projects round-robin turns by `owner/name`, each admitting at most one eligible head and
     awaited, so there is at most one coordinator-managed reviewer per OS user; already discovered
     work does not wait for another scan interval. When no known head is left it starts nothing and
     scans again after the interval. Each turn brings the project's owned checkout to `origin`'s

@@ -481,6 +481,29 @@ describe('ST-61/AC-6: failures and refusals do not loop', () => {
     })
   }
 
+  it('discovery listing the same pull request and head twice, and a no-model refusal: the reviewer runs once in that scan, and a later scan may try the head again', async () => {
+    const h = schedule({
+      repos: [A], listings: { [A]: [eligible(A, 1), eligible(A, 1)] },
+      reply: () => ({ status: 'rules-unreadable', reason: 'no checklist' }),
+    })
+    await idle(h)
+    expect(h.review).toHaveBeenCalledTimes(1)
+    expect(reviewEnding({ homedir: h.home, repo: A, number: 1, headSha: HEAD })).toBe('no-model-refusal')
+
+    await nextScan(h, 2)
+    expect(h.review).toHaveBeenCalledTimes(2)
+  })
+
+  it('two heads listed for one pull request are two entries: neither is dropped as a duplicate', async () => {
+    const newer = 'b'.repeat(40)
+    const h = schedule({
+      repos: [A], listings: { [A]: [eligible(A, 1), eligible(A, 1, newer), eligible(A, 1)] },
+      reply: () => ({ status: 'head-moved', reason: 'moved' }),
+    })
+    await idle(h)
+    expect(h.review.mock.calls.map(([{ candidate }]) => candidate.expectedHeadSha)).toEqual([HEAD, newer])
+  })
+
   it('another no-model refusal ends that head\'s turn only, and the head may be considered again at a later scan', async () => {
     let refusing = true
     const h = schedule({
@@ -624,6 +647,24 @@ describe('ST-61/AC-7: a failed head is not paid for twice', () => {
     await idle(h)
     expect(h.reviewed).toEqual([`${A}#1`, `${A}#2`])
     expect(reviewEnding({ homedir: h.home, repo: A, number: 1, headSha: HEAD })).toBe('model-consuming-failure')
+  })
+
+  it('a head that has come to count as failed since the scan is skipped just before admitting, and the next head still runs', async () => {
+    const home = freshHome()
+    const failed = {
+      repo: A, number: 1, headSha: HEAD, state: 'ended', startedAt: '2026-11-02T09:00:00.000Z', endedAt: '2026-11-02T09:01:00.000Z',
+      result: { status: 'session-failed', sessions: 1 },
+    }
+    let once = true
+    const h = schedule({
+      home, repos: [A], listings: { [A]: [eligible(A, 1), eligible(A, 2)] },
+      updateCheckout: vi.fn(async () => {
+        if (once) seed(reviewsPath(home), { reviews: [failed] })
+        once = false
+      }),
+    })
+    await idle(h)
+    expect(h.reviewed).toEqual([`${A}#2`])
   })
 
   it('an interrupted head is not reviewed again either', async () => {
