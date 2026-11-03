@@ -81,3 +81,6 @@ implementing it.
   the finding offers (crew, 2026-11-03, after the reviews of #108 and #111).
 - A coder run by hand is told what `.claude/prompts/coder.md`, "When you cannot proceed", tells
   ATC's: if a criterion's promise cannot be kept as written, stop and report it.
+- `review-blocked` brings a pull request to the crew's attention. It is not a hard stop. Once the
+  crew has agreed what comes next, that agreement is the word to remove the label: remove it and
+  get on with the work, without asking again (crew, 2026-11-03).

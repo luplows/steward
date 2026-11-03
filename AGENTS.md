@@ -39,6 +39,9 @@ This file applies to every session. Each role has its own instructions as well:
   a run given none is unattended, and lands the oldest only where `land` is true on `main`. Its
   eligibility rules and the `review-blocked` circuit breaker are defined in
   `scripts/land/runway.mjs`, which `land-approved.yml` runs.
+- Before telling another session that something has changed, read it back and see that it did, and
+  send a request that depends on the change only after that. A rotation that has started cannot be
+  called back.
 
 ## Claims about this repository
 
@@ -60,6 +63,8 @@ These hold for every pull request's content, whoever writes it, the coder includ
 - Fill the `Unit:` line of [`.github/pull_request_template.md`](.github/pull_request_template.md)
   with the unit the pull request implements, or `none`, along with the template's three sections.
   An empty section is a missing one. **Verification** gives the commands run and their real results.
+- Read the pull request's body against its diff before each review, not only the first. A new commit
+  can make a sentence in the body untrue, and the body is reviewed too.
 - Check whether `README.md` needs updating as a result of the change. Include any such update in
   the same pull request.
 - [`REVIEW.md`](REVIEW.md) is the checklist a pull request is reviewed against. Read it before the
@@ -88,7 +93,8 @@ These hold for every pull request's content, whoever writes it, the coder includ
 - CI's `test` job runs oxlint (`npm run lint`), then Vitest (`npm test`), and on a pull request the
   story containment check (`.github/workflows/ci.yml`). `test` is a required check. Vitest includes
   the story lint over this repository's own stories (`scripts/lint-stories.test.mjs`).
-- Add tests alongside new logic, in Vitest.
+- Add tests alongside new logic, in Vitest. A test uses a temporary home directory, and never reads
+  or writes the real `~/.steward/`.
 - Do not add coverage-percentage tooling such as `@vitest/coverage-v8`. Its absence is deliberate.
 - Green CI is necessary and not sufficient.
 
@@ -105,6 +111,7 @@ pushes its branch and opens its pull request, as its prompt says.
 - For every change: feature branch, commit, push, open a pull request.
 - Address anything arising from an open pull request with a new commit on its existing branch. New
   branch only for unrelated work.
+- Merge `main` into a pull request before its next review whenever it has fallen behind.
 - Open a pull request as a draft if it is not finished. Mark it ready when it is. The planning
   session is the exception: see [`docs/planning-session.md`](docs/planning-session.md).
 
