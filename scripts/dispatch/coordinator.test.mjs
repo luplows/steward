@@ -585,6 +585,26 @@ describe('ST-61/AC-5: the interval', () => {
     await until(() => !isRunning(spawned[1]))
   })
 
+  it('the largest interval ST-63 accepts: start and status say it in full, with no next scan, and the coordinator keeps running', async () => {
+    const largest = Math.floor(Number.MAX_SAFE_INTEGER / 60_000)
+    const home = freshHome()
+    configure(home, fixtureUserConfig({ coordinator: { scanIntervalMinutes: largest } }))
+    const { spawnFn, spawned } = countingSpawn()
+    const result = await run(['start'], home, { spawnFn })
+    expect(result.code).toBe(0)
+    expect(result.out).toContain(`every ${largest} minutes`)
+    await settledRecord(home)
+    expect(isRunning(spawned[0])).toBe(true)
+    const status = await statusOf(home)
+    expect(status).toMatchObject({ status: 'running', intervalMinutes: largest })
+    expect(status.nextScanAt ?? null).toBe(null)
+    const text = (await run(['status'], home)).out
+    expect(text).toContain(`Scan interval: ${largest} minutes.`)
+    expect(text).not.toContain('Next scan')
+    expect((await run(['stop'], home)).code).toBe(0)
+    await until(() => !isRunning(spawned[0]))
+  })
+
   for (const [name, config, message] of [
     ['an invalid interval', fixtureUserConfig({ coordinator: { scanIntervalMinutes: 0 } }), "'coordinator.scanIntervalMinutes' must be a positive integer"],
     ['a file that is not JSON', '{ "usageLimits":', 'invalid JSON'],

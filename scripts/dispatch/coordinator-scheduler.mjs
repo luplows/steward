@@ -6,8 +6,8 @@
  *
  * A scan reads the records and lists each project's candidates. Turns then run through what the
  * scan found, with no added delay: each turn belongs to the next project, by `owner/name`, that has
- * a head left, reads the records again, brings that project's owned checkout to `origin`'s `main`
- * and awaits one review. When no head is left, the scheduler waits the interval and scans again.
+ * a head left, brings that project's owned checkout to `origin`'s `main`, reads the records again
+ * just before admitting, and awaits one review. When no head is left, the scheduler waits the interval and scans again.
  * The position in that order is kept in memory, so a restart begins a new round.
  *
  * This only reviews. Landing, the runway, a rotation, inspection, the coder and the fixer are not
@@ -19,7 +19,8 @@
  * to the coordinator's record:
  *
  *   active           { repo, number, headSha } under review, or null
- *   nextScanAt       when the next scan is due, or null during a scan and its turns
+ *   nextScanAt       when the next scan is due, or null during a scan and its turns, and when that
+ *                    time is past what a Date can hold, as the largest interval accepted is
  *   lastOutcome      { repo, number, headSha, status, counted?, reason?, at } of the latest review
  *   usage            { status, reason } of a usage refusal, until the next scan, or null
  *   recordsProblem   why the records could not be read, or null
@@ -157,6 +158,14 @@ export async function scheduleReviews({
         continue
       }
 
+      // Git may have taken a while, and the project may have been deactivated meanwhile.
+      const current = await activated()
+      if (current === null) return
+      if (!current.includes(repo)) {
+        queues.delete(repo)
+        continue
+      }
+
       const queue = queues.get(repo)
       const candidate = queue.shift()
       if (queue.length === 0) queues.delete(repo)
@@ -187,7 +196,8 @@ export async function scheduleReviews({
       await turns()
       if (!admitting()) return
       const ms = intervalMinutes * 60_000
-      report({ nextScanAt: new Date(now().getTime() + ms).toISOString() })
+      const due = new Date(now().getTime() + ms)
+      report({ nextScanAt: Number.isNaN(due.getTime()) ? null : due.toISOString() })
       await Promise.race([wait(ms), coordinator.done])
     }
   } catch (error) {

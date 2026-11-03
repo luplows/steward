@@ -220,6 +220,34 @@ describe('ST-61/AC-1: only activated projects', () => {
   })
 })
 
+describe('ST-61/AC-1: the records read again after the checkout update, just before admitting', () => {
+  it('a project deactivated while its checkout updates: its queue is dropped, no review of it starts, and the others carry on', async () => {
+    const home = freshHome()
+    const h = schedule({
+      home, repos: [A, B], listings: { [A]: [eligible(A, 1), eligible(A, 2)], [B]: [eligible(B, 3)] },
+      updateCheckout: vi.fn(async (dir) => {
+        if (dir === ownedCheckoutPath(home, A)) writeProjects(home, [B])
+      }),
+    })
+    await idle(h)
+    expect(h.reviewed).toEqual([`${B}#3`])
+    expect(readReviews(reviewsPath(home)).map(({ repo }) => repo)).toEqual([B])
+  })
+
+  it('records that become unreadable while a checkout updates: no review starts, and status gives the reason', async () => {
+    const home = freshHome()
+    const file = projectsPath(home)
+    const h = schedule({
+      home, repos: [A], listings: { [A]: [eligible(A, 1)] },
+      updateCheckout: vi.fn(async () => { seed(file, 'not json') }),
+    })
+    await idle(h)
+    expect(h.review).not.toHaveBeenCalled()
+    expect(existsSync(reviewsPath(home))).toBe(false)
+    expect((await statusFromAnotherProcess(home)).recordsProblem).toContain(`${file} is malformed`)
+  })
+})
+
 describe('ST-61/AC-2: fair turns', () => {
   it('two projects with several candidates alternate, each in its own candidates\' order, whichever order the records are in', async () => {
     const h = schedule({ repos: [B, A], listings: { [A]: [eligible(A, 1), eligible(A, 2)], [B]: [eligible(B, 3), eligible(B, 4)] } })
@@ -343,6 +371,20 @@ describe('ST-61/AC-4: scanning', () => {
     expect(h.reviewed).toEqual([`${A}#1`])
     expect(h.listCandidates).toHaveBeenCalledTimes(2)
     expect(recordOf(h).nextScanAt).toBe('2026-11-02T10:30:00.000Z')
+  })
+
+  it('the largest interval ST-63 accepts: the next scan\'s time is unknown, the coordinator carries on, and it waits and scans as normal', async () => {
+    const largest = Math.floor(Number.MAX_SAFE_INTEGER / 60_000)
+    const h = schedule({ repos: [A], intervalMinutes: largest })
+    await idle(h)
+    expect(h.clock.wait.mock.calls).toEqual([[largest * 60_000]])
+    expect(h.coordinator.admitting()).toBe(true)
+    expect(recordOf(h).nextScanAt).toBe(null)
+    expect(await statusFromAnotherProcess(h.home)).toMatchObject({ status: 'running', nextScanAt: null })
+
+    await nextScan(h, 2)
+    expect(h.listCandidates).toHaveBeenCalledTimes(2)
+    expect(h.coordinator.admitting()).toBe(true)
   })
 
   it('the real wait holds for an interval longer than one timer can', async () => {
