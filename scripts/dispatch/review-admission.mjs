@@ -5,8 +5,10 @@
  *
  * The threat model is one member of the crew, one coordinator, one automatic review at a time, on
  * one machine: this is a small record the coordinator keeps for itself, not a lock. Manual commands
- * neither read nor write it. Scheduling (who calls `admitReview`, and when) and what a `running`
- * entry found at `start` means are not here.
+ * neither read nor write it. Scheduling (who calls `admitReview` and `reviewEnding`, and when) is
+ * not here. A `running` entry found at `start` means the coordinator ended during that review, or
+ * could not write how it ended, and `start` moves it to `ended` with `interruptRunning`, looking
+ * for no process and checking no verdict.
  *
  * The file, `~/.steward/state/reviews.json`, is `{ "reviews": [entry, ...] }`, with one entry for
  * each identity, `repo` (owner/name), `number` and `headSha` (full). An entry is
@@ -14,10 +16,11 @@
  *   { repo, number, headSha, state: 'running', startedAt }
  *   { repo, number, headSha, state: 'ended', startedAt, endedAt, result }
  *
- * where `result` is `{ status, sessions? }`, the reviewer's own as it returned them, or
- * `{ status: 'threw', message }` when the review threw.
+ * where `result` is `{ status, sessions? }`, the reviewer's own as it returned them,
+ * `{ status: 'threw', message }` when the review threw, or `{ status: 'interrupted' }` when `start`
+ * found the entry `running`.
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { FULL_HEAD_SHA } from './review-eligibility.mjs'
 import { reviewCandidate } from './review-work.mjs'
@@ -64,10 +67,61 @@ export function readReviews(file) {
   return data.reviews
 }
 
-function writeEntry(file, entry) {
-  const others = readReviews(file).filter((other) => !sameIdentity(other, entry))
+/**
+ * Writes `reviews` to a temporary file beside `file` and renames it over `file`, so that a write
+ * that fails leaves `file` as it was. Throws the write's own error, the temporary file removed as
+ * best it can be. For a failed write only: not a guard against another process.
+ */
+function writeReviews(file, reviews) {
   mkdirSync(path.dirname(file), { recursive: true })
-  writeFileSync(file, `${JSON.stringify({ reviews: [...others, entry] }, null, 2)}\n`, 'utf8')
+  const temporary = `${file}.tmp`
+  try {
+    writeFileSync(temporary, `${JSON.stringify({ reviews }, null, 2)}\n`, 'utf8')
+    renameSync(temporary, file)
+  } catch (error) {
+    try { rmSync(temporary, { force: true }) } catch { /* The write's error is the one to report. */ }
+    throw error
+  }
+}
+
+function writeEntry(file, entry) {
+  writeReviews(file, [...readReviews(file).filter((other) => !sameIdentity(other, entry)), entry])
+}
+
+/**
+ * How an `ended` entry's `result` counts: `verdict`, `no-model-refusal` or
+ * `model-consuming-failure`. `threw` counts as a failure because the record does not say whether a
+ * model started, and counting it as one cannot cause a second paid review.
+ */
+export function classifyResult({ status, sessions }) {
+  if (status === 'recorded' || status === 'already-reviewed') return 'verdict'
+  if (sessions !== undefined || status === 'threw' || status === 'interrupted') return 'model-consuming-failure'
+  return 'no-model-refusal'
+}
+
+/**
+ * How the review of this identity under `homedir` counts, or null when it has no `ended` entry.
+ * Throws as `readReviews` does.
+ */
+export function reviewEnding({ homedir, repo, number, headSha }) {
+  const found = readReviews(reviewsPath(homedir)).find((entry) => sameIdentity(entry, { repo, number, headSha }))
+  return found?.state === 'ended' ? classifyResult(found.result) : null
+}
+
+/**
+ * Moves every `running` entry under `homedir` to `ended` with `interrupted`, in one write, and
+ * returns those entries as they were. With none, writes nothing. For `start` alone, once it has
+ * found no coordinator running. Throws when it cannot read or write the file. A write that fails
+ * leaves the file as it was, so its entries stay `running`.
+ */
+export function interruptRunning({ homedir, now = () => new Date() }) {
+  const file = reviewsPath(homedir)
+  const reviews = readReviews(file)
+  const running = reviews.filter((entry) => entry.state === 'running')
+  if (running.length === 0) return []
+  const ending = { state: 'ended', endedAt: now().toISOString(), result: { status: 'interrupted' } }
+  writeReviews(file, reviews.map((entry) => (entry.state === 'running' ? { ...entry, ...ending } : entry)))
+  return running
 }
 
 /**
@@ -81,12 +135,14 @@ function writeEntry(file, entry) {
  *   `reviewed` is all the reviewer returned, and absent when it threw.
  * - `{ status: 'already-admitted', entry }`: a `running` entry holds this identity. Nothing
  *   started, and the entry is as it was. Not a failure, and not a review's result.
- * - `{ status: 'admission-closed' }`: `admit` refused it, a stop having been acknowledged. Nothing
- *   was written or started.
+ * - `{ status: 'admission-closed' }`: `admit` refused it, a stop having been acknowledged or `fail`
+ *   called. Nothing was written or started.
  * - `{ status: 'record-failed', file, reason, entry?, reviewed? }`: the record could not be read or
  *   written. Without `entry`, no review started. With it, the review has ended, and the returned
- *   `entry` is what says how. What the file then holds is uncertain: it may still have the entry
- *   `running`, or it may be malformed.
+ *   `entry` is what says how. A write that fails leaves the file as it was, so the file still has
+ *   the entry `running`, for a later `start` to move. On this status the caller is to admit no
+ *   more, handing `reason` to the coordinator's `fail`. A file already malformed, which is how the
+ *   record can also fail to read, stays so, and a later `start` refuses it and names it.
  */
 export async function admitReview({ homedir, admit, candidate, repoDir, ctx, reviewOptions, review = reviewCandidate, now = () => new Date() }) {
   const identity = { repo: candidate.repo, number: candidate.number, headSha: candidate.expectedHeadSha }

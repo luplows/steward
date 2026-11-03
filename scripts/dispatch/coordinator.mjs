@@ -19,6 +19,14 @@
  * that work has finished. Either change is the acknowledgment `stop` waits for. This story adds no
  * scheduling: the coordinator idles until it is stopped, and only tests admit (simulated) work.
  *
+ * A `start` that finds no coordinator running first moves each `running` entry in the record of its
+ * reviews to `ended` with `interrupted` (`interruptRunning`, `review-admission.mjs`), and says so.
+ * That head is not reviewed again automatically; a manual review, or a new head, is how it gets a
+ * verdict. `start` looks for no surviving reviewer: one may still post a verdict, which the gate
+ * binds to the head reviewed. A `start` that cannot read or update that record of reviews refuses,
+ * launching nothing, naming the file and leaving the coordinator's own record and any stop request
+ * as they were. `status` and `stop` do not read it.
+ *
  * Manual commands (`review`, `rotation`, `land` and the rest) never consult the coordinator.
  *
  * The threat model is one member of the crew running one `steward coordinator` command at a time,
@@ -34,6 +42,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import { homedir as osHomedir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { interruptRunning, reviewsPath } from './review-admission.mjs'
 import { stateDir } from './user-config.mjs'
 
 const MODULE_PATH = fileURLToPath(import.meta.url)
@@ -105,10 +114,11 @@ async function waitFor(check, { pollMs, waitMs }) {
 
 /**
  * Runs a coordinator in this process for `homedir`: writes its record, then watches for a stop
- * request. Returns `{ record, admit, done }`. `admit(job)` runs `job` (a function returning a
+ * request. Returns `{ record, admit, fail, done }`. `admit(job)` runs `job` (a function returning a
  * promise) as admitted work and returns true, or returns false, starting nothing, once a stop has
- * been acknowledged. `done` resolves once the coordinator has removed its record, with an error
- * when it stopped because of one.
+ * been acknowledged or `fail` called. `fail(error)` admits nothing more and ends the coordinator
+ * with `error` once admitted work has finished. `done` resolves once the coordinator has removed
+ * its record, with an error when it stopped because of one.
  */
 export function runCoordinator({ homedir, pid = process.pid, now = () => new Date(), pollMs = POLL_MS }) {
   const file = coordinatorPath(homedir)
@@ -128,6 +138,11 @@ export function runCoordinator({ homedir, pid = process.pid, now = () => new Dat
     rmSync(file, { force: true })
     finish(failure)
   }
+  const fail = (error) => {
+    admitting = false
+    failure ??= error
+    settle()
+  }
   const timer = setInterval(() => {
     try {
       if (!admitting || !existsSync(stopFile)) return
@@ -135,8 +150,7 @@ export function runCoordinator({ homedir, pid = process.pid, now = () => new Dat
       rmSync(stopFile, { force: true })
       if (admitted > 0) writeRecord(file, { ...record, state: 'stopping' })
     } catch (error) {
-      admitting = false
-      failure = error
+      return fail(error)
     }
     settle()
   }, pollMs)
@@ -150,7 +164,7 @@ export function runCoordinator({ homedir, pid = process.pid, now = () => new Dat
     })
     return true
   }
-  return { record, admit, done }
+  return { record, admit, fail, done }
 }
 
 /** What `status` reports: `{ status, pid?, startedAt?, note? }`. */
@@ -171,6 +185,17 @@ async function start({ homedir, spawnFn, pollMs, waitMs, out, err }) {
     err(`already-running: this OS user's coordinator is already running, as process ${record.pid}, started ${record.startedAt}. Nothing was started.`)
     err('To see it: steward coordinator status. To stop it: steward coordinator stop')
     return 1
+  }
+  let interrupted
+  try {
+    interrupted = interruptRunning({ homedir })
+  } catch (error) {
+    err(`The coordinator did not start: it could not read or update its record of reviews, ${reviewsPath(homedir)}. ${error.message}`)
+    err('Nothing was started.')
+    return 1
+  }
+  for (const { repo, number, headSha } of interrupted) {
+    out(`interrupted: the previous coordinator ended without writing how its review of ${repo} pull request #${number}, head ${headSha}, ended. It counts as failed, and this head will not be reviewed again automatically. A manual review of it, or a new head, is how it gets a verdict.`)
   }
   if (record !== null) {
     out(`The previous coordinator, process ${record.pid}, started ${record.startedAt}, ended without removing its record; replacing that record.`)

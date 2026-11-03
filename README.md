@@ -257,6 +257,24 @@ coordinator-dispatched work only, and is not a lock. Manual commands neither rea
 file, so a manual review may overlap an automatic one, or another manual one, and the possible
 duplicate costs and verdict races are the crew's to manage.
 
+An ended review counts as a verdict, a refusal that started no model, or a failure that may have
+paid for one (`reviewEnding`, in `review-admission.mjs`, for the scheduling to come to read). Those
+counts survive a stop and a restart, and no reset is needed after either. A coordinator that dies
+during a review leaves its entry `running`. The next `start`, before launching a coordinator, moves
+the entry to `ended` with `interrupted`, which counts as a failure, says which repository, pull
+request and full head were interrupted, and carries on. That head is not reviewed again
+automatically; a manual review of it, or a new head, is how it gets a verdict. `start` looks for no
+surviving reviewer, kills nothing and checks no verdict, so a reviewer that outlived its coordinator
+may still post a verdict, which the gate binds to the head reviewed: the crew accepts that risk. A
+`start` that finds a coordinator running changes no entry, and `status` and `stop` never do.
+
+Each write of `reviews.json` goes to a temporary file beside it, renamed over it, so a write that
+fails leaves the file as it was and the entry `running`, for `start` to move. A coordinator that
+cannot write how a review ended will admit nothing more and exit. A `start` that cannot read or
+update the file names the file, says why and starts nothing, and leaves the coordinator's record and
+any stop request as they were. A malformed file, from hand-editing for instance, is refused in this
+way until it is fixed or removed.
+
 ## Contributing
 
 For everyone:
