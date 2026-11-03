@@ -268,7 +268,8 @@ surviving reviewer, kills nothing and checks no verdict, so a reviewer that outl
 may still post a verdict, which the gate binds to the head reviewed: the crew accepts that risk. A
 `start` that finds a coordinator running changes no entry, and `status` and `stop` never do. A
 `start` that cannot read or update `reviews.json`, because it is malformed for instance, says why
-and starts nothing, until the file is fixed or removed.
+and starts nothing, until the file is fixed or removed. It leaves the coordinator's record and any
+stop request as they were, though a failed write may have left `reviews.json` changed or malformed.
 
 ## Contributing
 

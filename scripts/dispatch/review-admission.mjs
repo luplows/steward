@@ -99,7 +99,8 @@ export function reviewEnding({ homedir, repo, number, headSha }) {
 /**
  * Moves every `running` entry under `homedir` to `ended` with `interrupted`, in one write, and
  * returns those entries as they were. With none, writes nothing. For `start` alone, once it has
- * found no coordinator running. Throws, naming the file, when it cannot read or write it.
+ * found no coordinator running. Throws, naming the file, when it cannot read or write it. The write
+ * overwrites directly, so a failed one may leave the file changed or malformed.
  */
 export function interruptRunning({ homedir, now = () => new Date() }) {
   const file = reviewsPath(homedir)

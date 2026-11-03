@@ -2927,15 +2927,16 @@ shortened where it is long, so that it can be found there with its date.
     (`interruptRunning`), which counts as failed, names the repository, PR and full
     head and carries on, and that head is not reviewed again automatically. A manual
     review of it, or a new head, is how it gets a verdict. A `start` that cannot read
-    or update the file, malformed for instance, says why, launches nothing and changes
-    nothing: a failed write may leave the file malformed, and a malformed file never
-    reads as empty. A `start` that finds a coordinator running changes no entry,
-    and `status` and `stop` never do. A restart keeps the record, the reviewer rechecks
-    GitHub eligibility at its execution boundary, and neither an operator reset nor a
-    machine reboot is required. `start` looks for no surviving reviewer, kills no
-    process and checks no verdict: the crew accepts that a reviewer which outlived its
-    coordinator may still post a verdict, which the gate binds to its head. Manual
-    commands remain independent.
+    or update the file, malformed for instance, says why, launches nothing and leaves
+    the coordinator's record and any stop request as they were. A failed write may
+    have left the file changed or malformed, since it overwrites directly, and a
+    malformed file never reads as empty. A `start` that finds a coordinator running
+    changes no entry, and `status` and `stop` never do. A restart keeps the record,
+    the reviewer rechecks GitHub eligibility at its execution boundary, and neither an
+    operator reset nor a machine reboot is required. `start` looks for no surviving
+    reviewer, kills no process and checks no verdict: the crew accepts that a reviewer
+    which outlived its coordinator may still post a verdict, which the gate binds to
+    its head. Manual commands remain independent.
     This reverses the crew's 2026-10-27 and 2026-10-28 decisions, that uncertain work
     reports `recovery-needed` and refuses, and that restart needs a durable idle
     proof. Those left no way to clear the refusal before draft ST-64, so one crash

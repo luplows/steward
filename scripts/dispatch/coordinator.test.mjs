@@ -444,7 +444,7 @@ describe('ST-60/AC-4a: interrupted during a review', () => {
     await until(() => !isRunning(spawned[0]))
   })
 
-  it('a start that cannot read the file refuses, launches nothing, names the file and changes nothing', async () => {
+  it('a start that cannot read the file refuses, launches nothing, names the file, writes nothing to it, and leaves the record and stop request as they were', async () => {
     const home = freshHome()
     const file = seedReviews(home, '{ "reviews": [')
     const record = seedStaleRecord(home)
@@ -462,10 +462,13 @@ describe('ST-60/AC-4a: interrupted during a review', () => {
     expect(existsSync(stopFile)).toBe(true)
   })
 
-  it('a start that cannot write the file refuses in the same way, leaving the entry running', async () => {
+  // A read-only file refuses the write before it begins, so here the entry stays `running`. A write
+  // that fails part way may leave the file changed or malformed.
+  it('a start that cannot write the file refuses, launches nothing, and leaves the record and stop request as they were', async () => {
     const home = freshHome()
     const file = seedReviews(home, { reviews: [runningEntry()] })
     const record = seedStaleRecord(home)
+    const stopFile = seedFile(stopRequestPath(home), 'left over\n')
     const spawnFn = vi.fn()
     chmodSync(file, 0o444)
     let result
@@ -480,6 +483,7 @@ describe('ST-60/AC-4a: interrupted during a review', () => {
     expect(spawnFn).not.toHaveBeenCalled()
     expect(readReviews(file)).toEqual([runningEntry()])
     expect(readRecord(coordinatorPath(home))).toEqual(record)
+    expect(existsSync(stopFile)).toBe(true)
   })
 })
 
