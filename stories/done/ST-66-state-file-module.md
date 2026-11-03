@@ -16,31 +16,31 @@ and so that moving to a database later means changing one module rather than eac
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — **One module.** A new module, `scripts/dispatch/state-file.mjs`, exports a read and
+- [x] **AC-1** — **One module.** A new module, `scripts/dispatch/state-file.mjs`, exports a read and
       a write of a JSON state file. The read returns the parsed value, or says there is no file. It
       does not decide what a valid record is. The write creates the folder, writes a temporary file
       in the same folder as the target, and renames it over the target. Tests cover a read with no
       file, a read and a write of a value, and a read of a file that is not JSON.
-- [ ] **AC-2** — **A failed write leaves the file as it was.** What makes this true is the rename in
+- [x] **AC-2** — **A failed write leaves the file as it was.** What makes this true is the rename in
       AC-1: the target is not opened for writing. If the temporary file's write or the rename fails,
       the write removes the temporary file as best it can and throws the original error. Tests fail
       each step, and show the target byte for byte unchanged, no temporary file left, and the
       original error thrown.
-- [ ] **AC-3** — **All three files use it.** `reviews.json`
+- [x] **AC-3** — **All three files use it.** `reviews.json`
       (`scripts/dispatch/review-admission.mjs`), `projects.json` (`scripts/dispatch/project.mjs`) and
       `coordinator.json` (`scripts/dispatch/coordinator.mjs`) are read and written only through
       this module, and `writeReviews`' own temporary-file logic is gone. A test searches those
       three modules and shows no direct `readFile`, `readFileSync`, `writeFile` or `writeFileSync`
       call on those files.
-- [ ] **AC-4** — **Nothing else changes.** Each module keeps its own validation, and every result,
+- [x] **AC-4** — **Nothing else changes.** Each module keeps its own validation, and every result,
       refusal and message it gives for a missing, malformed or invalid file is unchanged. Existing
       tests keep their expectations, except where one mocks or inspects a file call this story
       moves, and the body names each such test. Each file's location and format are unchanged, so an
       installation from before this story needs no migration.
-- [ ] **AC-5** — **`projects.json` is covered.** A test fails a write during `steward project
+- [x] **AC-5** — **`projects.json` is covered.** A test fails a write during `steward project
       activate` and `deactivate`, and shows the existing records unchanged and the command reporting
       the failure.
-- [ ] **AC-6** — The implementing PR resolves this story's **Planned (ST-66)** marker in the design
+- [x] **AC-6** — The implementing PR resolves this story's **Planned (ST-66)** marker in the design
       of record, and `docs/user-config.md` says how the state files are written.
 
 ## Out of scope

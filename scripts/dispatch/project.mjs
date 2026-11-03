@@ -25,12 +25,13 @@
  * line it does not take.
  */
 import { existsSync, realpathSync, statSync } from 'node:fs'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import { homedir as osHomedir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { git, gitRoot, repoFromRemoteUrl } from './init.mjs'
 import { readSettings, REPO_RE } from './settings.mjs'
+import { readStateFile, writeStateFile } from './state-file.mjs'
 import { stateDir } from './user-config.mjs'
 
 export const GATE_WORKFLOW = '.github/workflows/review-gate.yml'
@@ -80,20 +81,14 @@ const isDirectory = (dir) => {
  * a malformed file is never read as permission for any project.
  */
 export async function readProjects(file) {
-  let raw
-  try {
-    raw = await readFile(file, 'utf8')
-  } catch (error) {
-    if (error.code === 'ENOENT') return []
-    throw error
-  }
   const bad = (what) => new Error(`${file} is malformed: ${what}. Fix or remove it; until then no project counts as activated.`)
   let data
   try {
-    data = JSON.parse(raw)
+    data = readStateFile(file)
   } catch (error) {
-    throw bad(`it is not valid JSON (${error.message})`)
+    throw error instanceof SyntaxError ? bad(`it is not valid JSON (${error.message})`) : error
   }
+  if (data === undefined) return []
   if (!isObject(data) || Object.keys(data).join() !== 'projects' || !Array.isArray(data.projects)) {
     throw bad('it must be an object whose only key, "projects", is a list')
   }
@@ -110,11 +105,6 @@ export async function readProjects(file) {
     seen.add(record.repo)
   })
   return data.projects
-}
-
-async function writeProjects(file, projects) {
-  await mkdir(path.dirname(file), { recursive: true })
-  await writeFile(file, `${JSON.stringify({ projects }, null, 2)}\n`, 'utf8')
 }
 
 /** What is wrong with the installation in `owned`, for `repo`: an empty list when nothing is. */
@@ -184,7 +174,7 @@ async function activate(given, { cwd, homedir, cloneUrl, out, err }) {
 
   const record = { repo, checkout: root, ownedCheckout: owned }
   const again = projects.some((p) => p.repo === repo)
-  await writeProjects(file, again ? projects.map((p) => (p.repo === repo ? record : p)) : [...projects, record])
+  writeStateFile(file, { projects: again ? projects.map((p) => (p.repo === repo ? record : p)) : [...projects, record] })
   const commit = git(owned, ['rev-parse', '--short', 'HEAD'])
   out(`${again ? `${repo} was already activated; its record is updated.` : `Activated ${repo}.`} Unattended review of it is now permitted on this machine.`)
   out(`  your checkout:       ${root} (not changed)`)
@@ -222,7 +212,7 @@ async function deactivate(repo, { homedir, out, err }) {
     err(`${repo} is not activated: ${file} has no record of it. Nothing was changed.`)
     return 1
   }
-  await writeProjects(file, projects.filter((p) => p !== record))
+  writeStateFile(file, { projects: projects.filter((p) => p !== record) })
   out(`Deactivated ${repo}: its record is removed from ${file}, so unattended review of it is no longer permitted on this machine.`)
   out(`The owned checkout is kept at ${record.ownedCheckout} for reuse; remove it by hand if you no longer want it.`)
   out('Your checkout is not changed, and a review already under way may finish.')

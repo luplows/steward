@@ -38,11 +38,12 @@
  * take.
  */
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir as osHomedir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { interruptRunning, reviewsPath } from './review-admission.mjs'
+import { readStateFile, writeStateFile } from './state-file.mjs'
 import { stateDir } from './user-config.mjs'
 
 const MODULE_PATH = fileURLToPath(import.meta.url)
@@ -66,23 +67,18 @@ export const stopRequestPath = (homedir) => path.join(stateDir({ homedir }), 'co
 
 /** The record in `file`, `{ pid, startedAt, state }`, or null when there is none. */
 export function readRecord(file) {
-  let raw
+  const bad = () => new Error(`${file} is not a coordinator record steward wrote. Stop the coordinator it names, if any, and remove the file.`)
+  let data
   try {
-    raw = readFileSync(file, 'utf8')
+    data = readStateFile(file)
   } catch (error) {
-    if (error.code === 'ENOENT') return null
-    throw error
+    throw error instanceof SyntaxError ? bad() : error
   }
-  try {
-    const { pid, startedAt, state } = JSON.parse(raw)
-    if (Number.isInteger(pid) && typeof startedAt === 'string' && typeof state === 'string') return { pid, startedAt, state }
-  } catch {
-    // Reported below.
-  }
-  throw new Error(`${file} is not a coordinator record steward wrote. Stop the coordinator it names, if any, and remove the file.`)
+  if (data === undefined) return null
+  const { pid, startedAt, state } = data ?? {}
+  if (Number.isInteger(pid) && typeof startedAt === 'string' && typeof state === 'string') return { pid, startedAt, state }
+  throw bad()
 }
-
-const writeRecord = (file, record) => writeFileSync(file, `${JSON.stringify(record, null, 2)}\n`, 'utf8')
 
 /** Whether a process with id `pid` is running. */
 export function isRunning(pid) {
@@ -104,7 +100,7 @@ async function waitFor(check, { pollMs, waitMs }) {
     try {
       value = check()
     } catch {
-      // A record caught half written: look again.
+      // A record that cannot be read just now: look again.
     }
     if (value !== undefined) return value
     if (Date.now() >= end) return undefined
@@ -123,9 +119,8 @@ async function waitFor(check, { pollMs, waitMs }) {
 export function runCoordinator({ homedir, pid = process.pid, now = () => new Date(), pollMs = POLL_MS }) {
   const file = coordinatorPath(homedir)
   const stopFile = stopRequestPath(homedir)
-  mkdirSync(path.dirname(file), { recursive: true })
   const record = { pid, startedAt: now().toISOString(), state: 'running' }
-  writeRecord(file, record)
+  writeStateFile(file, record)
 
   let admitting = true
   let admitted = 0
@@ -148,7 +143,7 @@ export function runCoordinator({ homedir, pid = process.pid, now = () => new Dat
       if (!admitting || !existsSync(stopFile)) return
       admitting = false
       rmSync(stopFile, { force: true })
-      if (admitted > 0) writeRecord(file, { ...record, state: 'stopping' })
+      if (admitted > 0) writeStateFile(file, { ...record, state: 'stopping' })
     } catch (error) {
       return fail(error)
     }
