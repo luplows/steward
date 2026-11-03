@@ -92,8 +92,9 @@ copying its implementation scripts.
 ## Constraints
 
 - Manual execution by the crew. Keep `blocked:` set so that no coder takes this story; a member
-  of the crew starts its execution session once the dependencies are done and the installation
-  version is available. Preparing this story authorizes no client installation or execution.
+  of the crew starts its execution session once the dependencies are done and the release review
+  has cut the release branch, which is the installation version: `init --ref` at that branch's
+  commit. Preparing this story authorizes no client installation or execution.
 - Use the projects' own approved pull-request processes for installation and validation changes.
   Do not copy steward's implementation into either project or bypass the review gate to obtain
   a successful landing result.
@@ -110,6 +111,9 @@ copying its implementation scripts.
   existing work"), this validation also covers the installation pull request, activation and
   automatic review, since manual evidence alone does not prove all of 0.1.0. It makes no safety
   promise, so `docs/planning-session.md`'s threat-model rule adds nothing further here.
+- Crew decision, 2026-11-03: this validation runs once the release branch is cut, from its commit,
+  and before the tag, after a dry run on a scratch repository (`docs/outline.md`, "Release
+  preparation"). The crew also installs in steward itself then, outside this story's criteria.
 - ST-25, `stories/done/ST-25-review-pass.md`: the review-and-land rotation.
 - ST-42, `stories/done/ST-42-gate-runs-installed-steward.md`: installed gate commands and thin
   workflow files, with no project copy of steward's implementation.
