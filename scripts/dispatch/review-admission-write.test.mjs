@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { coordinatorPath, isRunning, main, readRecord, runCoordinator, stopRequestPath } from './coordinator.mjs'
 import { admitReview, readReviews, reviewEnding, reviewsPath } from './review-admission.mjs'
+import { fixtureUserConfig } from './settings-fixture.mjs'
+import { userConfigPath } from './user-config.mjs'
 
 // A write of `reviews.json` that fails, in a file of its own because it replaces these three of
 // `node:fs` for what it imports. Each passes through until a test sets its hook, which throws to
@@ -44,7 +46,8 @@ afterEach(async () => {
 let counter = 0
 const freshHome = () => {
   const dir = path.join(base, `home-${++counter}`)
-  mkdirSync(dir, { recursive: true })
+  mkdirSync(path.join(dir, '.steward'), { recursive: true })
+  writeFileSync(userConfigPath({ env: {}, homedir: dir }), JSON.stringify(fixtureUserConfig()))
   return dir
 }
 
@@ -87,6 +90,7 @@ async function run(argv, homedir, options = {}) {
   const lines = { out: [], err: [] }
   const code = await main(argv, {
     homedir,
+    env: {},
     pollMs: 20,
     out: (line) => lines.out.push(line),
     err: (line) => lines.err.push(line),

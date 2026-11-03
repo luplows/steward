@@ -6,9 +6,9 @@
  * The threat model is one member of the crew, one coordinator, one automatic review at a time, on
  * one machine: this is a small record the coordinator keeps for itself, not a lock. Manual commands
  * neither read nor write it. Scheduling (who calls `admitReview` and `reviewEnding`, and when) is
- * not here. A `running` entry found at `start` means the coordinator ended during that review, or
- * could not write how it ended, and `start` moves it to `ended` with `interruptRunning`, looking
- * for no process and checking no verdict.
+ * `coordinator-scheduler.mjs`'s. A `running` entry found at `start` means the coordinator ended
+ * during that review, or could not write how it ended, and `start` moves it to `ended` with
+ * `interruptRunning`, looking for no process and checking no verdict.
  *
  * The file, `~/.steward/state/reviews.json`, is `{ "reviews": [entry, ...] }`, with one entry for
  * each identity, `repo` (owner/name), `number` and `headSha` (full). An entry is

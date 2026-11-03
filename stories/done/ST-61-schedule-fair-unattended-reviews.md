@@ -16,36 +16,36 @@ progresses without manual rotations or repeated costly failures.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — **Only activated projects.** Once `start` has reported `started`, the coordinator
+- [x] **AC-1** — **Only activated projects.** Once `start` has reported `started`, the coordinator
       scans only the projects in ST-57's records, read with `readProjects` at each scan and again
       before each admission. Unreadable records prevent automatic admission and `status` gives the
       reason; they never cause implicit activation. Candidate selection uses ST-59's
       `listReviewCandidates`, not a second eligibility check. Each turn brings the project's owned
       checkout to `origin`'s `main`, as activation does, and passes it as `repoDir`. Tests cover an
       initial scan, an inactive project and unreadable records.
-- [ ] **AC-2** — **Fair turns.** A project's turn admits at most one eligible PR/head through
+- [x] **AC-2** — **Fair turns.** A project's turn admits at most one eligible PR/head through
       ST-52, then yields to the next project with an eligible head, in round-robin order by
       `owner/name`. Candidate order within a project follows ST-59. With two projects holding
       eligible heads, two successive reviews do not belong to the same project. The position is
       kept in memory: a restart begins a new round. Tests cover two projects with several
       candidates, one empty project and a project activated or deactivated between turns.
-- [ ] **AC-3** — **One review at a time.** The coordinator awaits each review before starting the
+- [x] **AC-3** — **One review at a time.** The coordinator awaits each review before starting the
       next, so at most one coordinator-managed review runs at a time across all of the OS user's
       activated projects. Direct manual `review`, `--rereview`, `rotation` and `land` commands
       neither count towards this nor change the scheduler's position. Tests hold a stand-in review
       open and show no second one started.
-- [ ] **AC-4** — **Scanning.** The scan interval governs discovery of new work, **not the delay
+- [x] **AC-4** — **Scanning.** The scan interval governs discovery of new work, **not the delay
       between reviews already discovered**. On start, scan immediately. Run known eligible
       candidates in fair turns, with ST-59 checking the intended head again before any model
       session. When none remain, start no session and do not busy-loop; scan again after the
       configured interval. Tests using a controllable clock show consecutive known reviews with no
       added interval, idle waiting and discovery on a later scan.
-- [ ] **AC-5** — **The interval.** `start` reads `coordinator.scanIntervalMinutes` through
+- [x] **AC-5** — **The interval.** `start` reads `coordinator.scanIntervalMinutes` through
       `readUserConfig` (`scripts/dispatch/user-config.mjs`, ST-63) and refuses, starting nothing,
       when it throws. `coordinator status` reports the effective interval. A change takes effect
       at the next start. Tests cover the default, a configured interval and a refused
       configuration.
-- [ ] **AC-6** — **Failures and refusals do not loop.** A project's GitHub discovery failure, or a
+- [x] **AC-6** — **Failures and refusals do not loop.** A project's GitHub discovery failure, or a
       failure to bring its owned checkout to `origin`'s `main`, starts no review of that project,
       is reported in `status`, does not stop other projects, and is retried at that project's next
       normal scan.
@@ -54,19 +54,19 @@ progresses without manual rotations or repeated costly failures.
       runs again. Other no-model refusals end that head's turn, and it may be considered again at a
       later scan. Tests show that none of these starts an immediate retry or an extra model
       session.
-- [ ] **AC-6a** — **A record that cannot be kept ends the coordinator.** When `admitReview` returns
+- [x] **AC-6a** — **A record that cannot be kept ends the coordinator.** When `admitReview` returns
       `record-failed`, or `reviewEnding` throws, the scheduler hands the reason to
       `runCoordinator`'s `fail` (ST-60/AC-2) and admits nothing more. The next `start` moves an
       entry still `running`, or refuses a malformed file, as ST-60/AC-4a says. An `already-admitted`
       outcome ends that head's turn and starts no session. Tests cover a stand-in `record-failed`
       and an unreadable `reviews.json`.
-- [ ] **AC-7** — **A failed head is not paid for twice.** A head that ST-60 counts as a
+- [x] **AC-7** — **A failed head is not paid for twice.** A head that ST-60 counts as a
       model-consuming failure, `interrupted` included, is not reviewed again automatically, on
       later scans or after restart, and `status` lists it. A new head of that PR is eligible. A
       manual review remains available under its existing rules, and a verdict it records makes the
       head no longer pending. The reviewer's bounded retry within its own invocation is unchanged.
       Tests cover repeated scans, restart, a changed head and no extra model session.
-- [ ] **AC-8** — **Stop, deactivation and status.** After a stop's acknowledgement no new review is
+- [x] **AC-8** — **Stop, deactivation and status.** After a stop's acknowledgement no new review is
       admitted, and the current one may finish (ST-58). A project deactivated during a review is
       not admitted afterwards, and the review under way may finish. `coordinator status` shows the
       active project, PR and full head, the effective interval, the next scan when known, the last
@@ -77,7 +77,7 @@ progresses without manual rotations or repeated costly failures.
       entry (ST-60/AC-5). A failed write of these fields is not fatal: the coordinator carries on,
       and its next write replaces them. Tests cover a stop and a deactivation during a stand-in
       review, and `status`'s fields read from a separate process.
-- [ ] **AC-9** — Automatic scheduler work never calls `landPullRequest`, the runway,
+- [x] **AC-9** — Automatic scheduler work never calls `landPullRequest`, the runway,
       `runRotation`, inspection, the coder or the fixer, regardless of project `land` settings.
       Verdicts continue through the existing head-bound gate. Tests use two activated projects
       with differing issue and file unit-link conventions, and an inactive project. The

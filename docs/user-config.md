@@ -43,7 +43,7 @@ choice runs on the Codex CLI), and optional `coordinator`. No other top-level ke
 | `usageLimits` | An object (below) | The share of the plan's usage at or over which steward starts no coder or reviewer session. |
 | `roles` | An object with exactly the keys `coder` and `reviewer` | For each role, the choice it runs by default, and the choices available. |
 | `tools` | An object (below); required when a choice's `tool` is `"codex"`, and may be left out otherwise | What a tool other than Claude Code needs to be started. |
-| `coordinator` | Optional object with exactly `scanIntervalMinutes` (below) | The cadence returned for the coordinator's planned scheduling. |
+| `coordinator` | Optional object with exactly `scanIntervalMinutes` (below) | How often the coordinator scans for new work; `steward coordinator start` reads it. |
 
 ### `coordinator`
 
@@ -69,9 +69,11 @@ file beside its target, `<file>.tmp`, and is renamed over it, so a write that fa
 as it was. That covers a failed write only, and is no guard against two processes writing the same
 file. `coordinator.stop`, whose presence is the signal, is not written this way, and neither is
 this page's file, which a person edits.
-`STEWARD_CONFIG` does not move that folder. ST-61 owns scheduling and will consume the
-value at the coordinator's next safe start; runtime watching and configuration-editing commands
-are not implemented here.
+`STEWARD_CONFIG` does not move that folder. `steward coordinator start` reads the value through
+this reader and refuses, starting nothing, when the reader throws, so a change takes effect at the
+next `start`, and `steward coordinator status` reports the interval in effect. The interval governs
+the discovery of new work, not the delay between reviews already discovered (README, "The
+coordinator"). Runtime watching and configuration-editing commands are not implemented.
 
 ### `usageLimits`
 

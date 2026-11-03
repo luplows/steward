@@ -81,12 +81,11 @@ are under "The outline's reasoning", in Part 3.
 
 The crew's product roadmap of 2026-10-26 is in `outline.md`, "Product roadmap", the authority
 for versions 0.1 through 1.0. It is a set of agreed outcomes awaiting refinement where stories
-do not yet exist. The implemented review rotation is still started by hand; automatic scheduling
-is roadmap work, not delivered behaviour. Explicit activation (`steward project`,
+do not yet exist. The review rotation is started by hand. Explicit activation (`steward project`,
 `scripts/dispatch/project.mjs`) is built: it records which installed projects the coordinator may
-review, and starts nothing. The local coordinator's start, status and stop controls
-(`steward coordinator`, `scripts/dispatch/coordinator.mjs`) are built; the coordinator they start
-schedules nothing yet.
+review, and starts nothing. The local coordinator (`steward coordinator`,
+`scripts/dispatch/coordinator.mjs`) is built, and schedules automatic reviews of those projects
+(`scripts/dispatch/coordinator-scheduler.mjs`); it does not land.
 `migration-plan.md` preserves the earlier migration plan and is not the version roadmap.
 
 `steward init` delivers repository installation files through a draft installation pull
@@ -2338,8 +2337,8 @@ shortened where it is long, so that it can be found there with its date.
   (`docs/user-config.md`). Editable
   configuration remains separate from planned per-user operational state under
   `~/.steward/state/`. Existing model selection and manual commands do not
-  acquire coordinator admission. ST-61 will consume the setting but owns the
-  actual scheduling and any CLI editing convenience. This revises the
+  acquire coordinator admission. `steward coordinator start` reads the setting;
+  there is no CLI editing convenience. This revises the
   2026-10-15 path/name decision above without erasing its history.
   Considered and not chosen: a second coordinator-specific settings file
   (needless duplication), retaining the “machine” naming (mistakenly implies
@@ -2835,13 +2834,12 @@ shortened where it is long, so that it can be found there with its date.
     One record per repository, in `~/.steward/state/projects.json`, outside the
     user config and project settings; deactivation removes the record and
     retains the owned checkout for reuse, never cleaning it up automatically.
-  - **Planned (ST-61):** automatic admission reads the records at each
-    admission, so a deactivated project is not admitted afterwards; an already
-    admitted review may finish.
+  - Automatic admission reads the records at each scan and before each admission, so a deactivated
+    project is not admitted afterwards; an already admitted review may finish.
   - The coordinator is a detached process, one per OS user across projects,
     known by its record `~/.steward/state/coordinator.json`: its process id,
-    start time and state (`running` or `stopping`), and no credentials
-    (`scripts/dispatch/coordinator.mjs`). `steward coordinator start` launches
+    start time and state (`running` or `stopping`), the fields `status` shows, and no
+    credentials (`scripts/dispatch/coordinator.mjs`). `steward coordinator start` launches
     it and reports `started` only once the process has written that record,
     which is its acknowledgement that it is running; it reports
     `already-running`, starting nothing, when the recorded process is running,
@@ -2854,8 +2852,8 @@ shortened where it is long, so that it can be found there with its date.
     the admission boundary. With no admitted work it removes its record and
     exits, and `stop` reports `stopped`; otherwise it marks its record
     `stopping`, `stop` returns at once reporting `stopping`, and the
-    coordinator removes its record and exits once that work has finished. It
-    schedules nothing yet. Graceful stop is not the shared E-stop below: it
+    coordinator removes its record and exits once that work has finished.
+    Graceful stop is not the shared E-stop below: it
     terminates nothing and blocks no manual command.
   - Rescoped by the crew, 2026-10-31: ST-57 and ST-58 cover one member of the
     crew running one command at a time. Racing commands, symlinked paths, an
@@ -2888,11 +2886,10 @@ shortened where it is long, so that it can be found there with its date.
     `running` until a later `start` moves it (below). No timeout or process check ends it. This is
     a small record, not a lock: it prevents duplicate coordinator-dispatched work only. Manual
     commands neither read nor write it, and manual concurrency, with its possible duplicate costs
-    and verdict races, is the crew's to manage. Nothing calls `admitReview` until scheduling is
-    built.
-  - 0.1 still requires one automatic reviewer per user, fair bounded scanning,
-    duplicate automatic work prevention, session/usage bounds and the restart
-    behaviour below before unattended scheduling starts. Manual commands and
+    and verdict races, is the crew's to manage. The scheduler below is what calls `admitReview`.
+  - 0.1 has one automatic reviewer per user, fair bounded scanning, duplicate
+    automatic work prevention, session/usage bounds and the restart behaviour
+    below. Manual commands and
     external harnesses manage their own concurrency; overlaps may race over
     current verdicts and are an operator risk. Existing reviewer correctness
     and runway gate rules still apply.
@@ -2914,7 +2911,7 @@ shortened where it is long, so that it can be found there with its date.
     from its `ended` entry, as a verdict (`recorded` or `already-reviewed`), a no-model
     refusal (any other result with no `sessions`) or a model-consuming failure (every
     other result with `sessions`, `threw` and `interrupted`), for the unchanged-head
-    retry suppression planned below: `classifyResult`, and `reviewEnding` for an
+    retry suppression below: `classifyResult`, and `reviewEnding` for an
     identity, in `scripts/dispatch/review-admission.mjs`. The reviewer's bounded retry
     inside its original invocation is unchanged. Under a living coordinator a review
     that returned or threw has ended, since the reviewer awaits a session that resolves
@@ -2962,25 +2959,26 @@ shortened where it is long, so that it can be found there with its date.
     A Steward restart alone does not prove prior processes terminated.
     Comprehensive OS containment and proving a process has ended are not required
     to deliver the narrowed ST-60.
-  - **Planned (ST-61):** scan only explicitly activated projects. After a safe
-    initial scan, give projects round-robin turns, with at most one
-    coordinator-managed reviewer per OS user; already discovered work does
-    not wait for another scan interval. Rescoped by the crew, 2026-11-02: the
-    round-robin position is kept in memory, and a restart begins a new round. Use the
-    per-user configuration
-    (`docs/user-config.md`), defaulting to a 15-minute discovery interval
-    with a configurable positive whole-minute value and no arbitrary
-    product ceiling. GitHub discovery failures retry on subsequent scans;
-    no exponential project backoff is in 0.1. A usage refusal starts no more
-    reviews until the next scan, where the reviewer checks usage again, rather than
-    waiting for a reported reset (crew, 2026-11-02). A model-consuming review that definitively
-    fails does not automatically retry the unchanged head; a new head is
-    a new candidate, and direct manual commands remain independent.
-    ST-60 supplies the count of each review. Exceptional reconciliation in draft
-    ST-64 is not a prerequisite. Amended by the crew, 2026-11-02: ST-66 comes first; a
-    record that cannot be kept ends the coordinator through `fail`; and `status`, a
-    separate process, reads the active review, last outcome and reasons from the
-    coordinator's record, `coordinator.json`, which the coordinator keeps current.
+  - The scheduler (`scripts/dispatch/coordinator-scheduler.mjs`), which `coordinator.mjs run`
+    starts, scans only explicitly activated projects. It scans at once on starting, then gives
+    projects round-robin turns by `owner/name`, each admitting at most one eligible head and
+    awaited, so there is at most one coordinator-managed reviewer per OS user; already discovered
+    work does not wait for another scan interval. When no known head is left it starts nothing and
+    scans again after the interval. Each turn brings the project's owned checkout to `origin`'s
+    `main` and passes it as `repoDir`. Rescoped by the crew, 2026-11-02: the round-robin position is
+    kept in memory, and a restart begins a new round. The interval comes from the per-user
+    configuration (`docs/user-config.md`), through `start`, which refuses when it cannot be read. It
+    defaults to 15 minutes, with a configurable positive whole-minute value and no arbitrary product
+    ceiling. GitHub discovery failures and checkout failures retry on subsequent scans; no
+    exponential project backoff is in 0.1. A usage refusal starts no more reviews until the next
+    scan, where the reviewer checks usage again, rather than waiting for a reported reset (crew,
+    2026-11-02). A model-consuming review that definitively fails does not automatically retry the
+    unchanged head; a new head is a new candidate, and direct manual commands remain independent.
+    The count of each review is `reviewEnding`'s. Exceptional reconciliation in draft ST-64 is not a
+    prerequisite. Amended by the crew, 2026-11-02: a record that cannot be kept ends the coordinator
+    through `fail`; and `status`, a separate process, reads the active review, last outcome and
+    reasons from the coordinator's record, `coordinator.json`, which the coordinator writes as they
+    change. A failed write of those fields is not fatal, and the next write replaces them.
   - **Planned (ST-62):** a per-user shared emergency-stop latch with
     registered local process trees, including independent manual commands,
     explicit reset and verified-or-uncertain termination reporting is a

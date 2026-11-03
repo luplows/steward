@@ -23,8 +23,9 @@ Where a file defines the thing, the entry names it, and the file is the authorit
   automatic reviews, not manual commands (`docs/outline.md`, Product roadmap): a detached
   process started, inspected and gracefully stopped with
   `steward coordinator start`, `status` and `stop`, and known by its record,
-  `~/.steward/state/coordinator.json` (`scripts/dispatch/coordinator.mjs`). Its scheduling is
-  planned for 0.1 and not yet built.
+  `~/.steward/state/coordinator.json` (`scripts/dispatch/coordinator.mjs`). It reviews one head at
+  a time, in fair turns between the projects (`scripts/dispatch/coordinator-scheduler.mjs`), and
+  never lands.
 - **activation** — one OS user's permission for unattended local review of an installed project,
   given by `steward project activate` and taken away by `steward project deactivate`, and kept as
   a record in `~/.steward/state/projects.json` (`scripts/dispatch/project.mjs`). Installation

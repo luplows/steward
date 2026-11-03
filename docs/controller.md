@@ -22,11 +22,10 @@ enough, are in [`agent-workflow-design.md`](agent-workflow-design.md), "The cont
   `land` for a manual landing the crew asks for ("Landing", below), not `coder.mjs`, `story.mjs` or
   `loop.mjs` (`agent-workflow-design.md`, "Portability", "Decided so far").
 
-## Manual work and planned automatic coordination
+## Manual work and automatic coordination
 
 - The 0.1 coordinator can be started, inspected and stopped
-  (`steward coordinator start`, `status`, `stop`), but schedules nothing yet.
-  When its scheduling is built, it will schedule automatic reviews only;
+  (`steward coordinator start`, `status`, `stop`), and schedules automatic reviews only;
   explicit controller commands such as `rotation`, `review.mjs --rereview` and
   manual `land` remain direct, and never ask the coordinator, whether it is
   running, stopping or stopped. This does not change whose request authorizes

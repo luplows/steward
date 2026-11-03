@@ -5,19 +5,25 @@
  * "Decided so far", "Per-user coordinator foundations and manual independence".
  *
  *   steward coordinator start            start the coordinator in the background, detached
- *   steward coordinator status [--json]  whether it is running, stopping or stopped
+ *   steward coordinator status [--json]  whether it is running, stopping or stopped, and what it is
+ *                                        doing
  *   steward coordinator stop             ask it to admit no more work, and to exit once idle
  *
- * The coordinator is a detached process, `coordinator.mjs run <home>`, which `start` launches;
- * `run` is not for people. Its record is `~/.steward/state/coordinator.json`: its process id, its
- * start time and its state, `running` or `stopping`, and no credentials. Writing the record is how
- * it acknowledges that it is running: `start` reports `started` only once the record names the
- * process it launched. `stop` reaches it through a stop request, the file
- * `~/.steward/state/coordinator.stop`, which the coordinator looks for every `pollMs`. On seeing it
- * the coordinator admits no more work and removes the request; with no admitted work running it
- * removes its record and exits, and otherwise it writes `stopping` into its record and exits once
- * that work has finished. Either change is the acknowledgment `stop` waits for. This story adds no
- * scheduling: the coordinator idles until it is stopped, and only tests admit (simulated) work.
+ * The coordinator is a detached process, `coordinator.mjs run <home> <minutes>`, which `start`
+ * launches; `run` is not for people. Its record is `~/.steward/state/coordinator.json`: its process
+ * id, its start time, its state, `running` or `stopping`, and the fields `status` shows, which
+ * `coordinator-scheduler.mjs` names, and no credentials. Writing the record is how it acknowledges
+ * that it is running: `start` reports `started` only once the record names the process it launched.
+ * `stop` reaches it through a stop request, the file `~/.steward/state/coordinator.stop`, which the
+ * coordinator looks for every `pollMs`. On seeing it the coordinator admits no more work and
+ * removes the request; with no admitted work running it removes its record and exits, and otherwise
+ * it writes `stopping` into its record and exits once that work has finished. Either change is the
+ * acknowledgment `stop` waits for. While it runs, the coordinator schedules automatic reviews of
+ * the activated projects (`coordinator-scheduler.mjs`).
+ *
+ * `start` reads the scan interval, `coordinator.scanIntervalMinutes`, through `readUserConfig`, and
+ * refuses, changing nothing, when that throws. It hands the interval to the process it launches, so
+ * a change takes effect at the next `start`.
  *
  * A `start` that finds no coordinator running first moves each `running` entry in the record of its
  * reviews to `ended` with `interrupted` (`interruptRunning`, `review-admission.mjs`), and says so.
@@ -25,7 +31,8 @@
  * verdict. `start` looks for no surviving reviewer: one may still post a verdict, which the gate
  * binds to the head reviewed. A `start` that cannot read or update that record of reviews refuses,
  * launching nothing, naming the file and leaving the coordinator's own record and any stop request
- * as they were. `status` and `stop` do not read it.
+ * as they were. `status` reads it to list the heads that are not reviewed again automatically, and
+ * changes no entry; `stop` does not read it.
  *
  * Manual commands (`review`, `rotation`, `land` and the rest) never consult the coordinator.
  *
@@ -42,9 +49,10 @@ import { existsSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir as osHomedir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { interruptRunning, reviewsPath } from './review-admission.mjs'
+import { scheduleReviews } from './coordinator-scheduler.mjs'
+import { classifyResult, interruptRunning, readReviews, reviewsPath } from './review-admission.mjs'
 import { readStateFile, writeStateFile } from './state-file.mjs'
-import { stateDir } from './user-config.mjs'
+import { readUserConfig, stateDir } from './user-config.mjs'
 
 const MODULE_PATH = fileURLToPath(import.meta.url)
 const POLL_MS = 250
@@ -57,7 +65,8 @@ const USAGE = [
   '',
   'start   starts this OS user\'s coordinator in the background; it keeps running after this',
   '        terminal closes',
-  'status  says whether it is running, stopping or stopped; --json gives the same as JSON',
+  'status  says whether it is running, stopping or stopped, and what it is doing; --json gives the',
+  '        same as JSON',
   'stop    asks it to admit no more work and to exit once the work it admitted has finished',
 ].join('\n')
 
@@ -65,7 +74,7 @@ const USAGE = [
 export const coordinatorPath = (homedir) => path.join(stateDir({ homedir }), 'coordinator.json')
 export const stopRequestPath = (homedir) => path.join(stateDir({ homedir }), 'coordinator.stop')
 
-/** The record in `file`, `{ pid, startedAt, state }`, or null when there is none. */
+/** The record in `file`, `{ pid, startedAt, state, ...fields }`, or null when there is none. */
 export function readRecord(file) {
   const bad = () => new Error(`${file} is not a coordinator record steward wrote. Stop the coordinator it names, if any, and remove the file.`)
   let data
@@ -76,7 +85,7 @@ export function readRecord(file) {
   }
   if (data === undefined) return null
   const { pid, startedAt, state } = data ?? {}
-  if (Number.isInteger(pid) && typeof startedAt === 'string' && typeof state === 'string') return { pid, startedAt, state }
+  if (Number.isInteger(pid) && typeof startedAt === 'string' && typeof state === 'string') return data
   throw bad()
 }
 
@@ -109,20 +118,26 @@ async function waitFor(check, { pollMs, waitMs }) {
 }
 
 /**
- * Runs a coordinator in this process for `homedir`: writes its record, then watches for a stop
- * request. Returns `{ record, admit, fail, done }`. `admit(job)` runs `job` (a function returning a
- * promise) as admitted work and returns true, or returns false, starting nothing, once a stop has
- * been acknowledged or `fail` called. `fail(error)` admits nothing more and ends the coordinator
- * with `error` once admitted work has finished. `done` resolves once the coordinator has removed
- * its record, with an error when it stopped because of one.
+ * Runs a coordinator in this process for `homedir`: writes its record, with `fields`, then watches
+ * for a stop request. Returns `{ record, admit, admitting, report, fail, done }`. `admit(job)` runs
+ * `job` (a function returning a promise) as admitted work and returns true, or returns false,
+ * starting nothing, once a stop has been acknowledged or `fail` called; `admitting()` says which.
+ * `report(fields)` merges `fields` into the record and writes it if they changed anything. A write
+ * that fails is not fatal, and the next one replaces it; once the record is removed, `report`
+ * writes nothing. `fail(error)` admits nothing more and ends the coordinator with `error` once
+ * admitted work has finished. `done` resolves once the coordinator has removed its record, with an
+ * error when it stopped because of one.
  */
-export function runCoordinator({ homedir, pid = process.pid, now = () => new Date(), pollMs = POLL_MS }) {
+export function runCoordinator({ homedir, pid = process.pid, now = () => new Date(), pollMs = POLL_MS, fields = {} }) {
   const file = coordinatorPath(homedir)
   const stopFile = stopRequestPath(homedir)
   const record = { pid, startedAt: now().toISOString(), state: 'running' }
-  writeStateFile(file, record)
+  let reported = { ...fields }
+  writeStateFile(file, { ...record, ...reported })
 
   let admitting = true
+  let state = record.state
+  let removed = false
   let admitted = 0
   let failure = null
   let finish
@@ -130,6 +145,7 @@ export function runCoordinator({ homedir, pid = process.pid, now = () => new Dat
   const settle = () => {
     if (admitting || admitted > 0) return
     clearInterval(timer)
+    removed = true
     rmSync(file, { force: true })
     finish(failure)
   }
@@ -143,7 +159,10 @@ export function runCoordinator({ homedir, pid = process.pid, now = () => new Dat
       if (!admitting || !existsSync(stopFile)) return
       admitting = false
       rmSync(stopFile, { force: true })
-      if (admitted > 0) writeStateFile(file, { ...record, state: 'stopping' })
+      if (admitted > 0) {
+        state = 'stopping'
+        writeStateFile(file, { ...record, ...reported, state })
+      }
     } catch (error) {
       return fail(error)
     }
@@ -159,26 +178,61 @@ export function runCoordinator({ homedir, pid = process.pid, now = () => new Dat
     })
     return true
   }
-  return { record, admit, fail, done }
+  const report = (changes) => {
+    const next = { ...reported, ...changes }
+    if (removed || JSON.stringify(next) === JSON.stringify(reported)) return
+    reported = next
+    try {
+      writeStateFile(file, { ...record, ...reported, state })
+    } catch {
+      // Not fatal: the record stays as it was, and the next write carries these fields too.
+    }
+  }
+  return { record, admit, admitting: () => admitting, report, fail, done }
 }
 
 /** What `status` reports: `{ status, pid?, startedAt?, note? }`. */
 function describe(homedir) {
   const record = readRecord(coordinatorPath(homedir))
   if (record === null) return { status: 'stopped' }
-  const { pid, startedAt, state } = record
+  const { pid, startedAt, state, ...fields } = record
   if (!isRunning(pid)) {
     return { status: 'stopped', pid, startedAt, note: 'the previous coordinator ended without removing its record' }
   }
-  return { status: state === 'stopping' ? 'stopping' : 'running', pid, startedAt }
+  return { status: state === 'stopping' ? 'stopping' : 'running', pid, startedAt, ...fields }
 }
 
-async function start({ homedir, spawnFn, pollMs, waitMs, out, err }) {
+/**
+ * The heads the record of reviews counts as model-consuming failures, which are not reviewed again
+ * automatically: `{ failedHeads }`, or `{ reviewsProblem }` when it cannot be read, or nothing when
+ * there are none. Reads only.
+ */
+function failedHeads(homedir) {
+  let reviews
+  try {
+    reviews = readReviews(reviewsPath(homedir))
+  } catch (error) {
+    return { reviewsProblem: error.message }
+  }
+  const failed = reviews.filter((entry) => entry.state === 'ended' && classifyResult(entry.result) === 'model-consuming-failure')
+    .map(({ repo, number, headSha, endedAt, result }) => ({ repo, number, headSha, status: result.status, endedAt }))
+  return failed.length > 0 ? { failedHeads: failed } : {}
+}
+
+async function start({ homedir, env, spawnFn, pollMs, waitMs, out, err }) {
   const file = coordinatorPath(homedir)
   const record = readRecord(file)
   if (record !== null && isRunning(record.pid)) {
     err(`already-running: this OS user's coordinator is already running, as process ${record.pid}, started ${record.startedAt}. Nothing was started.`)
     err('To see it: steward coordinator status. To stop it: steward coordinator stop')
+    return 1
+  }
+  let intervalMinutes
+  try {
+    intervalMinutes = (await readUserConfig({ env, homedir })).coordinator.scanIntervalMinutes
+  } catch (error) {
+    err(`The coordinator did not start: it could not read its scan interval from the user config. ${error.message}`)
+    err('Nothing was started.')
     return 1
   }
   let interrupted
@@ -198,7 +252,7 @@ async function start({ homedir, spawnFn, pollMs, waitMs, out, err }) {
   }
   rmSync(stopRequestPath(homedir), { force: true })
 
-  const child = spawnFn(process.execPath, [MODULE_PATH, 'run', homedir], { detached: true, stdio: 'ignore', windowsHide: true })
+  const child = spawnFn(process.execPath, [MODULE_PATH, 'run', homedir, String(intervalMinutes)], { detached: true, stdio: 'ignore', windowsHide: true })
   let exited = false
   child.on('exit', () => { exited = true })
   child.on('error', () => { exited = true })
@@ -215,12 +269,35 @@ async function start({ homedir, spawnFn, pollMs, waitMs, out, err }) {
   child.unref()
   out(`started: this OS user's coordinator is running in the background, as process ${acknowledged.pid}, started ${acknowledged.startedAt}.`)
   out(`Its record is ${file}. It keeps running after this terminal closes.`)
-  out('It schedules no work yet. To see it: steward coordinator status. To stop it: steward coordinator stop')
+  out(`It reviews the activated projects' eligible pull requests, one at a time, and scans for new ones every ${intervalMinutes} minutes.`)
+  out('To see it: steward coordinator status. To stop it: steward coordinator stop')
   return 0
 }
 
+/** The lines `status` adds to its first, for the fields in `result`. */
+function statusLines({ intervalMinutes, nextScanAt, active, lastOutcome, usage, recordsProblem, projectProblems, failedHeads: failed, reviewsProblem }) {
+  const pull = ({ repo, number, headSha }) => `${repo} pull request #${number}, head ${headSha}`
+  const lines = []
+  if (intervalMinutes !== undefined) lines.push(`Scan interval: ${intervalMinutes} minutes.`)
+  if (nextScanAt) lines.push(`Next scan: ${nextScanAt}.`)
+  if (active) lines.push(`Reviewing: ${pull(active)}.`)
+  if (lastOutcome) {
+    const { status: ended, counted, reason, at } = lastOutcome
+    lines.push(`Last outcome: ${pull(lastOutcome)}: ${ended}${counted ? ` (${counted})` : ''}, at ${at}${reason ? `: ${reason}` : ''}.`)
+  }
+  if (usage) lines.push(`No more reviews until the next scan: ${usage.status}: ${usage.reason}.`)
+  if (recordsProblem) lines.push(`No automatic review starts: the project records cannot be read: ${recordsProblem}`)
+  for (const { repo, reason } of projectProblems ?? []) lines.push(`${repo}: no review until a later scan: ${reason}`)
+  if (failed) {
+    lines.push('Not reviewed again automatically, as a review of the head failed; a manual review, or a new head, is how it gets a verdict:')
+    for (const head of failed) lines.push(`  ${pull(head)}: ${head.status}, at ${head.endedAt}`)
+  }
+  if (reviewsProblem) lines.push(`The record of reviews cannot be read: ${reviewsProblem}`)
+  return lines
+}
+
 function status(json, { homedir, out }) {
-  const result = describe(homedir)
+  const result = { ...describe(homedir), ...failedHeads(homedir) }
   if (json) {
     out(JSON.stringify(result))
     return 0
@@ -233,6 +310,7 @@ function status(json, { homedir, out }) {
   } else {
     out(`running: the coordinator is process ${pid}, started ${startedAt}. To stop it: steward coordinator stop`)
   }
+  for (const line of statusLines(result)) out(line)
   return 0
 }
 
@@ -264,10 +342,12 @@ async function stop({ homedir, pollMs, waitMs, out, err }) {
   return 0
 }
 
-/** The detached coordinator process itself: runs until stopped, then exits. */
-async function run(homedir) {
+/** The detached coordinator process itself: schedules reviews until stopped, then exits. */
+async function run(homedir, intervalMinutes) {
   try {
-    const failure = await runCoordinator({ homedir }).done
+    const coordinator = runCoordinator({ homedir, fields: { intervalMinutes } })
+    scheduleReviews({ homedir, coordinator, intervalMinutes })
+    const failure = await coordinator.done
     return failure ? 1 : 0
   } catch {
     rmSync(coordinatorPath(homedir), { force: true })
@@ -276,19 +356,19 @@ async function run(homedir) {
 }
 
 /**
- * Runs `steward coordinator <argv>` and returns its exit code. `homedir`, `spawnFn` (`spawn` from
- * `node:child_process`), the polling interval, how long to wait for an acknowledgment, and the
- * output are injectable.
+ * Runs `steward coordinator <argv>` and returns its exit code. `homedir`, `env` (what the user
+ * config's path is read from), `spawnFn` (`spawn` from `node:child_process`), the polling interval,
+ * how long to wait for an acknowledgment, and the output are injectable.
  */
-export async function main(argv, { homedir = osHomedir(), spawnFn = spawn, pollMs = 100, waitMs = WAIT_MS, out = console.log, err = console.error } = {}) {
+export async function main(argv, { homedir = osHomedir(), env = process.env, spawnFn = spawn, pollMs = 100, waitMs = WAIT_MS, out = console.log, err = console.error } = {}) {
   const [command, ...rest] = argv
-  const ctx = { homedir, spawnFn, pollMs, waitMs, out, err }
+  const ctx = { homedir, env, spawnFn, pollMs, waitMs, out, err }
   try {
     if (command === 'start' && rest.length === 0) return await start(ctx)
     if (command === 'status' && rest.length === 0) return status(false, ctx)
     if (command === 'status' && rest.length === 1 && rest[0] === '--json') return status(true, ctx)
     if (command === 'stop' && rest.length === 0) return await stop(ctx)
-    if (command === 'run' && rest.length === 1) return await run(rest[0])
+    if (command === 'run' && rest.length === 2) return await run(rest[0], Number(rest[1]))
   } catch (error) {
     err(error.message)
     return 1
