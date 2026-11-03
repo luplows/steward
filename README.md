@@ -259,17 +259,21 @@ duplicate costs and verdict races are the crew's to manage.
 
 An ended review counts as a verdict, a refusal that started no model, or a failure that may have
 paid for one (`reviewEnding`, in `review-admission.mjs`, for the scheduling to come to read). Those
-counts survive a stop and a restart, and no reset is needed after either. If a coordinator ends
-during a review, its entry is left `running`. The next `start`, before launching a coordinator,
-moves the entry to `ended` with `interrupted`, which counts as a failure, says which repository,
-pull request and full head were interrupted, and carries on. That head is not reviewed again
+counts survive a stop and a restart, and no reset is needed after either. A coordinator that dies
+during a review leaves its entry `running`. The next `start`, before launching a coordinator, moves
+the entry to `ended` with `interrupted`, which counts as a failure, says which repository, pull
+request and full head were interrupted, and carries on. That head is not reviewed again
 automatically; a manual review of it, or a new head, is how it gets a verdict. `start` looks for no
 surviving reviewer, kills nothing and checks no verdict, so a reviewer that outlived its coordinator
 may still post a verdict, which the gate binds to the head reviewed: the crew accepts that risk. A
-`start` that finds a coordinator running changes no entry, and `status` and `stop` never do. A
-`start` that cannot read or update `reviews.json`, because it is malformed for instance, says why
-and starts nothing, until the file is fixed or removed. It leaves the coordinator's record and any
-stop request as they were, though a failed write may have left `reviews.json` changed or malformed.
+`start` that finds a coordinator running changes no entry, and `status` and `stop` never do.
+
+Writes to `reviews.json` overwrite it directly, so what it holds after a failed write is uncertain:
+it may still have the entry `running`, for `start` to move, or it may be malformed. A coordinator
+that cannot write how a review ended will admit nothing more and exit. A `start` that cannot read
+or update the file, because it is malformed for instance, names the file, says why and starts
+nothing, until the file is fixed or removed. It leaves the coordinator's record and any stop request
+as they were.
 
 ## Contributing
 

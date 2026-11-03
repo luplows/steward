@@ -6,9 +6,9 @@
  * The threat model is one member of the crew, one coordinator, one automatic review at a time, on
  * one machine: this is a small record the coordinator keeps for itself, not a lock. Manual commands
  * neither read nor write it. Scheduling (who calls `admitReview` and `reviewEnding`, and when) is
- * not here. A `running` entry found at `start` means the coordinator ended during that review, and
- * `start` moves it to `ended` with `interruptRunning`, looking for no process and checking no
- * verdict.
+ * not here. A `running` entry found at `start` means the coordinator ended during that review, or
+ * could not write how it ended, and `start` moves it to `ended` with `interruptRunning`, looking
+ * for no process and checking no verdict.
  *
  * The file, `~/.steward/state/reviews.json`, is `{ "reviews": [entry, ...] }`, with one entry for
  * each identity, `repo` (owner/name), `number` and `headSha` (full). An entry is
@@ -99,8 +99,9 @@ export function reviewEnding({ homedir, repo, number, headSha }) {
 /**
  * Moves every `running` entry under `homedir` to `ended` with `interrupted`, in one write, and
  * returns those entries as they were. With none, writes nothing. For `start` alone, once it has
- * found no coordinator running. Throws, naming the file, when it cannot read or write it. The write
- * overwrites directly, so a failed one may leave the file changed or malformed.
+ * found no coordinator running. Throws when it cannot read or write the file. The write overwrites
+ * directly, so what the file holds after a failed one is uncertain: its entries may still be
+ * `running`, or it may be malformed.
  */
 export function interruptRunning({ homedir, now = () => new Date() }) {
   const file = reviewsPath(homedir)
@@ -123,13 +124,14 @@ export function interruptRunning({ homedir, now = () => new Date() }) {
  *   `reviewed` is all the reviewer returned, and absent when it threw.
  * - `{ status: 'already-admitted', entry }`: a `running` entry holds this identity. Nothing
  *   started, and the entry is as it was. Not a failure, and not a review's result.
- * - `{ status: 'admission-closed' }`: `admit` refused it, a stop having been acknowledged. Nothing
- *   was written or started.
+ * - `{ status: 'admission-closed' }`: `admit` refused it, a stop having been acknowledged or `fail`
+ *   called. Nothing was written or started.
  * - `{ status: 'record-failed', file, reason, entry?, reviewed? }`: the record could not be read or
  *   written. Without `entry`, no review started. With it, the review has ended, and the returned
  *   `entry` is what says how. What the file then holds is uncertain: it may still have the entry
- *   `running`, or it may be malformed. On this status the caller admits no more: it hands `reason`
- *   to the coordinator's `fail`, and `start` deals with what the file holds.
+ *   `running`, or it may be malformed. On this status the caller is to admit no more, handing
+ *   `reason` to the coordinator's `fail`. A later `start` moves an entry still `running`, or
+ *   refuses a malformed file and names it.
  */
 export async function admitReview({ homedir, admit, candidate, repoDir, ctx, reviewOptions, review = reviewCandidate, now = () => new Date() }) {
   const identity = { repo: candidate.repo, number: candidate.number, headSha: candidate.expectedHeadSha }

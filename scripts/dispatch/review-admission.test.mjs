@@ -489,11 +489,13 @@ describe('ST-60/AC-2: ST-61 reads the count', () => {
     expect(ending(home)).toBe('verdict')
   })
 
-  it('a failed write of the outcome: the coordinator admits nothing more and ends as a handled error, leaving the entry running', async () => {
+  it('a write of the outcome that a read-only file refuses: record-failed, the entry stays running, and with fail the coordinator admits nothing more and ends as a handled error', async () => {
     const home = freshHome()
     const file = reviewsPath(home)
     const coordinator = runCoordinator({ homedir: home, pollMs: 20 })
-    // Read-only, so that the file reads as it was and the write of the ending fails.
+    // Read-only, so that the file reads as it was and the write of the ending is refused before it
+    // begins, which is all this shows. What a write that fails part way leaves is uncertain, and
+    // the malformed case is in `ST-52/AC-3` here and `ST-60/AC-4a` in `coordinator.test.mjs`.
     const review = standIn(async () => {
       chmodSync(file, 0o444)
       return { status: 'recorded', sessions: 1 }
@@ -509,7 +511,7 @@ describe('ST-60/AC-2: ST-61 reads the count', () => {
     expect(readReviews(file)).toEqual([{ ...identity, state: 'running', startedAt: STARTED }])
     expect(ending(home)).toBe(null)
 
-    // What the caller does with `record-failed`.
+    // What the caller is to do with `record-failed`.
     coordinator.fail(new Error(outcome.reason))
     const later = standIn()
     expect(await admitReview({ homedir: home, admit: coordinator.admit, candidate: candidate({ number: 8 }), review: later })).toEqual({ status: 'admission-closed' })
@@ -518,7 +520,7 @@ describe('ST-60/AC-2: ST-61 reads the count', () => {
     expect(existsSync(coordinatorPath(home))).toBe(false)
     expect(readReviews(file)).toEqual([{ ...identity, state: 'running', startedAt: STARTED }])
 
-    // The entry is left for `start`'s move, which counts it.
+    // Still `running` here, so the move `start` makes counts it.
     expect(interruptRunning({ homedir: home })).toEqual([{ ...identity, state: 'running', startedAt: STARTED }])
     expect(ending(home)).toBe('model-consuming-failure')
   })

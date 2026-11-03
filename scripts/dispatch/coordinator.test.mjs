@@ -444,7 +444,7 @@ describe('ST-60/AC-4a: interrupted during a review', () => {
     await until(() => !isRunning(spawned[0]))
   })
 
-  it('a start that cannot read the file refuses, launches nothing, names the file, writes nothing to it, and leaves the record and stop request as they were', async () => {
+  it('a start that finds the file malformed refuses, launches nothing, names the file, and leaves the file, the record and a stop request as they were', async () => {
     const home = freshHome()
     const file = seedReviews(home, '{ "reviews": [')
     const record = seedStaleRecord(home)
@@ -462,9 +462,9 @@ describe('ST-60/AC-4a: interrupted during a review', () => {
     expect(existsSync(stopFile)).toBe(true)
   })
 
-  // A read-only file refuses the write before it begins, so here the entry stays `running`. A write
-  // that fails part way may leave the file changed or malformed.
-  it('a start that cannot write the file refuses, launches nothing, and leaves the record and stop request as they were', async () => {
+  // A read-only file refuses the write before it begins, which is all this shows. What a write that
+  // fails part way leaves is uncertain, and no test makes one.
+  it('a start whose write a read-only file refuses: it refuses, launches nothing, names the file, and the entry, the record and a stop request stay', async () => {
     const home = freshHome()
     const file = seedReviews(home, { reviews: [runningEntry()] })
     const record = seedStaleRecord(home)

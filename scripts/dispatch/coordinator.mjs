@@ -23,7 +23,9 @@
  * reviews to `ended` with `interrupted` (`interruptRunning`, `review-admission.mjs`), and says so.
  * That head is not reviewed again automatically; a manual review, or a new head, is how it gets a
  * verdict. `start` looks for no surviving reviewer: one may still post a verdict, which the gate
- * binds to the head reviewed. `status` and `stop` do not read that record.
+ * binds to the head reviewed. A `start` that cannot read or update that record of reviews refuses,
+ * launching nothing, naming the file and leaving the coordinator's own record and any stop request
+ * as they were. `status` and `stop` do not read it.
  *
  * Manual commands (`review`, `rotation`, `land` and the rest) never consult the coordinator.
  *

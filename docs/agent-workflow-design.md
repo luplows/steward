@@ -2883,12 +2883,13 @@ shortened where it is long, so that it can be found there with its date.
     entry for the same identity returns `already-admitted`, starting nothing and changing nothing;
     a different head is a different identity, and the reviewer's expected-head check still applies.
     When the review returns or throws, the entry moves to `ended` with the reviewer's `status` and
-    `sessions`, or `threw` and the error's message. An `ended` entry blocks nothing. Only the
-    coordinator that wrote an entry ends it, so one that dies leaves it `running`, until a later
-    `start` moves it (below); no timeout or process check does so. This is a small record, not a
-    lock: it prevents duplicate coordinator-dispatched work only. Manual commands neither read nor
-    write it, and manual concurrency, with its possible duplicate costs and verdict races, is the
-    crew's to manage. Nothing calls `admitReview` until scheduling is built.
+    `sessions`, or `threw` and the error's message. An `ended` entry blocks nothing. The
+    coordinator that wrote an entry ends it; one that dies before writing the ending leaves it
+    `running` until a later `start` moves it (below). No timeout or process check ends it. This is
+    a small record, not a lock: it prevents duplicate coordinator-dispatched work only. Manual
+    commands neither read nor write it, and manual concurrency, with its possible duplicate costs
+    and verdict races, is the crew's to manage. Nothing calls `admitReview` until scheduling is
+    built.
   - 0.1 still requires one automatic reviewer per user, fair bounded scanning,
     duplicate automatic work prevention, session/usage bounds and the restart
     behaviour below before unattended scheduling starts. Manual commands and
@@ -2919,19 +2920,22 @@ shortened where it is long, so that it can be found there with its date.
     that returned or threw has ended, since the reviewer awaits a session that resolves
     only after its process ends. `admitReview` writes the outcome before it resolves,
     so before another review is admitted. When it cannot, it returns `record-failed`;
-    its caller hands that to `runCoordinator`'s `fail`, and the coordinator admits
-    nothing more and ends as a handled error, removing its record and leaving the entry
-    `running`. After a clean stop, or an interruption while idle, `start` carries on.
-    A `running` entry found at `start` means the coordinator died during that review:
-    before launching, `start` moves it to `ended` with `interrupted` in one plain write
-    (`interruptRunning`), which counts as failed, names the repository, PR and full
-    head and carries on, and that head is not reviewed again automatically. A manual
-    review of it, or a new head, is how it gets a verdict. A `start` that cannot read
-    or update the file, malformed for instance, says why, launches nothing and leaves
-    the coordinator's record and any stop request as they were. A failed write may
-    have left the file changed or malformed, since it overwrites directly, and a
-    malformed file never reads as empty. A `start` that finds a coordinator running
-    changes no entry, and `status` and `stop` never do. A restart keeps the record,
+    its caller is to hand that to `runCoordinator`'s `fail`, and the coordinator admits
+    nothing more and ends as a handled error, removing its record. Writes overwrite the
+    file directly, so what it holds after a failed write is uncertain: it may still
+    have the entry `running`, for `start` to move, or it may be malformed, and then
+    `start` refuses and names the file. After a clean stop, or an interruption while
+    idle, `start` carries on.
+    A `running` entry found at `start` means the coordinator died during that review,
+    or could not write how it ended: before launching, `start` moves it to `ended` with
+    `interrupted` in one plain write (`interruptRunning`), which counts as failed, names
+    the repository, PR and full head and carries on, and that head is not reviewed again
+    automatically. A manual review of it, or a new head, is how it gets a verdict. A
+    `start` that cannot read or update the file, malformed for instance, names the file,
+    says why, launches nothing and leaves the coordinator's record and any stop request
+    as they were. What the file holds after that `start`'s own failed write is uncertain
+    too, and a malformed file never reads as empty. A `start` that finds a coordinator
+    running changes no entry, and `status` and `stop` never do. A restart keeps the record,
     the reviewer rechecks GitHub eligibility at its execution boundary, and neither an
     operator reset nor a machine reboot is required. `start` looks for no surviving
     reviewer, kills no process and checks no verdict: the crew accepts that a reviewer
