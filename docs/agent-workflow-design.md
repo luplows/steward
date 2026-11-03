@@ -1042,8 +1042,8 @@ batch's end, so that the batch is fixed while work on `main` goes on, and nothin
 The branch changes only through pull requests into it, reviewed and landed through the gate: the
 release notes with the version, a fix that landed on `main` first and is cherry-picked, and a
 revert of a capability deferred from the release. None of them changes anything under `stories/`,
-since stories are written and moved on `main`. Its last commit is tagged, and the branch is kept
-as the release's record; the next batch is everything on `main` since the branch was cut, with
+since stories are written and moved on `main`. Its last commit is tagged, and the branch is then
+kept as the release's record; until it has a tag it may be replaced; the next batch is everything on `main` since the branch was cut, with
 every capability the release deferred, which is still on `main`. A patch release repairs the
 newest release on a branch cut from its tag, and its batch is only the pull requests into that
 branch. `main`'s `package.json` keeps the version `0.0.0`, since `main` is never released directly
@@ -1105,10 +1105,10 @@ Per capability: what it does now that it didn't before, in user language — the
 screen**, driving a deployment or a local dev server. That is the difference between reviewing work
 and reviewing a summary of work. Then: contributing stories, what the reviewer flagged but let
 through, and known gaps. For steward, putting it on screen means running what a project runs: `init`
-on a new scratch repository, then a review and a landing of a test pull request there.
+on a scratch repository, new or reset, then a review and a landing of a test pull request there.
 `init --ref <commit>` pins that repository's workflow files to the release branch's last commit,
-since its tag does not exist yet, and each repeat of the walkthrough uses another new scratch
-repository, since `init` leaves a file that is already there. Between `init` and the test pull
+since its tag does not exist yet, and each repeat of the walkthrough needs a repository holding
+none of `init`'s files, since `init` leaves a file that is already there. Between `init` and the test pull
 request, the pull request `init` leaves is merged by hand, since nothing can review it, and
 `steward protect` is run from steward at the same commit, so that the test pull request is
 reviewed and landed with protection set.
@@ -2586,6 +2586,21 @@ shortened where it is long, so that it can be found there with its date.
   migrating client units to steward's stories; copying steward's scripts into clients; and folding
   defect repairs into the validation story. The release review's scratch-project walkthrough
   remains separate. Writing this story does not start either client installation.
+- **A release branch with no tag may be replaced, and ST-48 installs from the new one** (decided
+  2026-11-03 by the crew, with the planning session, once ST-61 had landed). `release/v0.1.0` was cut
+  at `3ac40be` for an older 0.1.0, is 29 merges behind `main`, and has no tag. That commit is on
+  `main`, so deleting the branch loses nothing, and no release or project depends on it. When the crew
+  starts the release review, it closes #86, replaces the branch with a new `release/v0.1.0` from
+  `main`, and walks through it on a scratch repository. **Planned (ST-48):** the crew then validates
+  the two client projects from that branch's commit, before the release notes and the tag. A defect
+  is fixed on `main` and cherry-picked, as for any release. The rule that a tagged release branch is
+  never moved or deleted is unchanged. Considered and not chosen: one pull request bringing `main`'s
+  changes outside `stories/` into the old branch, a very large diff for one review; keeping the old
+  branch and releasing under another number, since 0.1.0 was never released; and running ST-48 from a
+  commit on `main` before the cut, which spares a cherry-pick per defect but validates something
+  other than what is released. A scratch repository may also be reset rather than new, revising the
+  decision of 2026-10-20 below, since what the walkthrough needs is a `main` holding none of `init`'s
+  files. Not chosen: requiring a new one each time.
 - **The release review cuts each release on a release branch, and a tag is never moved** (decided
   2026-10-19 by the owner, with the planning session, while planning how steward installs in another
   project). A project pins steward by a tag, so the first tag, `v0.1.0`, needs
@@ -2597,7 +2612,7 @@ shortened where it is long, so that it can be found there with its date.
   landed through the gate: the release notes, `releases/vX.Y.Z.md`, with the version in
   `package.json`; a fix, which lands on `main` first and is cherry-picked; and the revert of a
   capability the crew defers from the release, which stays on `main`. Once the crew accepts the
-  batch, the release review tags the branch's last commit, on the crew's word, and keeps the branch
+  batch, the release review tags the branch's last commit, on the crew's word, and then keeps the branch
   as the release's record; the next batch is everything on `main` since the branch was cut. `main`'s
   `package.json` keeps `0.0.0`, since `main` is never released directly. **A tag in steward's
   repository is never moved or deleted once pushed** (owner): a project pins steward by its tag, so
