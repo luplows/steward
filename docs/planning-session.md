@@ -79,8 +79,7 @@ implementing it.
   crew, with the options, before anything is fixed. Whether the code or the story changes is the
   crew's to decide. Do not settle it in a prompt to a coder, or choose a narrower fix than the one
   the finding offers (crew, 2026-11-03, after the reviews of #108 and #111).
-- A coder run by hand is told what `.claude/prompts/coder.md`, "When you cannot proceed", tells
-  ATC's: if a criterion's promise cannot be kept as written, stop and report it.
+- A coder run by hand is told to stop and report if a criterion's promise cannot be kept as written.
 - `review-blocked` brings a pull request to the crew's attention. It is not a hard stop. Once the
   crew has agreed what comes next, that agreement is the word to remove the label: remove it and
   get on with the work, without asking again (crew, 2026-11-03).

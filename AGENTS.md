@@ -113,7 +113,9 @@ pushes its branch and opens its pull request, as its prompt says.
 - For every change: feature branch, commit, push, open a pull request.
 - Address anything arising from an open pull request with a new commit on its existing branch. New
   branch only for unrelated work.
-- Merge `main` into a pull request before its next review whenever it has fallen behind.
+- Merge `main` into a pull request against `main` before its next review whenever it has fallen
+  behind. A pull request into a release branch is not brought up to `main`: that branch's batch is
+  fixed.
 - Open a pull request as a draft if it is not finished. Mark it ready when it is. The planning
   session is the exception: see [`docs/planning-session.md`](docs/planning-session.md).
 

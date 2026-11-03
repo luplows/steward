@@ -240,10 +240,6 @@ Draft means the runway will not land it, so this is safe to do at any point. A
 question written into a file is durable and someone will find it; a question
 asked into an empty session is not.
 
-The same route applies when you find that an acceptance criterion's promise
-cannot be kept as written. Do not build something close to it and tick it, and
-do not reword it. Say what the promise needs and why it cannot be met.
-
 Choosing between two readings of an answerable story is a different thing: state
 the reading you chose and why, plainly, in the PR body, and proceed. What this
 section exists to prevent is silently picking one reading and presenting the
