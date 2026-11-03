@@ -33,7 +33,9 @@ This file applies to every session. Each role has its own instructions as well:
 - Do not push, move or delete a tag, and do not push to a release branch (`release/vX.Y.Z`). Only
   the release review cuts a release branch and pushes a tag, each on the crew's word, as
   [`docs/release-review.md`](docs/release-review.md) says. A release branch then changes only
-  through pull requests, and no tag or release branch is ever moved or deleted.
+  through pull requests. No tag, and no release branch that has a tag, is ever moved or deleted. A
+  release branch with no tag may be replaced only by the release review, on the crew's word, as that
+  file says.
 - The sweep lands one eligible pull request per run, only when triggered, so a merge-ready pull
   request waits. A run given a pull request (`land.mjs` always gives one) considers only that one;
   a run given none is unattended, and lands the oldest only where `land` is true on `main`. Its
