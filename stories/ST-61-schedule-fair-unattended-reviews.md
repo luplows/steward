@@ -3,7 +3,7 @@ id: ST-61
 title: Fairly schedule bounded automatic reviews for activated projects
 tier: next
 kind: product
-depends_on: [ST-60, ST-63]
+depends_on: [ST-60, ST-63, ST-66]
 model: null
 blocked: null
 ---
@@ -45,13 +45,21 @@ progresses without manual rotations or repeated costly failures.
       when it throws. `coordinator status` reports the effective interval. A change takes effect
       at the next start. Tests cover the default, a configured interval and a refused
       configuration.
-- [ ] **AC-6** — **Failures and refusals do not loop.** A project's GitHub discovery failure is
-      reported, does not stop other projects, and is retried at that project's next normal scan.
+- [ ] **AC-6** — **Failures and refusals do not loop.** A project's GitHub discovery failure, or a
+      failure to bring its owned checkout to `origin`'s `main`, starts no review of that project,
+      is reported in `status`, does not stop other projects, and is retried at that project's next
+      normal scan.
       When a review returns `over-usage` or `usage-unknown`, no model session has started: the
       coordinator starts no more reviews until the next scan, where the reviewer's own usage check
       runs again. Other no-model refusals end that head's turn, and it may be considered again at a
       later scan. Tests show that none of these starts an immediate retry or an extra model
       session.
+- [ ] **AC-6a** — **A record that cannot be kept ends the coordinator.** When `admitReview` returns
+      `record-failed`, or `reviewEnding` throws, the scheduler hands the reason to
+      `runCoordinator`'s `fail` (ST-60/AC-2) and admits nothing more. The next `start` moves an
+      entry still `running`, or refuses a malformed file, as ST-60/AC-4a says. An `already-admitted`
+      outcome ends that head's turn and starts no session. Tests cover a stand-in `record-failed`
+      and an unreadable `reviews.json`.
 - [ ] **AC-7** — **A failed head is not paid for twice.** A head that ST-60 counts as a
       model-consuming failure, `interrupted` included, is not reviewed again automatically, on
       later scans or after restart, and `status` lists it. A new head of that PR is eligible. A
@@ -62,8 +70,13 @@ progresses without manual rotations or repeated costly failures.
       admitted, and the current one may finish (ST-58). A project deactivated during a review is
       not admitted afterwards, and the review under way may finish. `coordinator status` shows the
       active project, PR and full head, the effective interval, the next scan when known, the last
-      outcome, and the usage or failure reasons above, without credentials. Tests cover a stop and
-      a deactivation during a stand-in review, and `status`'s fields.
+      outcome, and the usage or failure reasons above, without credentials. `status` is a separate
+      process, so what makes this true is the coordinator writing these fields to its record,
+      `coordinator.json`, through ST-66's module, as they change, and `status` reading them there;
+      `readRecord` keeps them. `status` lists AC-7's failed heads from `reviews.json`, changing no
+      entry (ST-60/AC-5). A failed write of these fields is not fatal: the coordinator carries on,
+      and its next write replaces them. Tests cover a stop and a deactivation during a stand-in
+      review, and `status`'s fields read from a separate process.
 - [ ] **AC-9** — Automatic scheduler work never calls `landPullRequest`, the runway,
       `runRotation`, inspection, the coder or the fixer, regardless of project `land` settings.
       Verdicts continue through the existing head-bound gate. Tests use two activated projects
@@ -90,9 +103,9 @@ time, on one machine (Constraints). Outside it, and not to be guarded against, f
 
 - **Threat model:** one member of the crew, one coordinator, one automatic review at a time. Bounds
   on usage come from this story's turns and from the reviewer's existing checks.
-- Use ST-57's records, ST-58's owner and stop, ST-59's candidates and review, ST-52's record and
-  ST-60's count. Do not build a parallel reviewer, a GitHub verdict ledger or a whole-rotation
-  scheduler.
+- Use ST-57's records, ST-58's owner and stop, ST-59's candidates and review, ST-52's record,
+  ST-60's count and ST-66's module. Do not build a parallel reviewer, a GitHub verdict ledger or a
+  whole-rotation scheduler.
 - GitHub is authoritative for the PR's current head and governing verdict; discovered candidates
   are provisional and are rechecked at the review boundary.
 - Preserve the reviewer's usage checks, tool selection, timeout and stall bounds and its
@@ -114,6 +127,10 @@ time, on one machine (Constraints). Outside it, and not to be guarded against, f
   no longer refuses on `recovery-needed` (ST-60). Its two open questions asked to confirm ST-60's
   and ST-63's interfaces before dispatch: ST-60/AC-1 and AC-2, and ST-63's `readUserConfig`, now
   name them. `git log` of this file holds the earlier version.
+- Crew decision, 2026-11-02: ST-66 comes before this story, which was checked against what ST-60
+  and ST-52 built. AC-6's checkout failure, AC-6a and how `status` reads AC-8's fields were added
+  then. The detached coordinator has no output, so `status` and the next `start` are where a person
+  sees these.
 - `scripts/dispatch/review.mjs` already reports named usage and session outcomes, and fetches into
   its `repoDir`. `scripts/dispatch/rotation.mjs` includes landing and inspection, so a whole
   rotation is not a review-only automatic turn.

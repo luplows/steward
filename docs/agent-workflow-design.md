@@ -2947,6 +2947,13 @@ shortened where it is long, so that it can be found there with its date.
     during a review turned automatic review off for good. Considered and not chosen:
     keeping the refusal, cleared by a new `steward coordinator clear` command or by
     removing the entry by hand.
+  - **Planned (ST-66):** every JSON file under `~/.steward/state/` is read and written through one
+    small module, whose write renames a temporary file over its target, so that a failed write
+    leaves the file as it was (crew, 2026-11-02, after ST-60's reviews). Considered and not chosen:
+    moving to SQLite now, through `node:sqlite`. 0.1 has one writer per file by design, and JSON
+    files can be read and fixed by hand. The crew would revisit a database at the first story that
+    needs two writers at once, such as more than one reviewer at a time, coder and fixer sessions
+    sharing state with reviews, or ST-62's registration of running work.
   - **Planned (ST-64):** exceptional recovery is a holding draft for a future
     release, not a 0.1 dependency or a selected mechanism. Its Open questions
     retain orphaned-worker/descendant handling, process identity and permission
@@ -2970,7 +2977,10 @@ shortened where it is long, so that it can be found there with its date.
     fails does not automatically retry the unchanged head; a new head is
     a new candidate, and direct manual commands remain independent.
     ST-60 supplies the count of each review. Exceptional reconciliation in draft
-    ST-64 is not a prerequisite.
+    ST-64 is not a prerequisite. Amended by the crew, 2026-11-02: ST-66 comes first; a
+    record that cannot be kept ends the coordinator through `fail`; and `status`, a
+    separate process, reads the active review, last outcome and reasons from the
+    coordinator's record, `coordinator.json`, which the coordinator keeps current.
   - **Planned (ST-62):** a per-user shared emergency-stop latch with
     registered local process trees, including independent manual commands,
     explicit reset and verified-or-uncertain termination reporting is a
