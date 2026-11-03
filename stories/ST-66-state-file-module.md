@@ -28,10 +28,10 @@ and so that moving to a database later means changing one module rather than eac
       original error thrown.
 - [ ] **AC-3** — **All three files use it.** `reviews.json`
       (`scripts/dispatch/review-admission.mjs`), `projects.json` (`scripts/dispatch/project.mjs`) and
-      `coordinator.json` (`scripts/dispatch/coordinator.mjs`) are read and written only through this module, and
-      `writeReviews`' own temporary-file logic is gone. A test searches those three modules and
-      shows no direct `readFile`, `readFileSync`, `writeFile` or `writeFileSync` call on those
-      files.
+      `coordinator.json` (`scripts/dispatch/coordinator.mjs`) are read and written only through
+      this module, and `writeReviews`' own temporary-file logic is gone. A test searches those
+      three modules and shows no direct `readFile`, `readFileSync`, `writeFile` or `writeFileSync`
+      call on those files.
 - [ ] **AC-4** — **Nothing else changes.** Each module keeps its own validation, and every result,
       refusal and message it gives for a missing, malformed or invalid file is unchanged. Existing
       tests keep their expectations, except where one mocks or inspects a file call this story
