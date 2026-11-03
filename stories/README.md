@@ -72,10 +72,9 @@ by `kind` should be a visible violation of something written down rather than a
 natural-looking extension. Adding a value is cheap for the same reason.
 
 This repository's story tooling may read it. `kind: spike` marks a **spike**: a
-story whose output is findings and the stories they recommend, not code. Story
-containment reads it to let a spike's own pull request add those stories, as
-drafts: `checkStoryContainment` reads it, and `checkAddedDraft` checks each
-added story (`scripts/dispatch/story-containment.mjs`).
+story whose output is findings and the stories they recommend, not code. What a
+story's own pull request may add under `stories/` is `checkStoryContainment`'s
+to say (`scripts/dispatch/story-containment.mjs`).
 
 ## Status
 

@@ -318,12 +318,6 @@ Each of these is an item of the checklist failing, or a defect the author
 would fix: cite the item it fails, and give it severity `block`. None of them
 is an observation, however small or however easy to fix.
 
-**A case the unit excludes does not block.** A finding about how the diff
-behaves in a case the unit's **Out of scope** names is an `observation`, whatever
-item it would otherwise fail, unless the diff exposes a credential, which is a
-`block`. The last bullet above is different: it is about the diff building
-something the unit excluded.
-
 There is no partial credit and no dismissal mechanism: the only way past a
 `block` is to fix what it found and get a fresh review. For the code that means
 a commit, which resets the gate to pending. A block on the PR description alone
