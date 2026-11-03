@@ -8,6 +8,8 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { coordinatorPath, isRunning, main, readRecord, runCoordinator, stopRequestPath } from './coordinator.mjs'
 import { admitReview, readReviews, reviewEnding, reviewsPath } from './review-admission.mjs'
+import { fixtureUserConfig } from './settings-fixture.mjs'
+import { userConfigPath } from './user-config.mjs'
 
 const DISPATCH = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.join(DISPATCH, '..', '..')
@@ -32,7 +34,8 @@ afterEach(async () => {
 let counter = 0
 const freshHome = () => {
   const dir = path.join(base, `home-${++counter}`)
-  mkdirSync(dir, { recursive: true })
+  mkdirSync(path.join(dir, '.steward'), { recursive: true })
+  writeFileSync(userConfigPath({ env: {}, homedir: dir }), JSON.stringify(fixtureUserConfig()))
   return dir
 }
 
@@ -50,6 +53,7 @@ async function run(argv, homedir, options = {}) {
   const lines = { out: [], err: [] }
   const code = await main(argv, {
     homedir,
+    env: {},
     pollMs: 20,
     out: (line) => lines.out.push(line),
     err: (line) => lines.err.push(line),
@@ -59,6 +63,29 @@ async function run(argv, homedir, options = {}) {
 }
 
 const statusOf = async (homedir) => JSON.parse((await run(['status', '--json'], homedir)).out)
+
+/**
+ * The record of a coordinator that has started, once it has stopped changing. With no activated
+ * project its first scan writes to it just after `start` reports `started`, and then nothing does.
+ * Whether a write landed is not asked: one refused because `start` was reading is not fatal (AC-8).
+ */
+async function settledRecord(homedir) {
+  const read = () => {
+    try {
+      return JSON.stringify(readRecord(coordinatorPath(homedir)))
+    } catch {
+      return undefined
+    }
+  }
+  let last
+  await until(() => {
+    const seen = read()
+    const same = seen !== undefined && seen === last
+    last = seen
+    return same
+  })
+  return readRecord(coordinatorPath(homedir))
+}
 
 /** A process id that was running and is not any more. */
 function deadPid() {
@@ -131,7 +158,7 @@ describe('ST-58/AC-2: one coordinator, by its record', () => {
     const home = freshHome()
     const { spawnFn, spawned } = countingSpawn()
     expect((await run(['start'], home, { spawnFn })).code).toBe(0)
-    const record = readRecord(coordinatorPath(home))
+    const record = await settledRecord(home)
 
     const second = await run(['start'], home, { spawnFn })
     expect(second.code).toBe(1)
@@ -243,7 +270,7 @@ describe('ST-58/AC-5: exiting and starting again', () => {
     const home = freshHome()
     const { spawnFn, spawned } = countingSpawn()
     expect((await run(['start'], home, { spawnFn })).code).toBe(0)
-    const first = readRecord(coordinatorPath(home))
+    const first = await settledRecord(home)
     process.kill(first.pid)
     await until(() => !isRunning(first.pid))
     expect(readRecord(coordinatorPath(home))).toEqual(first)
@@ -511,6 +538,106 @@ describe('ST-60/AC-6: what an interruption does is documented', () => {
       expect(text).toContain('may still post a verdict')
       expect(text).toContain('not reviewed again automatically')
     }
+  })
+})
+
+describe('ST-61/AC-5: the interval', () => {
+  // The interval is in the record `start` waits for. The next scan is shown with an injected clock,
+  // in `coordinator-scheduler.test.mjs`.
+  const configure = (home, config) => writeFileSync(userConfigPath({ env: {}, homedir: home }), typeof config === 'string' ? config : JSON.stringify(config))
+  const { coordinator: _cadence, ...noSection } = fixtureUserConfig()
+
+  it('with no coordinator section, start hands on the default, and status reports it, in a home with no activated project', async () => {
+    const home = freshHome()
+    configure(home, noSection)
+    const { spawnFn, spawned } = countingSpawn()
+    const started = await run(['start'], home, { spawnFn })
+    expect(started.code).toBe(0)
+    expect(started.out).toContain('every 15 minutes')
+    expect(readRecord(coordinatorPath(home)).intervalMinutes).toBe(15)
+    await settledRecord(home)
+    const status = await statusOf(home)
+    expect(status).toMatchObject({ status: 'running', intervalMinutes: 15 })
+    expect(status).not.toHaveProperty('lastOutcome')
+    expect(status.projectProblems ?? []).toEqual([])
+    expect((await run(['status'], home)).out).toContain('Scan interval: 15 minutes.')
+    expect((await run(['stop'], home)).code).toBe(0)
+    await until(() => !isRunning(spawned[0]))
+  })
+
+  it('a configured interval is the effective one, and a change takes effect at the next start', async () => {
+    const home = freshHome()
+    configure(home, fixtureUserConfig({ coordinator: { scanIntervalMinutes: 10_080 } }))
+    const { spawnFn, spawned } = countingSpawn()
+    expect((await run(['start'], home, { spawnFn })).code).toBe(0)
+    await settledRecord(home)
+    expect((await statusOf(home)).intervalMinutes).toBe(10_080)
+
+    configure(home, fixtureUserConfig({ coordinator: { scanIntervalMinutes: 60 } }))
+    expect((await statusOf(home)).intervalMinutes).toBe(10_080)
+    expect((await run(['stop'], home)).code).toBe(0)
+    await until(() => !isRunning(spawned[0]))
+
+    expect((await run(['start'], home, { spawnFn })).code).toBe(0)
+    await settledRecord(home)
+    expect((await statusOf(home)).intervalMinutes).toBe(60)
+    expect((await run(['stop'], home)).code).toBe(0)
+    await until(() => !isRunning(spawned[1]))
+  })
+
+  it('the largest interval ST-63 accepts: start and status say it in full, with no next scan, and the coordinator keeps running', async () => {
+    const largest = Math.floor(Number.MAX_SAFE_INTEGER / 60_000)
+    const home = freshHome()
+    configure(home, fixtureUserConfig({ coordinator: { scanIntervalMinutes: largest } }))
+    const { spawnFn, spawned } = countingSpawn()
+    const result = await run(['start'], home, { spawnFn })
+    expect(result.code).toBe(0)
+    expect(result.out).toContain(`every ${largest} minutes`)
+    await settledRecord(home)
+    expect(isRunning(spawned[0])).toBe(true)
+    const status = await statusOf(home)
+    expect(status).toMatchObject({ status: 'running', intervalMinutes: largest })
+    expect(status.nextScanAt ?? null).toBe(null)
+    const text = (await run(['status'], home)).out
+    expect(text).toContain(`Scan interval: ${largest} minutes.`)
+    expect(text).not.toContain('Next scan')
+    expect((await run(['stop'], home)).code).toBe(0)
+    await until(() => !isRunning(spawned[0]))
+  })
+
+  for (const [name, config, message] of [
+    ['an invalid interval', fixtureUserConfig({ coordinator: { scanIntervalMinutes: 0 } }), "'coordinator.scanIntervalMinutes' must be a positive integer"],
+    ['a file that is not JSON', '{ "usageLimits":', 'invalid JSON'],
+  ]) {
+    it(`${name}: start refuses, starting nothing and changing nothing`, async () => {
+      const home = freshHome()
+      configure(home, config)
+      const file = seedReviews(home, { reviews: [runningEntry()] })
+      const before = readFileSync(file, 'utf8')
+      const record = seedStaleRecord(home)
+      const stopFile = seedFile(stopRequestPath(home), 'left over\n')
+      const spawnFn = vi.fn()
+      const result = await run(['start'], home, { spawnFn })
+      expect(result.code).toBe(1)
+      expect(result.err).toContain('The coordinator did not start: it could not read its scan interval from the user config.')
+      expect(result.err).toContain(message)
+      expect(result.err).toContain('Nothing was started.')
+      expect(result.out).toBe('')
+      expect(spawnFn).not.toHaveBeenCalled()
+      expect(readFileSync(file, 'utf8')).toBe(before)
+      expect(readRecord(coordinatorPath(home))).toEqual(record)
+      expect(existsSync(stopFile)).toBe(true)
+    })
+  }
+
+  it('no user config at all: start refuses, naming the file', async () => {
+    const home = freshHome()
+    rmSync(userConfigPath({ env: {}, homedir: home }))
+    const spawnFn = vi.fn()
+    const result = await run(['start'], home, { spawnFn })
+    expect(result.code).toBe(1)
+    expect(result.err).toContain(`${userConfigPath({ env: {}, homedir: home })}: file not found`)
+    expect(spawnFn).not.toHaveBeenCalled()
   })
 })
 

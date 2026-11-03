@@ -24,11 +24,13 @@
  * the records file is malformed, or the repository to deactivate has no record); 2 for a command
  * line it does not take.
  */
+import { execFile } from 'node:child_process'
 import { existsSync, realpathSync, statSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { homedir as osHomedir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 import { git, gitRoot, repoFromRemoteUrl } from './init.mjs'
 import { readSettings, REPO_RE } from './settings.mjs'
 import { readStateFile, writeStateFile } from './state-file.mjs'
@@ -36,6 +38,10 @@ import { stateDir } from './user-config.mjs'
 
 export const GATE_WORKFLOW = '.github/workflows/review-gate.yml'
 const RECORD_KEYS = ['repo', 'checkout', 'ownedCheckout']
+const execFileAsync = promisify(execFile)
+// What brings an owned checkout that has been cloned to origin's main, detached.
+const FETCH_MAIN = ['fetch', '--quiet', 'origin', '+refs/heads/main:refs/remotes/origin/main']
+const CHECKOUT_MAIN = ['checkout', '--quiet', '--detach', 'refs/remotes/origin/main']
 
 const USAGE = [
   'usage: steward project activate <checkout-path>',
@@ -107,6 +113,22 @@ export async function readProjects(file) {
   return data.projects
 }
 
+/**
+ * Brings the owned checkout `owned` to origin's main, as `activate` does for one already cloned,
+ * without blocking the coordinator while Git runs. Throws what Git said, and throws when `owned` is
+ * no checkout, which only `activate` clones.
+ */
+export async function updateOwnedCheckout(owned) {
+  if (!isCheckout(owned)) throw new Error(`${owned} is not a checkout; activating the project again clones it`)
+  for (const args of [FETCH_MAIN, CHECKOUT_MAIN]) {
+    try {
+      await execFileAsync('git', args, { cwd: owned, encoding: 'utf8', windowsHide: true })
+    } catch (error) {
+      throw new Error(String(error.stderr ?? '').trim() || String(error.stdout ?? '').trim() || error.message)
+    }
+  }
+}
+
 /** What is wrong with the installation in `owned`, for `repo`: an empty list when nothing is. */
 export async function installationProblems(owned, repo) {
   const problems = []
@@ -150,13 +172,13 @@ async function activate(given, { cwd, homedir, cloneUrl, out, err }) {
   try {
     if (isCheckout(owned)) {
       out(`Updating the owned checkout of ${repo}, at ${owned}, to origin's main. Your checkout is not changed.`)
-      git(owned, ['fetch', '--quiet', 'origin', '+refs/heads/main:refs/remotes/origin/main'])
+      git(owned, FETCH_MAIN)
     } else {
       out(`Copying ${repo}'s main from GitHub into the owned checkout, at ${owned}. Your checkout is not changed.`)
       await mkdir(path.dirname(owned), { recursive: true })
       git(path.dirname(owned), ['clone', '--quiet', '--no-checkout', '--branch', 'main', '--single-branch', cloneUrl(url), owned])
     }
-    git(owned, ['checkout', '--quiet', '--detach', 'refs/remotes/origin/main'])
+    git(owned, CHECKOUT_MAIN)
   } catch (error) {
     err(`${repo} was not activated: Git could not bring the owned checkout to origin's main. Git said: ${error.message}`)
     if (isDirectory(owned)) err(`The owned checkout is kept at ${owned} for the next attempt.`)

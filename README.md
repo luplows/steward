@@ -43,8 +43,8 @@ To run the review side, you need:
 to `~/.steward/config.json` and replace `STEWARD_SETTINGS` with `STEWARD_CONFIG` where used.
 The old names are ignored; there is no migration or fallback. Optional
 `coordinator.scanIntervalMinutes` defaults to 15 only in an otherwise valid file. Reading it
-starts no coordinator or session; scheduling is planned separately. See
-[`docs/user-config.md`](docs/user-config.md) for validation and multi-day intervals.
+starts no coordinator or session; `steward coordinator start` reads it ([below](#the-coordinator)).
+See [`docs/user-config.md`](docs/user-config.md) for validation and multi-day intervals.
 
 Then, from a checkout of the repository:
 
@@ -60,8 +60,9 @@ exports `listReviewCandidates` and `reviewCandidate`: discovery reports eligible
 and skip reasons in PR-number order; execution attempts one named pair through the existing
 reviewer. It binds the expected full head SHA at reviewer admission and starts no model if the
 head or eligibility changed. This operation only reviews, with either value of `land`; it requests
-no landing and runs no coding or inspection. Automatic scheduling remains planned work; local
-activation, which says which projects it may review, is built ([below](#activating-a-project)).
+no landing and runs no coding or inspection. The coordinator schedules it
+([below](#the-coordinator)), for the projects local activation names
+([below](#activating-a-project)).
 
 In another project, the crew runs steward from the package at the tag the project's workflow files
 pin, the form those files use, from the project's checkout:
@@ -146,11 +147,9 @@ asks for one landing of one pull request that has passed review, through the sam
 ([below](#landing-unattended-and-manual)). `init` leaves a `steward.config.json` that is already
 there as it is, byte for byte, whatever its `land` says or what `--yes` or `--land` are given, and
 its closing output says that file governs its own landing authorization. Merging the installation
-pull request starts nothing on any machine. Running steward on a machine without starting each
-command by hand (a local coordinator scheduling reviews) is planned
-([`docs/outline.md`](docs/outline.md), "Product roadmap") and not built; the commands in this
-README are what exists now, activation among them ([below](#activating-a-project)), and the
-coordinator's start, status and stop controls ([below](#the-coordinator)).
+pull request starts nothing on any machine. To have steward review a project's pull requests
+without starting each command by hand, activate the project ([below](#activating-a-project)) and
+start the coordinator ([below](#the-coordinator)), which reviews and never lands.
 
 It never marks its pull request ready or merges it, does not touch the project's `package.json`,
 its CI or its stories, and does nothing about branch protection. Set up this way, a project uses
@@ -215,25 +214,62 @@ None of these commands starts a review or a coordinator.
 ### The coordinator
 
 The coordinator is one long-running process per OS user, across that user's terminals and
-activated projects, that will schedule their automatic reviews. It schedules nothing yet: for now
-it can be started, inspected and gracefully stopped, and stays idle until it is stopped.
+activated projects, that schedules their automatic reviews until it is stopped. It only reviews:
+it never lands, runs the runway or a rotation, inspects, or starts a coder or a fixer, whatever a
+project's `land` says, and verdicts go through the existing gate.
 
 ```sh
 steward coordinator start            # start it in the background
-steward coordinator status [--json]  # running, stopping or stopped
+steward coordinator status [--json]  # running, stopping or stopped, and what it is doing
 steward coordinator stop             # admit no more work; exit once admitted work has finished
 ```
 
 `start` launches the coordinator detached, so it keeps running after the terminal that started it
 closes, and reports `started` only once the new process has written its record,
-`~/.steward/state/coordinator.json`: its process id, start time and state, and no credentials.
-If the process ends, or writes no record in time, `start` says it did not start and exits 1. When
-the recorded process is running, `start` starts nothing, reports `already-running` with its process
-id and start time, and exits 1. When the record's process is no longer running, `start` says so,
-replaces the record and starts a new coordinator. `status` starts nothing; it reports `running`,
-`stopping` or `stopped`, with the process id and start time when there is a record, and `--json`
-prints the same as one JSON object. A record whose process is gone is reported as `stopped`, noting
-that the previous coordinator ended without removing its record.
+`~/.steward/state/coordinator.json`: its process id, start time and state, what `status` shows
+(below), and no credentials. `start` first reads `coordinator.scanIntervalMinutes` from the user
+config, and refuses, starting nothing and changing nothing, when it cannot read that config. A
+change to the interval takes effect at the next `start`. If the process ends, or writes no record
+in time, `start` says it did not start and exits 1. When the recorded process is running, `start`
+starts nothing, reports `already-running` with its process id and start time, and exits 1. When the
+record's process is no longer running, `start` says so, replaces the record and starts a new
+coordinator. A record whose process is gone is reported by `status` as `stopped`, noting that the
+previous coordinator ended without removing its record.
+
+On starting, the coordinator scans at once. A scan reads the activation records and lists each
+activated project's candidates (`listReviewCandidates`), keeping one entry for each pull request and
+head. It then reviews the eligible heads it found in fair, round-robin turns by `owner/name`: each
+turn belongs to the next project with a head left,
+brings that project's owned checkout to `origin`'s `main`, reads the records again just before
+admitting, reviews one head and awaits it, so one automatic review runs at a time across the OS
+user's projects. The interval governs the discovery of new work, not the delay between reviews
+already discovered: when no known head is left, the coordinator starts nothing and scans again after
+`coordinator.scanIntervalMinutes`. The position in the order is kept in memory, so a restart begins
+a new round. Manual commands neither count towards the one review nor change the position.
+
+- A project's failed GitHub discovery, or a failure to bring its owned checkout to `origin`'s
+  `main`, starts no review of it and stops no other project; the next scan tries it again.
+- Records that cannot be read prevent every automatic review, and never activate anything; each
+  scan reads them again.
+- When a review returns `over-usage` or `usage-unknown`, no model has started. The coordinator
+  starts no more reviews until the next scan, where the reviewer checks usage again. Another refusal
+  that started no model ends that head's turn, and a later scan may consider it again.
+- A head whose review counted as a model-consuming failure, `interrupted` included, is not reviewed
+  again automatically: the coordinator checks at each scan and just before each admission, and the
+  count survives a restart. A new head of that pull request is eligible, and a manual review remains
+  available.
+
+`status` starts nothing and changes nothing. It reports `running`, `stopping` or `stopped`, with
+the process id and start time when there is a record, and `--json` prints the same as one JSON
+object. For a running coordinator it adds what the coordinator wrote to its record as these changed:
+the review under way, with its project, pull request and full head, the effective interval, the next
+scan when known, the last outcome, and the usage and failure reasons above. It also lists, from
+`reviews.json`, the heads not reviewed again automatically, or says that file cannot be read. A
+write of these fields that fails is not fatal: the coordinator carries on, and what it writes next
+replaces them, so `status` can be behind until then. The record's only other writes are at the start
+and on a stop. On Windows a write can be refused while another process is reading the file, so a
+`start` that is watching for the record can occasionally cost the first scan's note of the next
+scan.
 
 `stop` leaves a stop request, `~/.steward/state/coordinator.stop`, which the coordinator looks for
 a few times a second. On seeing it, the coordinator admits no more work, and that is the
@@ -245,32 +281,32 @@ harmless. A graceful stop terminates nothing, and is not the shared emergency st
 before 1.0, which will terminate running work and block new commands.
 
 Manual commands, `review`, `rotation` and `land` among them, never ask the coordinator, and run the
-same whether it is running, stopping or stopped.
+same whether it is running, stopping or stopped. A project deactivated during a review is not
+admitted afterwards, and the review under way may finish.
 
-So that a later scan will not start, and pay for, a review already started, the coordinator will
-note each automatic review in `~/.steward/state/reviews.json` before starting it, and how it ended
+So that a later scan will not start, and pay for, a review already started, the coordinator notes
+each automatic review in `~/.steward/state/reviews.json` before starting it, and how it ended
 afterwards (`admitReview`,
-[`scripts/dispatch/review-admission.mjs`](scripts/dispatch/review-admission.mjs), built ahead of the
-scheduling that will call it). A repository, pull request and full head with a `running` entry is
-not started again; a new head is a new review. This prevents duplicate
-coordinator-dispatched work only, and is not a lock. Manual commands neither read nor write that
-file, so a manual review may overlap an automatic one, or another manual one, and the possible
-duplicate costs and verdict races are the crew's to manage.
+[`scripts/dispatch/review-admission.mjs`](scripts/dispatch/review-admission.mjs)). A repository,
+pull request and full head with a `running` entry is not started again; a new head is a new review.
+This prevents duplicate coordinator-dispatched work only, and is not a lock. Manual commands neither
+read nor write that file, so a manual review may overlap an automatic one, or another manual one,
+and the possible duplicate costs and verdict races are the crew's to manage.
 
 An ended review counts as a verdict, a refusal that started no model, or a failure that may have
-paid for one (`reviewEnding`, in `review-admission.mjs`, for the scheduling to come to read). Those
-counts survive a stop and a restart, and no reset is needed after either. A coordinator that dies
-during a review leaves its entry `running`. The next `start`, before launching a coordinator, moves
-the entry to `ended` with `interrupted`, which counts as a failure, says which repository, pull
-request and full head were interrupted, and carries on. That head is not reviewed again
-automatically; a manual review of it, or a new head, is how it gets a verdict. `start` looks for no
-surviving reviewer, kills nothing and checks no verdict, so a reviewer that outlived its coordinator
-may still post a verdict, which the gate binds to the head reviewed: the crew accepts that risk. A
-`start` that finds a coordinator running changes no entry, and `status` and `stop` never do.
+paid for one (`reviewEnding`, in `review-admission.mjs`). Those counts survive a stop and a restart,
+and no reset is needed after either. A coordinator that dies during a review leaves its entry
+`running`. The next `start`, before launching a coordinator, moves the entry to `ended` with
+`interrupted`, which counts as a failure, says which repository, pull request and full head were
+interrupted, and carries on. That head is not reviewed again automatically; a manual review of it,
+or a new head, is how it gets a verdict. `start` looks for no surviving reviewer, kills nothing and
+checks no verdict, so a reviewer that outlived its coordinator may still post a verdict, which the
+gate binds to the head reviewed: the crew accepts that risk. A `start` that finds a coordinator
+running changes no entry, and `status` and `stop` never do.
 
 Each write of `reviews.json` goes to a temporary file beside it, renamed over it, so a write that
 fails leaves the file as it was and the entry `running`, for `start` to move. A coordinator that
-cannot write how a review ended will admit nothing more and exit. A `start` that cannot read or
+cannot read that file, or write to it, admits nothing more and exits. A `start` that cannot read or
 update the file names the file, says why and starts nothing, and leaves the coordinator's record and
 any stop request as they were. A malformed file, from hand-editing for instance, is refused in this
 way until it is fixed or removed.
