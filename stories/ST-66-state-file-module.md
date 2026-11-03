@@ -27,8 +27,8 @@ and so that moving to a database later means changing one module rather than eac
       each step, and show the target byte for byte unchanged, no temporary file left, and the
       original error thrown.
 - [ ] **AC-3** — **All three files use it.** `reviews.json`
-      (`scripts/dispatch/review-admission.mjs`), `projects.json` (`scripts/dispatch/project.mjs`) and `coordinator.json`
-      (`scripts/dispatch/coordinator.mjs`) are read and written only through this module, and
+      (`scripts/dispatch/review-admission.mjs`), `projects.json` (`scripts/dispatch/project.mjs`) and
+      `coordinator.json` (`scripts/dispatch/coordinator.mjs`) are read and written only through this module, and
       `writeReviews`' own temporary-file logic is gone. A test searches those three modules and
       shows no direct `readFile`, `readFileSync`, `writeFile` or `writeFileSync` call on those
       files.
@@ -46,8 +46,8 @@ and so that moving to a database later means changing one module rather than eac
 ## Out of scope
 
 The threat model is one member of the crew, one coordinator, one automatic review at a time, on
-one machine, and a write that fails while steward is running. Outside it, and not to be guarded against,
-for now:
+one machine, and a write that fails while steward is running. Outside it, and not to be guarded
+against, for now:
 
 - Two processes writing the same file at once: the last rename wins. Locks and retries are not
   added.

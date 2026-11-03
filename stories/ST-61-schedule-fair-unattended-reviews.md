@@ -104,8 +104,8 @@ time, on one machine (Constraints). Outside it, and not to be guarded against, f
 - **Threat model:** one member of the crew, one coordinator, one automatic review at a time. Bounds
   on usage come from this story's turns and from the reviewer's existing checks.
 - Use ST-57's records, ST-58's owner and stop, ST-59's candidates and review, ST-52's record,
-  ST-60's count and ST-66's module. Do not build a parallel reviewer, a GitHub verdict ledger or a whole-rotation
-  scheduler.
+  ST-60's count and ST-66's module. Do not build a parallel reviewer, a GitHub verdict ledger or a
+  whole-rotation scheduler.
 - GitHub is authoritative for the PR's current head and governing verdict; discovered candidates
   are provisional and are rechecked at the review boundary.
 - Preserve the reviewer's usage checks, tool selection, timeout and stall bounds and its
