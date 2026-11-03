@@ -20,11 +20,11 @@
  * `{ status: 'threw', message }` when the review threw, or `{ status: 'interrupted' }` when `start`
  * found the entry `running`.
  */
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { FULL_HEAD_SHA } from './review-eligibility.mjs'
 import { reviewCandidate } from './review-work.mjs'
 import { REPO_RE } from './settings.mjs'
+import { readStateFile, writeStateFile } from './state-file.mjs'
 import { stateDir } from './user-config.mjs'
 
 /** Where the record is under `homedir`. */
@@ -44,20 +44,14 @@ const sameIdentity = (a, b) => a.repo === b.repo && a.number === b.number && a.h
  * anything else: a malformed file never reads as an empty one.
  */
 export function readReviews(file) {
-  let raw
-  try {
-    raw = readFileSync(file, 'utf8')
-  } catch (error) {
-    if (error.code === 'ENOENT') return []
-    throw error
-  }
   const bad = (what) => new Error(`${file} is malformed: ${what}. Fix or remove it; until then no automatic review starts.`)
   let data
   try {
-    data = JSON.parse(raw)
+    data = readStateFile(file)
   } catch (error) {
-    throw bad(`it is not valid JSON (${error.message})`)
+    throw error instanceof SyntaxError ? bad(`it is not valid JSON (${error.message})`) : error
   }
+  if (data === undefined) return []
   if (!isObject(data) || Object.keys(data).join() !== 'reviews' || !Array.isArray(data.reviews)) {
     throw bad('it must be an object whose only key, "reviews", is a list')
   }
@@ -67,25 +61,8 @@ export function readReviews(file) {
   return data.reviews
 }
 
-/**
- * Writes `reviews` to a temporary file beside `file` and renames it over `file`, so that a write
- * that fails leaves `file` as it was. Throws the write's own error, the temporary file removed as
- * best it can be. For a failed write only: not a guard against another process.
- */
-function writeReviews(file, reviews) {
-  mkdirSync(path.dirname(file), { recursive: true })
-  const temporary = `${file}.tmp`
-  try {
-    writeFileSync(temporary, `${JSON.stringify({ reviews }, null, 2)}\n`, 'utf8')
-    renameSync(temporary, file)
-  } catch (error) {
-    try { rmSync(temporary, { force: true }) } catch { /* The write's error is the one to report. */ }
-    throw error
-  }
-}
-
 function writeEntry(file, entry) {
-  writeReviews(file, [...readReviews(file).filter((other) => !sameIdentity(other, entry)), entry])
+  writeStateFile(file, { reviews: [...readReviews(file).filter((other) => !sameIdentity(other, entry)), entry] })
 }
 
 /**
@@ -120,7 +97,7 @@ export function interruptRunning({ homedir, now = () => new Date() }) {
   const running = reviews.filter((entry) => entry.state === 'running')
   if (running.length === 0) return []
   const ending = { state: 'ended', endedAt: now().toISOString(), result: { status: 'interrupted' } }
-  writeReviews(file, reviews.map((entry) => (entry.state === 'running' ? { ...entry, ...ending } : entry)))
+  writeStateFile(file, { reviews: reviews.map((entry) => (entry.state === 'running' ? { ...entry, ...ending } : entry)) })
   return running
 }
 

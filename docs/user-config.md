@@ -63,7 +63,12 @@ activation, ownership, reservation or other state. Operational state is kept und
 (`scripts/dispatch/project.mjs`, README "Activating a project"), and the coordinator's record,
 `~/.steward/state/coordinator.json`, a stop request for it, `~/.steward/state/coordinator.stop`
 (`scripts/dispatch/coordinator.mjs`, README "The coordinator"), and its note of each automatic
-review, `~/.steward/state/reviews.json` (`scripts/dispatch/review-admission.mjs`).
+review, `~/.steward/state/reviews.json` (`scripts/dispatch/review-admission.mjs`). Those three JSON
+files are read and written through `scripts/dispatch/state-file.mjs`: a write goes to a temporary
+file beside its target, `<file>.tmp`, and is renamed over it, so a write that fails leaves the file
+as it was. That covers a failed write only, and is no guard against two processes writing the same
+file. `coordinator.stop`, whose presence is the signal, is not written this way, and neither is
+this page's file, which a person edits.
 `STEWARD_CONFIG` does not move that folder. ST-61 owns scheduling and will consume the
 value at the coordinator's next safe start; runtime watching and configuration-editing commands
 are not implemented here.
