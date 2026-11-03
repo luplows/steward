@@ -2977,7 +2977,10 @@ shortened where it is long, so that it can be found there with its date.
     fails does not automatically retry the unchanged head; a new head is
     a new candidate, and direct manual commands remain independent.
     ST-60 supplies the count of each review. Exceptional reconciliation in draft
-    ST-64 is not a prerequisite.
+    ST-64 is not a prerequisite. Amended by the crew, 2026-11-02: ST-66 comes first; a
+    record that cannot be kept ends the coordinator through `fail`; and `status`, a
+    separate process, reads the active review, last outcome and reasons from the
+    coordinator's record, `coordinator.json`, which the coordinator keeps current.
   - **Planned (ST-62):** a per-user shared emergency-stop latch with
     registered local process trees, including independent manual commands,
     explicit reset and verified-or-uncertain termination reporting is a
