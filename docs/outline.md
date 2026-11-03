@@ -207,8 +207,10 @@ The existing `release/v0.1.0` branch and draft PR #86 are older release preparat
 that this redefined 0.1.0 target is delivered. Decided by the crew, 2026-11-03: that branch has no
 tag, so when the crew starts the release review, it closes #86, replaces the branch with a new
 `release/v0.1.0` cut from `main`, and takes the batch as all of `main`, through
-`docs/release-review.md`. No tag, and no release branch that has a tag, is moved or deleted. ST-48
-then installs from the new branch's commit, and nothing is tagged until it is done. Steward's own
+`docs/release-review.md`. No tag, and no release branch that has a tag, is moved or deleted. Before
+that cut, the crew runs the install through on a scratch repository as a dry run, from a commit on
+`main`. Once it is cut, ST-48 installs in pinpoint and tower-workshop-paths from the new branch's
+commit, the crew installs in steward itself too, and nothing is tagged until ST-48 is done. Steward's own
 release-review procedure remains specific to this repository; it is not a generic client feature.
 
 ## Defining steward

@@ -112,7 +112,8 @@ copying its implementation scripts.
   automatic review, since manual evidence alone does not prove all of 0.1.0. It makes no safety
   promise, so `docs/planning-session.md`'s threat-model rule adds nothing further here.
 - Crew decision, 2026-11-03: this validation runs once the release branch is cut, from its commit,
-  and before the tag (`docs/outline.md`, "Release preparation").
+  and before the tag, after a dry run on a scratch repository (`docs/outline.md`, "Release
+  preparation"). The crew also installs in steward itself then, outside this story's criteria.
 - ST-25, `stories/done/ST-25-review-pass.md`: the review-and-land rotation.
 - ST-42, `stories/done/ST-42-gate-runs-installed-steward.md`: installed gate commands and thin
   workflow files, with no project copy of steward's implementation.

@@ -2591,9 +2591,13 @@ shortened where it is long, so that it can be found there with its date.
   at `3ac40be` for an older 0.1.0, is 29 merges behind `main`, and has no tag. That commit is on
   `main`, so deleting the branch loses nothing, and no release or project depends on it. When the crew
   starts the release review, it closes #86, replaces the branch with a new `release/v0.1.0` from
-  `main`, and walks through it on a scratch repository. **Planned (ST-48):** the crew then validates
-  the two client projects from that branch's commit, before the release notes and the tag. A defect
-  is fixed on `main` and cherry-picked, as for any release. The rule that a tagged release branch is
+  `main`, and walks through it on a scratch repository. Before the cut, the crew runs the install
+  through on that scratch repository as a dry run, from a commit on `main`, activation and the
+  coordinator included, so that defects are fixed on `main` before there is a branch to cherry-pick
+  them into. **Planned (ST-48):** the crew then validates the two client projects from that branch's
+  commit, before the release notes and the tag, and installs in steward itself too, which ST-48's
+  criteria do not cover. A defect found after the cut is fixed on `main` and cherry-picked, as for
+  any release. The rule that a tagged release branch is
   never moved or deleted is unchanged. Considered and not chosen: one pull request bringing `main`'s
   changes outside `stories/` into the old branch, a very large diff for one review; keeping the old
   branch and releasing under another number, since 0.1.0 was never released; and running ST-48 from a
