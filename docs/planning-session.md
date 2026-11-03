@@ -41,6 +41,10 @@ pull request" section included, except where this file says otherwise.
   configuration, or against any concurrent process, cannot be finished: a review can always find
   one more case, and each fix adds code for the next review to search (crew, 2026-10-30, after
   ST-56's reviews).
+- A criterion promising what is left after a failure, such as a file left as it was, names what
+  makes that true, such as a write to a temporary file and a rename over the target. Otherwise the
+  story and the code can each be read as right, and a review finds the difference (crew, 2026-11-03,
+  after ST-60's reviews).
 - Before opening the pull request, run `node scripts/lint-stories.mjs` and
   `node scripts/dispatch/queue.mjs`. The story should lint with no blocking violation, and the
   queue should show the status you intend: `draft` while its Open questions section holds
@@ -71,3 +75,9 @@ implementing it.
   Clearing `blocked:` is the planning session's (`stories/_TEMPLATE.md`).
 - A story the crew decides not to build is retired to `stories/retired/`, as `stories/README.md`,
   "Lifecycle", describes.
+- When a review first shows a story and its code disagreeing, stop and bring the finding to the
+  crew, with the options, before anything is fixed. Whether the code or the story changes is the
+  crew's to decide. Do not settle it in a prompt to a coder, or choose a narrower fix than the one
+  the finding offers (crew, 2026-11-03, after the reviews of #108 and #111).
+- A coder run by hand is told what `.claude/prompts/coder.md`, "When you cannot proceed", tells
+  ATC's: if a criterion's promise cannot be kept as written, stop and report it.
