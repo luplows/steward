@@ -17,37 +17,37 @@ separate pull request to `main` and a merge first.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — **Containment allows an added exclusion.** `checkStoryContainment`
+- [x] **AC-1** — **Containment allows an added exclusion.** `checkStoryContainment`
       (`scripts/dispatch/story-containment.mjs`) accepts a story's own pull request adding lines to
       that story's `## Out of scope` section, in the form AC-2 gives. It still fails a line added in
       any other section, and a change to or removal of any line already there. Tests cover each, for
       a story moved into `stories/done/` and for one not moved.
-- [ ] **AC-2** — **Each added line says whose decision it is and what follows.** The form is
+- [x] **AC-2** — **Each added line says whose decision it is and what follows.** The form is
       `- **After review:** <the case> (crew, YYYY-MM-DD). Follow-up: <story id, or none>.`
       Containment fails an added line in any other form, and one naming a story id that is neither
       at the merge base nor added by the pull request. Tests cover each.
-- [ ] **AC-3** — **Any story's pull request may add drafts.** A pull request that moves its own
+- [x] **AC-3** — **Any story's pull request may add drafts.** A pull request that moves its own
       story may add stories directly under `stories/` on the conditions `checkAddedDraft` already
       defines, whatever that story's `kind`. A test shows a `kind: workflow` story's pull request
       adding a draft, and existing `checkAddedDraft` tests keep their expectations.
-- [ ] **AC-4** — **A case the unit excludes does not block.** `.claude/prompts/reviewer.md` says that
+- [x] **AC-4** — **A case the unit excludes does not block.** `.claude/prompts/reviewer.md` says that
       a finding about how the diff behaves in a case the unit's **Out of scope** names is an
       `observation`, whatever item it would otherwise fail, unless the diff exposes a credential,
       which is a `block`. Building something the unit excluded still blocks.
-- [ ] **AC-4a** — **The reviewer honours an added line and reports it.** The same prompt says that a
+- [x] **AC-4a** — **The reviewer honours an added line and reports it.** The same prompt says that a
       line in AC-2's form, added by the pull request's diff, counts as part of the unit's **Out of
       scope**, and that each such line is itself reported with severity `observation`, so that the
       crew sees it in the verdict. It also says that a line excluding everything an acceptance
       criterion asks for, rather than a case of it, is a `block`. The unit is still read from `main`.
-- [ ] **AC-5** — **It is the crew's decision.** `.claude/prompts/coder.md` says a coder does not add
+- [x] **AC-5** — **It is the crew's decision.** `.claude/prompts/coder.md` says a coder does not add
       such a line, and reports the case instead. `docs/planning-session.md` says the planning session
       adds one only once the crew has decided, with the draft follow-up when the crew wants the case
       done later.
-- [ ] **AC-5a** — **A coder stops at a promise it cannot keep.** `.claude/prompts/coder.md`, "When you
+- [x] **AC-5a** — **A coder stops at a promise it cannot keep.** `.claude/prompts/coder.md`, "When you
       cannot proceed", says that the section's route applies when an acceptance criterion's promise
       cannot be kept as written: the coder does not build something close to it and tick it, does not
       reword it, and says what the promise needs and why it cannot be met.
-- [ ] **AC-6** — The implementing pull request resolves this story's **Planned (ST-67)** marker, and
+- [x] **AC-6** — The implementing pull request resolves this story's **Planned (ST-67)** marker, and
       corrects `REVIEW.md`, "Conformance to the unit", item 3, and the design record's statements of
       what containment allows. It changes nothing else under `stories/`: `stories/README.md` already
       leaves what a story's own pull request may add to `checkStoryContainment`.

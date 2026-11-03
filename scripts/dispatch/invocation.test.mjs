@@ -319,6 +319,39 @@ describe('ST-39/AC-2: the reviewer reads origin\'s branches from the refs ATC fe
   })
 })
 
+describe('ST-67: a case a story excludes, and who may record one', () => {
+  const flatPrompt = (template) => splitPromptFile(template).prompt.replace(/\s+/g, ' ')
+  const reviewer = flatPrompt(REVIEWER_TEMPLATE)
+  const coder = flatPrompt(CODER_TEMPLATE)
+
+  it('ST-67/AC-4: a finding in an excluded case is an observation, unless it exposes a credential; building it still blocks', () => {
+    expect(reviewer).toContain("A finding about how the diff behaves in a case the unit's **Out of scope** names is an `observation`, whatever item it would otherwise fail, unless the diff exposes a credential, which is a `block`.")
+    expect(reviewer).toContain('It does not cover building something the unit excluded: that still blocks')
+    expect(reviewer).toContain('something the unit puts under **Out of scope** is present.')
+  })
+
+  it('ST-67/AC-4a: an added line in the form counts, is reported, and cannot exclude a whole criterion', () => {
+    expect(reviewer).toContain('The unit above is still read from `main`')
+    expect(reviewer).toContain("A line the diff adds there in exactly this form counts as part of the unit's **Out of scope**: `- **After review:** <the case> (crew, YYYY-MM-DD). Follow-up: <story id, or none>.`")
+    expect(reviewer).toContain('Report each such line as a finding with severity `observation`')
+    expect(reviewer).toContain('A line that excludes everything an acceptance criterion asks for, rather than a case of it, is a `block`')
+  })
+
+  it('ST-67/AC-5: a coder reports the case, and the planning session adds a line once the crew has decided', () => {
+    expect(coder).toContain("**Do not add a line to the story's Out of scope.**")
+    expect(coder).toContain('report it in your PR body instead')
+    const planning = readRepo('docs/planning-session.md').replace(/\s+/g, ' ')
+    expect(planning).toContain('Add one only once the crew has decided.')
+    expect(planning).toContain('When the crew wants the case done later, add a draft story for it')
+  })
+
+  it('ST-67/AC-5a: "When you cannot proceed" covers a promise that cannot be kept as written', () => {
+    const start = CODER_TEMPLATE.indexOf('## When you cannot proceed')
+    const section = CODER_TEMPLATE.slice(start, CODER_TEMPLATE.indexOf('\n## ', start + 1)).replace(/\s+/g, ' ')
+    expect(section).toContain("The same route applies when an acceptance criterion's promise cannot be kept as written: do not build something close to it and tick it, do not reword it, and say what the promise needs and why it cannot be met.")
+  })
+})
+
 describe('ST-4: the reviewer blocks on defects rather than recording them as observations', () => {
   const { prompt } = splitPromptFile(REVIEWER_TEMPLATE)
   const flat = prompt.replace(/\s+/g, ' ')

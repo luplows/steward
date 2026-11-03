@@ -6,6 +6,11 @@ what it is given, and what its invocation does and does not guarantee, are in
 `docs/agent-workflow-design.md`, "Reviewer", "Invocation shape" and
 "Credential minimalism".
 
+"Your verdict" restates the form of a line a pull request may add to its unit's
+**Out of scope**. It must not drift from `afterReviewRe`
+(`scripts/dispatch/story-containment.mjs`), which enforces it for steward's own
+stories.
+
 Everything below the `---` is the prompt. `review.mjs` starts the session with
 `spawnSession` (`scripts/dispatch/spawn.mjs`), which renders the prompt with
 `buildInvocation` (`scripts/dispatch/invocation.mjs`). That substitutes these
@@ -73,7 +78,8 @@ The unit, as it stands on `main`:
 The unit is read from `main`, not from this pull request's branch: it is the
 unit as it stood before this work, which the pull request cannot edit into
 agreement with itself. Any change the pull request makes to it is in the diff,
-for you to judge.
+for you to judge. "Your verdict" says how to judge a line it adds to the unit's
+**Out of scope**.
 
 Whether a missing or unreadable unit, `Unit: none`, or several links fails this
 review is the checklist's to say, not this prompt's. A pull request with no
@@ -278,7 +284,8 @@ gets switched off. Both are failures.
 - **A finding you would fix in this pull request if you were its author is a
   `block`, not an observation.** That is the test for the boundary, whatever
   kind of text the finding is in. An observation is never a defect you chose
-  to let through.
+  to let through. The one exception is a case the unit excludes, which "Your
+  verdict" describes.
 - `pass-with-observations` is for findings that are real but not this diff's
   to fix: something there before the diff, something outside it, a
   suggestion, or something that follows a decision the unit or the crew
@@ -317,6 +324,25 @@ is a `block` when:
 Each of these is an item of the checklist failing, or a defect the author
 would fix: cite the item it fails, and give it severity `block`. None of them
 is an observation, however small or however easy to fix.
+
+**A case the unit excludes does not block.** A finding about how the diff
+behaves in a case the unit's **Out of scope** names is an `observation`,
+whatever item it would otherwise fail, unless the diff exposes a credential,
+which is a `block`. Cite the item it would otherwise fail. This is an exception
+to the list above and to the test under "Calibration". It does not cover
+building something the unit excluded: that still blocks, as the last condition
+above says.
+
+**A line the diff adds to the unit's Out of scope.** The unit above is still
+read from `main`, so it does not show such a line. A line the diff adds there in
+exactly this form counts as part of the unit's **Out of scope**:
+
+`- **After review:** <the case> (crew, YYYY-MM-DD). Follow-up: <story id, or none>.`
+
+Report each such line as a finding with severity `observation`, citing the
+checklist's containment item, so that the crew sees it in the verdict. A line
+that excludes everything an acceptance criterion asks for, rather than a case
+of it, is a `block`: that criterion is then not delivered.
 
 There is no partial credit and no dismissal mechanism: the only way past a
 `block` is to fix what it found and get a fresh review. For the code that means

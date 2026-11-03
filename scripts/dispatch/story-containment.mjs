@@ -8,9 +8,10 @@
  * restricted -- that is the planning session's territory, covered by `REVIEW.md`'s
  * "Changes to stories" section instead.
  *
- * ST-30: a pull request that moves its own story, when that story reads
- * `kind: spike` at the merge base, may also add stories directly under
- * `stories/` as drafts -- see `checkAddedDraft` for the conditions.
+ * ST-67: a story's own pull request may also add lines to that story's
+ * `## Out of scope`, in the form `afterReviewRe` defines, and one that moves
+ * its own story may add stories directly under `stories/` as drafts -- see
+ * `checkAddedDraft` for the conditions.
  *
  * `resolveStory`, below, decides whether a diff implements a story. It lived
  * in `review.mjs` until the review took its unit from the pull request's body
@@ -125,27 +126,99 @@ function isAllowedEdit(oldLine, newLine) {
   return Boolean(was && now && was[2] === ' ' && now[2] === 'x' && was[1] === now[1] && was[3] === now[3])
 }
 
-// AC-2: the own story file's content, before and after -- whichever path(s)
-// it lived at (unmoved, or moved into stories/done/). Anything other than a
-// tick flip or a `blocked:` edit is a violation, named by line.
-function checkOwnFile(file, oldText, newText) {
-  const oldLines = (oldText ?? '').split(/\r?\n/)
-  const newLines = (newText ?? '').split(/\r?\n/)
-  const { prefix, oldMid, newMid } = changedLines(oldLines, newLines)
-  if (oldMid.length !== newMid.length) {
+// ST-67: the one form of line a story's own pull request may add to its
+// `## Out of scope`. `.claude/prompts/reviewer.md`, "Your verdict", restates it.
+const afterReviewRe = (storyPrefix) => new RegExp(
+  `^- \\*\\*After review:\\*\\* \\S.* \\(crew, \\d{4}-\\d{2}-\\d{2}\\)\\. Follow-up: (none|${storyPrefix}-\\d+)\\.$`,
+)
+const AFTER_REVIEW_FORM = '- **After review:** <the case> (crew, YYYY-MM-DD). Follow-up: <story id, or none>.'
+
+// ST-67: the lines of `## Out of scope`, without its heading, as [start, end).
+// Headings and fences are read as `parseSections` (queue.mjs) reads them.
+function outOfScopeRange(lines) {
+  let start = null
+  let fenceChar = null
+  let fenceLen = 0
+  for (let i = 0; i < lines.length; i++) {
+    const marker = lines[i].match(/^\s*(`{3,}|~{3,})/)?.[1]
+    if (marker) {
+      if (fenceChar === null) {
+        fenceChar = marker[0]
+        fenceLen = marker.length
+      } else if (marker[0] === fenceChar && marker.length >= fenceLen) {
+        fenceChar = null
+      }
+      continue
+    }
+    if (fenceChar !== null) continue
+    const heading = lines[i].match(/^##(?!#)\s+(.+?)\s*$/)?.[1]
+    if (heading === undefined) continue
+    if (start !== null) return [start, i]
+    if (heading === 'Out of scope') start = i + 1
+  }
+  return start === null ? null : [start, lines.length]
+}
+
+// ST-67: the indexes of the new file's lines that are additions to
+// `## Out of scope`: those left over after matching the section's old lines, in
+// order. A changed or removed old line leaves the old lines unmatched, so it
+// shows as a difference in the line-for-line comparison in `checkOwnFile`.
+function addedToOutOfScope(oldLines, newLines) {
+  const oldRange = outOfScopeRange(oldLines)
+  const newRange = outOfScopeRange(newLines)
+  if (!oldRange || !newRange) return new Set()
+  const added = new Set()
+  let next = oldRange[0]
+  for (let i = newRange[0]; i < newRange[1]; i++) {
+    if (next < oldRange[1] && newLines[i] === oldLines[next]) next++
+    else added.add(i)
+  }
+  return added
+}
+
+function checkAfterReviewLine(file, index, text, storyPrefix, knownIds) {
+  const followUp = text.match(afterReviewRe(storyPrefix))?.[1]
+  if (followUp === undefined) {
     return [{
       file,
-      line: prefix + 1,
-      message: 'its own story file changed by more than a line-for-line edit (lines added or removed)',
+      line: index + 1,
+      message: `added to its own Out of scope, but not in the form "${AFTER_REVIEW_FORM}" (nothing else may be added there, not even a blank line): "${text}"`,
     }]
   }
-  const violations = []
+  if (followUp === 'none' || knownIds.has(followUp)) return []
+  return [{
+    file,
+    line: index + 1,
+    message: `added to its own Out of scope, but its follow-up ${followUp} is neither at the merge base nor added by the pull request`,
+  }]
+}
+
+// AC-2: the own story file's content, before and after -- whichever path(s)
+// it lived at (unmoved, or moved into stories/done/). ST-67: lines added to its
+// `## Out of scope` must each be in the form above. Past those, anything other
+// than a tick flip or a `blocked:` edit is a violation, named by line.
+function checkOwnFile(file, oldText, newText, storyPrefix, knownIds) {
+  const oldLines = (oldText ?? '').split(/\r?\n/)
+  const newLines = (newText ?? '').split(/\r?\n/)
+  const added = addedToOutOfScope(oldLines, newLines)
+  const violations = [...added].flatMap((i) => checkAfterReviewLine(file, i, newLines[i], storyPrefix, knownIds))
+  const kept = newLines.flatMap((_, i) => (added.has(i) ? [] : [i]))
+  const { prefix, oldMid, newMid } = changedLines(oldLines, kept.map((i) => newLines[i]))
+  const lineAt = (k) => (kept[prefix + k] ?? prefix + k) + 1
+  if (oldMid.length !== newMid.length) {
+    violations.push({
+      file,
+      line: lineAt(0),
+      message: 'its own story file changed by more than a line-for-line edit (lines added or removed)',
+    })
+    return violations
+  }
   for (let k = 0; k < oldMid.length; k++) {
     if (oldMid[k] === newMid[k]) continue
     if (!isAllowedEdit(oldMid[k], newMid[k])) {
       violations.push({
         file,
-        line: prefix + k + 1,
+        line: lineAt(k),
         message: `disallowed change to its own story: "${oldMid[k]}" -> "${newMid[k]}"`,
       })
     }
@@ -185,11 +258,11 @@ async function idsAtBase(cwd, mergeBase, prefix) {
   return ids
 }
 
-// ST-30: a file a spike's pull request adds directly under stories/ must be a
-// draft story with a fresh id. `claimed` maps each id the pull request's added
+// ST-30: a file a story's own pull request adds directly under stories/ must be
+// a draft story with a fresh id. `claimed` maps each id the pull request's added
 // files carry to how many carry it; `baseIds` is the merge base's.
 function checkAddedDraft(file, newText, prefix, baseIds, claimed) {
-  const fail = (message) => [{ file, line: 1, message: `added by a spike's pull request, but ${message}` }]
+  const fail = (message) => [{ file, line: 1, message: `added by a story's own pull request, but ${message}` }]
   const name = file.slice('stories/'.length)
   if (!isStoryFilename(name, prefix)) return fail(`its name does not match the story filename pattern for ${prefix}`)
   let story
@@ -247,23 +320,14 @@ export async function checkStoryContainment({ cwd, base, head, branch }) {
 
   const violations = []
 
-  // ST-30: a spike's own pull request may add drafts directly under stories/.
-  let spike = false
-  if (resolved.kind === 'moved') {
-    try {
-      const own = await showFile(cwd, mergeBase, ownBefore)
-      spike = parseFrontmatter(own, ownBefore).data.kind === 'spike'
-    } catch {
-      spike = false
-    }
-  }
+  // ST-67: a pull request that moves its own story may add drafts directly under stories/.
   const addedDrafts = new Map()
-  if (spike) {
+  if (resolved.kind === 'moved') {
     for (const [file, status] of touched) {
       if (status === 'A' && /^stories\/[^/]+$/.test(file)) addedDrafts.set(file, await showFile(cwd, head, file))
     }
   }
-  const baseIds = spike ? await idsAtBase(cwd, mergeBase, storyPrefix) : new Set()
+  const baseIds = await idsAtBase(cwd, mergeBase, storyPrefix)
   const claimed = new Map()
   const idRe = new RegExp(`^(${storyPrefix}-\\d+)-`)
   for (const [file, text] of addedDrafts) {
@@ -274,6 +338,9 @@ export async function checkStoryContainment({ cwd, base, head, branch }) {
     }
   }
 
+  // ST-67: what an added Out of scope line's follow-up may name.
+  const knownIds = new Set([...baseIds, ...claimed.keys()])
+
   for (const file of touched.keys()) {
     if (addedDrafts.has(file)) {
       violations.push(...checkAddedDraft(file, addedDrafts.get(file), storyPrefix, baseIds, claimed))
@@ -282,7 +349,7 @@ export async function checkStoryContainment({ cwd, base, head, branch }) {
     if (file === ownBefore && file === ownAfter) {
       const oldText = await showFile(cwd, mergeBase, file)
       const newText = await showFile(cwd, head, file)
-      violations.push(...checkOwnFile(file, oldText, newText))
+      violations.push(...checkOwnFile(file, oldText, newText, storyPrefix, knownIds))
     } else if (file === ownBefore || file === ownAfter) {
       continue // the other half of a moved own-file pair, handled below
     } else {
@@ -294,7 +361,7 @@ export async function checkStoryContainment({ cwd, base, head, branch }) {
   if (ownBefore && ownAfter && ownBefore !== ownAfter) {
     const oldText = await showFile(cwd, mergeBase, ownBefore)
     const newText = await showFile(cwd, head, ownAfter)
-    violations.push(...checkOwnFile(ownAfter, oldText, newText))
+    violations.push(...checkOwnFile(ownAfter, oldText, newText, storyPrefix, knownIds))
   }
 
   violations.sort((a, b) => (a.file === b.file ? a.line - b.line : a.file < b.file ? -1 : 1))

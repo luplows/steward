@@ -1285,7 +1285,7 @@ describe('ST-21: review against the checklist from main, in sections', () => {
       ['Changes to code', 'the diff changes code, tests, workflow files or prompts.'],
       ['Integrity', null],
       ['Conformance to the unit', 'the pull request implements a unit.'],
-      ['Changes to stories', "the pull request adds or changes a file under `stories/` without implementing one, or is a spike's own pull request and adds a story."],
+      ['Changes to stories', "the pull request adds or changes a file under `stories/` without implementing one, or is a story's own pull request and adds a story."],
     ])
     expect(parsed.sections.map((section) => section.items.map((item) => item.number))).toEqual([
       // "Every pull request" gained item 5 in ST-45/AC-9.

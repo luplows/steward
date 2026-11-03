@@ -326,13 +326,179 @@ describe("ST-30/AC-3 and AC-4: nothing else a spike's pull request does changes"
     )
   }, CONTAINMENT_TEST_TIMEOUT)
 
-  it("fails when a kind: workflow story's pull request adds a draft", async () => {
+})
+
+describe("ST-67/AC-3: any story's pull request may add drafts", () => {
+  it("ST-67/AC-3: passes when a kind: workflow story's pull request adds a draft", async () => {
     const args = spikeScenario('workflow-adds-draft', () => {
       write('stories/OQ-300-first.md', DRAFT('OQ-300'))
     }, 'workflow')
+    await expect(checkStoryContainment(args)).resolves.toEqual({ ok: true })
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it("ST-67/AC-3: checkAddedDraft's conditions hold for a kind: workflow story's pull request", async () => {
+    const args = spikeScenario('workflow-adds-non-draft', () => {
+      write('stories/OQ-300-first.md', STORY('OQ-300'))
+    }, 'workflow')
+    const result = await checkStoryContainment(args)
+    expect(result.ok).toBe(false)
+    expect(result.violations).toContainEqual(
+      expect.objectContaining({ file: 'stories/OQ-300-first.md', message: expect.stringContaining("not 'draft'") }),
+    )
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it('ST-67/AC-3: a pull request that does not move its story still may not add one', async () => {
+    const args = scenario('no-move-adds-draft', MAIN(), () => {
+      write('stories/OQ-300-first.md', DRAFT('OQ-300'))
+    })
     const result = await checkStoryContainment(args)
     expect(result.ok).toBe(false)
     expect(result.violations).toContainEqual(expect.objectContaining({ file: 'stories/OQ-300-first.md' }))
+  }, CONTAINMENT_TEST_TIMEOUT)
+})
+
+// ST-67: a story with an added line under `## Out of scope`, after the existing
+// `*(none)*`. A story moved into stories/done/ also ticks an AC, and one not
+// moved does not, so each path is tested as a coder's pull request would make it.
+const NO_EXCLUSIONS = '## Out of scope\n\n*(none)*'
+const WITH_OUT_OF_SCOPE = (...lines) => STORY('OQ-82').replace(NO_EXCLUSIONS, [NO_EXCLUSIONS, ...lines].join('\n'))
+const AFTER_REVIEW = (followUp = 'none') => `- **After review:** A case it excludes (crew, 2026-11-03). Follow-up: ${followUp}.`
+
+const LAYOUTS = [
+  {
+    name: 'moved into stories/done/',
+    file: 'stories/done/OQ-82-foo.md',
+    edit: (text) => {
+      move('stories/OQ-82-foo.md', 'stories/done/OQ-82-foo.md')
+      write('stories/done/OQ-82-foo.md', text.replace('- [ ] **AC-1**', '- [x] **AC-1**'))
+    },
+  },
+  {
+    name: 'not moved',
+    file: 'stories/OQ-82-foo.md',
+    edit: (text) => write('stories/OQ-82-foo.md', text),
+  },
+]
+
+describe.each(LAYOUTS)('ST-67/AC-1: an added exclusion, for a story $name', ({ name, file, edit }) => {
+  const slug = name.replace(/\W+/g, '-')
+  const violationsOf = async (scenarioName, text) => {
+    const result = await checkStoryContainment(scenario(`${scenarioName}-${slug}`, MAIN(), () => edit(text)))
+    expect(result.ok).toBe(false)
+    return result.violations
+  }
+
+  it('ST-67/AC-1: accepts lines added to its Out of scope', async () => {
+    const args = scenario(`added-lines-${slug}`, MAIN(), () => edit(WITH_OUT_OF_SCOPE(AFTER_REVIEW(), AFTER_REVIEW('OQ-90'))))
+    await expect(checkStoryContainment(args)).resolves.toEqual({ ok: true })
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it('ST-67/AC-1: fails a line in that form added in any other section', async () => {
+    for (const heading of ['## Acceptance criteria', '## Constraints', '## Open questions']) {
+      const text = STORY('OQ-82').replace(`${heading}\n`, `${heading}\n\n${AFTER_REVIEW()}\n`)
+      const violations = await violationsOf(`other-section-${heading.replace(/\W+/g, '-')}`, text)
+      expect(violations).toContainEqual(expect.objectContaining({ file }))
+    }
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it('ST-67/AC-1: fails a line in that form above the first heading', async () => {
+    const violations = await violationsOf('above-heading', STORY('OQ-82').replace('## Intent\n', `${AFTER_REVIEW()}\n\n## Intent\n`))
+    expect(violations).toContainEqual(expect.objectContaining({ file }))
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it('ST-67/AC-1: fails a change to a line already there', async () => {
+    const text = STORY('OQ-82').replace(NO_EXCLUSIONS, '## Out of scope\n\n*(nothing)*')
+    expect(await violationsOf('changed-existing', text)).toContainEqual(expect.objectContaining({ file }))
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it('ST-67/AC-1: fails replacing a line already there with one in the form', async () => {
+    const text = STORY('OQ-82').replace(NO_EXCLUSIONS, `## Out of scope\n\n${AFTER_REVIEW()}`)
+    expect(await violationsOf('replaced-existing', text)).toContainEqual(expect.objectContaining({ file }))
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it('ST-67/AC-1: fails removing a line already there', async () => {
+    const text = STORY('OQ-82').replace(NO_EXCLUSIONS, '## Out of scope\n')
+    expect(await violationsOf('removed-existing', text)).toContainEqual(expect.objectContaining({ file }))
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it('ST-67/AC-2: fails an added line in any other form, naming the line', async () => {
+    const forms = [
+      '- A case it excludes.',
+      '',
+      '- **After review:** (crew, 2026-11-03). Follow-up: none.',
+      '- **After review:** A case (coder, 2026-11-03). Follow-up: none.',
+      '- **After review:** A case (crew, 3 November 2026). Follow-up: none.',
+      '- **After review:** A case (crew, 2026-11-03).',
+      '- **After review:** A case (crew, 2026-11-03). Follow-up: later.',
+      '- **After review:** A case (crew, 2026-11-03). Follow-up: ST-90.',
+      '- **After review:** A case (crew, 2026-11-03). Follow-up: none',
+      '**After review:** A case (crew, 2026-11-03). Follow-up: none.',
+    ]
+    for (const [index, line] of forms.entries()) {
+      const text = WITH_OUT_OF_SCOPE(line)
+      const violations = await violationsOf(`other-form-${index}`, text)
+      // An added blank line matches the blank line already there, so the second of the two is the addition.
+      const added = text.split('\n').indexOf('*(none)*') + (line === '' ? 3 : 2)
+      expect(violations, line).toEqual([expect.objectContaining({
+        file,
+        line: added,
+        message: expect.stringContaining('not in the form'),
+      })])
+    }
+  }, 2 * CONTAINMENT_TEST_TIMEOUT)
+
+  it('ST-67/AC-2: fails a follow-up naming a story neither at the merge base nor added', async () => {
+    const violations = await violationsOf('unknown-follow-up', WITH_OUT_OF_SCOPE(AFTER_REVIEW('OQ-999')))
+    expect(violations).toEqual([expect.objectContaining({
+      file,
+      message: expect.stringContaining('OQ-999 is neither at the merge base nor added'),
+    })])
+  }, CONTAINMENT_TEST_TIMEOUT)
+})
+
+describe('ST-67/AC-2: what a follow-up may name', () => {
+  // spikeScenario's base holds OQ-90 in stories/ and OQ-91 in stories/done/.
+  const movedWithLine = (followUp, extra = () => {}) => spikeScenario(`follow-up-${followUp}`, () => {
+    write('stories/done/OQ-82-foo.md', WITH_OUT_OF_SCOPE(AFTER_REVIEW(followUp)))
+    extra()
+  }, 'workflow')
+
+  it('ST-67/AC-2: accepts none, and a story at the merge base in stories/ or stories/done/', async () => {
+    for (const followUp of ['none', 'OQ-90', 'OQ-91']) {
+      await expect(checkStoryContainment(movedWithLine(followUp))).resolves.toEqual({ ok: true })
+    }
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it('ST-67/AC-2: accepts a story the pull request adds as a draft', async () => {
+    const args = movedWithLine('OQ-300', () => write('stories/OQ-300-later.md', DRAFT('OQ-300')))
+    await expect(checkStoryContainment(args)).resolves.toEqual({ ok: true })
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it('ST-67/AC-2: fails a story id no file carries', async () => {
+    const result = await checkStoryContainment(movedWithLine('OQ-301', () => write('stories/OQ-300-later.md', DRAFT('OQ-300'))))
+    expect(result.ok).toBe(false)
+    expect(result.violations).toEqual([expect.objectContaining({
+      file: 'stories/done/OQ-82-foo.md',
+      message: expect.stringContaining('OQ-301'),
+    })])
+  }, CONTAINMENT_TEST_TIMEOUT)
+})
+
+describe('ST-67/AC-1: edits beside an added exclusion', () => {
+  it('ST-67/AC-1: a tick and a blocked: edit still pass, and a reworded AC still fails, naming its line', async () => {
+    const line = AFTER_REVIEW()
+    const ticked = WITH_OUT_OF_SCOPE(line).replace('- [ ] **AC-2**', '- [x] **AC-2**').replace('blocked: null', 'blocked: "waiting"')
+    const passing = scenario('beside-pass', MAIN(), () => write('stories/OQ-82-foo.md', ticked))
+    await expect(checkStoryContainment(passing)).resolves.toEqual({ ok: true })
+
+    const reworded = WITH_OUT_OF_SCOPE(line).replace('## Constraints\n\n*(none)*', '## Constraints\n\n*(reworded)*')
+    const failing = scenario('beside-fail', MAIN(), () => write('stories/OQ-82-foo.md', reworded))
+    const result = await checkStoryContainment(failing)
+    expect(result.ok).toBe(false)
+    expect(result.violations).toEqual([expect.objectContaining({
+      file: 'stories/OQ-82-foo.md',
+      line: reworded.split('\n').indexOf('*(reworded)*') + 1,
+    })])
   }, CONTAINMENT_TEST_TIMEOUT)
 })
 
