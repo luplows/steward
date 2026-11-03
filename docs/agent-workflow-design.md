@@ -2973,8 +2973,9 @@ shortened where it is long, so that it can be found there with its date.
     exponential project backoff is in 0.1. A usage refusal starts no more reviews until the next
     scan, where the reviewer checks usage again, rather than waiting for a reported reset (crew,
     2026-11-02). A model-consuming review that definitively fails does not automatically retry the
-    unchanged head; a new head is a new candidate, and direct manual commands remain independent.
-    The count of each review is `reviewEnding`'s. Exceptional reconciliation in draft ST-64 is not a
+    unchanged head: the scheduler checks `reviewEnding` at each scan and just before each admission.
+    A new head is a new candidate, and direct manual commands remain independent. The count of each
+    review is `reviewEnding`'s. Exceptional reconciliation in draft ST-64 is not a
     prerequisite. Amended by the crew, 2026-11-02: a record that cannot be kept ends the coordinator
     through `fail`; and `status`, a separate process, reads the active review, last outcome and
     reasons from the coordinator's record, `coordinator.json`, which the coordinator writes as they

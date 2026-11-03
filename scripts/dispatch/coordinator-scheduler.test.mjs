@@ -526,15 +526,17 @@ describe('ST-61/AC-6a: a record that cannot be kept ends the coordinator', () =>
     expect(spawnFn).not.toHaveBeenCalled()
   })
 
-  it('a reviews.json unreadable at the admission itself is record-failed from the real admitReview, starting no review', async () => {
+  it('a reviews.json unreadable just before admitting ends it through reviewEnding, with nothing admitted', async () => {
     const home = freshHome()
     const file = reviewsPath(home)
+    const admission = vi.fn()
     const h = schedule({
       home, repos: [A], listings: { [A]: [eligible(A, 1)] },
       updateCheckout: async () => { seed(file, 'not json') },
+      admission,
     })
     expect((await h.coordinator.done).message).toContain(`${file} is malformed`)
-    expect(h.review).not.toHaveBeenCalled()
+    expect(admission).not.toHaveBeenCalled()
   })
 
   it('an outcome that cannot be written ends it, and the next start moves the entry still running', async () => {
@@ -613,6 +615,16 @@ describe('ST-61/AC-7: a failed head is not paid for twice', () => {
       expect(again.review.mock.calls[0][0].candidate.expectedHeadSha).toBe(newer)
     })
   }
+
+  it('discovery listing the same pull request and head twice: a failure of the first means the second starts no review, and the next head still does', async () => {
+    const h = schedule({
+      repos: [A], listings: { [A]: [eligible(A, 1), eligible(A, 1), eligible(A, 2)] },
+      reply: ({ number }) => (number === 1 ? { status: 'session-failed', reason: 'stalled', sessions: 1 } : { status: 'recorded', sessions: 1 }),
+    })
+    await idle(h)
+    expect(h.reviewed).toEqual([`${A}#1`, `${A}#2`])
+    expect(reviewEnding({ homedir: h.home, repo: A, number: 1, headSha: HEAD })).toBe('model-consuming-failure')
+  })
 
   it('an interrupted head is not reviewed again either', async () => {
     const home = freshHome()

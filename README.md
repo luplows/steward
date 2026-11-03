@@ -254,8 +254,9 @@ a new round. Manual commands neither count towards the one review nor change the
   starts no more reviews until the next scan, where the reviewer checks usage again. Another refusal
   that started no model ends that head's turn, and a later scan may consider it again.
 - A head whose review counted as a model-consuming failure, `interrupted` included, is not reviewed
-  again automatically, on later scans or after a restart. A new head of that pull request is
-  eligible, and a manual review remains available.
+  again automatically: the coordinator checks at each scan and just before each admission, and the
+  count survives a restart. A new head of that pull request is eligible, and a manual review remains
+  available.
 
 `status` starts nothing and changes nothing. It reports `running`, `stopping` or `stopped`, with
 the process id and start time when there is a record, and `--json` prints the same as one JSON

@@ -7,8 +7,10 @@
  * A scan reads the records and lists each project's candidates. Turns then run through what the
  * scan found, with no added delay: each turn belongs to the next project, by `owner/name`, that has
  * a head left, brings that project's owned checkout to `origin`'s `main`, reads the records again
- * just before admitting, and awaits one review. When no head is left, the scheduler waits the interval and scans again.
- * The position in that order is kept in memory, so a restart begins a new round.
+ * just before admitting, and awaits one review, unless `reviewEnding` now counts that head as a
+ * model-consuming failure, which the scan checks too. When no head is left, the scheduler waits the
+ * interval and scans again. The position in that order is kept in memory, so a restart begins a new
+ * round.
  *
  * This only reviews. Landing, the runway, a rotation, inspection, the coder and the fixer are not
  * reached from here, whatever a project's `land` says. Verdicts go through the existing gate.
@@ -169,6 +171,10 @@ export async function scheduleReviews({
       const queue = queues.get(repo)
       const candidate = queue.shift()
       if (queue.length === 0) queues.delete(repo)
+      // The scan's filter saw this head before this pass's reviews ended, and discovery can list a
+      // head twice. A throw here, as in the scan, ends the coordinator.
+      const { number, expectedHeadSha: headSha } = candidate
+      if (reviewEnding({ homedir, repo, number, headSha }) === 'model-consuming-failure') continue
       report({ active: { repo, number: candidate.number, headSha: candidate.expectedHeadSha } })
       const outcome = await admission({
         homedir, admit: coordinator.admit, candidate, repoDir, ctx: contexts(repo).ctx, reviewOptions, review, now,
