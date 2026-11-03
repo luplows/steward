@@ -2731,7 +2731,7 @@ shortened where it is long, so that it can be found there with its date.
     mode with protection required but `enforce_admins` off. Out of scope: how a 404 "Not Found" for
     an account without admin access is treated (`protect` keeps today's handling, until the owner
     has seen it on GitHub), and GitHub rulesets.
-- **A rotation waits only for short, bounded events, and one runs at a time on a machine**
+- **A rotation waits only for short, bounded events**
   (decided 2026-10-24 by the owner, with the planning session, after the rotations that landed
   #81, #82 and #83). Each of the three passed review and was returned not landable because
   `review/agent` read `success` about ten seconds after the verdict comment, so each needed a
@@ -2760,17 +2760,11 @@ shortened where it is long, so that it can be found there with its date.
     hand and tower-workshop-paths' frozen loop, and the flag with it (owner). Considered and not
     chosen: doing so in ST-51, which widens a fix the release waits on and changes the frozen
     loop's callers; and only renaming the option.
-  - **Planned (ST-52):** revised by the crew on 2026-10-27. The 2026-10-24
-    proposal to lock out overlapping rotations of one project is superseded.
-    The new coordinator reserves only automatic review work, whereas manual
-    `review`, `--rereview`, `rotation` and `land` remain independent and
-    may overlap. ST-52's revised ACs in this planning PR reserve a canonical
-    repository/PR/head identity only for automatic coordinator work; the
-    story depends on ST-58 and ST-59. Rescoped by the crew, 2026-11-02: the reservation is an
-    entry in `~/.steward/state/reviews.json` that the one coordinator writes before a review and
-    moves to `ended` after it. Counting outcomes and restart belong to ST-60; exceptional
-    crashed-worker reconciliation is deferred to draft ST-64. Project fairness belongs to ST-61.
-    Distributed review claims remain later work.
+  - The 2026-10-24 proposal that one rotation runs at a time on a machine, locking out any later
+    one, was superseded by the crew on 2026-10-27 and never built: no lock surrounds a rotation, and
+    manual `review`, `--rereview`, `rotation` and `land` remain independent and may overlap. What
+    stops the coordinator repeating its own automatic work is under "Per-user coordinator
+    foundations and manual independence", below. Distributed review claims remain later work.
 
 - **Manual landing and review-only installation defaults** (crew, 2026-10-26).
   - Standing permission for unattended landing differs from the crew explicitly requesting one
@@ -2879,6 +2873,23 @@ shortened where it is long, so that it can be found there with its date.
     before a model session starts. It returns the reviewer's result and actual
     head, retains the existing malformed-result retry, and neither lands nor
     inspects. Manual review and rotation keep their existing behavior.
+  - The coordinator notes each automatic review before starting it, so that a later scan does not
+    pay for the same review twice (crew, 2026-10-27; rescoped 2026-11-02 to one member of the crew,
+    one coordinator and one automatic review at a time, on one machine). `admitReview`
+    (`scripts/dispatch/review-admission.mjs`, which also names the file's shape) runs one review as
+    work admitted through `runCoordinator`'s `admit`. It first writes an entry in state `running`
+    to `~/.steward/state/reviews.json`, for the repository, PR and full head. A malformed file, or
+    an entry it cannot write, starts no review and is reported with the file's path. A `running`
+    entry for the same identity returns `already-admitted`, starting nothing and changing nothing;
+    a different head is a different identity, and the reviewer's expected-head check still applies.
+    When the review returns or throws, the entry moves to `ended` with the reviewer's `status` and
+    `sessions`, or `threw` and the error's message. An `ended` entry blocks nothing. Only the
+    coordinator that wrote an entry ends it, so one that dies leaves it `running`; no timeout or
+    process check does so. This is a small record, not a lock: it prevents duplicate
+    coordinator-dispatched work only. Manual commands neither read nor write it, and manual
+    concurrency, with its possible duplicate costs and verdict races, is the crew's to manage.
+    Nothing calls `admitReview` until scheduling is built, and counting each entry and handling a
+    `running` entry at `start` are planned too, below.
   - 0.1 still requires one automatic reviewer per user, fair bounded scanning,
     duplicate automatic work prevention, session/usage bounds and conservative
     restart safety before unattended scheduling starts. Manual commands and

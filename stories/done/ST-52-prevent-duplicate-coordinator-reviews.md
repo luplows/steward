@@ -17,34 +17,34 @@ one review at a time, so this is a small record it keeps for itself, not a lock.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — **A note before the review starts.** Before starting an automatic reviewer, the
+- [x] **AC-1** — **A note before the review starts.** Before starting an automatic reviewer, the
       coordinator writes an entry to `~/.steward/state/reviews.json` for `(owner/name, PR number,
       full head SHA)`, in state `running`. The review runs as admitted work through ST-58's `admit`.
       If the entry cannot be written, no reviewer starts, and the coordinator reports the failure
       with the file's path. A malformed file is treated the same way: it is reported, and it never
       reads as an empty one. Tests show the entry written before the review starts, and no review
       started when the write fails or the file is malformed.
-- [ ] **AC-2** — **The same review is not started twice.** A `running` entry for the same identity
+- [x] **AC-2** — **The same review is not started twice.** A `running` entry for the same identity
       makes a later attempt return a distinct, nonfatal `already-admitted` outcome, naming the
       entry rather than reporting a review success. It starts no model session and leaves the entry
       as it was. A different head is a different identity, and ST-59's expected-head check still
       refuses a review if GitHub no longer reports that head. Tests exercise both cases.
-- [ ] **AC-3** — **The entry records how it ended.** When the review returns, or throws, its entry
+- [x] **AC-3** — **The entry records how it ended.** When the review returns, or throws, its entry
       moves to state `ended` with the result: the reviewer's `status` and `sessions` as returned,
       or `threw` and the error's message. `reviewPullRequest` awaits each session, and `runSession`
       resolves only after the session's process has ended, so under a living coordinator a review
       that returned or threw has ended. An `ended` entry does not itself block a later admission;
       whether to review that head again is ST-61's decision. Tests cover a recorded review, a
       returned failure, a throw, and admission after an `ended` entry.
-- [ ] **AC-4** — **A coordinator that dies leaves its entry `running`.** Only the coordinator that
+- [x] **AC-4** — **A coordinator that dies leaves its entry `running`.** Only the coordinator that
       wrote an entry moves it to `ended`; no timeout or process check does. What the next `start`
       does with such an entry is ST-60/AC-4a's. A test ends a stand-in coordinator during a review
       and shows the entry still `running`.
-- [ ] **AC-5** — Direct manual `review`, `review --rereview`, `rotation` and `land` operations
+- [x] **AC-5** — Direct manual `review`, `review --rereview`, `rotation` and `land` operations
       neither read nor write `reviews.json`. A test holds a `running` entry and shows an
       independently invoked manual review reaching its normal review logic. Existing review
       integrity checks, manual landing authorization and GitHub gate constraints remain unchanged.
-- [ ] **AC-6** — Automatic admission uses this record and ST-58's `admit`, with no lock around
+- [x] **AC-6** — Automatic admission uses this record and ST-58's `admit`, with no lock around
       `runRotation`. Documentation explains that this prevents duplicate *coordinator-dispatched*
       work only; manual concurrency and possible duplicate costs or verdict races are the crew's to
       manage. The implementing PR resolves the design of record's **Planned (ST-52)** marker and

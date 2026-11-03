@@ -189,7 +189,7 @@ is retired or silently replaced. Reconcile the remaining overlaps before dispatc
 | Existing work | Relationship to the roadmap and next planning action |
 |---|---|
 | ST-48 | Retains crew-only two-client installation and gate validation. Amended by the crew, 2026-11-02, to cover the installation pull request, activation and automatic review, and to wait on ST-54, ST-56, ST-57 and ST-61; manual evidence alone does not prove all of 0.1.0. |
-| ST-52 | Revised in this PR: durable per-user reservations apply only to coordinator-dispatched automatic reviews, not manual rotations or reviews. The story depends on ST-58 and ST-59; it does not implement counting outcomes and restart (ST-60), exceptional recovery (draft ST-64), scheduling (ST-61) or a second rotation lock. |
+| ST-52 | Done: the coordinator's record of its reviews, `~/.steward/state/reviews.json`, applies only to coordinator-dispatched automatic reviews, not manual rotations or reviews. It does not implement counting outcomes and restart (ST-60), exceptional recovery (draft ST-64) or scheduling (ST-61), and no lock surrounds a rotation. |
 | ST-6 | Schedule the owner-run investigation and the implementation it recommends for 0.4. Reconcile earlier coder/scheduler dependencies when those stories are refined; deferring isolation does not mean it already exists. |
 | ST-11 / ST-12 | Held stories address the old loop's scheduler and retry pause/resume. Reconcile their useful requirements with the new coordinator, resource bounds and restart contracts; do not start the frozen coder loop to satisfy automatic review. |
 | ST-2 | Starvation promotion conflicts with approval-order scheduling of explicit handoffs. Decide its disposition with the crew before refining the coding queue; do not dispatch it as the 0.2 scheduling rule. Steward's current story queue stays tier/id ordered until separately changed. |
@@ -521,12 +521,12 @@ settles it.
   suggested 5, set on the command line. The owner expects rarely to have more than a couple of
   pull requests in flight.
 - **One machine runs the review side, for now** (owner, 2026-10-11). Several machines are wanted
-  later, and the rotation is built so that adding them is small. On one machine, while a rotation
-  is running, any later rotation is locked out (owner, 2026-10-24; ST-52); several machines, and
-  several reviewers at once, are still to be solved. **Revised 2026-10-27:** this proposed
-  rotation lock is superseded for 0.1. The coordinator is per OS user and prevents duplicate
-  *automatic* work only; independent manual commands may overlap. Ideas kept for future
-  distributed coordination, none decided:
+  later, and the rotation is built so that adding them is small. The owner decided on 2026-10-24
+  that on one machine, while a rotation is running, any later rotation would be locked out; several
+  machines, and several reviewers at once, are still to be solved. **Revised 2026-10-27:** this
+  proposed rotation lock is superseded for 0.1 and was not built. The coordinator is per OS user
+  and prevents duplicate *automatic* work only; independent manual commands may overlap. Ideas kept
+  for future distributed coordination, none decided:
   - landing is already safe across machines: each trigger names its pull request, and the runway
     re-checks it before merging;
   - reviewing is the exposure, since two machines could review the same head and both pay, though

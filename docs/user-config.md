@@ -61,9 +61,10 @@ activation, ownership, reservation or other state. Operational state is kept und
 `~/.steward/state/`, separate from this editable file: activation records in
 `~/.steward/state/projects.json` and owned checkouts under `~/.steward/state/checkouts/`
 (`scripts/dispatch/project.mjs`, README "Activating a project"), and the coordinator's record,
-`~/.steward/state/coordinator.json`, and a stop request for it, `~/.steward/state/coordinator.stop`
-(`scripts/dispatch/coordinator.mjs`, README "The coordinator"). `STEWARD_CONFIG` does not move
-that folder. ST-61 owns scheduling and will consume the
+`~/.steward/state/coordinator.json`, a stop request for it, `~/.steward/state/coordinator.stop`
+(`scripts/dispatch/coordinator.mjs`, README "The coordinator"), and its note of each automatic
+review, `~/.steward/state/reviews.json` (`scripts/dispatch/review-admission.mjs`).
+`STEWARD_CONFIG` does not move that folder. ST-61 owns scheduling and will consume the
 value at the coordinator's next safe start; runtime watching and configuration-editing commands
 are not implemented here.
 
