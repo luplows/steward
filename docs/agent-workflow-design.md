@@ -190,9 +190,10 @@ assert.** A coder that misreads a story writes tests confirming the misreading. 
 Steward's CI is one job, `test` in `.github/workflows/ci.yml`: `npm ci`, `npm run lint` (oxlint),
 `npm test` (Vitest), and on a pull request story containment
 (`scripts/dispatch/story-containment.mjs`), which fails a story's own pull request that changes
-`stories/` beyond its story's move, ticks and `blocked:` line. The one exception: the pull request
-of a story with `kind: spike` may also add new stories, as drafts, on the conditions
-`checkAddedDraft` defines in the same file (Part 3, "Decided so far", 2026-10-15). Vitest includes
+`stories/` beyond its story's move, ticks and `blocked:` line, and `**After review:**` lines added
+to its **Out of scope**. A pull request that moves its own story may also add new stories, as
+drafts, on the conditions `checkAddedDraft` defines in the same file, whatever the story's `kind`
+(Part 3, "Decided so far", "A case a story excludes does not block"). Vitest includes
 the **story schema lint** (`scripts/lint-stories.mjs`) over every story in `stories/` and
 `stories/done/` and every `**Planned (ST-n)**` marker in `docs/`: frontmatter, sections, AC ids and
 markers (`scripts/lint-stories.test.mjs`, "the real repository lints clean"). The six runs before
@@ -605,9 +606,9 @@ orders by `kind` should be a visible violation of something written down rather 
 natural-looking extension. Adding a value is cheap for the same reason.
 
 This repository's story tooling may read it. `kind: spike` marks a spike, a story whose output is
-findings and the stories they recommend, and story containment reads it to let the spike's own pull
-request add those stories as drafts (`scripts/dispatch/story-containment.mjs`; Part 3, "Decided so
-far", 2026-10-15).
+findings and the stories they recommend. Its own pull request adds those stories as drafts, as any
+story's own pull request may (`scripts/dispatch/story-containment.mjs`; Part 3, "Decided so far",
+2026-10-15, and "A case a story excludes does not block").
 
 ### The starvation valve
 
@@ -1457,7 +1458,8 @@ use, as the review side took the engine's reviewer, that part is described in Pa
    lands it on a passing verdict (OQ-83; `scripts/dispatch/writer-prs.mjs`). Only a pull request
    from an account with write access is reviewed at all, let alone landed (OQ-81). CI fails a
    coder's own pull request if it changes `stories/` beyond its own story's move, ticks and
-   `blocked:` edit (OQ-82; `scripts/dispatch/story-containment.mjs`). In tower-workshop-paths, its
+   `blocked:` edit, and what the crew's decision may add after a block: `**After review:**` lines
+   and draft stories (OQ-82; `scripts/dispatch/story-containment.mjs`). In tower-workshop-paths, its
    OQ-105 plans for CI also to fail one whose head branch names a `story/OQ-<n>-…` other than the
    story its diff moves.
 2. Dispatcher picks the highest-tier, lowest-id ready story; creates a worktree and the branch
@@ -2570,16 +2572,17 @@ shortened where it is long, so that it can be found there with its date.
   The first release, `v0.1.0`, is cut by a release review session, whose instructions are a
   separate pull request.
 - **A case a story excludes does not block** (decided 2026-11-03 by the crew, with the planning
-  session, after #111's reviews). The threat-model rule binds only a story's author: a reviewer can
-  still block on a case the story's **Out of scope** names. **Planned (ST-67):** such a finding is an
-  observation (`.claude/prompts/reviewer.md`, "Your verdict"), unless the diff exposes a credential.
+  session, after #111's reviews). The threat-model rule binds only a story's author, so a reviewer
+  could still block on a case the story's **Out of scope** names. Such a finding is an observation
+  (`.claude/prompts/reviewer.md`, "Your verdict"), unless the diff exposes a credential.
   Considered and not chosen: no change; treating anything outside a threat model as an observation,
   which asks the reviewer to judge where it ends; and requiring each block to name a realistic way it
   happens, which a reviewer can usually do. A story's own pull request may also add such an exclusion
   after a block, on the crew's decision, with a draft story when the case should be done
-  later, and the verdict reports the added line. The unit is still read from `main`. Considered and
-  not chosen: a follow-up draft alone, which leaves the criterion unchanged and the finding blocking;
-  and requiring a follow-up for every exclusion, which fills the queue with cases the crew does not
+  later, and the verdict reports the added line (`checkStoryContainment`,
+  `scripts/dispatch/story-containment.mjs`, holds its form). The unit is still read from `main`.
+  Considered and not chosen: a follow-up draft alone, which leaves the criterion unchanged and the
+  finding blocking; and requiring a follow-up for every exclusion, which fills the queue with cases the crew does not
   mean to do. Any story's own pull request may add such a draft, whatever its `kind`, not only a
   spike's. A coder does not add an exclusion: it reports the case. It also stops at a criterion's
   promise it cannot keep as written, taking `.claude/prompts/coder.md`'s "When you cannot proceed"

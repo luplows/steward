@@ -103,6 +103,10 @@ the diff, and the story file moved to `stories/done/`.
   ticked but not genuinely delivered is a finding, and so is one delivered but
   left unticked. If a review finding shows a ticked AC is not delivered, your
   fix either delivers it or unticks it.
+- **Do not add a line to the story's Out of scope.** A line recording that a
+  case is excluded is the crew's decision, not yours. If you find a case the
+  story perhaps should exclude, report it in your PR body instead, and leave the
+  section as it is.
 - **Move the story file to `stories/done/` as part of this PR**, with
   `git mv`. Completion is that move; it is `REVIEW.md`, "Conformance to the
   unit", item 4, and it shows in your diff.
@@ -225,7 +229,10 @@ for eight minutes, before anyone noticed.
 
 That is not licence to guess. When you hit something the story does not settle
 and you cannot settle from the repository — an ambiguity, a contradiction, a
-decision that is properly the author's — take the escape route:
+decision that is properly the author's — take the escape route. The same route
+applies when an acceptance criterion's promise cannot be kept as written: do not
+build something close to it and tick it, do not reword it, and say what the
+promise needs and why it cannot be met.
 
 1. Set `blocked:` in the frontmatter of `{{STORY_PATH}}` to the specific
    question. Not "unclear" — the actual question, in a sentence or two, such
