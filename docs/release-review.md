@@ -47,6 +47,12 @@ A release is cut from `main`, or, as a patch release, from the newest release's 
   from the tag's commit, `git push origin "vX.Y.Z^{commit}:refs/heads/release/vX.Y.(Z+1)"`.
   Then, also on the crew's word, give it the same branch protection as `main`: `test` and
   `review/agent` required, with `enforce_admins` on. Report the branch's commit to the crew.
+- **Replace a release branch that has no tag, on the crew's word**, when it has fallen so far behind
+  `main` that bringing it up to date is more work than cutting it again. It is no release's record
+  yet. First check that `git ls-remote --tags origin` lists no tag of its version, and that its last
+  commit is on `main` (`git merge-base --is-ancestor`). Close the pull requests into it, remove its
+  protection, delete it, and cut it again as above, then protect it again. With no other release
+  branch, its batch is all of `main`.
 - From then on the release branch changes only through pull requests into it, reviewed and landed
   through the gate like any other. Nothing is pushed to it directly.
 - **No pull request into a release branch changes anything under `stories/`.** Stories are written
@@ -62,8 +68,9 @@ A release is cut from `main`, or, as a patch release, from the newest release's 
 - Group the batch by **capability**, as a project using steward meets it, not by pull request or
   story. For each capability: what it does now that it did not before, in plain words, and the
   pull requests that built it.
-- **Run it as a project would**, from the release branch. On a new scratch repository the crew
-  provides, with one commit on `main` (`init` clones `main`, so it needs one): run
+- **Run it as a project would**, from the release branch. On a scratch repository the crew provides,
+  new or reset, with one commit on `main` (`init` clones `main`, so it needs one), none of `init`'s
+  files there, no branch left by an earlier `init`, and no branch protection: run
   `init --ref <commit>`, where `<commit>` is the release branch's last commit
   (`git rev-parse origin/release/vX.Y.Z` once fetched), so that the workflow files it writes install
   steward at that commit, since the tag does not exist yet (ST-44). Then mark ready and merge by
@@ -73,8 +80,8 @@ A release is cut from `main`, or, as a patch release, from the newest release's 
   (`npx --yes --package=github:luplows/steward#<commit> steward protect`). Then open a test pull
   request there, and have it reviewed and landed, with protection set, with the commands the
   release documents. Report each command and its result, `protect`'s included. Run it again at the new last commit whenever a fix or a revert lands into
-  the release branch, on another new scratch repository: `init` leaves a file that already exists as
-  it is, so it would not repin the first one's workflows (ST-44). The tag's commit differs from the
+  the release branch, on a scratch repository in that same state: `init` leaves a file that already
+  exists as it is, so it would not repin the last run's workflows (ST-44). The tag's commit differs from the
   last one walked through only by the notes and the version.
 - Give each capability one verdict: `accepted`, `accepted-with-followup` or `blocks-release`.
 - **A blocker is fixed or deferred.** A fix lands on `main` first, as any `fix` story, written with
@@ -118,5 +125,5 @@ reviews and lands it, last of the pull requests into the release branch.
    cuts each release on a release branch, and a tag is never moved"). A release found wrong after
    its tag is fixed by a patch release, as "The batch and its branch" says, or, when it is no
    longer the newest, by the next release.
-3. **Keep the release branch.** It is the release's record, and the next batch is measured from
-   where it was cut. Never delete it.
+3. **Keep the tagged release branch.** It is the release's record, and the next batch is measured
+   from where it was cut. Never delete it.
