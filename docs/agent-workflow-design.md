@@ -2884,15 +2884,14 @@ shortened where it is long, so that it can be found there with its date.
     a different head is a different identity, and the reviewer's expected-head check still applies.
     When the review returns or throws, the entry moves to `ended` with the reviewer's `status` and
     `sessions`, or `threw` and the error's message. An `ended` entry blocks nothing. Only the
-    coordinator that wrote an entry ends it, so one that dies leaves it `running`; no timeout or
-    process check does so. This is a small record, not a lock: it prevents duplicate
-    coordinator-dispatched work only. Manual commands neither read nor write it, and manual
-    concurrency, with its possible duplicate costs and verdict races, is the crew's to manage.
-    Nothing calls `admitReview` until scheduling is built, and counting each entry and handling a
-    `running` entry at `start` are planned too, below.
+    coordinator that wrote an entry ends it, so one that dies leaves it `running`, until a later
+    `start` moves it (below); no timeout or process check does so. This is a small record, not a
+    lock: it prevents duplicate coordinator-dispatched work only. Manual commands neither read nor
+    write it, and manual concurrency, with its possible duplicate costs and verdict races, is the
+    crew's to manage. Nothing calls `admitReview` until scheduling is built.
   - 0.1 still requires one automatic reviewer per user, fair bounded scanning,
-    duplicate automatic work prevention, session/usage bounds and conservative
-    restart safety before unattended scheduling starts. Manual commands and
+    duplicate automatic work prevention, session/usage bounds and the restart
+    behaviour below before unattended scheduling starts. Manual commands and
     external harnesses manage their own concurrency; overlaps may race over
     current verdicts and are an operator risk. Existing reviewer correctness
     and runway gate rules still apply.
@@ -2909,20 +2908,34 @@ shortened where it is long, so that it can be found there with its date.
 
 - **Automatic-review recovery, fair scheduling and deferred shared E-stop**
   (crew, 2026-10-27; planning drafts reserved in ST-60–62).
-  - **Planned (ST-60):** revised by the crew, 2026-10-27, following the read-only
-    architecture investigation, and by the crew, 2026-11-02. For 0.1, count each
-    automatic review from its ST-52 entry as a verdict, a no-model refusal or a
-    model-consuming failure, for ST-61's unchanged-head retry suppression. Preserve
-    the reviewer's bounded retry inside its original invocation. Under a living
-    coordinator a review that returned or threw has ended, since the reviewer awaits
-    a session that resolves only after its process ends. After a clean stop, or an
-    interruption while idle, `start` carries on. A `running` entry found at `start`
-    means the coordinator died during that review: `start` counts it as failed
-    (`interrupted`), says so and carries on, and that head is not reviewed again
-    automatically. Restarts recheck GitHub eligibility, preserve retry suppression
-    and require neither an operator reset nor a machine reboot. The crew accepts
-    that a reviewer which outlived its coordinator may still post a verdict, which
-    the gate binds to its head. Manual commands remain independent.
+  - Revised by the crew, 2026-10-27, following the read-only architecture
+    investigation, and by the crew, 2026-11-02. For 0.1, each automatic review counts,
+    from its `ended` entry, as a verdict (`recorded` or `already-reviewed`), a no-model
+    refusal (any other result with no `sessions`) or a model-consuming failure (every
+    other result with `sessions`, `threw` and `interrupted`), for the unchanged-head
+    retry suppression planned below: `classifyResult`, and `reviewEnding` for an
+    identity, in `scripts/dispatch/review-admission.mjs`. The reviewer's bounded retry
+    inside its original invocation is unchanged. Under a living coordinator a review
+    that returned or threw has ended, since the reviewer awaits a session that resolves
+    only after its process ends. `admitReview` writes the outcome before it resolves,
+    so before another review is admitted. When it cannot, it returns `record-failed`;
+    its caller hands that to `runCoordinator`'s `fail`, and the coordinator admits
+    nothing more and ends as a handled error, removing its record and leaving the entry
+    `running`. After a clean stop, or an interruption while idle, `start` carries on.
+    A `running` entry found at `start` means the coordinator died during that review:
+    before launching, `start` moves it to `ended` with `interrupted` in one plain write
+    (`interruptRunning`), which counts as failed, names the repository, PR and full
+    head and carries on, and that head is not reviewed again automatically. A manual
+    review of it, or a new head, is how it gets a verdict. A `start` that cannot read
+    or update the file, malformed for instance, says why, launches nothing and changes
+    nothing: a failed write may leave the file malformed, and a malformed file never
+    reads as empty. A `start` that finds a coordinator running changes no entry,
+    and `status` and `stop` never do. A restart keeps the record, the reviewer rechecks
+    GitHub eligibility at its execution boundary, and neither an operator reset nor a
+    machine reboot is required. `start` looks for no surviving reviewer, kills no
+    process and checks no verdict: the crew accepts that a reviewer which outlived its
+    coordinator may still post a verdict, which the gate binds to its head. Manual
+    commands remain independent.
     This reverses the crew's 2026-10-27 and 2026-10-28 decisions, that uncertain work
     reports `recovery-needed` and refuses, and that restart needs a durable idle
     proof. Those left no way to clear the refusal before draft ST-64, so one crash

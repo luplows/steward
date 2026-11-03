@@ -2,13 +2,13 @@
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { isRunning, runCoordinator, stopRequestPath } from './coordinator.mjs'
+import { coordinatorPath, isRunning, runCoordinator, stopRequestPath } from './coordinator.mjs'
 import { createContext } from './github.mjs'
-import { admitReview, readReviews, reviewsPath } from './review-admission.mjs'
+import { admitReview, classifyResult, interruptRunning, readReviews, reviewEnding, reviewsPath } from './review-admission.mjs'
 import { fixtureSettings, fixtureUserConfig } from './settings-fixture.mjs'
 
 const DISPATCH = path.dirname(fileURLToPath(import.meta.url))
@@ -400,5 +400,142 @@ describe('ST-52/AC-6: automatic admission uses this record and admit, documented
       expect(text).toContain('~/.steward/state/reviews.json')
       expect(text).toContain('duplicate coordinator-dispatched work only')
     }
+  })
+})
+
+describe('ST-60/AC-1: three ways a review counts', () => {
+  const VERDICT = 'verdict'
+  const REFUSAL = 'no-model-refusal'
+  const FAILURE = 'model-consuming-failure'
+  // Every status `reviewPullRequest` names, with and without `sessions` where it can have either.
+  const RESULTS = [
+    [{ status: 'recorded', sessions: 1 }, VERDICT],
+    [{ status: 'already-reviewed', sessions: 2 }, VERDICT],
+    [{ status: 'already-reviewed' }, VERDICT],
+    [{ status: 'session-failed', sessions: 1 }, FAILURE],
+    [{ status: 'malformed-verdict', sessions: 2 }, FAILURE],
+    [{ status: 'cannot-review', sessions: 1 }, FAILURE],
+    [{ status: 'no-verdict', sessions: 1 }, FAILURE],
+    [{ status: 'head-moved', sessions: 1 }, FAILURE],
+    [{ status: 'unrecordable', sessions: 1 }, FAILURE],
+    [{ status: 'head-moved' }, REFUSAL],
+    [{ status: 'invalid-expected-head' }, REFUSAL],
+    [{ status: 'choice-unavailable' }, REFUSAL],
+    [{ status: 'rereview-refused' }, REFUSAL],
+    [{ status: 'rules-unreadable' }, REFUSAL],
+    [{ status: 'reviewer-unavailable' }, REFUSAL],
+    [{ status: 'over-usage' }, REFUSAL],
+    [{ status: 'usage-unknown' }, REFUSAL],
+  ]
+
+  for (const [result, counted] of RESULTS) {
+    it(`${result.status} ${result.sessions ? 'with' : 'without'} sessions counts as ${counted}`, () => {
+      expect(classifyResult(result)).toBe(counted)
+    })
+  }
+
+  it('a review that threw and one interrupted count as model-consuming failures, having no sessions', () => {
+    expect(classifyResult({ status: 'threw', message: 'it broke' })).toBe(FAILURE)
+    expect(classifyResult({ status: 'interrupted' })).toBe(FAILURE)
+  })
+
+  it('those are all the statuses review.mjs and the usage check it calls can return', () => {
+    const source = (name) => readFileSync(path.join(DISPATCH, name), 'utf8')
+    const named = (text) => [...text.matchAll(/status: '([a-z-]+)'/g)].map(([, status]) => status)
+    const ternary = source('review.mjs').match(/const status = now\.headSha === pr\.headSha \? '([a-z-]+)' : '([a-z-]+)'/).slice(1)
+    const found = new Set([...named(source('review.mjs')), ...ternary, ...named(source('usage.mjs'))])
+    expect(found).toEqual(new Set(RESULTS.map(([{ status }]) => status)))
+  })
+})
+
+describe('ST-60/AC-2: ST-61 reads the count', () => {
+  const ending = (home, over = {}) => reviewEnding({ homedir: home, ...identity, ...over })
+
+  it('gives each of the three classes from the entry a real admission wrote, and null with no entry', async () => {
+    const home = freshHome()
+    const { admit } = coordinatorIn(home)
+    expect(ending(home)).toBe(null)
+    for (const [number, body, counted] of [
+      [1, async () => ({ status: 'recorded', sessions: 1 }), 'verdict'],
+      [2, async () => ({ status: 'over-usage', resetsAt: 'later' }), 'no-model-refusal'],
+      [3, async () => ({ status: 'session-failed', sessions: 1 }), 'model-consuming-failure'],
+      [4, async () => { throw new Error('it broke') }, 'model-consuming-failure'],
+    ]) {
+      expect((await admitReview({ homedir: home, admit, candidate: candidate({ number }), review: standIn(body) })).status).toBe('ended')
+      expect(ending(home, { number })).toBe(counted)
+    }
+    expect(ending(home)).toBe(null)
+    expect(ending(home, { number: 1, headSha: OTHER_HEAD })).toBe(null)
+    expect(ending(home, { number: 1, repo: 'crew/other' })).toBe(null)
+  })
+
+  it('gives nothing for a running entry, and throws on a malformed file rather than reading it as none', () => {
+    const home = freshHome()
+    seed(home, { reviews: [{ ...identity, state: 'running', startedAt: STARTED }] })
+    expect(ending(home)).toBe(null)
+    seed(home, 'not JSON')
+    expect(() => ending(home)).toThrow(/is malformed/)
+  })
+
+  it('writes the outcome before the admission resolves, so before another review is admitted', async () => {
+    const home = freshHome()
+    const { admit } = coordinatorIn(home)
+    const first = held()
+    const outcome = admitReview({ homedir: home, admit, candidate: candidate(), review: first.review })
+    await until(() => first.review.mock.calls.length === 1)
+    expect(ending(home)).toBe(null)
+    first.release()
+    await outcome
+    expect(ending(home)).toBe('verdict')
+  })
+
+  it('a failed write of the outcome: the coordinator admits nothing more and ends as a handled error, leaving the entry running', async () => {
+    const home = freshHome()
+    const file = reviewsPath(home)
+    const coordinator = runCoordinator({ homedir: home, pollMs: 20 })
+    // Read-only, so that the file reads as it was and the write of the ending fails.
+    const review = standIn(async () => {
+      chmodSync(file, 0o444)
+      return { status: 'recorded', sessions: 1 }
+    })
+    let outcome
+    try {
+      outcome = await admitReview({ homedir: home, admit: coordinator.admit, candidate: candidate(), review, now })
+    } finally {
+      chmodSync(file, 0o644)
+    }
+    expect(outcome.status).toBe('record-failed')
+    expect(outcome.entry.result).toEqual({ status: 'recorded', sessions: 1 })
+    expect(readReviews(file)).toEqual([{ ...identity, state: 'running', startedAt: STARTED }])
+    expect(ending(home)).toBe(null)
+
+    // What the caller does with `record-failed`.
+    coordinator.fail(new Error(outcome.reason))
+    const later = standIn()
+    expect(await admitReview({ homedir: home, admit: coordinator.admit, candidate: candidate({ number: 8 }), review: later })).toEqual({ status: 'admission-closed' })
+    expect(later).not.toHaveBeenCalled()
+    expect((await coordinator.done).message).toBe(outcome.reason)
+    expect(existsSync(coordinatorPath(home))).toBe(false)
+    expect(readReviews(file)).toEqual([{ ...identity, state: 'running', startedAt: STARTED }])
+
+    // The entry is left for `start`'s move, which counts it.
+    expect(interruptRunning({ homedir: home })).toEqual([{ ...identity, state: 'running', startedAt: STARTED }])
+    expect(ending(home)).toBe('model-consuming-failure')
+  })
+
+  it('fail waits for admitted work, and refuses more meanwhile', async () => {
+    const home = freshHome()
+    const coordinator = runCoordinator({ homedir: home, pollMs: 20 })
+    let release
+    expect(coordinator.admit(() => new Promise((resolve) => { release = resolve }))).toBe(true)
+    await until(() => release !== undefined)
+    const failure = new Error('the record could not be written')
+    coordinator.fail(failure)
+    expect(coordinator.admit(async () => {})).toBe(false)
+    await sleep(100)
+    expect(existsSync(coordinatorPath(home))).toBe(true)
+    release()
+    expect(await coordinator.done).toBe(failure)
+    expect(existsSync(coordinatorPath(home))).toBe(false)
   })
 })

@@ -2,13 +2,15 @@
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { coordinatorPath, isRunning, main, readRecord, runCoordinator, stopRequestPath } from './coordinator.mjs'
+import { admitReview, readReviews, reviewEnding, reviewsPath } from './review-admission.mjs'
 
 const DISPATCH = path.dirname(fileURLToPath(import.meta.url))
+const ROOT = path.join(DISPATCH, '..', '..')
 
 // Detached coordinators start and stop for real in some of these tests.
 vi.setConfig({ testTimeout: 60_000 })
@@ -264,6 +266,268 @@ describe('ST-58/AC-6: manual commands do not ask the coordinator', () => {
     for (const name of ['review', 'rotation', 'land']) {
       const source = readFileSync(path.join(DISPATCH, `${name}.mjs`), 'utf8')
       expect(source).not.toMatch(/coordinator\.mjs|coordinator\.json|coordinator\.stop/)
+    }
+  })
+})
+
+const HEAD = 'a'.repeat(40)
+const candidate = { repo: 'crew/client', number: 7, expectedHeadSha: HEAD }
+const identity = { repo: 'crew/client', number: 7, headSha: HEAD }
+const STARTED = '2026-11-01T09:00:00.000Z'
+const runningEntry = (over = {}) => ({ ...identity, state: 'running', startedAt: STARTED, ...over })
+const endedEntry = (over = {}) => ({
+  ...identity, number: 3, state: 'ended', startedAt: STARTED, endedAt: STARTED, result: { status: 'recorded', sessions: 1 }, ...over,
+})
+
+function seedFile(file, content) {
+  mkdirSync(path.dirname(file), { recursive: true })
+  writeFileSync(file, typeof content === 'string' ? content : JSON.stringify(content))
+  return file
+}
+const seedReviews = (home, content) => seedFile(reviewsPath(home), content)
+/** A record naming a process that has gone, as a coordinator killed leaves. */
+const seedStaleRecord = (home) => {
+  const record = { pid: deadPid(), startedAt: STARTED, state: 'running' }
+  seedFile(coordinatorPath(home), record)
+  return record
+}
+
+describe('ST-60/AC-3: a graceful stop and start', () => {
+  it('a stand-in review held through a stop finishes and writes its outcome, and it survives a restart', async () => {
+    const home = freshHome()
+    const coordinator = runCoordinator({ homedir: home, pollMs: 20 })
+    let release
+    const review = vi.fn(() => new Promise((resolve) => { release = () => resolve({ status: 'recorded', sessions: 1 }) }))
+    const outcome = admitReview({ homedir: home, admit: coordinator.admit, candidate, review })
+    await until(() => review.mock.calls.length === 1)
+
+    expect((await run(['stop'], home)).out).toMatch(/^stopping: /)
+    const later = vi.fn()
+    expect(await admitReview({ homedir: home, admit: coordinator.admit, candidate: { ...candidate, number: 8 }, review: later })).toEqual({ status: 'admission-closed' })
+    expect(later).not.toHaveBeenCalled()
+    expect(readReviews(reviewsPath(home))[0].state).toBe('running')
+
+    release()
+    expect(await coordinator.done).toBe(null)
+    expect((await outcome).status).toBe('ended')
+    const before = readFileSync(reviewsPath(home), 'utf8')
+
+    const { spawnFn, spawned } = countingSpawn()
+    const again = await run(['start'], home, { spawnFn })
+    expect(again.code).toBe(0)
+    expect(again.out).toMatch(/^started: /)
+    expect(again.out).not.toMatch(/interrupted/)
+    expect(readFileSync(reviewsPath(home), 'utf8')).toBe(before)
+    expect(reviewEnding({ homedir: home, ...identity })).toBe('verdict')
+
+    expect((await run(['stop'], home)).code).toBe(0)
+    await until(() => !isRunning(spawned[0]))
+  })
+})
+
+describe('ST-60/AC-4: interrupted while idle', () => {
+  it('a stand-in coordinator killed with no running entry restarts as after a clean stop, leaving the entries as they were', async () => {
+    const home = freshHome()
+    const file = seedReviews(home, { reviews: [endedEntry()] })
+    const before = readFileSync(file, 'utf8')
+    const { spawnFn, spawned } = countingSpawn()
+    expect((await run(['start'], home, { spawnFn })).code).toBe(0)
+    const first = readRecord(coordinatorPath(home))
+    process.kill(first.pid)
+    await until(() => !isRunning(first.pid))
+
+    const again = await run(['start'], home, { spawnFn })
+    expect(again.code).toBe(0)
+    expect(again.out).toMatch(/started: /)
+    expect(again.out).not.toMatch(/interrupted/)
+    expect(again.err).toBe('')
+    expect(readFileSync(file, 'utf8')).toBe(before)
+    expect(readRecord(coordinatorPath(home)).pid).toBe(spawned[1])
+
+    expect((await run(['stop'], home)).code).toBe(0)
+    await until(() => !isRunning(spawned[1]))
+  })
+
+  it('with no record of reviews at all, start writes none', async () => {
+    const home = freshHome()
+    seedStaleRecord(home)
+    const { spawnFn, spawned } = countingSpawn()
+    expect((await run(['start'], home, { spawnFn })).code).toBe(0)
+    expect(existsSync(reviewsPath(home))).toBe(false)
+    expect((await run(['stop'], home)).code).toBe(0)
+    await until(() => !isRunning(spawned[0]))
+  })
+})
+
+describe('ST-60/AC-4a: interrupted during a review', () => {
+  it('a stand-in coordinator killed during a review: start moves its entry to interrupted, says so, and starts', async () => {
+    const home = freshHome()
+    const file = reviewsPath(home)
+    const url = (name) => JSON.stringify(pathToFileURL(path.join(DISPATCH, name)).href)
+    const script = `
+      import { runCoordinator } from ${url('coordinator.mjs')}
+      import { admitReview } from ${url('review-admission.mjs')}
+      const [, homedir, candidate] = process.argv
+      const { admit } = runCoordinator({ homedir })
+      admitReview({ homedir, admit, candidate: JSON.parse(candidate), review: () => new Promise(() => {}) })
+    `
+    const child = spawn(process.execPath, ['--input-type=module', '-e', script, home, JSON.stringify(candidate)], { stdio: 'ignore' })
+    started.push(child.pid)
+    await until(() => existsSync(file) && readFileSync(file, 'utf8').endsWith('\n'))
+    const [running] = readReviews(file)
+    expect(running.state).toBe('running')
+    process.kill(child.pid)
+    await until(() => !isRunning(child.pid))
+    expect(readReviews(file)).toEqual([running])
+
+    const { spawnFn, spawned } = countingSpawn()
+    const result = await run(['start'], home, { spawnFn })
+    expect(result.code).toBe(0)
+    expect(result.out).toContain(`crew/client pull request #7, head ${HEAD}`)
+    expect(result.out).toContain('this head will not be reviewed again automatically')
+    expect(result.out).toContain('A manual review of it, or a new head, is how it gets a verdict')
+    expect(result.out).toMatch(/started: /)
+    const [moved] = readReviews(file)
+    expect(moved).toEqual({ ...running, state: 'ended', endedAt: expect.any(String), result: { status: 'interrupted' } })
+    expect(reviewEnding({ homedir: home, ...identity })).toBe('model-consuming-failure')
+    expect(readRecord(coordinatorPath(home)).pid).toBe(spawned[0])
+
+    // Once moved, a later start has nothing to say about it.
+    expect((await run(['stop'], home)).code).toBe(0)
+    await until(() => !isRunning(spawned[0]))
+    const before = readFileSync(file, 'utf8')
+    const later = await run(['start'], home, { spawnFn })
+    expect(later.out).not.toMatch(/interrupted/)
+    expect(readFileSync(file, 'utf8')).toBe(before)
+    expect((await run(['stop'], home)).code).toBe(0)
+    await until(() => !isRunning(spawned[1]))
+  })
+
+  it('moves every running entry before the launch, names each, and leaves ended entries as they were', async () => {
+    const home = freshHome()
+    const other = runningEntry({ repo: 'crew/other', number: 9, headSha: 'b'.repeat(40) })
+    const ended = endedEntry()
+    const file = seedReviews(home, { reviews: [runningEntry(), ended, other] })
+    let atLaunch
+    const { spawnFn: counting, spawned } = countingSpawn()
+    const spawnFn = (...args) => {
+      atLaunch = readReviews(file)
+      return counting(...args)
+    }
+    const result = await run(['start'], home, { spawnFn })
+    expect(result.code).toBe(0)
+    expect(result.out).toContain(`crew/client pull request #7, head ${HEAD}`)
+    expect(result.out).toContain(`crew/other pull request #9, head ${'b'.repeat(40)}`)
+    expect(atLaunch.map(({ state }) => state)).toEqual(['ended', 'ended', 'ended'])
+    const reviews = readReviews(file)
+    expect(reviews).toEqual(atLaunch)
+    expect(reviews[1]).toEqual(ended)
+    expect(reviews[0].result).toEqual({ status: 'interrupted' })
+    expect(reviews[2].result).toEqual({ status: 'interrupted' })
+    expect((await run(['stop'], home)).code).toBe(0)
+    await until(() => !isRunning(spawned[0]))
+  })
+
+  it('a start that finds a running coordinator changes no entry and reports already-running', async () => {
+    const home = freshHome()
+    const { spawnFn, spawned } = countingSpawn()
+    expect((await run(['start'], home, { spawnFn })).code).toBe(0)
+    const file = seedReviews(home, { reviews: [runningEntry()] })
+    const before = readFileSync(file, 'utf8')
+    const second = await run(['start'], home, { spawnFn })
+    expect(second.code).toBe(1)
+    expect(second.err).toMatch(/^already-running: /)
+    expect(second.out).toBe('')
+    expect(readFileSync(file, 'utf8')).toBe(before)
+    expect(spawned).toHaveLength(1)
+    expect((await run(['stop'], home)).code).toBe(0)
+    await until(() => !isRunning(spawned[0]))
+  })
+
+  it('a start that cannot read the file refuses, launches nothing, names the file and changes nothing', async () => {
+    const home = freshHome()
+    const file = seedReviews(home, '{ "reviews": [')
+    const record = seedStaleRecord(home)
+    const stopFile = seedFile(stopRequestPath(home), 'left over\n')
+    const spawnFn = vi.fn()
+    const result = await run(['start'], home, { spawnFn })
+    expect(result.code).toBe(1)
+    expect(result.err).toContain(`The coordinator did not start: it could not read or update its record of reviews, ${file}.`)
+    expect(result.err).toContain(`${file} is malformed`)
+    expect(result.err).toContain('Nothing was started.')
+    expect(result.out).toBe('')
+    expect(spawnFn).not.toHaveBeenCalled()
+    expect(readFileSync(file, 'utf8')).toBe('{ "reviews": [')
+    expect(readRecord(coordinatorPath(home))).toEqual(record)
+    expect(existsSync(stopFile)).toBe(true)
+  })
+
+  it('a start that cannot write the file refuses in the same way, leaving the entry running', async () => {
+    const home = freshHome()
+    const file = seedReviews(home, { reviews: [runningEntry()] })
+    const record = seedStaleRecord(home)
+    const spawnFn = vi.fn()
+    chmodSync(file, 0o444)
+    let result
+    try {
+      result = await run(['start'], home, { spawnFn })
+    } finally {
+      chmodSync(file, 0o644)
+    }
+    expect(result.code).toBe(1)
+    expect(result.err).toContain(`The coordinator did not start: it could not read or update its record of reviews, ${file}.`)
+    expect(result.out).toBe('')
+    expect(spawnFn).not.toHaveBeenCalled()
+    expect(readReviews(file)).toEqual([runningEntry()])
+    expect(readRecord(coordinatorPath(home))).toEqual(record)
+  })
+})
+
+describe('ST-60/AC-5: only start changes this', () => {
+  it('status and stop change no entry and admit no work: with no coordinator, with a dead one, and with a running one', async () => {
+    const home = freshHome()
+    const file = seedReviews(home, { reviews: [runningEntry()] })
+    const before = readFileSync(file, 'utf8')
+    const spawnFn = vi.fn()
+    const asks = async (status) => {
+      for (const argv of [['status'], ['status', '--json']]) {
+        const result = await run(argv, home, { spawnFn })
+        expect(result.code).toBe(0)
+        expect(result.out).toContain(status)
+        expect(result.out).not.toMatch(/interrupted/)
+      }
+      expect(readFileSync(file, 'utf8')).toBe(before)
+    }
+
+    await asks('stopped')
+    expect((await run(['stop'], home, { spawnFn })).out).toMatch(/^stopped: /)
+    expect(readFileSync(file, 'utf8')).toBe(before)
+
+    seedStaleRecord(home)
+    await asks('stopped')
+    expect((await run(['stop'], home, { spawnFn })).out).toMatch(/^stopped: /)
+    expect(readFileSync(file, 'utf8')).toBe(before)
+    rmSync(coordinatorPath(home))
+
+    const coordinator = runCoordinator({ homedir: home, pollMs: 20 })
+    await asks('running')
+    // With no work admitted, it has none to wait for.
+    expect((await run(['stop'], home, { spawnFn })).out).toMatch(/^stopped: .* had no work running/)
+    expect(await coordinator.done).toBe(null)
+    expect(readFileSync(file, 'utf8')).toBe(before)
+    expect(spawnFn).not.toHaveBeenCalled()
+  })
+})
+
+describe('ST-60/AC-6: what an interruption does is documented', () => {
+  it('the design of record has no ST-60 marker, and it and the README give the interruption and its accepted risk', () => {
+    const design = readFileSync(path.join(ROOT, 'docs', 'agent-workflow-design.md'), 'utf8')
+    expect(design).not.toMatch(/\*\*Planned \([^)]*\bST-60\b/)
+    for (const doc of [design, readFileSync(path.join(ROOT, 'README.md'), 'utf8')]) {
+      const text = doc.replace(/\s+/g, ' ')
+      expect(text).toContain('`interrupted`')
+      expect(text).toContain('may still post a verdict')
+      expect(text).toContain('not reviewed again automatically')
     }
   })
 })
