@@ -336,7 +336,7 @@ describe("ST-67/AC-3: any story's pull request may add drafts", () => {
     await expect(checkStoryContainment(args)).resolves.toEqual({ ok: true })
   }, CONTAINMENT_TEST_TIMEOUT)
 
-  it("ST-67/AC-3: checkAddedDraft's conditions hold for a kind: workflow story's pull request", async () => {
+  it("ST-67/AC-3: a kind: workflow story's pull request still may not add a story that is not a draft", async () => {
     const args = spikeScenario('workflow-adds-non-draft', () => {
       write('stories/OQ-300-first.md', STORY('OQ-300'))
     }, 'workflow')
@@ -358,8 +358,8 @@ describe("ST-67/AC-3: any story's pull request may add drafts", () => {
 })
 
 // ST-67: a story with an added line under `## Out of scope`, after the existing
-// `*(none)*`. A story moved into stories/done/ also ticks an AC, and one not
-// moved does not, so each path is tested as a coder's pull request would make it.
+// `*(none)*`. A story moved into stories/done/ also ticks an AC, so that path
+// shows the two together; one not moved changes nothing else.
 const NO_EXCLUSIONS = '## Out of scope\n\n*(none)*'
 const WITH_OUT_OF_SCOPE = (...lines) => STORY('OQ-82').replace(NO_EXCLUSIONS, [NO_EXCLUSIONS, ...lines].join('\n'))
 const AFTER_REVIEW = (followUp = 'none') => `- **After review:** A case it excludes (crew, 2026-11-03). Follow-up: ${followUp}.`
@@ -394,7 +394,7 @@ describe.each(LAYOUTS)('ST-67/AC-1: an added exclusion, for a story $name', ({ n
   }, CONTAINMENT_TEST_TIMEOUT)
 
   it('ST-67/AC-1: fails a line in that form added in any other section', async () => {
-    for (const heading of ['## Acceptance criteria', '## Constraints', '## Open questions']) {
+    for (const heading of ['## Intent', '## Acceptance criteria', '## Constraints', '## Context', '## Open questions']) {
       const text = STORY('OQ-82').replace(`${heading}\n`, `${heading}\n\n${AFTER_REVIEW()}\n`)
       const violations = await violationsOf(`other-section-${heading.replace(/\W+/g, '-')}`, text)
       expect(violations).toContainEqual(expect.objectContaining({ file }))
@@ -485,20 +485,32 @@ describe('ST-67/AC-2: what a follow-up may name', () => {
 })
 
 describe('ST-67/AC-1: edits beside an added exclusion', () => {
-  it('ST-67/AC-1: a tick and a blocked: edit still pass, and a reworded AC still fails, naming its line', async () => {
-    const line = AFTER_REVIEW()
-    const ticked = WITH_OUT_OF_SCOPE(line).replace('- [ ] **AC-2**', '- [x] **AC-2**').replace('blocked: null', 'blocked: "waiting"')
-    const passing = scenario('beside-pass', MAIN(), () => write('stories/OQ-82-foo.md', ticked))
-    await expect(checkStoryContainment(passing)).resolves.toEqual({ ok: true })
-
-    const reworded = WITH_OUT_OF_SCOPE(line).replace('## Constraints\n\n*(none)*', '## Constraints\n\n*(reworded)*')
-    const failing = scenario('beside-fail', MAIN(), () => write('stories/OQ-82-foo.md', reworded))
-    const result = await checkStoryContainment(failing)
+  const expectDisallowedAt = async (name, text, changed) => {
+    const result = await checkStoryContainment(scenario(name, MAIN(), () => write('stories/OQ-82-foo.md', text)))
     expect(result.ok).toBe(false)
     expect(result.violations).toEqual([expect.objectContaining({
       file: 'stories/OQ-82-foo.md',
-      line: reworded.split('\n').indexOf('*(reworded)*') + 1,
+      line: text.split('\n').indexOf(changed) + 1,
+      message: expect.stringContaining('disallowed change'),
     })])
+  }
+
+  it('ST-67/AC-1: a tick and a blocked: edit still pass', async () => {
+    const ticked = WITH_OUT_OF_SCOPE(AFTER_REVIEW()).replace('- [ ] **AC-2**', '- [x] **AC-2**').replace('blocked: null', 'blocked: "waiting"')
+    const passing = scenario('beside-pass', MAIN(), () => write('stories/OQ-82-foo.md', ticked))
+    await expect(checkStoryContainment(passing)).resolves.toEqual({ ok: true })
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it('ST-67/AC-1: a reworded acceptance criterion still fails, naming its line', async () => {
+    const changed = '- [ ] **AC-2** — Second thing, reworded.'
+    const text = WITH_OUT_OF_SCOPE(AFTER_REVIEW()).replace('- [ ] **AC-2** — Second thing.', changed)
+    await expectDisallowedAt('beside-reworded-ac', text, changed)
+  }, CONTAINMENT_TEST_TIMEOUT)
+
+  it('ST-67/AC-1: a changed line in a section after the added line still fails, naming its line in the new file', async () => {
+    const changed = '*(changed)*'
+    const text = WITH_OUT_OF_SCOPE(AFTER_REVIEW()).replace('## Constraints\n\n*(none)*', `## Constraints\n\n${changed}`)
+    await expectDisallowedAt('beside-changed-constraints', text, changed)
   }, CONTAINMENT_TEST_TIMEOUT)
 })
 
