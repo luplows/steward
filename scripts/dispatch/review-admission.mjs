@@ -20,7 +20,7 @@
  * `{ status: 'threw', message }` when the review threw, or `{ status: 'interrupted' }` when `start`
  * found the entry `running`.
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { FULL_HEAD_SHA } from './review-eligibility.mjs'
 import { reviewCandidate } from './review-work.mjs'
@@ -67,9 +67,21 @@ export function readReviews(file) {
   return data.reviews
 }
 
+/**
+ * Writes `reviews` to a temporary file beside `file` and renames it over `file`, so that a write
+ * that fails leaves `file` as it was. Throws the write's own error, the temporary file removed as
+ * best it can be. For a failed write only: not a guard against another process.
+ */
 function writeReviews(file, reviews) {
   mkdirSync(path.dirname(file), { recursive: true })
-  writeFileSync(file, `${JSON.stringify({ reviews }, null, 2)}\n`, 'utf8')
+  const temporary = `${file}.tmp`
+  try {
+    writeFileSync(temporary, `${JSON.stringify({ reviews }, null, 2)}\n`, 'utf8')
+    renameSync(temporary, file)
+  } catch (error) {
+    try { rmSync(temporary, { force: true }) } catch { /* The write's error is the one to report. */ }
+    throw error
+  }
 }
 
 function writeEntry(file, entry) {
@@ -99,9 +111,8 @@ export function reviewEnding({ homedir, repo, number, headSha }) {
 /**
  * Moves every `running` entry under `homedir` to `ended` with `interrupted`, in one write, and
  * returns those entries as they were. With none, writes nothing. For `start` alone, once it has
- * found no coordinator running. Throws when it cannot read or write the file. The write overwrites
- * directly, so what the file holds after a failed one is uncertain: its entries may still be
- * `running`, or it may be malformed.
+ * found no coordinator running. Throws when it cannot read or write the file. A write that fails
+ * leaves the file as it was, so its entries stay `running`.
  */
 export function interruptRunning({ homedir, now = () => new Date() }) {
   const file = reviewsPath(homedir)
@@ -128,10 +139,10 @@ export function interruptRunning({ homedir, now = () => new Date() }) {
  *   called. Nothing was written or started.
  * - `{ status: 'record-failed', file, reason, entry?, reviewed? }`: the record could not be read or
  *   written. Without `entry`, no review started. With it, the review has ended, and the returned
- *   `entry` is what says how. What the file then holds is uncertain: it may still have the entry
- *   `running`, or it may be malformed. On this status the caller is to admit no more, handing
- *   `reason` to the coordinator's `fail`. A later `start` moves an entry still `running`, or
- *   refuses a malformed file and names it.
+ *   `entry` is what says how. A write that fails leaves the file as it was, so the file still has
+ *   the entry `running`, for a later `start` to move. On this status the caller is to admit no
+ *   more, handing `reason` to the coordinator's `fail`. A file already malformed, which is how the
+ *   record can also fail to read, stays so, and a later `start` refuses it and names it.
  */
 export async function admitReview({ homedir, admit, candidate, repoDir, ctx, reviewOptions, review = reviewCandidate, now = () => new Date() }) {
   const identity = { repo: candidate.repo, number: candidate.number, headSha: candidate.expectedHeadSha }

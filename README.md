@@ -268,12 +268,12 @@ surviving reviewer, kills nothing and checks no verdict, so a reviewer that outl
 may still post a verdict, which the gate binds to the head reviewed: the crew accepts that risk. A
 `start` that finds a coordinator running changes no entry, and `status` and `stop` never do.
 
-Writes to `reviews.json` overwrite it directly, so what it holds after a failed write is uncertain:
-it may still have the entry `running`, for `start` to move, or it may be malformed. A coordinator
-that cannot write how a review ended will admit nothing more and exit. A `start` that cannot read
-or update the file, because it is malformed for instance, names the file, says why and starts
-nothing, until the file is fixed or removed. It leaves the coordinator's record and any stop request
-as they were.
+Each write of `reviews.json` goes to a temporary file beside it, renamed over it, so a write that
+fails leaves the file as it was and the entry `running`, for `start` to move. A coordinator that
+cannot write how a review ended will admit nothing more and exit. A `start` that cannot read or
+update the file names the file, says why and starts nothing, and leaves the coordinator's record and
+any stop request as they were. A malformed file, from hand-editing for instance, is refused in this
+way until it is fixed or removed.
 
 ## Contributing
 

@@ -2921,20 +2921,20 @@ shortened where it is long, so that it can be found there with its date.
     only after its process ends. `admitReview` writes the outcome before it resolves,
     so before another review is admitted. When it cannot, it returns `record-failed`;
     its caller is to hand that to `runCoordinator`'s `fail`, and the coordinator admits
-    nothing more and ends as a handled error, removing its record. Writes overwrite the
-    file directly, so what it holds after a failed write is uncertain: it may still
-    have the entry `running`, for `start` to move, or it may be malformed, and then
-    `start` refuses and names the file. After a clean stop, or an interruption while
-    idle, `start` carries on.
+    nothing more and ends as a handled error, removing its record. Each write goes to a
+    temporary file beside `reviews.json`, renamed over it, so a write that fails leaves
+    the file as it was and the entry `running`, for `start` to move. This is for a
+    failed write only, not a guard against another process (crew, 2026-11-02). After a
+    clean stop, or an interruption while idle, `start` carries on.
     A `running` entry found at `start` means the coordinator died during that review,
     or could not write how it ended: before launching, `start` moves it to `ended` with
-    `interrupted` in one plain write (`interruptRunning`), which counts as failed, names
-    the repository, PR and full head and carries on, and that head is not reviewed again
+    `interrupted` in one write (`interruptRunning`), which counts as failed, names the
+    repository, PR and full head and carries on, and that head is not reviewed again
     automatically. A manual review of it, or a new head, is how it gets a verdict. A
-    `start` that cannot read or update the file, malformed for instance, names the file,
-    says why, launches nothing and leaves the coordinator's record and any stop request
-    as they were. What the file holds after that `start`'s own failed write is uncertain
-    too, and a malformed file never reads as empty. A `start` that finds a coordinator
+    `start` that cannot read or update the file names the file, says why, launches
+    nothing and leaves the coordinator's record and any stop request as they were. A
+    malformed file, from hand-editing for instance, is refused in this way and never
+    reads as empty. A `start` that finds a coordinator
     running changes no entry, and `status` and `stop` never do. A restart keeps the record,
     the reviewer rechecks GitHub eligibility at its execution boundary, and neither an
     operator reset nor a machine reboot is required. `start` looks for no surviving

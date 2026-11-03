@@ -2,7 +2,7 @@
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { spawn, spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -462,29 +462,7 @@ describe('ST-60/AC-4a: interrupted during a review', () => {
     expect(existsSync(stopFile)).toBe(true)
   })
 
-  // A read-only file refuses the write before it begins, which is all this shows. What a write that
-  // fails part way leaves is uncertain, and no test makes one.
-  it('a start whose write a read-only file refuses: it refuses, launches nothing, names the file, and the entry, the record and a stop request stay', async () => {
-    const home = freshHome()
-    const file = seedReviews(home, { reviews: [runningEntry()] })
-    const record = seedStaleRecord(home)
-    const stopFile = seedFile(stopRequestPath(home), 'left over\n')
-    const spawnFn = vi.fn()
-    chmodSync(file, 0o444)
-    let result
-    try {
-      result = await run(['start'], home, { spawnFn })
-    } finally {
-      chmodSync(file, 0o644)
-    }
-    expect(result.code).toBe(1)
-    expect(result.err).toContain(`The coordinator did not start: it could not read or update its record of reviews, ${file}.`)
-    expect(result.out).toBe('')
-    expect(spawnFn).not.toHaveBeenCalled()
-    expect(readReviews(file)).toEqual([runningEntry()])
-    expect(readRecord(coordinatorPath(home))).toEqual(record)
-    expect(existsSync(stopFile)).toBe(true)
-  })
+  // A `start` whose own write fails is in `review-admission-write.test.mjs`.
 })
 
 describe('ST-60/AC-5: only start changes this', () => {
