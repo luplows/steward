@@ -2569,6 +2569,22 @@ shortened where it is long, so that it can be found there with its date.
 
   The first release, `v0.1.0`, is cut by a release review session, whose instructions are a
   separate pull request.
+- **A case a story excludes does not block** (decided 2026-11-03 by the crew, with the planning
+  session, after #111's reviews). The threat-model rule binds only a story's author: a reviewer can
+  still block on a case the story's **Out of scope** names. **Planned (ST-67):** such a finding is an
+  observation (`.claude/prompts/reviewer.md`, "Your verdict"), unless the diff exposes a credential.
+  Considered and not chosen: no change; treating anything outside a threat model as an observation,
+  which asks the reviewer to judge where it ends; and requiring each block to name a realistic way it
+  happens, which a reviewer can usually do. A story's own pull request may also add such an exclusion
+  after a block, on the crew's decision, with a draft story when the case should be done
+  later, and the verdict reports the added line. The unit is still read from `main`. Considered and
+  not chosen: a follow-up draft alone, which leaves the criterion unchanged and the finding blocking;
+  and requiring a follow-up for every exclusion, which fills the queue with cases the crew does not
+  mean to do. Any story's own pull request may add such a draft, whatever its `kind`, not only a
+  spike's. A coder does not add an exclusion: it reports the case. It also stops at a criterion's
+  promise it cannot keep as written, taking `.claude/prompts/coder.md`'s "When you cannot proceed"
+  route rather than building something close and ticking it (crew, 2026-11-03, after #108's and
+  #111's reviews). Not chosen: leaving that rule to the coder's prompt alone, without a unit.
 - **The crew validates review installation in two existing projects** (crew, 2026-10-21;
   **Planned (ST-48)**). After ST-25, ST-42, ST-44 and ST-47 are delivered (and ST-49 and ST-50,
   owner, 2026-10-23, in the entry below), the crew manually installs
