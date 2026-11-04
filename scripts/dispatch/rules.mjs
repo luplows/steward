@@ -144,6 +144,7 @@ export async function readRules({ repoDir, base, rulesFile }) {
     const { stdout } = await execFileAsync('git', ['show', `${REMOTE}/${base}:${rulesFile}`], {
       cwd: repoDir,
       maxBuffer: 64 * 1024 * 1024,
+      windowsHide: true,
     })
     text = stdout
   } catch (err) {
