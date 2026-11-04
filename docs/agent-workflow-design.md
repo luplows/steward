@@ -2589,7 +2589,7 @@ shortened where it is long, so that it can be found there with its date.
   route rather than building something close and ticking it (crew, 2026-11-03, after #108's and
   #111's reviews). Not chosen: leaving that rule to the coder's prompt alone, without a unit.
 - **`Integrity`, item 1, asks for numbers only from a measurement** (decided 2026-11-03 by the crew,
-  with the planning session, after the dry run on `luplows/playground`; **Planned (ST-68)**). The item
+  with the planning session, after the dry run on `luplows/playground`). The item
   asked for "actual numbers", so a review could block a documentation change that had nothing to
   measure, and #4 passed there while #6 and #8, with a near-identical Verification, were blocked for
   it. The item now asks for each command run and its actual result, for numbers where a result is a

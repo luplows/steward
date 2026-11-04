@@ -55,9 +55,11 @@ Applies when: the diff changes code, tests, workflow files or prompts.
 
 ## Integrity
 
-1. The **Verification** section reports real results — actual numbers, taken
-   the same way across a before/after comparison — rather than an assertion
-   that checks passed.
+1. The **Verification** section gives each command run and its actual result,
+   rather than an assertion that checks passed. A result that is a measurement
+   gives its numbers, taken the same way across a before/after comparison. When
+   no project check applies to a change, the section explains why and gives a
+   command showing what changed, such as a diff, with its output.
 2. A check that could not be run is stated as such, with the reason, rather
    than quietly omitted from the list.
 3. No local workaround is left in the diff. A path, config, or flag patched

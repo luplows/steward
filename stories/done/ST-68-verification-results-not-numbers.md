@@ -16,7 +16,7 @@ numbers, and whether it blocks does not depend on how the reviewer reads the ite
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — **The item asks for results, and for numbers only from a measurement.** In both
+- [x] **AC-1** — **The item asks for results, and for numbers only from a measurement.** In both
       `templates/review-checklist.md` and `REVIEW.md`, "Integrity", item 1, reads, wrapped as the
       file's other items are:
 
@@ -26,9 +26,9 @@ numbers, and whether it blocks does not depend on how the reviewer reads the ite
       > the section explains why and gives a command showing what changed, such as a diff,
       > with its output.
 
-- [ ] **AC-2** — **Nothing else in either checklist changes.** The diff of each file changes only
+- [x] **AC-2** — **Nothing else in either checklist changes.** The diff of each file changes only
       that item's lines, so "Integrity" keeps its four items in both, and items keep their numbers.
-- [ ] **AC-3** — **The design record says it is built.** The `**Planned (ST-68)**` marker in
+- [x] **AC-3** — **The design record says it is built.** The `**Planned (ST-68)**` marker in
       `docs/agent-workflow-design.md`, Part 3, "Decided so far", on "`Integrity`, item 1, asks for
       numbers only from a measurement", is removed.
 
