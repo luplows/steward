@@ -2588,6 +2588,17 @@ shortened where it is long, so that it can be found there with its date.
   promise it cannot keep as written, taking `.claude/prompts/coder.md`'s "When you cannot proceed"
   route rather than building something close and ticking it (crew, 2026-11-03, after #108's and
   #111's reviews). Not chosen: leaving that rule to the coder's prompt alone, without a unit.
+- **`Integrity`, item 1, asks for numbers only from a measurement** (decided 2026-11-03 by the crew,
+  with the planning session, after the dry run on `luplows/playground`; **Planned (ST-68)**). The item
+  asked for "actual numbers", so a review could block a documentation change that had nothing to
+  measure, and #4 passed there while #6 and #8, with a near-identical Verification, were blocked for
+  it. The item now asks for each command run and its actual result, for numbers where a result is a
+  measurement. When no project check applies to a change, Verification explains why and gives
+  a command and its output showing what changed.
+  It changes in `templates/review-checklist.md` and `REVIEW.md` together. Considered and not chosen:
+  changing the example alone, which leaves steward's own reviews reading it the old way; and leaving
+  the wording for projects to change in their own copies, since a project's first review meets it
+  before the project has any reason to.
 - **The crew validates review installation in two existing projects** (crew, 2026-10-21;
   **Planned (ST-48)**). After ST-25, ST-42, ST-44 and ST-47 are delivered (and ST-49 and ST-50,
   owner, 2026-10-23, in the entry below), the crew manually installs
