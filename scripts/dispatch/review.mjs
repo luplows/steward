@@ -304,6 +304,7 @@ async function git(cwd, args) {
   const { stdout } = await execFileAsync('git', ['-c', 'core.quotepath=off', ...args], {
     cwd,
     maxBuffer: 64 * 1024 * 1024,
+    windowsHide: true,
   })
   return stdout
 }
