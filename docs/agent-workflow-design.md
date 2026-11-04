@@ -2622,6 +2622,26 @@ shortened where it is long, so that it can be found there with its date.
   precedes the immutable tag. No routine mid-review version changes are expected. Not chosen:
   changing the active v0.1.0 procedure, leaving the version until the last PR, or publishing
   a version before acceptance.
+- **Planned (ST-74)** **New installation files follow default Prettier formatting**
+  (crew, 2026-11-04, after ST-48 client validation). A fresh installation's generated
+  files pass the pinned default formatter check, without changing their JSON or workflow
+  behavior. The installer and README explain how a client formats only the new files
+  with its own settings before merging. This does not rewrite existing client files.
+  Considered and not chosen: running a formatter inside the project automatically,
+  or promising to match every custom Prettier configuration.
+- **Planned (ST-75)** **Post-landing CI limitations are documented for clients**
+  (crew, 2026-11-04, after ST-48 client validation). The README and installation PR
+  explain that runway merges made with `github.token` do not fire new push workflows.
+  The README offers an optional default-branch `workflow_run` example, with its limits,
+  so clients can select appropriate post-landing checks. The installer leaves client CI
+  alone. Not chosen: a new credential, automatic workflow dispatch or changing merge
+  authorization in this first follow-up.
+- **Planned (ST-77)** **Review comments show the unit and reviewer actually used**
+  (crew, 2026-11-04, after ST-48 client validation). Each recorded verdict carries
+  its existing unit-read note and the selected reviewer tool and model for human
+  readers, while keeping the existing machine-readable marker and gate unchanged.
+  Not chosen: changing unit discovery or reviewer selection, or disclosing prompts
+  and machine-local configuration.
 - **The crew validates review installation in two existing projects** (crew, 2026-10-21;
   **Planned (ST-48)**). After ST-25, ST-42, ST-44 and ST-47 are delivered (and ST-49 and ST-50,
   owner, 2026-10-23, in the entry below), the crew manually installs
