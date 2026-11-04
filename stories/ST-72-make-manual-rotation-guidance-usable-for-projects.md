@@ -10,49 +10,52 @@ blocked: null
 
 ## Intent
 
-As a crew member running a manual review rotation from an installed Steward package, I want
-the command's prerequisite and skip messages to be actionable, so that I can use it without
-access to Steward's source repository or misread a blocking review as a passing one.
+As a crew member running a manual rotation from an installed Steward package, I want its
+checkout prerequisite and skip messages to be actionable, so that I can run it without
+Steward's source repository and distinguish a blocked PR from a passing one.
 
 ## Acceptance criteria
 
-Starter criteria for post-0.1 refinement; do not dispatch until Open questions are settled.
-
-- [ ] **AC-1** — Placeholder: when manual rotation refuses a branch checkout, its error gives
-      a supported way to prepare a checkout that can run the installed `steward rotation`
-      command, without naming a script path available only in Steward's source repository.
-- [ ] **AC-2** — Placeholder: document the supported package-based manual rotation and its
-      checkout prerequisite in user-facing documentation.
-- [ ] **AC-3** — Placeholder: when a rotation skips a PR with a governing verdict on its
-      current head, its output identifies whether that verdict is `pass`,
-      `pass-with-observations` or `block`.
+- [ ] **AC-1** — A rotation from a checkout with a branch checked out still refuses before
+      dispatch. Its message names the need for a detached worktree and directs the user to
+      prepare one with Git and run `steward rotation` from it, rather than referring to
+      `node scripts/dispatch/loop.mjs --init [path]` or another source-only path.
+- [ ] **AC-2** — `README.md` gives a complete manual rotation procedure for an installed
+      project, using `git fetch origin main`, `git worktree add --detach <path> origin/main`,
+      entering the resulting worktree and invoking the installed package's
+      `steward rotation`. It says what checkout state the command requires.
+- [ ] **AC-3** — When rotation skips a PR because it already has an honoured governing
+      verdict on the current head, the printed skip line names `pass`,
+      `pass-with-observations` or `block`, as applicable. It still skips without starting
+      another review; other refusal messages retain their meaning.
+- [ ] **AC-4** — Tests exercise the branch-checkout refusal and all three governing-verdict
+      skip outputs, including the unchanged refusal/skip behavior.
+- [ ] **AC-5** — Remove the `**Planned (ST-72)**` marker from the corresponding decision in
+      `docs/agent-workflow-design.md` when these usability changes are implemented.
 
 ## Out of scope
 
-- Changing coordinator admission, automatic scheduling, review or landing rules.
-- Automatically creating or deleting worktrees unless the crew chooses that separately.
-- Relaxing the existing safeguard against rotation in a branch checkout.
-- Changing the meaning of `review-blocked` or permitting extra review rounds.
+- Adding a command that automatically creates, deletes or repairs a rotation worktree.
+- Changing the detached-checkout requirement, automatic review scheduling or landing rules.
+- Reworking the separate coder loop; its shared refusal may become clearer, but its workflow
+  is otherwise unchanged.
+- Changing the meaning of `review-blocked` or allowing extra review rounds.
 
 ## Constraints
 
-*(none)*
+- Manual rotation retains the existing refusal to run from a branch checkout; this is a
+  guidance and reporting change, not new worktree lifecycle automation.
 
 ## Context
 
-- `scripts/dispatch/rotation.mjs` uses `requireOwnWorktree` from
-  `scripts/dispatch/loop.mjs`, whose refusal names
-  `node scripts/dispatch/loop.mjs --init [path]`: a source-repository path, not
-  a command installed in another project.
-- `scripts/dispatch/review-eligibility.mjs` returns the governing verdict in
-  `existing` when a head has already been reviewed, while rotation currently prints only
-  the generic skip reason.
-- `README.md` documents `rotation` with a source-repository command and documents
-  the installed `npx --package=...` command form elsewhere.
+- `scripts/dispatch/rotation.mjs` calls `requireOwnWorktree` in
+  `scripts/dispatch/loop.mjs`, whose refusal names a source-only script path.
+- `scripts/dispatch/review-eligibility.mjs` returns the governing verdict in `existing`;
+  rotation currently prints only the generic skip reason.
+- `README.md` separately documents source-tree commands and installed-package commands.
+- Crew decision, 2026-11-04: document manual Git worktree preparation and keep these related
+  usability changes in one story, without adding automatic setup.
 
 ## Open questions
 
-- Is a documented, manually prepared detached worktree sufficient, or should Steward expose
-  a supported package command to create one?
-- Does this remain one usability story, or should checkout guidance and verdict reporting
-  be split into independently deliverable changes?
+*(none)*

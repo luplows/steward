@@ -2599,6 +2599,29 @@ shortened where it is long, so that it can be found there with its date.
   changing the example alone, which leaves steward's own reviews reading it the old way; and leaving
   the wording for projects to change in their own copies, since a project's first review meets it
   before the project has any reason to.
+- **Planned (ST-71)** **The two Verification template comments agree with the checklist**
+  (crew, 2026-11-04, after the v0.1.0 scratch walkthrough). Both the example PR template and
+  Steward's own PR template give the same instructions to report commands and actual results,
+  numerical results only for measurements, an explanation when no project check applies, and
+  the command and output showing what changed. Both include a measurement example and a
+  documentation-only example. Other project-specific template instructions stay as they are.
+  Not chosen: updating only the installed example, or making every Verification numerical.
+- **Planned (ST-72)** **Manual rotation keeps its detached-worktree requirement, with usable
+  installed-package guidance** (crew, 2026-11-04). Its branch-checkout refusal points to
+  preparing a detached worktree with Git, and the README documents the steps for a project
+  that uses Steward from the package. When rotation skips an already-reviewed PR, it prints
+  the governing verdict on the current head. Not chosen: creating worktrees automatically,
+  or splitting the small related guidance and reporting changes into separate stories.
+- **Planned (ST-73)** **Release version and provisional notes are committed first**
+  (crew, 2026-11-04; applies after v0.1.0). The crew fixes the version before cutting a
+  release branch. After the branch is protected, the release review reads back its actual
+  required checks and administrator enforcement before the first reviewed PR. That PR sets
+  the package and lockfile versions and adds release notes with explicit
+  `Pending release review` placeholders. The scratch walkthrough then tests that candidate.
+  The final PR updates only the notes, resolves every placeholder after crew acceptance, and
+  precedes the immutable tag. No routine mid-review version changes are expected. Not chosen:
+  changing the active v0.1.0 procedure, leaving the version until the last PR, or publishing
+  a version before acceptance.
 - **The crew validates review installation in two existing projects** (crew, 2026-10-21;
   **Planned (ST-48)**). After ST-25, ST-42, ST-44 and ST-47 are delivered (and ST-49 and ST-50,
   owner, 2026-10-23, in the entry below), the crew manually installs
