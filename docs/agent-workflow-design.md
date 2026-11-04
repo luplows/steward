@@ -2593,7 +2593,8 @@ shortened where it is long, so that it can be found there with its date.
   asked for "actual numbers", so a review could block a documentation change that had nothing to
   measure, and #4 passed there while #6 and #8, with a near-identical Verification, were blocked for
   it. The item now asks for each command run and its actual result, for numbers where a result is a
-  measurement, and, from a change no project check applies to, for it to say so and show what changed.
+  measurement. When no project check applies to a change, Verification explains why and gives
+  a command and its output showing what changed.
   It changes in `templates/review-checklist.md` and `REVIEW.md` together. Considered and not chosen:
   changing the example alone, which leaves steward's own reviews reading it the old way; and leaving
   the wording for projects to change in their own copies, since a project's first review meets it

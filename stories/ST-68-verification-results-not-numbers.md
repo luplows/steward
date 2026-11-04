@@ -22,8 +22,9 @@ numbers, and whether it blocks does not depend on how the reviewer reads the ite
 
       > The **Verification** section gives each command run and its actual result, rather than an
       > assertion that checks passed. A result that is a measurement gives its numbers, taken the
-      > same way across a before/after comparison. A change no project check applies to says so,
-      > and gives a command showing what changed, such as a diff, with its output.
+      > same way across a before/after comparison. When no project check applies to a change,
+      > the section explains why and gives a command showing what changed, such as a diff,
+      > with its output.
 
 - [ ] **AC-2** — **Nothing else in either checklist changes.** The diff of each file changes only
       that item's lines, so "Integrity" keeps its four items in both, and items keep their numbers.
