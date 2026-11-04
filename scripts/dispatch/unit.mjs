@@ -92,6 +92,7 @@ async function readFileOnMain(target, { repoDir, base }) {
     execFileAsync('git', ['-c', 'core.quotepath=off', ...args], {
       cwd: repoDir,
       maxBuffer: 64 * 1024 * 1024,
+      windowsHide: true,
     })
   try {
     const type = (await git(['cat-file', '-t', spec])).stdout.trim()

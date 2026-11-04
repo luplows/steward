@@ -322,7 +322,7 @@ export function parseComments(json) {
 
 /** Reads the token from `gh auth token`. Used for authentication alone. */
 export async function ghAuthToken() {
-  const { stdout } = await execFileAsync('gh', ['auth', 'token'])
+  const { stdout } = await execFileAsync('gh', ['auth', 'token'], { windowsHide: true })
   const token = stdout.trim()
   if (!token) throw new Error('`gh auth token` returned nothing; run `gh auth login`')
   return token

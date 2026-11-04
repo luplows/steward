@@ -15,15 +15,15 @@ without flashing console windows on my desktop, so that unattended review is uno
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — Each of these four direct subprocess calls used by coordinator-managed review
+- [x] **AC-1** — Each of these four direct subprocess calls used by coordinator-managed review
       supplies `windowsHide: true` in its Node child-process options: `gh auth token` in
       `scripts/dispatch/github.mjs`; the Git helper in `scripts/dispatch/review.mjs`; the
       `git show` call in `scripts/dispatch/rules.mjs`; and the Git helper that reads file
       units in `scripts/dispatch/unit.mjs`.
-- [ ] **AC-2** — Regression tests exercise the options passed at all four sites, including a
+- [x] **AC-2** — Regression tests exercise the options passed at all four sites, including a
       file-unit read and GitHub token retrieval, and fail if `windowsHide: true` is missing.
       These tests do not require a live GitHub repository or model session.
-- [ ] **AC-3** — Each changed call still invokes the same command with the same arguments,
+- [x] **AC-3** — Each changed call still invokes the same command with the same arguments,
       working directory and output/error handling. The fix changes process-window visibility,
       not review eligibility, verdict content, tool choice, or credentials.
 
