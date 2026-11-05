@@ -15,8 +15,8 @@ Where a file defines the thing, the entry names it, and the file is the authorit
   decisions recorded as "(owner, date)".
 - **planning session** — the session that plans with the crew and writes stories
   (`docs/planning-session.md`). *Formerly: Session A.*
-- **release review** — the periodic walkthrough of what has landed, ending in a release tag. Not
-  yet run. *Formerly: Session B.*
+- **release review** — the periodic walkthrough of what has landed, ending in a release tag. First
+  run for v0.1.0, tagged on 2026-11-05. *Formerly: Session B.*
 - **controller** — the session asked to run steward's dispatch scripts by hand, doing ATC's work
   (`docs/controller.md`). *Formerly: the dispatcher session.*
 - **coordinator** — the per-OS-user authority for scheduling explicitly activated projects'

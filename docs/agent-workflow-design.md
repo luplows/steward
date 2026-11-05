@@ -46,7 +46,9 @@ The document is in three parts:
 **Planned (ST-69)** (crew, 2026-11-04) Upgrading a supported v0.1.0 integration
 to v0.2.0 produces a draft project PR updating unmodified Steward-managed thin
 workflows and pins. Modified managed files or inconsistent or unknown pins refuse
-rather than inviting a merge guess. Steward inspects project-owned configuration
+rather than inviting a merge guess. A v0.1.0 pin is `v0.1.0`, the tag's commit, or
+`935fb5b`, which the first clients pin and which differs from the tag only by the
+release notes and the version (crew, 2026-11-05). Steward inspects project-owned configuration
 and rules, proposes only deterministic changes justified by the target release,
 and validates the proposed result. The crew approves and lands the PR. Local
 coordinator stop/restart, activation and authorization remain separate and manual.
@@ -3136,6 +3138,28 @@ shortened where it is long, so that it can be found there with its date.
   rewrites and hook side effects in the first release, or quietly bypassing
   failing hooks without changing the story. This is a revised planned contract,
   not behavior already implemented in PR #92.
+
+- **Loose ends from the v0.1.0 release** (decided 2026-11-05 by the owner, with the planning
+  session, from the release review's brief). Each is planned in the story named:
+  - **Planned (ST-79): `init` tells its own workflows from a project's.** With every file already
+    on `main`, `init` said the installation was complete, as it did in steward itself, whose
+    workflows are its own. It now compares each workflow with its template, apart from the pin, and
+    says which are not its own instead. Considered and not chosen: rewording the message alone.
+  - **Planned (ST-80): the reviewer reports every blocking finding it finds in one review.** On
+    playground #10, two reviews of one head blocked on two different parts of the description,
+    either of which a single review could have reported. In the owner's words: "I want as many
+    fixes to be caught as reasonable. I don't expect the list to be perfect - that's a bad metric
+    for software." A block on a pull request's description still counts toward the round bound
+    like any other ("What the gate enforces", item 3). Considered and not chosen: counting such
+    blocks differently, which can be revisited with numbers after the prompt changes.
+  - **Planned (ST-81): a session's output that arrives after its process exits is kept.**
+    `runSession` builds its record from the stdout it holds when `exit` fires. Tower-workshop-paths'
+    CI run 41784405916, on Ubuntu, failed `spawn.test.mjs`'s streaming test with
+    `malformed-output`, which lost output would give. 1,040 runs on Windows lost none.
+  - **Planned (ST-82): steward's own gate is converted to the thin workflows**, kept in 0.2 and
+    timed when 0.2 is cut, since nothing else in the 0.2 slice depends on it. Steward's gate cannot
+    review the pull request that installs it, so the crew merges that one by hand, as in
+    tower-workshop-paths.
 
 - **Installation through a reviewable pull request** (crew, 2026-10-26).
   "Have `steward init` create a reviewable installation PR instead of
