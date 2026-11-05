@@ -32,6 +32,8 @@ the child's stdio streams might still be open then.
 - [ ] **AC-3** — A session stopped for its time limit or stall interval is
       reported as today, and every existing test in `spawn.test.mjs` passes
       unchanged.
+- [ ] **AC-4** — The `**Planned (ST-81)**` marker in
+      `docs/agent-workflow-design.md` loses `ST-81`.
 
 ## Out of scope
 

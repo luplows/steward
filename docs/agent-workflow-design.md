@@ -3156,7 +3156,7 @@ shortened where it is long, so that it can be found there with its date.
     `runSession` builds its record from the stdout it holds when `exit` fires. Tower-workshop-paths'
     CI run 41784405916, on Ubuntu, failed `spawn.test.mjs`'s streaming test with
     `malformed-output`, which lost output would give. 1,040 runs on Windows lost none.
-  - **Converting steward's own gate to the thin workflows is a draft, ST-82**, kept in 0.2 and
+  - **Planned (ST-82): steward's own gate is converted to the thin workflows**, kept in 0.2 and
     timed when 0.2 is cut, since nothing else in the 0.2 slice depends on it. Steward's gate cannot
     review the pull request that installs it, so the crew merges that one by hand, as in
     tower-workshop-paths.

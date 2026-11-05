@@ -28,6 +28,8 @@ answered.
       landed in steward through the thin workflows, and the record says which.
 - [ ] **AC-3** — Provisional: steward's documents that describe its own gate
       running from `scripts/` say what it runs instead.
+- [ ] **AC-4** — The `**Planned (ST-82)**` marker in
+      `docs/agent-workflow-design.md` loses `ST-82`.
 
 ## Out of scope
 
