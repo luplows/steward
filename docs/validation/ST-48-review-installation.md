@@ -150,7 +150,7 @@ steward project activate <the project's checkout>
 
 It ran at 20:38:18 UTC, exit 0, printing `Nothing was started.` The operator's checkout did not change.
 The scan due at 20:49:54 UTC started the review at 20:49:56 UTC, and `steward coordinator status` then
-reported:
+reported, among its lines:
 
 ```
 Next scan: 2026-11-04T21:05:28.796Z.
