@@ -16,7 +16,10 @@
  *
  * It overwrites nothing. Every file is created only when the clone lacks it (`flag: 'wx'`), and
  * one that is there is named as left. It neither reads nor writes `storyPrefix`, `stories/` or the
- * project's `package.json` or CI workflows.
+ * project's `package.json` or CI workflows. A checklist `main` already has is read from `main` and
+ * parsed as the reviewer reads it (`readRules`, `rules.mjs`); one that does not parse is left as it
+ * is, and a warning naming it and each problem is printed and put at the top of the pull
+ * request's body, after its first sentence. The installation goes ahead as it would have otherwise.
  *
  * Every question has a flag, `--yes` takes the default of every question no flag answers, and with
  * no terminal a question with neither is refused, before anything is written (`QUESTIONS`). The
@@ -52,6 +55,7 @@ import { ghAuthToken } from './github.mjs'
 import { INSPECTION_LABEL, isLabelAlreadyExists } from './inspect.mjs'
 import { userConfigPath, TOOL_EFFORTS } from './user-config.mjs'
 import { isRulesFilePath } from './rules-file-path.mjs'
+import { readRules } from './rules.mjs'
 import { BREAKER_OVERRIDE_LABEL, REVIEW_BLOCKED_LABEL } from '../land/runway.mjs'
 
 const API = 'https://api.github.com'
@@ -660,20 +664,56 @@ export function landingNotes(settingsResult, answers, flags) {
 
 const json = (value) => `${JSON.stringify(value, null, 2)}\n`
 
+/**
+ * What the person is told when the checklist `main` already has does not parse: the file, each
+ * problem the reviewer's parser found in it, and to repair it: before merging the installation,
+ * or, when `complete` (`main` already has every file), before protecting `main`, or with the
+ * required check removed for the repair where `main` is already protected. Nothing when
+ * `problems` is empty, as for a checklist that parses or one `init` wrote.
+ */
+export function checklistWarning(rulesFile, problems, { complete = false } = {}) {
+  if (problems.length === 0) return []
+  return [
+    `WARNING: the checklist main already has, ${rulesFile}, does not parse, and init left it as it is:`,
+    ...problems.map((problem) => `  ${problem}`),
+    '  With the gate on main, steward refuses to review any pull request until it parses, the one that repairs it included.',
+    complete
+      ? '  Repair it through a pull request merged as the project normally merges, before running `steward protect`. ' +
+        'If main already requires review/agent, a member of the crew with admin access removes that required check for the repair, ' +
+        'and runs `steward protect` again once it has merged.'
+      : '  Repair it before merging the installation, in its pull request or in one merged before it.',
+  ]
+}
+
 /** The draft pull request's title: steward and its version. */
 export const pullTitle = (version) => `Install steward ${version}`
 
 /**
  * The draft pull request's body: a generated installation section, then the project's pull
- * request template exactly as it is, for the crew to fill.
+ * request template exactly as it is, for the crew to fill. When the checklist `main` already has
+ * does not parse (`rulesProblems`), a warning naming it and each problem comes straight after the
+ * first paragraph, before anything else.
  */
-export function pullBody({ version, pin, added, left, landing, template }) {
+export function pullBody({ version, pin, added, left, landing, template, rulesFile = null, rulesProblems = [] }) {
   const list = (files) => (files.length === 0 ? ['- none'] : files.map((rel) => `- \`${rel}\``))
+  const warning =
+    rulesProblems.length === 0
+      ? []
+      : [
+          `> [!WARNING]`,
+          `> **The checklist \`main\` already has, \`${rulesFile}\`, does not parse. Repair it before merging this pull request.** ` +
+            '`steward init` left it as it is. Once the gate is on `main`, steward refuses to review any pull request until it ' +
+            'parses, the one that repairs it included. Repair it in this pull request, or in one merged before it.',
+          '>',
+          ...rulesProblems.map((problem) => `> - ${problem}`),
+          '',
+        ]
   return [
     '## Steward installation',
     '',
     `This draft pull request installs steward ${version}, pinned to \`${pin}\`. \`steward init\` made it.`,
     '',
+    ...warning,
     'Files added:',
     ...list(added),
     '',
@@ -930,6 +970,9 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   ]
   const added = files.map(([rel]) => rel).filter((rel) => !existsSync(path.join(clone, ...rel.split('/'))))
   const left = files.map(([rel]) => rel).filter((rel) => !added.includes(rel))
+  // A checklist main already has is checked as the reviewer reads it, from main, and left as it is.
+  const rules = left.includes(rulesFile) ? await readRules({ repoDir: clone, base: 'main', rulesFile }) : { ok: true }
+  const rulesProblems = rules.ok ? [] : rules.problems
 
   // The refusals that wait for the clone, before any file is written. They matter only when there
   // is a pull request to open.
@@ -977,6 +1020,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
         'The crew closes each once.',
     )
   }
+  for (const line of checklistWarning(rulesFile, rulesProblems, { complete: added.length === 0 })) out(line)
   for (const rel of templates) {
     out(`left ${rel}: the project's pull request template`)
     if (rel.endsWith('/')) continue
@@ -1026,7 +1070,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   )
   progress.pushed = true
   const templateText = await readFile(bodyTemplate === null ? template('pull_request_template.md') : path.join(clone, ...bodyTemplate.split('/')), 'utf8')
-  const body = pullBody({ version, pin, added, left: [...left, ...templates], landing, template: templateText })
+  const body = pullBody({ version, pin, added, left: [...left, ...templates], landing, template: templateText, rulesFile, rulesProblems })
   const pull = await step('opening the draft pull request', 'GitHub', async () => {
     const response = await ctx.send(buildCreateDraftPull(repo, { branch, title, body }))
     if (!ok(response)) throw new Error(githubSaid(response))
@@ -1040,6 +1084,9 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   out(`  installation commit: ${commit}`)
   out(`  pull request: ${pull?.html_url}`)
   for (const line of landing) out(line)
+  if (rulesProblems.length > 0) {
+    out(`The checklist ${rulesFile} does not parse, as the warning above and the pull request's body say: repair it before merging the installation.`)
+  }
   out(
     "Review it, fill in the project's template in its body, and mark it ready when it is. Merge it as the project normally merges: " +
       'the gate cannot review the pull request that installs it. Merging it starts nothing on any machine: running steward on a machine is a separate step.',

@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { readFileSync } from 'node:fs'
-import { parseRules, readRules } from './rules.mjs'
+import { parseRules, readRules, validateRules } from './rules.mjs'
 
 // The readRules tests build git repositories before each test; a slow machine
 // needs more than Vitest's default 10 s (hook) and 5 s (test). ST-28/AC-4.
@@ -196,6 +196,28 @@ A lead.  More lead.
   })
 })
 
+describe('validateRules', () => {
+  it('ST-78/AC-1: is parseRules, the reviewer\'s parser, with each problem naming the file, the section and the reason', () => {
+    const text = '## Rules\n\n1. a\n1. b\n\n## Notes\n\nProse and no numbered item.\n'
+    const parsed = parseRules(text)
+    expect(parsed.ok).toBe(false)
+    const result = validateRules('docs/RULES.md', text)
+    expect(result).toEqual({ ok: false, problems: parsed.problems.map((p) => `docs/RULES.md: ${p}`) })
+    expect(result.problems).toEqual([
+      'docs/RULES.md: section "Rules": numbers two items 1',
+      'docs/RULES.md: section "Notes": has no item (a line beginning "1. ")',
+    ])
+  })
+
+  it('ST-78/AC-1: a checklist that parses gives parseRules\'s own result, and the file with no section is named too', () => {
+    expect(validateRules('REVIEW.md', SEVERAL)).toEqual(parseRules(SEVERAL))
+    expect(validateRules('REVIEW.md', 'no sections\n')).toEqual({
+      ok: false,
+      problems: ['REVIEW.md: the file has no section (a line beginning "## ")'],
+    })
+  })
+})
+
 describe('readRules', { timeout: GIT_TIMEOUT }, () => {
   let tmp
   let repoDir
@@ -262,6 +284,14 @@ describe('readRules', { timeout: GIT_TIMEOUT }, () => {
     const bad = await readRules({ repoDir, base: 'main', rulesFile: 'BAD.md' })
     expect(bad.ok).toBe(false)
     expect(bad.problems[0]).toContain('BAD.md')
+  })
+
+  it('ST-78/AC-1: readRules gives the same problems as validateRules, the shared check, for a checklist on main', async () => {
+    const d5 = '## Rules\n\n1. a\n\n## Notes\n\nProse and no numbered item.\n'
+    await putOnMain('D5.md', d5)
+    const r = await readRules({ repoDir, base: 'main', rulesFile: 'D5.md' })
+    expect(r).toEqual({ ok: false, problems: validateRules('D5.md', d5).problems })
+    expect(r.problems).toEqual(['D5.md: section "Notes": has no item (a line beginning "1. ")'])
   })
 
   it('ST-20/AC-3 does not throw when repoDir is not a repository', async () => {

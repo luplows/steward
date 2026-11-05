@@ -133,7 +133,12 @@ when that file is missing.
 The pull request's title names steward and its version. Its body is a section saying what was
 added, what was left, what the installation means for landing and what to check before marking it
 ready, followed by the project's own pull request template, unchanged, for the crew to fill (with
-several templates, `--pr-template <path>` chooses; with none, steward's own is used). When `main`
+several templates, `--pr-template <path>` chooses; with none, steward's own is used). A checklist
+`main` already has is read from `main` and parsed as the reviewer parses it. One that does not
+parse is left as it is, and the installation goes ahead: `init`'s output and, at the top of the
+draft pull request's body, a warning name the file and each problem, such as a section with no
+numbered item, and say to repair it before merging the installation (see
+[When the checklist does not parse](#when-the-checklist-does-not-parse)). When `main`
 already has every file, `init` says the installation is already complete and makes no branch,
 commit, push or pull request. It refuses, with exit 2, when the branch is already on `origin` or a
 pull request is open from it. When a step fails it stops, says which, with Git's or GitHub's own
@@ -173,12 +178,38 @@ review. It asks no question, takes no flag but `--repo owner/name` (the reposito
 account that can administer the repository. Before it sets anything it reads `main` on GitHub, and
 refuses, naming what is missing and exiting 1, unless `main` holds `steward.config.json`, the
 checklist that file names, `.github/workflows/review-gate.yml` and
-`.github/workflows/land-approved.yml`. Once they are there it makes `main` require `review/agent`
+`.github/workflows/land-approved.yml`. It also refuses, naming the file and each problem and
+setting nothing, when that checklist, as `main` holds it, does not parse as the reviewer parses it.
+Once they are there it makes `main` require `review/agent`
 with `enforce_admins` on. Protection already there is kept, and only those two are added to it
 (where it requires no status checks, it is rebuilt with every setting it had, plus those two); the
 project's own CI checks are the crew's to add. Where GitHub offers none, as on a private repository
 on GitHub Free, or the account cannot set it, it says so plainly, says that nothing on GitHub then
 enforces the gate, and exits 1.
+
+### When the checklist does not parse
+
+The reviewer reads the checklist from `main`. While the checklist there does not parse, steward
+refuses to review any pull request of the project, the one that repairs it included, so none gets
+a verdict and none passes `review/agent`. `init` warns of it, and `steward protect` and
+`steward project activate` refuse it, but each checks `main` only as it found it when it ran: a
+change to the checklist merged afterwards can break it again. Steward does not repair the
+checklist, rewrite it or relax anything to get past it: the repair is the crew's.
+
+- **Before `steward protect` has been run**, or where protection does not require `review/agent`,
+  repair the checklist through a pull request and merge it as the project normally merges. Then
+  run `steward protect` if you want protection.
+- **Once `main` requires `review/agent`**, with `enforce_admins` on, GitHub refuses to merge the
+  repair, admins included. A member of the crew with admin access to the repository decides to
+  remove `review/agent` from the required status checks of `main`'s branch protection, in
+  GitHub's settings, for the time it takes; merges the pull request that repairs the checklist,
+  as the project normally merges; and runs `steward protect` again, which reads the repaired
+  checklist from `main`, refuses if it still does not parse, and otherwise makes `review/agent`
+  required again, with `enforce_admins` on.
+
+Do not post a verdict marker by hand, or have anything else write one, to get a pull request past
+the gate: a marker is a reviewer's verdict on a head, and one written for any other reason is not
+a review. Steward has no bypass of its own.
 
 ### Activating a project
 
@@ -199,11 +230,13 @@ installation on `origin`'s `main`, not on the branch the checkout is on, in a ch
 the owned checkout, a clone of `origin` at `~/.steward/state/checkouts/<owner>/<name>`, detached at
 `origin`'s `main`: cloned when it is not there, fetched and checked out when it is. `main` must have
 a valid `steward.config.json` whose `repo` is that repository, and files at the checklist's path it
-names and at `.github/workflows/review-gate.yml`. When it does, `activate` records the project in
+names and at `.github/workflows/review-gate.yml`, and that checklist must parse as the reviewer
+parses it. When it does, `activate` records the project in
 `~/.steward/state/projects.json`, one record per repository holding the repository, the root of
 the checkout it was given and the owned checkout, and no credentials; activating it again, from
 any checkout of it, updates that record and reuses the owned checkout. When it does not,
-`activate` names each check that failed, records nothing, keeps the owned checkout for the next
+`activate` names each check that failed, records nothing (a record already there is left as it
+was), keeps the owned checkout for the next
 attempt and exits 1. `list` reads the records, and marks a checkout that is no longer there as
 missing, and one that is not a usable Git checkout as invalid; a records file it cannot read fails
 visibly, and counts as permission for no project.

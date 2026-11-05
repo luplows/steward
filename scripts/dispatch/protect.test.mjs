@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 import * as init from './init.mjs'
 import { settingsBody } from './init.mjs'
 import { assertAllowedRequest, createProtectContext, main, PROTECTION_BODY } from './protect.mjs'
+import { parseRules, validateRules } from './rules.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const CLI = path.join(ROOT, 'scripts', 'dispatch', 'cli.mjs')
@@ -21,6 +22,11 @@ const GATE_FILES = ['.github/workflows/review-gate.yml', '.github/workflows/land
 const ON_MAIN = ['steward.config.json', 'REVIEW.md', ...GATE_FILES]
 // What the person running protect reads: nothing of steward's own source or stories.
 const MENTIONS_STEWARD_INTERNALS = /ST-\d|AC-\d|scripts\/|\.mjs/
+
+/** A checklist the reviewer's parser reads: one section with one numbered item. */
+const VALID_CHECKLIST = '# Checklist\n\n## Every pull request\n\n1. The diff matches its description.\n'
+/** D5: a `## ` section holding prose and no numbered item, which the reviewer's parser refuses. */
+const D5_CHECKLIST = `${VALID_CHECKLIST}\n## Notes\n\nSome prose and no numbered rule.\n`
 
 const MESSAGES = {
   upgrade: 'Upgrade to GitHub Pro or make this repository public to enable this feature.',
@@ -47,14 +53,15 @@ const base64 = (value) => Buffer.from(typeof value === 'string' ? value : JSON.s
 
 /**
  * GitHub's answers, injected as `fetch`. `main` says whether the repository has a `main`; `have` is
- * the files `main` holds, and `config` the content of its `steward.config.json`. `readStatus` maps
+ * the files `main` holds, `config` the content of its `steward.config.json`, and `rules` the content
+ * of every other file but the gate's two workflows, the checklist among them. `readStatus` maps
  * `'main'` or a file's path to a status that read answers instead (a 500, say). `protection` is
  * `none` (not protected, and settable), `existing`, `plan` (every protection request refused for
  * the plan), `admin` (settable only with admin rights the account lacks), `limited` (a rate
  * limit's 403) or `broken` (a 500); `existing` is the body returned for `existing`. Records every
  * request.
  */
-function fakeGitHub({ main = true, have = ON_MAIN, config = { rulesFile: 'REVIEW.md' }, readStatus = {}, protection = 'none', existing = null } = {}) {
+function fakeGitHub({ main = true, have = ON_MAIN, config = { rulesFile: 'REVIEW.md' }, rules = VALID_CHECKLIST, readStatus = {}, protection = 'none', existing = null } = {}) {
   const requests = []
   const urls = []
   const fetch = async (url, init) => {
@@ -72,7 +79,8 @@ function fakeGitHub({ main = true, have = ON_MAIN, config = { rulesFile: 'REVIEW
       const file = contents[1].split('/').map(decodeURIComponent).join('/')
       if (readStatus[file]) return reply(readStatus[file], { message: 'server error' })
       if (!have.includes(file)) return reply(404, { message: 'Not Found' })
-      return reply(200, { type: 'file', path: file, encoding: 'base64', content: file === 'steward.config.json' ? base64(config) : base64('x') })
+      const content = file === 'steward.config.json' ? config : GATE_FILES.includes(file) ? 'x' : rules
+      return reply(200, { type: 'file', path: file, encoding: 'base64', content: base64(content) })
     }
     if (rest.startsWith('/branches/main/protection/') && init.method === 'POST') return reply(200, {})
     if (rest === PROTECTION) {
@@ -568,5 +576,81 @@ describe('ST-50/AC-11: what protect prints is written for the person running it'
     const { out } = await runProtect([], { gh: fakeGitHub({ have: ON_MAIN.slice(0, 2) }) })
     expect(out).toMatch(/Branch protection was not set, and nothing on GitHub was changed/)
     expect(out).toMatch(/then run steward protect again/)
+  })
+})
+
+describe('ST-78/AC-3: protect checks the checklist on main before it sets protection', () => {
+  it('ST-78/AC-3: a checklist on main that does not parse is refused, naming the file and the reason, with no protection request', async () => {
+    const gh = fakeGitHub({ rules: D5_CHECKLIST })
+    const { code, out, err } = await runProtect([], { gh })
+    expect(code).toBe(1)
+    expect(err).toBe('')
+    expect(out).toMatch(/Branch protection was not set, and nothing on GitHub was changed: the checklist on main on acme\/widgets does not parse/)
+    expect(out).toContain('  REVIEW.md: section "Notes": has no item (a line beginning "1. ")')
+    expect(out).toMatch(/Repair it on main through a pull request, .* then run steward protect again/)
+    expect(writes(gh)).toEqual([])
+    expect(gh.requests.some((r) => r.rest.startsWith(PROTECTION))).toBe(false)
+  })
+
+  it('ST-78/AC-3: the checklist is the one the rulesFile names, read from GitHub\'s main and not the working directory', async () => {
+    const config = { rulesFile: 'docs/my rules.md' }
+    const have = ['steward.config.json', 'docs/my rules.md', ...GATE_FILES]
+    const cwd = makeCwd()
+    mkdirSync(path.join(cwd, 'docs'), { recursive: true })
+    writeFileSync(path.join(cwd, 'docs', 'my rules.md'), VALID_CHECKLIST)
+    const refused = fakeGitHub({ config, have, rules: D5_CHECKLIST })
+    const result = await runProtect([], { cwd, gh: refused })
+    expect(result.code).toBe(1)
+    expect(result.out).toContain('  docs/my rules.md: section "Notes": has no item (a line beginning "1. ")')
+    expect(writes(refused)).toEqual([])
+
+    writeFileSync(path.join(cwd, 'docs', 'my rules.md'), D5_CHECKLIST)
+    const set = fakeGitHub({ config, have })
+    expect((await runProtect([], { cwd, gh: set })).code).toBe(0)
+    expect(writes(set)).toEqual([{ method: 'PUT', rest: PROTECTION, body: PROTECTION_BODY }])
+  })
+
+  it('ST-78/AC-3: a checklist whose content GitHub does not return is refused, with no protection request', async () => {
+    const gh = fakeGitHub()
+    const original = gh.fetch
+    gh.fetch = async (url, init) =>
+      url.endsWith('/contents/REVIEW.md?ref=main')
+        ? { status: 200, text: async () => JSON.stringify({ type: 'file', path: 'REVIEW.md', encoding: 'none', content: '' }) }
+        : original(url, init)
+    const { code, out } = await runProtect([], { gh })
+    expect(code).toBe(1)
+    expect(out).toContain('REVIEW.md: GitHub did not return its content from main, so it cannot be checked')
+    expect(gh.requests.some((r) => r.rest.startsWith(PROTECTION))).toBe(false)
+  })
+
+  it('ST-78/AC-3: a checklist that parses keeps what protect did before: it reads the same files and sets the same protection', async () => {
+    const gh = fakeGitHub({ rules: VALID_CHECKLIST })
+    const { code, out } = await runProtect([], { gh })
+    expect(code).toBe(0)
+    expect(reads(gh).map((r) => r.rest)).toEqual([
+      '/branches/main',
+      '/contents/steward.config.json?ref=main',
+      '/contents/REVIEW.md?ref=main',
+      '/contents/.github/workflows/review-gate.yml?ref=main',
+      '/contents/.github/workflows/land-approved.yml?ref=main',
+      PROTECTION,
+    ])
+    expect(writes(gh)).toEqual([{ method: 'PUT', rest: PROTECTION, body: PROTECTION_BODY }])
+    expect(out).not.toMatch(/does not parse/)
+  })
+})
+
+describe('ST-78/AC-5: D5, a section with prose and no numbered item', () => {
+  it('ST-78/AC-5: the reviewer\'s parser rejects it, and protect refuses it with that parser\'s own problems, setting nothing', async () => {
+    expect(parseRules(D5_CHECKLIST)).toEqual({ ok: false, problems: ['section "Notes": has no item (a line beginning "1. ")'] })
+    const { problems } = validateRules('REVIEW.md', D5_CHECKLIST)
+    expect(problems).toEqual(['REVIEW.md: section "Notes": has no item (a line beginning "1. ")'])
+    const gh = fakeGitHub({ rules: D5_CHECKLIST, protection: 'existing' })
+    const { code, out } = await runProtect([], { gh })
+    expect(code).toBe(1)
+    for (const problem of problems) expect(out).toContain(`  ${problem}`)
+    expect(out).not.toMatch(MENTIONS_STEWARD_INTERNALS)
+    expect(writes(gh)).toEqual([])
+    expect(gh.requests.some((r) => r.rest.startsWith(PROTECTION))).toBe(false)
   })
 })

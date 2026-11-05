@@ -35,7 +35,7 @@ accepts this as meeting AC-2: the landing evidence, #282, went through the real 
 | D2 | A verdict comment names neither the unit read nor the reviewer used | [ST-77](../../stories/ST-77-include-review-provenance-in-verdicts.md) |
 | D3 | A landing starts no workflows triggered by `push` on `main` | [ST-75](../../stories/ST-75-explain-ci-after-steward-landing.md) |
 | D4 | A landing does not close the linked issue | [ST-76](../../stories/ST-76-choose-issue-closure-after-runway-landing.md) |
-| D5 | An existing checklist is not parsed at installation, and can then refuse every review | [ST-78](../../stories/ST-78-validate-existing-review-rules.md) |
+| D5 | An existing checklist is not parsed at installation, and can then refuse every review | [ST-78](../../stories/done/ST-78-validate-existing-review-rules.md) |
 
 ## pinpoint
 

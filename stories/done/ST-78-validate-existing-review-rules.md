@@ -14,13 +14,13 @@ As a member of the crew installing or activating steward, I want an existing che
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — Expose shared validation using the reviewer's actual rules parser (`parseRules` in `scripts/dispatch/rules.mjs`), returning a diagnostic naming the configured file and invalid section/reason. Do not maintain a separate checklist grammar.
-- [ ] **AC-2** — When `steward init` finds an existing checklist on project `main` that fails validation, leave it untouched and report the exact problem in CLI output and prominently in the **draft installation PR**, instructing the crew to repair it before merging. An otherwise eligible installation still creates that PR. Valid existing rules do not cause a warning.
-- [ ] **AC-3** — `steward protect` validates configured rules from `main` before setting protection. Invalid rules cause a refusal naming the file and reason, and no protection-setting request. Valid rules preserve existing behavior.
-- [ ] **AC-4** — `steward project activate` validates configured rules from `main` before making a project active. Invalid rules refuse without changing activation state. Valid rules preserve existing behavior.
-- [ ] **AC-5** — Tests reproduce D5: a `## ` section containing prose but no numbered item is rejected by the reviewer parser, warned on by `init` in output and PR body, and refused by `protect` and `activate` without their state-changing actions. Tests use the shared parser, not a simulated alternate validator.
-- [ ] **AC-6** — Document recovery when a checklist becomes invalid after protection, including crew-authorized changes to required checks if needed. Do not recommend fabricated verdict markers or an automatic bypass.
-- [ ] **AC-7** — Resolve the `**Planned (ST-78)**` marker in `docs/agent-workflow-design.md` when implementing this story.
+- [x] **AC-1** — Expose shared validation using the reviewer's actual rules parser (`parseRules` in `scripts/dispatch/rules.mjs`), returning a diagnostic naming the configured file and invalid section/reason. Do not maintain a separate checklist grammar.
+- [x] **AC-2** — When `steward init` finds an existing checklist on project `main` that fails validation, leave it untouched and report the exact problem in CLI output and prominently in the **draft installation PR**, instructing the crew to repair it before merging. An otherwise eligible installation still creates that PR. Valid existing rules do not cause a warning.
+- [x] **AC-3** — `steward protect` validates configured rules from `main` before setting protection. Invalid rules cause a refusal naming the file and reason, and no protection-setting request. Valid rules preserve existing behavior.
+- [x] **AC-4** — `steward project activate` validates configured rules from `main` before making a project active. Invalid rules refuse without changing activation state. Valid rules preserve existing behavior.
+- [x] **AC-5** — Tests reproduce D5: a `## ` section containing prose but no numbered item is rejected by the reviewer parser, warned on by `init` in output and PR body, and refused by `protect` and `activate` without their state-changing actions. Tests use the shared parser, not a simulated alternate validator.
+- [x] **AC-6** — Document recovery when a checklist becomes invalid after protection, including crew-authorized changes to required checks if needed. Do not recommend fabricated verdict markers or an automatic bypass.
+- [x] **AC-7** — Resolve the `**Planned (ST-78)**` marker in `docs/agent-workflow-design.md` when implementing this story.
 
 ## Out of scope
 

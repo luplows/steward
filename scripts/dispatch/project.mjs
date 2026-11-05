@@ -12,7 +12,10 @@
  * Of the caller's checkout, `activate` reads only its root and `origin`'s URL, and writes nothing
  * there. It checks the installation in a clone of steward's own, the owned checkout at
  * `~/.steward/state/checkouts/<owner>/<name>`, detached at `origin`'s `main`: cloned when absent,
- * fetched and checked out when present. The records are kept in `~/.steward/state/projects.json`,
+ * fetched and checked out when present. It refuses, recording nothing and leaving any record there
+ * was as it was, when the checklist on `origin`'s `main` does not parse with the reviewer's own
+ * reader (`readRules`, `rules.mjs`): every review of the project would be refused. What it checks
+ * is `main` as it fetched it. The records are kept in `~/.steward/state/projects.json`,
  * one per repository. Deactivation removes the record and keeps the owned checkout for reuse;
  * nothing here deletes an owned checkout. None of these commands starts a review or a coordinator.
  *
@@ -32,6 +35,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { git, gitRoot, repoFromRemoteUrl } from './init.mjs'
+import { readRules } from './rules.mjs'
 import { readSettings, REPO_RE } from './settings.mjs'
 import { readStateFile, writeStateFile } from './state-file.mjs'
 import { stateDir } from './user-config.mjs'
@@ -190,6 +194,22 @@ async function activate(given, { cwd, homedir, cloneUrl, out, err }) {
     err(`${repo} was not activated: steward is not installed on origin's main. On main:`)
     for (const problem of problems) err(`  - ${problem}`)
     err('Nothing was recorded. Install steward with `steward init`, merge its pull request, and run this again.')
+    err(`The owned checkout is kept at ${owned} for the next attempt.`)
+    return 1
+  }
+
+  // The checklist, as origin's main holds it, read and parsed as the reviewer reads it.
+  const { rulesFile } = await readSettings(owned)
+  const rules = await readRules({ repoDir: owned, base: 'main', rulesFile })
+  if (!rules.ok) {
+    const recorded = projects.some((p) => p.repo === repo)
+    err(
+      `${repo} was not activated: its checklist on origin's main does not parse, so steward would refuse to review ` +
+        'every pull request of it, the one that repairs it included. The checklist:',
+    )
+    for (const problem of rules.problems) err(`  - ${problem}`)
+    err(recorded ? `Its record in ${file} is left as it was: it stays activated, as it was before.` : 'Nothing was recorded.')
+    err('Repair the checklist on main through a pull request, merged as the project normally merges, and run this again.')
     err(`The owned checkout is kept at ${owned} for the next attempt.`)
     return 1
   }

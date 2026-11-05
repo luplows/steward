@@ -68,7 +68,7 @@ function installedCheckout(repo) {
   git(dir, 'remote', 'add', 'origin', url)
   const files = {
     'steward.config.json': `${JSON.stringify(fixtureSettings({ repo }), null, 2)}\n`,
-    'REVIEW.md': '# Checklist\n',
+    'REVIEW.md': '# Checklist\n\n## Every pull request\n\n1. The diff matches its description.\n',
     '.github/workflows/review-gate.yml': 'name: review-gate\n',
   }
   for (const [rel, text] of Object.entries(files)) {

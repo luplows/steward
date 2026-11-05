@@ -8,7 +8,11 @@
  * It reads `main` on GitHub, not the working directory, before it sets anything, and refuses,
  * sending no request but reads, unless `main` holds `steward.config.json`, the checklist that
  * file's `rulesFile` names, `.github/workflows/review-gate.yml` and
- * `.github/workflows/land-approved.yml`. It reads no file's content beyond the `rulesFile` value.
+ * `.github/workflows/land-approved.yml`, and unless that checklist, as `main` holds it, parses with
+ * the reviewer's own parser (`validateRules`, `rules.mjs`): while it does not parse every review is
+ * refused, its repair's among them, so with `review/agent` required no pull request could merge. Of
+ * the files' content it reads only the `rulesFile` value and the checklist. What it checks is
+ * `main` as it read it: a change merged afterwards is not checked.
  *
  * Once those are there it makes `main` require `review/agent` with `enforce_admins` on
  * (`PROTECTION_BODY`), keeping any protection the project already has: it adds `review/agent` to
@@ -32,6 +36,7 @@ import { existsSync, realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { ghAuthToken } from './github.mjs'
 import { isRulesFilePath } from './rules-file-path.mjs'
+import { validateRules } from './rules.mjs'
 import { readSettings } from './settings.mjs'
 
 const API = 'https://api.github.com'
@@ -351,13 +356,15 @@ const isMissing = (response) => response.status === 404
 
 /**
  * Reads `main` on GitHub for what protection needs there. Resolves `{ hasMain: false }` with no
- * `main`; otherwise `{ hasMain: true, missing }`, `missing` listing, in words for the person
- * running `protect`, each of the four that is not there. A read that fails any other way throws.
+ * `main`; otherwise `{ hasMain: true, missing, rulesProblems }`, `missing` listing, in words for
+ * the person running `protect`, each of the four that is not there, and `rulesProblems` what is
+ * wrong with the checklist there (`checklistProblems`), empty when it parses or is missing. A read
+ * that fails any other way throws.
  */
 export async function readMain(ctx) {
   const branch = buildGetMain(ctx.repo)
   const found = await ctx.send(branch)
-  if (isMissing(found)) return { hasMain: false, missing: [] }
+  if (isMissing(found)) return { hasMain: false, missing: [], rulesProblems: [] }
   if (!ok(found)) throw new HttpError(branch, found.status, found.body)
 
   const present = async (file) => {
@@ -370,6 +377,7 @@ export async function readMain(ctx) {
   }
 
   const missing = []
+  let rulesProblems = []
   const settings = await present(SETTINGS_FILE)
   if (!settings.found) {
     missing.push(SETTINGS_FILE)
@@ -378,23 +386,44 @@ export async function readMain(ctx) {
     const rulesFile = rulesFileOf(settings.body)
     if (rulesFile === null) {
       missing.push("the project's checklist: it cannot be named, since the rulesFile in steward.config.json is not a path")
-    } else if (!(await present(rulesFile)).found) {
-      missing.push(rulesFile)
+    } else {
+      const rules = await present(rulesFile)
+      if (!rules.found) missing.push(rulesFile)
+      else rulesProblems = checklistProblems(rulesFile, rules.body)
     }
   }
   for (const file of GATE_FILES) if (!(await present(file)).found) missing.push(file)
-  return { hasMain: true, missing }
+  return { hasMain: true, missing, rulesProblems }
+}
+
+/** The text of a file as GitHub's contents API returns it, or `null` when the body does not carry it. */
+function contentText(body) {
+  if (body?.encoding !== 'base64' || typeof body.content !== 'string') return null
+  return Buffer.from(body.content, 'base64').toString('utf8')
 }
 
 /** The `rulesFile` of a `steward.config.json` as GitHub's contents API returns it, or `null` unless it is a path. */
 function rulesFileOf(body) {
   try {
-    if (body?.encoding !== 'base64' || typeof body.content !== 'string') return null
-    const value = JSON.parse(Buffer.from(body.content, 'base64').toString('utf8'))?.rulesFile
+    const text = contentText(body)
+    if (text === null) return null
+    const value = JSON.parse(text)?.rulesFile
     return isRulesFilePath(value) ? value : null
   } catch {
     return null
   }
+}
+
+/**
+ * What is wrong with the checklist `rulesFile` as GitHub's contents API returns it from `main`:
+ * the problems the reviewer's own parser finds (`validateRules`), each naming the file, or one
+ * saying its content could not be read. An empty list when it parses.
+ */
+function checklistProblems(rulesFile, body) {
+  const text = contentText(body)
+  if (text === null) return [`${rulesFile}: GitHub did not return its content from ${MAIN}, so it cannot be checked`]
+  const parsed = validateRules(rulesFile, text)
+  return parsed.ok ? [] : parsed.problems
 }
 
 // ------------------------------------------------------------------ the command
@@ -457,6 +486,16 @@ async function run(argv, { cwd, fetch, getToken, out }) {
     out('Missing:')
     for (const item of onMain.missing) out(`  ${item}`)
     out(`Add them to ${MAIN} through a pull request, merged as the project normally merges, then run steward protect again.`)
+    return 1
+  }
+  if (onMain.rulesProblems.length > 0) {
+    out(
+      `Branch protection was not set, and nothing on GitHub was changed: the checklist on ${MAIN} on ${repo} does not parse, ` +
+        'so steward would refuse to review every pull request, the one that repairs it included, and protection would then stop every merge.',
+    )
+    out('The checklist:')
+    for (const problem of onMain.rulesProblems) out(`  ${problem}`)
+    out(`Repair it on ${MAIN} through a pull request, merged as the project normally merges, then run steward protect again.`)
     return 1
   }
 

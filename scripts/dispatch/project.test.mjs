@@ -8,6 +8,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { fixtureSettings } from './settings-fixture.mjs'
 import { main, ownedCheckoutPath, projectsPath } from './project.mjs'
+import { parseRules, validateRules } from './rules.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const REPO = 'acme/widgets'
@@ -55,10 +56,15 @@ function put(dir, files) {
   }
 }
 
+/** A checklist the reviewer's parser reads: one section with one numbered item. */
+const VALID_CHECKLIST = '# Checklist\n\n## Every pull request\n\n1. The diff matches its description.\n'
+/** D5: a `## ` section holding prose and no numbered item, which the reviewer's parser refuses. */
+const D5_CHECKLIST = '# Checklist\n\n## Every pull request\n\n1. The diff matches its description.\n\n## Notes\n\nSome prose and no numbered rule.\n'
+
 /** The files of an installation of steward for `repo`, as `init` would leave them on `main`. */
 const installation = (repo = REPO) => ({
   'steward.config.json': `${JSON.stringify(fixtureSettings({ repo }), null, 2)}\n`,
-  'REVIEW.md': '# Checklist\n',
+  'REVIEW.md': VALID_CHECKLIST,
   '.github/workflows/review-gate.yml': 'name: review-gate\n',
 })
 
@@ -401,5 +407,71 @@ describe('ST-57/AC-7: the documented interface', () => {
     ]) {
       expect(readme).toContain(text)
     }
+  })
+})
+
+describe('ST-78/AC-4: activation checks the checklist on main before making a project active', () => {
+  it('ST-78/AC-4: a checklist on main that does not parse is refused, naming the file and the reason, and nothing is recorded', async () => {
+    const home = fresh('home')
+    const result = await run(['activate', makeRepo({ files: { ...installation(), 'REVIEW.md': D5_CHECKLIST } })], { home })
+    expect(result.code).toBe(1)
+    expect(result.out).not.toContain('Activated')
+    expect(result.err).toContain(`${REPO} was not activated: its checklist on origin's main does not parse`)
+    expect(result.err).toContain('  - REVIEW.md: section "Notes": has no item (a line beginning "1. ")')
+    expect(result.err).toContain('Nothing was recorded.')
+    expect(existsSync(projectsPath(home))).toBe(false)
+  })
+
+  it('ST-78/AC-4: the checklist read is main\'s, not the caller\'s branch: a repair only on a branch is refused, and one on main activates', async () => {
+    const home = fresh('home')
+    const cwd = makeRepo({ files: { ...installation(), 'REVIEW.md': D5_CHECKLIST } })
+    git(cwd, 'checkout', '-q', '-b', 'fix/checklist')
+    put(cwd, { 'REVIEW.md': VALID_CHECKLIST })
+    git(cwd, 'commit', '-q', '-am', 'repair the checklist on a branch')
+    git(cwd, 'push', '-q', BARES.get(ORIGIN_URL), 'fix/checklist')
+    expect((await run(['activate', cwd], { home })).code).toBe(1)
+    expect(existsSync(projectsPath(home))).toBe(false)
+
+    git(cwd, 'push', '-q', BARES.get(ORIGIN_URL), 'fix/checklist:main')
+    const activated = await run(['activate', cwd], { home })
+    expect(activated.err).toBe('')
+    expect(activated.code).toBe(0)
+    expect(records(home).map((r) => r.repo)).toEqual([REPO])
+  })
+
+  it('ST-78/AC-4: an activated project whose checklist on main stops parsing is refused on activating again, its record left byte for byte', async () => {
+    const home = fresh('home')
+    const cwd = makeRepo({ files: installation() })
+    expect((await run(['activate', cwd], { home })).code).toBe(0)
+    const before = readFileSync(projectsPath(home), 'utf8')
+    commitOnOriginMain(ORIGIN_URL, { 'REVIEW.md': D5_CHECKLIST })
+    const again = await run(['activate', cwd], { home })
+    expect(again.code).toBe(1)
+    expect(again.out).not.toMatch(/its record is updated|Activated/)
+    expect(again.err).toContain('REVIEW.md: section "Notes": has no item')
+    expect(again.err).toContain(`Its record in ${projectsPath(home)} is left as it was`)
+    expect(readFileSync(projectsPath(home), 'utf8')).toBe(before)
+  })
+
+  it('ST-78/AC-4: a checklist that parses activates as before, with the same record and output', async () => {
+    const home = fresh('home')
+    const cwd = makeRepo({ files: installation() })
+    const result = await run(['activate', cwd], { home })
+    expect(result.err).toBe('')
+    expect(result.code).toBe(0)
+    expect(result.out).toContain(`Activated ${REPO}.`)
+    expect(records(home)).toEqual([{ repo: REPO, checkout: toplevel(cwd), ownedCheckout: ownedCheckoutPath(home, REPO) }])
+  })
+})
+
+describe('ST-78/AC-5: D5, a section with prose and no numbered item', () => {
+  it('ST-78/AC-5: the reviewer\'s parser rejects it, and activate refuses it with that parser\'s own problems, recording nothing', async () => {
+    expect(parseRules(D5_CHECKLIST)).toEqual({ ok: false, problems: ['section "Notes": has no item (a line beginning "1. ")'] })
+    const { problems } = validateRules('REVIEW.md', D5_CHECKLIST)
+    const home = fresh('home')
+    const result = await run(['activate', makeRepo({ files: { ...installation(), 'REVIEW.md': D5_CHECKLIST } })], { home })
+    expect(result.code).toBe(1)
+    for (const problem of problems) expect(result.err).toContain(`  - ${problem}`)
+    expect(existsSync(projectsPath(home))).toBe(false)
   })
 })
