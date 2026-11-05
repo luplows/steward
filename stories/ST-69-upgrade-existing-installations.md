@@ -3,77 +3,52 @@ id: ST-69
 title: Upgrade an existing Steward installation to a newer release
 tier: next
 kind: product
-depends_on: [ST-56]
+depends_on: [ST-56, ST-78]
 model: null
 blocked: null
 ---
 
 ## Intent
 
-As a member of the crew using Steward in an existing project, I want a deliberate way to upgrade
-its installed Steward integration to a newer release, so that I can take improvements without
-reinstalling from scratch or silently replacing the project's own choices.
+As a member of the crew using steward in an existing project, I want a mostly automatic upgrade from v0.1.0 to v0.2.0 through a reviewable pull request, so I can adopt improvements without reinstalling or losing project choices.
 
 ## Acceptance criteria
 
-Provisional only. This is a starter draft for 0.2, not a dispatchable implementation contract.
-Refine or split it after the Open questions are resolved.
-
-- [ ] **AC-1** — Placeholder: define an observable upgrade from an existing pinned Steward
-      installation to a specifically selected newer release, including how the crew sees and
-      approves every project change before it takes effect.
-- [ ] **AC-2** — Placeholder: define and test the handling of existing configuration, checklists,
-      workflow files and other project-owned changes, including clear refusals and recovery steps
-      when an upgrade cannot be completed safely.
-- [ ] **AC-3** — Placeholder: document the supported starting versions, upgrade procedure and
-      verification of the effective installed version; make the release's required project actions
-      clear.
+- [ ] **AC-1** — `steward upgrade --to v0.2.0` prepares a draft pull request targeting the project's `main`, reporting its URL. It does not merge or mark ready, change protection, activate the project, start or stop the coordinator, or authorize coding.
+- [ ] **AC-2** — Identify the installed version from managed workflow references on `main`. For the supported v0.1.0 installation, propose v0.2.0. Missing, inconsistent or unrecognized references cause refusal naming the findings; a consistent v0.2.0 installation is a reported no-op with no PR.
+- [ ] **AC-3** — Compare installed Steward-managed workflow files with the corresponding v0.1.0 templates allowing only version-pin substitution. Customized managed files cause refusal naming each file and explaining manual reconciliation, without silently replacing or attempting a general merge.
+- [ ] **AC-4** — Propose v0.2.0 managed workflows and pins, preserving which optional workflows were installed. Tests inspect resulting workflow contents and references. Do not change unrelated project files.
+- [ ] **AC-5** — Inspect `steward.config.json` and its configured review-rules file from `main`. Preserve compatible choices; propose only target-release changes established by explicit, unambiguous migration rules, explaining each project-owned edit. Where a project-policy decision is required, report it without guessing.
+- [ ] **AC-6** — Validate the proposed result against the target release's applicable settings requirements and ST-78's review-rule parser before claiming the upgrade is ready for crew consideration. An invalid result identifies the affected file and reason and is not reported as validated.
+- [ ] **AC-7** — The draft PR names source and target versions, changed managed files, any justified project-owned changes, validation outcome, unresolved actions and manual post-merge steps; it makes no claim the project was already upgraded.
+- [ ] **AC-8** — On failed preparation report any remaining branch, clone or PR and how to recover. Tests cover a no-op, inconsistent pins, customized workflows, invalid proposed rules and a failed preparation; do not claim rollback without evidence.
+- [ ] **AC-9** — Document the bounded v0.1.0-to-v0.2.0 process, approval and effective-pin verification, and any *manual* coordinator stop/restart required. The command never changes local coordinator or per-user state.
+- [ ] **AC-10** — Resolve the `**Planned (ST-69)**` marker in `docs/agent-workflow-design.md` in the implementing PR, correcting the design passage if necessary.
 
 ## Out of scope
 
-- Building upgrade support for 0.1.0; the first release uses the current installation path.
-- Changing a project's unit conventions or rewriting its planning artifacts.
-- Implicitly activating a project, starting the coordinator or enabling unattended landing.
-- ST-65's optional first-install polish (clone removal, PR title/body customization and rerun
-  conveniences), unless the crew explicitly finds a shared requirement while refining.
+- Arbitrary historical upgrades, downgrades, general migration engines, automatic rollback or conflict resolution.
+- Automatic approval, merge, local activation, coordinator lifecycle changes or authorization to code.
+- Arbitrary Git configurations, concurrent upgrade processes and mid-preparation external edits.
+- Changing the client's unit conventions or planning artifacts.
+- ST-65's first-install conveniences, ST-73's release stabilization and ST-74's fresh-install formatting.
+- Repairing the initial installation/protection/activation checklist defect (ST-78).
 
 ## Constraints
 
-- Keep installation and local activation separate, and preserve the crew's authority over
-  project changes and landing.
-- Scope the eventual safety acceptance criteria to the supported upgrade workflow and threat
-  model, rather than promising safe migration under every Git or concurrent-process setup.
+- Changes enter a client through a crew-reviewed PR, never a direct push to `main`.
+- Managed workflow files may be updated when unmodified. Project configuration and review rules are project-owned but may be read and receive explicitly justified, deterministic proposed edits.
+- The bounded threat model is one crew member running an upgrade from an ordinary checkout without a concurrent modifying process. Do not promise broader Git safety.
 
 ## Context
 
-- Crew proposal, 2026-11-03: prioritize a usable upgrade path during the 0.2 milestone. Its
-  behavior and final 0.2 inclusion remain to be agreed; this draft does not authorize coding.
-- `scripts/dispatch/init.mjs` (ST-56) creates a reviewable installation pull request and only
-  adds missing files. Running it again does not replace existing pinned workflows or a project's
-  `steward.config.json` and checklist, so it is not an upgrade mechanism.
-- `templates/workflows/` contains the thin GitHub workflows whose Steward version references are
-  filled during installation. `docs/release-review.md` requires release notes to record actions
-  a project must take when moving to a new tag.
-- ST-65 (`stories/ST-65-init-follow-ups.md`) holds first-install conveniences proposed for 0.2.
-  This story concerns *already installed* projects and should be checked for overlap with ST-65
-  before either story is dispatched.
-- `docs/outline.md`, "0.2.0 — Automated coding vertical slice", is the current milestone
-  definition; placing upgrade work alongside it is a proposal, not yet an amendment to the
-  design of record.
+- Crew decision, 2026-11-04: target an automatic but reviewable 0.1-to-0.2 upgrade, refusing customized managed workflows and disagreeing pins; leave coordinator follow-up manual; validate the proposed result.
+- ST-44 and ST-56 establish initial installation and its draft PR. Repeating `init` does not repin installed workflows.
+- ST-65, ST-73 and ST-74 cover first-install convenience, release-version preparation and fresh-install formatting respectively; avoid overlapping those stories.
+- ST-78 provides shared review-rule validation; ST-48 records installation validation evidence.
+- `templates/workflows/`, `scripts/dispatch/init.mjs` and `docs/release-review.md` supply the existing installed-workflow and release context.
 
 ## Open questions
 
-- What is the smallest supported 0.2 upgrade: move the thin workflow pins from v0.1.0 to v0.2.0
-  only, or also update installed templates, settings or local configuration?
-- How does the crew request and approve an upgrade: a new command, an `init` mode, or a documented
-  procedure that opens a reviewable pull request? What is the expected branch and PR behavior?
-- How are customized checklists, existing or edited workflow files, pull request templates and
-  project configuration preserved or selectively updated? When should the upgrade refuse?
-- Which source versions and target references are supported, and how is the installed version
-  identified when workflow pins disagree or an installation is partial?
-- Do local coordinator state, active projects or user configuration require migration or an
-  explicit stop/restart, or are they independent of upgrading the project integration?
-- What should verification and recovery cover: first upgrade from 0.1.0, idempotent rerun,
-  interrupted attempt, partial install, rollback and both issue/file-unit projects?
-- Is this one implementable story or should it be split into a reviewable workflow-pin upgrade
-  followed by additional migration work? Confirm its place within the 0.2 milestone.
+- Before dispatch, inspect the final v0.1.0 artifact and specify the exact managed file set and pin comparison that defines a supported installation.
+- If v0.2.0 requires substantial migration of project-owned configuration, decide whether to separate that migration rather than expanding this story.
