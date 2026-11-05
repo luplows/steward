@@ -17,12 +17,12 @@ copying its implementation scripts.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — A manual validation record, `docs/validation/ST-48-review-installation.md`,
+- [x] **AC-1** — A manual validation record, `docs/validation/ST-48-review-installation.md`,
       has separate sections for pinpoint and tower-workshop-paths. Each identifies the project,
       date, operator, steward version and resolved commit, prerequisites, and the project's
       existing unit convention. The crew validates pinpoint first, then tower-workshop-paths,
       as the recorded adoption order specifies.
-- [ ] **AC-2** — In each project, the crew installs the review gate through the installed
+- [x] **AC-2** — In each project, the crew installs the review gate through the installed
       steward package and `init`, using ST-42's thin workflows, and adopts the draft installation
       pull request `init` opens (ST-56) through the project's own process. Its record gives the
       exact commands and answers, their outcomes, that pull request and its resulting commit,
@@ -31,24 +31,24 @@ copying its implementation scripts.
       alone by `init`, any manual configuration, and the branch-protection outcome of `steward
       protect` (ST-50), including when protection is unavailable. No coder is enabled or
       dispatched.
-- [ ] **AC-3** — Each project's record compares its unit convention before and after
+- [x] **AC-3** — Each project's record compares its unit convention before and after
       installation, with links to the relevant units and pull requests. Pinpoint continues to
       use GitHub issues; tower-workshop-paths continues to use its file stories and `OQ` prefix.
       The settings and validation pull requests use the corresponding unit links. Neither
       project is migrated to steward's `ST` stories, schema, queue or completion convention.
-- [ ] **AC-4** — In each project, an actual steward reviewer session reviews a pull request
+- [x] **AC-4** — In each project, an actual steward reviewer session reviews a pull request
       against its linked unit and the project's checklist. The record links the unit, checklist
       revision, pull request, reviewer result and posted verdict comment, and records the full
       reviewed head SHA. The verdict marker's head matches that SHA and the pull request head
       at review; the gate records the corresponding `review/agent` state on that same commit.
       A hand-written marker or injected verdict does not satisfy this criterion.
-- [ ] **AC-4a** — **Activation and automatic review.** In each project, after the installation
+- [x] **AC-4a** — **Activation and automatic review.** In each project, after the installation
       has landed, the crew activates it with `steward project activate` (ST-57) and starts the
       coordinator (ST-58). The coordinator reviews a pull request in each project, with no rotation
       or `review` started by hand, in turns (ST-61). The record gives the commands and their
       outcomes, `coordinator status`'s report, and the same evidence as AC-4 for each review. It
       also shows a project that is installed but not activated receiving no automatic review.
-- [ ] **AC-5** — In each project, at least one pull request lands through steward's pilot and
+- [x] **AC-5** — In each project, at least one pull request lands through steward's pilot and
       runway after a passing real review, by the crew's manual `land` (ST-54) where the project is
       review-only. The record links the passing verdict, successful
       `review/agent` status, checks required by that project's `landWhen`, landing command and
@@ -56,7 +56,7 @@ copying its implementation scripts.
       SHA and head accepted for landing are the same; the record establishes that review and
       the required checks passed before the merge. A direct manual merge does not satisfy
       this criterion.
-- [ ] **AC-6** — In at least one project, the crew exercises a pull request with a deliberate,
+- [x] **AC-6** — In at least one project, the crew exercises a pull request with a deliberate,
       documented violation of its linked unit or checklist. A real review returns `block`,
       and `review/agent` is `failure` on that head. A steward landing attempt leaves the pull
       request unmerged because of the blocking review. The record links the violation,
@@ -64,14 +64,14 @@ copying its implementation scripts.
       request at that time. Unrelated failures alone do not demonstrate the gate's refusal.
       This may precede a fix and passing review of a new head used for AC-5, provided the
       evidence distinguishes the two heads and outcomes.
-- [ ] **AC-7** — Each project's section separately records the procedure, expected and actual
+- [x] **AC-7** — Each project's section separately records the procedure, expected and actual
       outcomes, evidence for AC-2 through AC-6 as applicable, and defects found, or explicitly
       says none were found. Each defect has reproduction steps, expected and actual behaviour,
       impact on validation, and a link to separate follow-up work in the repository responsible
       for it. Defect fixes are excluded from this story's completion diff. If a defect prevents
       a required demonstration, that criterion remains undelivered until the follow-up lands
       and a recorded rerun demonstrates it; reporting the defect alone is not success.
-- [ ] **AC-8** — The crew's completion pull request in steward includes the validation record,
+- [x] **AC-8** — The crew's completion pull request in steward includes the validation record,
       ticks only criteria actually demonstrated, and moves this story to `stories/done/`.
       Every **Planned** marker naming ST-48 in `docs/agent-workflow-design.md` is resolved,
       correcting its passage wherever the outcome differs from the recorded plan.

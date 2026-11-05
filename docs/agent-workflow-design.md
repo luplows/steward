@@ -2661,7 +2661,7 @@ shortened where it is long, so that it can be found there with its date.
   Not chosen: changing unit discovery or reviewer selection, or disclosing prompts
   and machine-local configuration.
 - **The crew validates review installation in two existing projects** (crew, 2026-10-21;
-  **Planned (ST-48)**). After ST-25, ST-42, ST-44 and ST-47 are delivered (and ST-49 and ST-50,
+  delivered: [the record](validation/ST-48-review-installation.md)). After ST-25, ST-42, ST-44 and ST-47 are delivered (and ST-49 and ST-50,
   owner, 2026-10-23, in the entry below), the crew manually installs
   the review gate first in pinpoint and then in tower-workshop-paths, preserving their existing
   issue and file-story conventions. Each installation uses steward's package and thin workflows,
@@ -2685,9 +2685,11 @@ shortened where it is long, so that it can be found there with its date.
   `main`, and walks through it on a scratch repository. Before the cut, the crew runs the install
   through on that scratch repository as a dry run, from a commit on `main`, activation and the
   coordinator included, so that defects are fixed on `main` before there is a branch to cherry-pick
-  them into. **Planned (ST-48):** the crew then validates the two client projects from that branch's
-  commit, before the release notes and the tag, and installs in steward itself too, which ST-48's
-  criteria do not cover. A defect found after the cut is fixed on `main` and cherry-picked, as for
+  them into. The crew then validated the two client projects from that branch's
+  commit, before the release notes and the tag ([the record](validation/ST-48-review-installation.md)).
+  ST-48's criteria do not cover steward itself. There the crew changed the plan, 2026-11-04, after
+  tower-workshop-paths had to remove its old engine before `init` could take over: `init` runs once
+  at the release commit, and converting steward's own gate to the thin workflows moves to 0.2. A defect found after the cut is fixed on `main` and cherry-picked, as for
   any release. The rule that a tagged release branch is
   never moved or deleted is unchanged. Considered and not chosen: one pull request bringing `main`'s
   changes outside `stories/` into the old branch, a very large diff for one review; keeping the old

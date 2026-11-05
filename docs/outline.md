@@ -214,7 +214,8 @@ tag, so when the crew starts the release review, it closes #86, replaces the bra
 `docs/release-review.md`. No tag, and no release branch that has a tag, is moved or deleted. Before
 that cut, the crew runs the install through on a scratch repository as a dry run, from a commit on
 `main`. Once it is cut, ST-48 installs in pinpoint and tower-workshop-paths from the new branch's
-commit, the crew installs in steward itself too, and nothing is tagged until ST-48 is done. Steward's own
+commit, and nothing is tagged until ST-48 is done. In steward itself, as the crew decided on
+2026-11-04, `init` runs once at that commit, and converting steward's own gate moves to 0.2. Steward's own
 release-review procedure remains specific to this repository; it is not a generic client feature.
 
 ## Defining steward
