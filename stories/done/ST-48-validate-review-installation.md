@@ -114,12 +114,6 @@ copying its implementation scripts.
 - Crew decision, 2026-11-03: this validation runs once the release branch is cut, from its commit,
   and before the tag, after a dry run on a scratch repository (`docs/outline.md`, "Release
   preparation"). The crew also installs in steward itself then, outside this story's criteria.
-- Crew decision, 2026-11-04: in steward itself, `init` runs once at the release commit, and
-  converting steward's own gate to the thin workflows moves to 0.2. The record gives the result.
-- Crew decision, 2026-11-04: removing `review/agent` from tower-workshop-paths' required checks to
-  merge its #281 and #283 by hand meets AC-2 and the Constraints, as its #282 landed through the
-  real gate.
-- ST-74, ST-75, ST-76, ST-77 and ST-78: the follow-ups to defects D1 to D5, linked from the record.
 - ST-25, `stories/done/ST-25-review-pass.md`: the review-and-land rotation.
 - ST-42, `stories/done/ST-42-gate-runs-installed-steward.md`: installed gate commands and thin
   workflow files, with no project copy of steward's implementation.
