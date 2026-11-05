@@ -1435,7 +1435,8 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
   other condition, a verdict the gate can parse, was met in the first trial.
 - **M2. Which role first.** **Decided 2026-10-08 by the owner: the reviewer.** Goal 2's value is
   largest there, and a reviewer that cannot write is a smaller guarantee to re-establish than a
-  coder's.
+  coder's. **Planned (ST-15):** the coder is second, from a trial on 2026-11-04 (Part 3, "Decided
+  so far", "A Codex coder's work is committed by the dispatcher").
 - **M3. Guarantees before use.** **Decided 2026-10-08 by the owner:** no tool runs a role until that
   role's guarantees are shown to hold for it by tests, in the way the guarantee checks in OQ-73's
   Context test the coder's.
@@ -1779,10 +1780,9 @@ shortened where it is long, so that it can be found there with its date.
 - **The move comes first** (decided 2026-10-07 by the owner).
   The workflow has moved to a repository of its own, steward; tower-workshop-paths adopting it is
   that repository's own work (its OQ-115, OQ-132, OQ-133 and OQ-134).
-  **Planned (ST-15):** once moved, coder sessions run through an adapter per agent tool, so that
-  the coder can be given another company's model. The reviewer can already be: a choice in the
-  machine's settings runs it through the Codex CLI (`codex.mjs`). OQ-114 is a draft, to be split
-  before it is dispatched; OQ-115 was split on 2026-10-08 (below).
+  **Planned (ST-15):** coder sessions run through an adapter per agent tool, so that the coder can
+  be given another company's model. The reviewer can already be: a choice in the machine's settings
+  runs it through the Codex CLI (`codex.mjs`). OQ-115 was split on 2026-10-08 (below).
 - **Goal 3 is about AI model companies, not GitHub** (decided 2026-10-07 by the owner). The gate
   stays on GitHub. Moving the hosting would be a far larger migration, and would depend on the
   target platform's rules much more than switching models does.
@@ -2289,7 +2289,8 @@ shortened where it is long, so that it can be found there with its date.
   reading Codex's usage is left open while the owner is on a free ChatGPT plan (ST-32's open
   question 1, answered later the same day: "A Codex reviewer runs read-only", below); and a Codex
   coder waits until steward's coder stories are built, perhaps with the same permissions as a
-  Codex reviewer until a full sandbox is decided (ST-6). **Also decided the
+  Codex reviewer until a full sandbox is decided (ST-6). (Revised 2026-11-04 by the owner: "A Codex
+  coder's work is committed by the dispatcher", below.) **Also decided the
   same day by the owner, when the planning session checked ST-31's pull request (#36):** the weekly
   window is the `weekly_all` row alone, for now, and the per-model `weekly_scoped` rows are not
   read; and a window whose `percent` is not a number is a usage that cannot be read, so it starts
@@ -3209,6 +3210,27 @@ shortened where it is long, so that it can be found there with its date.
   cleanup deleting another process's edits); retiring ST-56 for a new story, which would have
   changed every citation of it; a clean worktree of the caller's repository, which shares that
   repository's configuration, refs and hooks.
+- **Planned (ST-15): a Codex coder's work is committed by the dispatcher** (decided 2026-11-04 and
+  2026-11-05 by the owner, with the planning session, from "Trials and measurements", "Codex as
+  coder"). The owner took the hold off ST-15 for this story on 2026-11-04, ahead of steward's other
+  coder stories, and accepted the trial's recommendations on 2026-11-05. A coder choice may name
+  `"codex"`, and the session runs under `-s workspace-write`, which refuses a commit. So the
+  dispatcher commits what a completed session left, with git's hooks off, since the worktree may
+  hold hook scripts the session could edit, and the session's prompt says not to commit. It ignores
+  the user's Codex configuration (`--ignore-user-config`), so that no plugin or `notify` program of
+  the user's runs in it. That also drops the Windows sandbox mode, without which every command is
+  refused, so the mode becomes a machine setting, `tools.codex.windowsSandbox`. Its temporary
+  folder is its own, so that it cannot write to the rest of `%TEMP%`. **For any tool, the
+  dispatcher refuses to push a change under `.claude/prompts/`** (owner, 2026-11-04), because the
+  sandbox allows such an edit and the prompt is what a coder must not change for itself. The coder
+  has been tried only on Windows, so another platform is refused until a trial there. **A limit
+  this leaves:** such a session can read `~/.codex/auth.json` and `~/.claude/.credentials.json`,
+  and what it copies into the worktree would be committed and pushed. That is outside the story's
+  threat model, of an honest model and one member of the crew, and stays with ST-6, for 0.4; the
+  documentation says so, as `outline.md`, 0.4.0, asks. Considered and not chosen: adding the git
+  folders with `--add-dir` so that the session commits, which still could not commit in the trial
+  and made the hooks folder writable; keeping the user's Codex configuration; leaving the temporary
+  folder as it is; and waiting for the rest of steward's coder stories.
 
 ### The move, in order
 
@@ -4015,6 +4037,52 @@ instead of sending it. Nothing was posted.
 | Findings | Four, each correct: the body was a placeholder; it gave no Docs check outcome, though `README.md` still said reviewers run in Claude Code; AC-6 was not delivered; and `tools.codex.executable` accepted a directory, since the check was `existsSync`. The last two were fixed after the trial. |
 | Commands | It confirmed the head with `git rev-parse HEAD`, diffed `origin/main...HEAD`, read the unit from `main`, and left the tests and lint to CI. |
 | Wall time | 131.7 s, for the whole of `reviewPullRequest`. |
+
+### Codex as coder
+
+Run on 2026-11-04 by the planning session, with the owner's agreement, on the standalone codex-cli
+0.163.0 on Windows, model `gpt-6.1-sol`, in throwaway clones of steward under the session's
+temporary folder, with `coderEnv`'s environment. Nothing was pushed. It did not run `coder.mjs` or
+its retry path, on any other platform, or on more than one story.
+
+The flags that worked: `codex exec -s workspace-write -C <tree> -m <model> -c
+model_reasoning_effort="<effort>" -c approval_policy="never" -c windows.sandbox="elevated" -c
+sandbox_workspace_write.exclude_tmpdir_env_var=true -c sandbox_workspace_write.exclude_slash_tmp=true
+--add-dir <session temp> --ignore-user-config --json -o <file> --ephemeral -`, with `TMP`, `TEMP` and
+`TMPDIR` set to the session temp folder.
+
+| Tried under the sandbox | Result |
+|---|---|
+| `git add` and `git commit`, in a worktree | Refused: `index.lock`, permission denied, in the worktree's git folder. `git status` and `git log` work. |
+| The same with the git folder and common folder added by `--add-dir` | Still refused, and the common folder and its `hooks` became writable. |
+| The same in a plain clone | Refused. |
+| `fetch` from Node, SSH, `git push --dry-run` | Refused. |
+| `gh`, with `coderEnv`'s empty `GH_CONFIG_DIR` | Not logged in. |
+| Writing to the home folder, another drive, `~/.steward`, `~/.codex` | Refused. |
+| Writing to `%TEMP%` under the default `workspace-write` | Allowed, for all of it, including a checkout there and its `.git`. |
+| The same with the two temp exclusions, `--add-dir` and the temp variables | Only the worktree and the session temp folder are writable. |
+| Editing `.claude/prompts/coder.md` in the worktree | Allowed. |
+| Reading `~/.codex/auth.json`, `~/.claude/.credentials.json`, `~/.steward/state/projects.json` | Allowed; sizes were read and their contents were not. `~/.ssh/id_ed25519` was refused. |
+| `--ignore-user-config` naming no Windows sandbox mode | Every command refused, "blocked by policy". Naming `windows.sandbox` as `elevated` or `unelevated` fixed one command; `approval_policy="never"` and `--ignore-rules` did not. Only `elevated` ran a whole story. |
+| Vitest | Runs. Two `spawn.test.mjs` tests that kill descendants fail only in the sandbox, where `os.userInfo()` also throws ENOMEM. `npm.ps1` is blocked by PowerShell's policy; `npm.cmd` works. |
+
+One early run reported that it had finished while its command was still running, and the probe was
+killed. A session blocked on every command still exits 0 with a well-formed PR block saying that
+nothing was done; `pushBranch`'s `nothing-committed` would catch it.
+
+**A whole story.** Given the rendered coder prompt for ST-9 and a note on the trial's conditions,
+Codex wrote the test, checked that it failed with the code removed and restored the source byte for
+byte, ticked the criteria, moved the story and reported plainly, in 6 min 41 s, of which `npm test`
+was 300 s. It used 2,483,074 input tokens, 2,404,608 of them cached, and 4,417 output. `parsePrBlock`
+parsed its report. Its full suite in the sandbox gave 5 failed, 1957 passed, 1 skipped; outside the
+sandbox, in the same tree, 4 failed, 1958 passed, 1 skipped. Those four came from the trial's own
+folder: three `loop.test.mjs` tests hit a path too long, and `init.test.mjs`'s ST-50/AC-2 test found
+the word "trial" in it. A dispatcher commit (`git add -A`, then `-c core.hooksPath=NUL commit
+--no-verify`) gave 2 files changed; `story-containment.mjs` and `lint-stories.mjs` each exited 0, and
+nothing under `.claude/` had changed.
+
+The runs added `trust_level` entries for the throwaway clones to the owner's `~/.codex/config.toml`,
+removed afterwards on the owner's word. Codex's usage for the story was not measured.
 
 ### The reviewer's checkout: head or base
 
