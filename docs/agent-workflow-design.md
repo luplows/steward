@@ -41,6 +41,24 @@ The document is in three parts:
 
 # Part 1: Steward's design
 
+## Upgrade and checklist preflight
+
+**Planned (ST-69)** (crew, 2026-11-04) Upgrading a supported v0.1.0 integration
+to v0.2.0 produces a draft project PR updating unmodified Steward-managed thin
+workflows and pins. Modified managed files or inconsistent or unknown pins refuse
+rather than inviting a merge guess. Steward inspects project-owned configuration
+and rules, proposes only deterministic changes justified by the target release,
+and validates the proposed result. The crew approves and lands the PR. Local
+coordinator stop/restart, activation and authorization remain separate and manual.
+General historical migrations and automatic conflict resolution are not promised.
+
+**Planned (ST-78)** (crew, 2026-11-04) Existing configured review rules are
+checked through the reviewer's parser before reliance on the gate. `init` keeps
+an invalid existing checklist and warns in its output and draft installation PR
+to allow repair before merge. `protect` and `project activate` refuse
+unreadable rules. Neither auto-rewrites project policy nor opens a privileged
+gate bypass. Recovery after later changes is documented.
+
 ## Purpose
 
 A path from a ready unit of work to a merged change: agents code and review, and a pull request

@@ -152,6 +152,10 @@ execution status remains derived where possible. Resource bounds, duplicate-work
 recovery after restart belong in this first slice, not in a later hardening release. The legacy
 tier/id queue is not automatically the authorization or scheduling mechanism for this slice.
 
+The crew also targets a bounded, reviewable v0.1.0-to-v0.2.0 upgrade path
+(ST-69) and shared existing-checklist preflight (ST-78). This adds no promise
+of arbitrary migration or automatic conflict resolution.
+
 ### 0.3.0 — Automated fixing
 
 Respond to blocking reviews and qualifying failed checks through bounded correction attempts on
