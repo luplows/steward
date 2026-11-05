@@ -20,8 +20,7 @@ As a member of the crew installing or activating steward, I want an existing che
 - [ ] **AC-4** — `steward project activate` validates configured rules from `main` before making a project active. Invalid rules refuse without changing activation state. Valid rules preserve existing behavior.
 - [ ] **AC-5** — Tests reproduce D5: a `## ` section containing prose but no numbered item is rejected by the reviewer parser, warned on by `init` in output and PR body, and refused by `protect` and `activate` without their state-changing actions. Tests use the shared parser, not a simulated alternate validator.
 - [ ] **AC-6** — Document recovery when a checklist becomes invalid after protection, including crew-authorized changes to required checks if needed. Do not recommend fabricated verdict markers or an automatic bypass.
-- [ ] **AC-7** — Link ST-48/AC-7's D5 finding to this story. The ST-48 completion diff does not include defect implementation work.
-- [ ] **AC-8** — Resolve the `**Planned (ST-78)**` marker in `docs/agent-workflow-design.md` when implementing this story.
+- [ ] **AC-7** — Resolve the `**Planned (ST-78)**` marker in `docs/agent-workflow-design.md` when implementing this story.
 
 ## Out of scope
 
@@ -41,7 +40,7 @@ As a member of the crew installing or activating steward, I want an existing che
 ## Context
 
 - D5 was found during ST-48 validation in tower-workshop-paths: its existing `REVIEW.md` held a section without numbered rules, leading to `rules-unreadable` and `no-model-refusal`. The required gate could not review the fixing PR.
-- TWP PR #283 repaired the checklist under crew control and genuine review and landing resumed. Follow-up work is separate from ST-48's completion.
+- TWP PR #283 repaired the checklist under crew control and genuine review and landing resumed. ST-48/AC-7 links this defect follow-up; defect implementation stays outside ST-48's completion diff.
 - `scripts/dispatch/rules.mjs`, `init.mjs`, `protect.mjs` and `project.mjs` are the relevant current paths.
 - Crew decision, 2026-11-04: `init` warns and leaves a draft PR; `protect` and `activate` refuse. Preserve parser semantics and document recovery.
 
