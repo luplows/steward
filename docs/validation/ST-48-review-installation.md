@@ -124,16 +124,43 @@ The coordinator reviewed #69 against #68. No `review` or `rotation` was run by h
 
 ### AC-4a: Activation and automatic review
 
-Not activated: the coordinator started at 20:34:54 UTC with #69 open, and `coordinator status` said
-`No project is activated`. #69 then had 0 comments, `review/agent` pending and no entry in
-`reviews.json`.
+**Not activated: no review.** With #69 open:
 
-Activated: `steward project activate` ran at 20:38:18 UTC, exit 0, printing `Nothing was started.` The
-scan due at 20:49:54 UTC started the review at 20:49:56 UTC, and `coordinator status` then reported:
+```sh
+steward coordinator start
+```
+
+It started at 20:34:54 UTC, as process 51412. About 20 seconds later, `steward coordinator status`
+reported the first three lines below, and `steward project list` the last:
 
 ```
+running: the coordinator is process 51412, started 2026-11-04T20:34:54.348Z. To stop it: steward coordinator stop
+Scan interval: 15 minutes.
+Next scan: 2026-11-04T20:49:54.355Z.
+No project is activated (<user's home>\.steward\state\projects.json lists none).
+```
+
+#69 then had 0 comments, `review/agent` pending and no entry in `reviews.json`.
+
+**Activated: review at the next scan.**
+
+```sh
+steward project activate <the project's checkout>
+```
+
+It ran at 20:38:18 UTC, exit 0, printing `Nothing was started.` The operator's checkout did not change.
+The scan due at 20:49:54 UTC started the review at 20:49:56 UTC, and `steward coordinator status` then
+reported:
+
+```
+Next scan: 2026-11-04T21:05:28.796Z.
 Last outcome: luplows/pinpoint pull request #69, head 98c135a452d0119aa25c9fcc7b41825f67c632b0: recorded (verdict), at 2026-11-04T20:50:28.791Z.
 ```
+
+AC-4's table is the evidence for this review.
+
+`steward coordinator stop` reported: `stopped: the coordinator, process 51412, had no work running; it
+has removed its record and exited.`
 
 Reviews in turns are in tower-workshop-paths' section, which ran after this one. **Defects:** none.
 
@@ -284,10 +311,31 @@ The coordinator reviewed #282 against OQ-97. No `review` or `rotation` was run b
 
 ### AC-4a: Activation and automatic review
 
-Not activated: the coordinator started at 01:33:26 UTC with #282 open and only pinpoint activated. At
-01:33:35 UTC, #282 had 0 comments, `review/agent` pending and no entry in `reviews.json`.
+**Not activated: no review.** With #282 open and only pinpoint activated:
 
-Activated: `steward project activate` ran at 01:34:24 UTC, exit 0, printing `Nothing was started.`
+```sh
+steward coordinator start
+```
+
+It started at 01:33:26 UTC, as process 41616. At 01:33:35 UTC, `steward coordinator status` reported:
+
+```
+running: the coordinator is process 41616, started 2026-11-05T01:33:26.143Z. To stop it: steward coordinator stop
+Scan interval: 15 minutes.
+Next scan: 2026-11-05T01:48:26.916Z.
+```
+
+#282 then had 0 comments, `review/agent` pending and no entry for this repository in `reviews.json`.
+
+**Activated.**
+
+```sh
+steward project activate <the project's checkout>
+```
+
+It ran at 01:34:24 UTC, exit 0, printing `Nothing was started.` The operator's checkout did not change.
+
+**In turns.**
 
 The first scan, at 01:48:26 UTC, reviewed pinpoint first, then took #282's turn at 01:48:54 UTC, which
 ended in 2 seconds as `rules-unreadable` (D5). No model started. After #283, both projects had a head
@@ -298,11 +346,29 @@ waiting at one scan, one review running at a time:
 | `luplows/pinpoint` #73 | `069d9ef` | 02:19:04 | 02:19:43 | `recorded`, 1 session, pass |
 | `luplows/tower-workshop-paths` #282 | `91b6bac` | 02:19:44 | 02:21:38 | `recorded`, 1 session, pass |
 
-`coordinator status` then reported:
+`steward coordinator status` then reported:
 
 ```
+running: the coordinator is process 41616, started 2026-11-05T01:33:26.143Z. To stop it: steward coordinator stop
+Scan interval: 15 minutes.
+Next scan: 2026-11-05T02:36:38.400Z.
 Last outcome: luplows/tower-workshop-paths pull request #282, head 91b6bac6477823571dc003b3c3f8decee894aabc: recorded (verdict), at 2026-11-05T02:21:38.396Z.
 ```
+
+AC-4's table is the evidence for #282's review. For pinpoint #73's:
+
+| Item | Value |
+| --- | --- |
+| Unit | None: `Unit: none`. #73 exists only to have a head waiting at the same scan. Pinpoint's automatic review of a pull request with a linked unit is #69, above |
+| Checklist revision | `REVIEW.md` on `main` at `8c3300f923a0fd17c92655524577246702709fc6` |
+| Reviewer result | `reviews.json`: `recorded`, 1 session |
+| Verdict comment | pass, comment 6647882267 on #73 |
+| Reviewed head and pull request head at review | `069d9efa7bb8dfc1096265e934f2141eef1c8256` |
+| Marker | `<!-- agent-review head=069d9efa7bb8dfc1096265e934f2141eef1c8256 verdict=pass -->` |
+| `review/agent` on that SHA | `success`, 02:19:56 UTC |
+
+#73 was closed unmerged afterwards. `steward coordinator stop` reported: `stopped: the coordinator,
+process 41616, had no work running; it has removed its record and exited.`
 
 **Defects:** D5 delayed this. None otherwise.
 
