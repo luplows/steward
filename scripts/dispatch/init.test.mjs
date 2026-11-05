@@ -21,6 +21,7 @@ import {
   repoFromRemoteUrl,
 } from './init.mjs'
 import { main as projectMain, projectsPath } from './project.mjs'
+import { parseRules, validateRules } from './rules.mjs'
 import { readUserConfig } from './user-config.mjs'
 import { createLandContext, landPullRequest } from './land.mjs'
 import { readSettings } from './settings.mjs'
@@ -1718,5 +1719,104 @@ describe('ST-57/AC-6: init never activates a project', () => {
         REPO,
       ])
     }
+  })
+})
+
+/** A checklist the reviewer's parser reads: one section with one numbered item. */
+const VALID_CHECKLIST = '# Checklist\n\n## Every pull request\n\n1. The diff matches its description.\n'
+/** D5: a `## ` section holding prose and no numbered item, which the reviewer's parser refuses. */
+const D5_CHECKLIST = `${VALID_CHECKLIST}\n## Notes\n\nSome prose and no numbered rule.\n`
+const D5_PROBLEM = 'section "Notes": has no item (a line beginning "1. ")'
+
+describe('ST-78/AC-2: init checks an existing checklist on main, keeps it, and warns', () => {
+  const opened = (gh) => writes(gh).find((r) => r.rest === '/pulls')?.body
+
+  it('ST-78/AC-2: one that does not parse is left byte for byte, the draft pull request is still opened, and output and body name the problem', async () => {
+    const cwd = makeRepo({ files: { 'REVIEW.md': D5_CHECKLIST } })
+    const gh = fakeGitHub()
+    const { code, out, err, clone } = await runInit(['--yes'], { cwd, gh })
+    expect(err).toBe('')
+    expect(code).toBe(0)
+    expect(read(clone, 'REVIEW.md')).toBe(D5_CHECKLIST)
+    expect(git(clone, 'diff', '--name-only', 'HEAD~1', 'HEAD').split('\n')).not.toContain('REVIEW.md')
+    expect(out).toContain('left REVIEW.md: already there')
+    expect(out).toContain('WARNING: the checklist main already has, REVIEW.md, does not parse, and init left it as it is:')
+    expect(out).toContain(`  REVIEW.md: ${D5_PROBLEM}`)
+    expect(out).toContain('Repair it before merging the installation')
+    expect(out).toMatch(/The checklist REVIEW\.md does not parse.*repair it before merging the installation/)
+
+    const pull = opened(gh)
+    expect(pull).toMatchObject({ draft: true, base: 'main', head: DEFAULT_BRANCH })
+    const generated = pull.body.split('\n---\n')[0]
+    expect(pull.body.startsWith('## Steward installation\n')).toBe(true)
+    expect(generated).toContain('> [!WARNING]')
+    expect(generated).toContain('> **The checklist `main` already has, `REVIEW.md`, does not parse. Repair it before merging this pull request.**')
+    expect(generated).toContain(`> - REVIEW.md: ${D5_PROBLEM}`)
+    // Prominent: before the list of files and everything else the section says.
+    expect(generated.indexOf('> [!WARNING]')).toBeLessThan(generated.indexOf('Files added:'))
+  })
+
+  it('ST-78/AC-2: the checklist is the one an existing steward.config.json names, read from main and not the caller\'s checkout', async () => {
+    const settings = `${JSON.stringify({ repo: REPO, setup: null, check: null, landWhen: 'all-checks', land: false, unitLinks: ['file'], rulesFile: 'docs/RULES.md', inspectAfterHours: 6 })}\n`
+    const cwd = makeRepo({ files: { 'steward.config.json': settings, 'docs/RULES.md': D5_CHECKLIST } })
+    put(cwd, { 'docs/RULES.md': VALID_CHECKLIST })
+    const gh = fakeGitHub()
+    const { code, out } = await runInit(['--yes'], { cwd, gh })
+    expect(code).toBe(0)
+    expect(out).toContain(`  docs/RULES.md: ${D5_PROBLEM}`)
+    expect(opened(gh).body).toContain(`> - docs/RULES.md: ${D5_PROBLEM}`)
+
+    const valid = makeRepo({ files: { 'REVIEW.md': VALID_CHECKLIST } })
+    put(valid, { 'REVIEW.md': D5_CHECKLIST })
+    const quiet = await runInit(['--yes'], { cwd: valid })
+    expect(quiet.code).toBe(0)
+    expect(quiet.out).not.toMatch(/WARNING|does not parse/)
+  })
+
+  it('ST-78/AC-2: a checklist that parses, or one init writes, causes no warning', async () => {
+    for (const files of [{ 'REVIEW.md': VALID_CHECKLIST }, {}]) {
+      const cwd = makeRepo({ files })
+      const gh = fakeGitHub()
+      const { code, out } = await runInit(['--yes'], { cwd, gh })
+      expect(code, JSON.stringify(files)).toBe(0)
+      expect(out, JSON.stringify(files)).not.toMatch(/WARNING|does not parse/)
+      expect(opened(gh).body, JSON.stringify(files)).not.toMatch(/\[!WARNING\]|does not parse/)
+    }
+  })
+
+  it('ST-78/AC-2: with every file already on main, it warns in its output and says to repair before protecting', async () => {
+    const cwd = makeRepo()
+    expect((await runInit(['--yes'], { cwd })).code).toBe(0)
+    adopt(cwd)
+    const scratch = fresh('scratch')
+    git(scratch, 'clone', '-q', ORIGINS.get(cwd).bare, '.')
+    put(scratch, { 'REVIEW.md': D5_CHECKLIST })
+    git(scratch, 'commit', '-q', '-am', 'break the checklist')
+    git(scratch, 'push', '-q', 'origin', 'main')
+
+    const gh = fakeGitHub()
+    const { code, out } = await runInit(['--yes'], { cwd, gh })
+    expect(code).toBe(0)
+    expect(out).toMatch(/already complete/)
+    expect(out).toContain(`  REVIEW.md: ${D5_PROBLEM}`)
+    expect(out).toContain('before running `steward protect`')
+    expect(gh.requests.some((r) => r.rest.startsWith('/pulls'))).toBe(false)
+  })
+})
+
+describe('ST-78/AC-5: D5, a section with prose and no numbered item', () => {
+  it('ST-78/AC-5: the reviewer\'s parser rejects it, and init warns with that parser\'s own problems in its output and the pull request\'s body', async () => {
+    expect(parseRules(D5_CHECKLIST)).toEqual({ ok: false, problems: [D5_PROBLEM] })
+    const { problems } = validateRules('REVIEW.md', D5_CHECKLIST)
+    const cwd = makeRepo({ files: { 'REVIEW.md': D5_CHECKLIST } })
+    const gh = fakeGitHub()
+    const { code, out } = await runInit(['--yes'], { cwd, gh })
+    expect(code).toBe(0)
+    const body = writes(gh).find((r) => r.rest === '/pulls').body.body
+    for (const problem of problems) {
+      expect(out).toContain(`  ${problem}`)
+      expect(body).toContain(`> - ${problem}`)
+    }
+    expect(out).not.toMatch(/ST-\d|AC-\d|scripts\/|\.mjs/)
   })
 })

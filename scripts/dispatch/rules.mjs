@@ -132,9 +132,24 @@ export function parseRules(text) {
 }
 
 /**
+ * Checks `text`, the content of the checklist `rulesFile`, with `parseRules`,
+ * the parser the reviewer's checklist is read with, and no grammar of its own.
+ * Pure. Returns `parseRules`'s result, with each problem prefixed by
+ * `rulesFile`, so that it names the file, the section and the reason:
+ * `{ ok: false, problems }`, or `{ ok: true, … }` as `parseRules` returns it.
+ * `readRules` uses it, and so do `steward init`, `steward protect` and
+ * `steward project activate`, before steward relies on the checklist (ST-78).
+ */
+export function validateRules(rulesFile, text) {
+  const parsed = parseRules(text)
+  if (parsed.ok) return parsed
+  return { ok: false, problems: parsed.problems.map((problem) => `${rulesFile}: ${problem}`) }
+}
+
+/**
  * Reads `rulesFile` as it stands on `<remote>/<base>` in `repoDir`, never a
- * pull request's head, and parses it. A file that parses returns
- * `parseRules`'s result with the file's `text` added, its HTML comments
+ * pull request's head, and parses it with `validateRules`. A file that parses
+ * returns `parseRules`'s result with the file's `text` added, its HTML comments
  * removed, which is what the reviewer is given (ST-21, ST-43). A file missing
  * from there, or one that does not parse, returns `{ ok: false, problems }`; neither throws.
  */
@@ -154,7 +169,7 @@ export async function readRules({ repoDir, base, rulesFile }) {
       problems: [`${rulesFile}: cannot be read from ${REMOTE}/${base}: ${detail}`],
     }
   }
-  const parsed = parseRules(text)
+  const parsed = validateRules(rulesFile, text)
   if (parsed.ok) return { ...parsed, text: stripComments(text) }
-  return { ok: false, problems: parsed.problems.map((problem) => `${rulesFile}: ${problem}`) }
+  return parsed
 }

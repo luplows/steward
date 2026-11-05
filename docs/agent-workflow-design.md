@@ -54,12 +54,21 @@ and validates the proposed result. The crew approves and lands the PR. Local
 coordinator stop/restart, activation and authorization remain separate and manual.
 General historical migrations and automatic conflict resolution are not promised.
 
-**Planned (ST-78)** (crew, 2026-11-04) Existing configured review rules are
-checked through the reviewer's parser before reliance on the gate. `init` keeps
-an invalid existing checklist and warns in its output and draft installation PR
-to allow repair before merge. `protect` and `project activate` refuse
-unreadable rules. Neither auto-rewrites project policy nor opens a privileged
-gate bypass. Recovery after later changes is documented.
+(crew, 2026-11-04) Existing configured review rules are checked through the
+reviewer's parser (`validateRules`, `scripts/dispatch/rules.mjs`: `parseRules`
+with each problem naming the file) before steward relies on the gate, as `main`
+holds them. `init` keeps an invalid existing checklist and warns in its output
+and at the top of its draft installation pull request's body, naming the file
+and each problem, so that it is repaired before the installation merges; the
+pull request is opened all the same. `protect` and `project activate` refuse a
+checklist that does not parse, before any protection request and without
+changing any activation record. None of them rewrites project policy or opens a
+bypass of the gate, and each checks `main` only as it found it. When the
+checklist stops parsing later, once `main` requires `review/agent`, recovery is
+a member of the crew with admin access removing that required check for the
+time of the repair, merging the repair, and running `protect` again
+(`README.md`, "When the checklist does not parse"); a verdict marker written by
+hand is not a recovery.
 
 ## Purpose
 
@@ -2831,7 +2840,9 @@ shortened where it is long, so that it can be found there with its date.
     reads `main` on GitHub first, and refuses, naming what is missing and setting nothing, unless
     `main` holds `steward.config.json`, the checklist its `rulesFile` names,
     `.github/workflows/review-gate.yml` and `.github/workflows/land-approved.yml` (it reads that
-    they are there, and the `rulesFile` value, nothing more of their contents); once they are
+    they are there, and the `rulesFile` value, nothing more of their contents; since 2026-11-04 it
+    also reads the checklist and refuses one that does not parse, Part 1, "Upgrade and checklist
+    preflight"); once they are
     there it does what `init`'s protection did (the passage above), and asks nothing and takes no
     flag but `--repo`, since running it is the crew's yes. Unlike `init`, it exits 1 whenever it sets
     no protection, whether it or GitHub refuses, since protection is its only job (owner). The
