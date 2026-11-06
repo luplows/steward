@@ -338,7 +338,7 @@ describe('ST-34/AC-2: the form of the file', () => {
     await expectRejected(changed((s) => { s.roles.coder.available.opus = 'opus' }), "'roles.coder.available.opus' must be an object")
   })
 
-  it('ST-34/AC-2, ST-32/AC-1: tool must be "claude", or "codex" for a reviewer', async () => {
+  it('ST-34/AC-2, ST-32/AC-1, ST-15/AC-1: tool must be "claude" or "codex"', async () => {
     for (const bad of ['Codex', 'Claude', 'gemini', '', null]) {
       await expectRejected(
         changed((s) => { s.roles.reviewer.available.opus.tool = bad }),
@@ -469,11 +469,6 @@ describe('ST-32/AC-1: a Codex choice for the reviewer', () => {
       .rejects.toThrow("'roles.reviewer.available.opus.effort' must be one of")
   })
 
-  it('ST-32/AC-1: a coder choice with tool codex is refused, naming its key', async () => {
-    await expect(readWith(withSol((s) => { s.roles.coder.available.gpt = { ...sol, strength: 3 } })))
-      .rejects.toThrow("'roles.coder.available.gpt.tool' must be one of [\"claude\"]")
-  })
-
   it('ST-32/AC-1: a Codex choice needs tools.codex.executable, an absolute path to a file that exists', async () => {
     await expect(readWith(withSol((s) => { delete s.tools })))
       .rejects.toThrow("missing required key 'tools.codex.executable'")
@@ -514,5 +509,89 @@ describe('ST-32/AC-1: a Codex choice for the reviewer', () => {
           .rejects.toThrow("'tools.codex.executable' names no file that exists")
       }
     })
+  })
+})
+
+describe('ST-15/AC-1: a Codex choice for the coder', () => {
+  const CODEX = 'C:/Program Files/Codex/codex.exe'
+  const gpt = { tool: 'codex', model: 'gpt-6.1-sol', effort: 'high', strength: 3 }
+
+  /** Reads `settings` from a temp home, on `platform`, with the Codex executable existing. */
+  async function readWith(settings, platform = 'win32') {
+    return withTempHome(async (home) => {
+      writeHomeFile(home, JSON.stringify(settings))
+      return readUserConfig({ env: {}, homedir: home, exists: (p) => p === CODEX, platform })
+    })
+  }
+  const withGpt = (more = () => {}) => changed((s) => {
+    s.roles.coder.available.gpt = { ...gpt }
+    s.tools = { codex: { executable: CODEX, windowsSandbox: 'elevated' } }
+    more(s)
+  })
+
+  it('ST-15/AC-1: accepts a coder choice with tool codex and its strength, and keeps windowsSandbox', async () => {
+    const read = await readWith(withGpt())
+    expect(read.roles.coder.available.gpt).toEqual(gpt)
+    expect(read.tools).toEqual({ codex: { executable: CODEX, windowsSandbox: 'elevated' } })
+    const unelevated = await readWith(withGpt((s) => { s.tools.codex.windowsSandbox = 'unelevated' }))
+    expect(unelevated.tools.codex.windowsSandbox).toBe('unelevated')
+  })
+
+  it('ST-15/AC-1: windowsSandbox is required for a coder choice on Codex, and the error names it', async () => {
+    await expect(readWith(withGpt((s) => { delete s.tools.codex.windowsSandbox })))
+      .rejects.toThrow("missing required key 'tools.codex.windowsSandbox', since a coder choice's tool is \"codex\"")
+  })
+
+  it('ST-15/AC-1: any value of windowsSandbox but elevated and unelevated is refused', async () => {
+    for (const bad of ['Elevated', 'none', '', true, null, 1]) {
+      await expect(readWith(withGpt((s) => { s.tools.codex.windowsSandbox = bad })))
+        .rejects.toThrow("'tools.codex.windowsSandbox' must be one of [\"elevated\",\"unelevated\"]")
+    }
+  })
+
+  it('ST-15/AC-1: a file giving Codex to the reviewer alone, with tools.codex holding only executable, stays valid', async () => {
+    const reviewerOnly = changed((s) => {
+      s.roles.reviewer.available.sol = { tool: 'codex', model: 'gpt-6.1-sol', effort: 'high' }
+      s.tools = { codex: { executable: CODEX } }
+    })
+    const read = await readWith(reviewerOnly)
+    expect(read.tools).toEqual({ codex: { executable: CODEX } })
+  })
+
+  it('ST-15/AC-1: a windowsSandbox given with no coder choice on Codex is still checked', async () => {
+    const reviewerOnly = (sandbox) => changed((s) => {
+      s.roles.reviewer.available.sol = { tool: 'codex', model: 'gpt-6.1-sol', effort: 'high' }
+      s.tools = { codex: { executable: CODEX, windowsSandbox: sandbox } }
+    })
+    expect((await readWith(reviewerOnly('unelevated'))).tools.codex.windowsSandbox).toBe('unelevated')
+    await expect(readWith(reviewerOnly('no'))).rejects.toThrow("'tools.codex.windowsSandbox' must be one of")
+  })
+
+  it('ST-15/AC-1: a coder choice on Codex is refused off Windows, saying it has been tried only on Windows', async () => {
+    for (const platform of ['linux', 'darwin']) {
+      const promise = readWith(withGpt(), platform)
+      await expect(promise).rejects.toThrow("'roles.coder.available.gpt.tool'")
+      await expect(promise).rejects.toThrow('only on Windows')
+    }
+    // The reviewer's Codex choice has no such limit.
+    const reviewerOnly = changed((s) => {
+      s.roles.reviewer.available.sol = { tool: 'codex', model: 'gpt-6.1-sol', effort: 'high' }
+      s.tools = { codex: { executable: CODEX } }
+    })
+    await expect(readWith(reviewerOnly, 'linux')).resolves.toBeTruthy()
+  })
+
+  it('ST-15/AC-1: the platform is process.platform unless injected', async () => {
+    const expected = process.platform === 'win32'
+    await withTempHome(async (home) => {
+      writeHomeFile(home, JSON.stringify(withGpt()))
+      const read = readUserConfig({ env: {}, homedir: home, exists: (p) => p === CODEX })
+      if (expected) await expect(read).resolves.toBeTruthy()
+      else await expect(read).rejects.toThrow('only on Windows')
+    })
+  })
+
+  it('ST-15/AC-1: a coder choice on Codex still needs tools.codex.executable', async () => {
+    await expect(readWith(withGpt((s) => { delete s.tools }))).rejects.toThrow("missing required key 'tools.codex.executable'")
   })
 })

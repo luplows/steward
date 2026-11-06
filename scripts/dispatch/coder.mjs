@@ -29,8 +29,10 @@
  *
  * The coder commits and the dispatcher pushes (OQ-84): `pushBranch` runs after a
  * session that ended `completed`, so the session needs no write access to the
- * remote. Every result returned after a session has run carries that session's
- * output under `session`.
+ * remote. A coder run through the Codex CLI (ST-15) cannot commit under its sandbox, so the
+ * dispatcher commits what a completed Codex session left (`commitSessionWork`), with git's hooks
+ * off, and then pushes the same way. Every result returned after a session has run carries that
+ * session's output under `session`.
  *
  * Every way this can stop short is a distinct `status` on the result, and each
  * leaves a state someone can see: a pushed branch with no pull request, a local
@@ -54,11 +56,11 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { coderLineNames, firstWithUsage, withCoderLine } from './choices.mjs'
-import { readCodexUsage } from './codex.mjs'
+import { readCodexUsage, spawnCodexCoder } from './codex.mjs'
 import { coderEnv } from './coder-env.mjs'
 import { buildGetPullRequestState, createContext, createPullRequest, parsePullRequestState, replacePullRequest } from './github.mjs'
 import { installDependencies } from './install.mjs'
-import { RETRY_SOURCES } from './invocation.mjs'
+import { buildInvocation, RETRY_SOURCES } from './invocation.mjs'
 import { coderChoice, readUserConfig } from './user-config.mjs'
 import { buildStory, deriveStatus, dispatchable, isStoryFilename, orderStories, parseFrontmatter } from './queue.mjs'
 import { readSettings } from './settings.mjs'
@@ -76,6 +78,12 @@ const CODER_PROMPT = path.join(ENGINE_ROOT, '.claude', 'prompts', 'coder.md')
 
 const REMOTE = 'origin'
 const BASE = 'main'
+// The identity of the dispatcher's own commits: the claim commit, and a Codex session's work.
+const DISPATCH_IDENTITY = ['-c', 'user.name=tw-dispatch', '-c', 'user.email=dispatch@tower-workshop-paths.invalid']
+// ST-15/AC-6: git's hooks off for one command. The null device is a folder with no hooks in it.
+const NULL_DEVICE = process.platform === 'win32' ? 'NUL' : '/dev/null'
+const HOOKS_OFF = ['-c', `core.hooksPath=${NULL_DEVICE}`]
+const PROMPTS_DIR = '.claude/prompts/'
 
 async function git(cwd, args) {
   const { stdout } = await execFileAsync('git', ['-c', 'core.quotepath=off', ...args], {
@@ -242,18 +250,33 @@ function classifyStatus(porcelainZ) {
 
 /**
  * Pushes `branch` from the worktree `cwd`, and only when it holds a commit
- * beyond `baseSha` and nothing else was left uncommitted. Never commits on the
- * coder's behalf and never forces. `dispatchCoder` and the retry path share it.
+ * beyond `baseSha`, nothing else was left uncommitted, and no commit beyond `baseSha` touches
+ * `.claude/prompts/` (ST-15/AC-7). Never commits (a Codex session's work is committed by
+ * `commitSessionWork`, which the callers run first; it is the dispatcher's, not `pushBranch`'s) and
+ * never forces. `dispatchCoder` and the retry path share it. With `hooksOff` (a Codex session,
+ * ST-15/AC-6) the push runs with git's hooks off.
  *
  * Resolves `{ status: 'pushed', headSha, screenshots }`, or a status that means
  * nothing was pushed: `nothing-committed` and `uncommitted-changes` (each with
  * `paths`, the uncommitted changes, empty when there are none),
- * `push-failed` (with git's error as `reason`).
+ * `prompt-change-refused` (with `paths`, the prompt files the commits touch, and a `reason`
+ * naming them), `push-failed` (with git's error as `reason`).
  */
-export async function pushBranch({ cwd, branch, baseSha }) {
+export async function pushBranch({ cwd, branch, baseSha, hooksOff = false }) {
   const args = pushArgs(branch)
   const ahead = Number((await git(cwd, ['rev-list', '--count', `${baseSha}..refs/heads/${branch}`])).trim())
   const { changes, screenshots } = classifyStatus(await git(cwd, ['status', '--porcelain', '-z', '--untracked-files=all']))
+  if (ahead > 0) {
+    const prompts = await promptPathsTouched(cwd, baseSha, branch)
+    if (prompts.length > 0) {
+      return {
+        status: 'prompt-change-refused',
+        paths: prompts,
+        screenshots,
+        reason: `the commits beyond ${baseSha} change ${PROMPTS_DIR}, which is the crew's to change: ${prompts.join(', ')}`,
+      }
+    }
+  }
   if (ahead === 0) {
     // No commit wins over uncommitted changes, but the paths are still named:
     // the worktree is removed after this, so the result is their only record.
@@ -269,13 +292,78 @@ export async function pushBranch({ cwd, branch, baseSha }) {
     }
   }
   try {
-    await git(cwd, args)
+    await git(cwd, [...(hooksOff ? HOOKS_OFF : []), ...args])
   } catch (error) {
     const reason = String(error.stderr ?? '').trim() || error.message
     return { status: 'push-failed', reason, screenshots }
   }
   const headSha = (await git(cwd, ['rev-parse', `refs/heads/${branch}`])).trim()
   return { status: 'pushed', headSha, screenshots }
+}
+
+/**
+ * The paths under `.claude/prompts/` that the commits of `branch` beyond `baseSha` add, change,
+ * delete or move (ST-15/AC-7), each once. A move counts as the deletion of the old path and the
+ * addition of the new one (`--no-renames`), so either side under the folder is named. Every commit
+ * beyond `baseSha` is inspected (`--full-history`, so no history simplification hides one). A merge
+ * commit counts for its own changes only, those that differ from every parent (`--cc`), so a prompt
+ * change made in a conflict resolution is named. A commit that is on `origin/main` does not count,
+ * since it is at the base, so merging `main` into the branch names no prompt change that came from
+ * `main`, and neither does a path touched only by commits already at `baseSha`.
+ */
+async function promptPathsTouched(cwd, baseSha, branch) {
+  const main = `refs/remotes/${REMOTE}/${BASE}`
+  const hasMain = (await gitOrNull(cwd, ['rev-parse', '--verify', '--quiet', main])) !== null
+  const out = await git(cwd, [
+    'log', '--full-history', '--cc', '--no-renames', '--name-only', '--format=', '-z',
+    `${baseSha}..refs/heads/${branch}`, ...(hasMain ? ['--not', main] : []), '--', PROMPTS_DIR,
+  ])
+  return [...new Set(out.split('\0').map((p) => p.trim()).filter((p) => p !== ''))]
+}
+
+/**
+ * Commits what a completed Codex session left in the worktree `cwd` (ST-15/AC-5): new, changed,
+ * deleted and moved files, but not an untracked file under `e2e/__screenshots__/`, which
+ * `classifyStatus` leaves out of the changes. The commit has the claim commit's identity, runs with
+ * git's hooks off and `--no-verify` (ST-15/AC-6), and its subject is `title`, or
+ * `<storyId>: the coder's work` when there is none. Resolves `{ committed: false }` when the worktree
+ * holds nothing to commit, else `{ committed: true, subject }`.
+ */
+export async function commitSessionWork({ cwd, storyId, title }) {
+  const status = await git(cwd, ['status', '--porcelain', '-z', '--untracked-files=all'])
+  const { changes, screenshots } = classifyStatus(status)
+  if (changes.length === 0) return { committed: false }
+  const left = screenshots.map((file) => `:(exclude,literal)${file}`)
+  await git(cwd, [...HOOKS_OFF, 'add', '-A', '--', '.', ...left])
+  const staged = await git(cwd, ['diff', '--cached', '--name-only'])
+  if (staged.trim() === '') return { committed: false }
+  const subject = typeof title === 'string' && title.trim() !== '' ? title.trim() : `${storyId}: the coder's work`
+  await git(cwd, [...DISPATCH_IDENTITY, ...HOOKS_OFF, 'commit', '--no-verify', '-q', '-m', subject])
+  return { committed: true, subject }
+}
+
+/** The title of a parsed PR block, else `null`. */
+const titleOf = (block) => (block?.status === 'parsed' ? block.title : null)
+
+/**
+ * Starts one coder session and resolves `spawnSession`'s result shape. A choice whose tool is
+ * `"claude"` runs through `spawnSession` with `sessionOptions` as ever. One whose tool is `"codex"`
+ * (ST-15/AC-4) runs through `codexSession` (`spawnCodexCoder`), with `tools.codex.executable` and
+ * `windowsSandbox`, the choice's model and effort, `timeoutMs` and `stallMs` from `sessionOptions`
+ * when given, and the prompt `buildInvocation` renders, which on a retry includes `retrySection`.
+ */
+function startCoderSession({ choice, machine, sessionOptions, codexSession, scratch, ...invocation }) {
+  if (choice.tool !== 'codex') {
+    return spawnSession({ ...sessionOptions, ...invocation, role: 'coder', model: choice.model, effort: choice.effort })
+  }
+  const { prompt } = buildInvocation({ ...invocation, role: 'coder', model: choice.model, effort: choice.effort })
+  const { timeoutMs, stallMs } = sessionOptions
+  const { executable, windowsSandbox } = machine.tools.codex
+  return codexSession({
+    executable, windowsSandbox, cwd: invocation.cwd, model: choice.model, effort: choice.effort, prompt,
+    baseEnv: invocation.baseEnv, emptyGhConfigDir: invocation.emptyGhConfigDir, scratch,
+    ...(timeoutMs !== undefined && { timeoutMs }), ...(stallMs !== undefined && { stallMs }),
+  })
 }
 
 /** The parts of a session's JSON envelope the dispatcher keeps in its result. */
@@ -337,7 +425,9 @@ async function cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded }) {
  *                  `readUsage`. Called at most once, in `repoDir`, after the story is
  *                  chosen and before the branch is claimed (ST-31)
  *   codexUsage     `({ executable, cwd })`, resolving `readCodexUsage`'s result, for a choice whose
- *                  tool is `codex` (ST-35/AC-6; none can be configured until ST-15)
+ *                  tool is `codex` (ST-35/AC-6)
+ *   codexSession   `spawnCodexCoder`'s shape of call, for a choice whose tool is `codex`
+ *                  (ST-15/AC-4); defaults to `spawnCodexCoder`
  *   userConfig  `()`, resolving the user config; defaults to `readUserConfig`
  *                  on the real environment and home directory. Called once, before the
  *                  usage check (ST-34)
@@ -363,6 +453,7 @@ async function cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded }) {
 export async function dispatchCoder({
   ctx, repoDir = process.cwd(), storyId, promptTemplate, baseEnv = process.env, sessionOptions = {},
   install = installDependencies, usage = readUsage, choice: named, codexUsage = readCodexUsage,
+  codexSession = spawnCodexCoder,
   userConfig = () => readUserConfig({ env: process.env, homedir: homedir() }),
 }) {
   const template = promptTemplate ?? readFileSync(CODER_PROMPT, 'utf8')
@@ -443,7 +534,7 @@ export async function dispatchCoder({
     // identity happens to be configured on the machine running it (CI's
     // runners have none at all).
     await git(tree, [
-      '-c', 'user.name=tw-dispatch', '-c', 'user.email=dispatch@tower-workshop-paths.invalid',
+      ...DISPATCH_IDENTITY,
       'commit', '--allow-empty', '-m', `Claim ${chosen.id} on ${label} at ${new Date().toISOString()}`,
     ])
     baseSha = (await git(tree, ['rev-parse', 'HEAD'])).trim()
@@ -472,14 +563,11 @@ export async function dispatchCoder({
     } catch (error) {
       return { status: 'install-failed', storyId: chosen.id, branch, reason: error.message }
     }
-    const { classification, output } = await spawnSession({
-      ...sessionOptions,
-      role: 'coder',
+    const { classification, output } = await startCoderSession({
+      choice, machine, sessionOptions, codexSession, scratch,
       promptTemplate: template,
       repo: ctx.repo,
       story,
-      model: choice.model,
-      effort: choice.effort,
       branch,
       baseEnv,
       emptyGhConfigDir: ghConfigDir,
@@ -493,7 +581,10 @@ export async function dispatchCoder({
       // No push: a session that did not finish is not the dispatcher's to publish.
       return { status: 'session-failed', ...context, outcome: classification.outcome, reason: classification.reason, pushed: false }
     }
-    const push = await pushBranch({ cwd: tree, branch, baseSha })
+    // ST-15/AC-5: a Codex session cannot commit, so the dispatcher commits what it left.
+    const viaCodex = choice.tool === 'codex'
+    if (viaCodex) await commitSessionWork({ cwd: tree, storyId: chosen.id, title: titleOf(classification.prText) })
+    const push = await pushBranch({ cwd: tree, branch, baseSha, hooksOff: viaCodex })
     if (push.status !== 'pushed') {
       const { status, ...rest } = push
       return { status, ...context, ...rest }
@@ -648,8 +739,8 @@ async function hasStoryFile(repoDir, ref, filename, storyId) {
  * `pushBranch`, and the pull request's title and body are replaced with the
  * ones it emitted. It opens no pull request and leaves the draft state alone.
  *
- *   ctx, repoDir, promptTemplate, baseEnv, sessionOptions, install, usage, codexUsage, choice,
- *   userConfig
+ *   ctx, repoDir, promptTemplate, baseEnv, sessionOptions, install, usage, codexUsage,
+ *   codexSession, choice, userConfig
  *                    as for `dispatchCoder`; `usage` is called before the
  *                    worktree is made, so `over-usage` and `usage-unknown`
  *                    (ST-31) come before anything is installed. The body it replaces ends with
@@ -667,15 +758,16 @@ async function hasStoryFile(repoDir, ref, filename, storyId) {
  * `pr-not-open`, `choice-unavailable` (ST-34/AC-4), `wrong-branch` (the head is not `branchFor` of a story file
  * with this id at its tip on `origin`), `branch-missing`, `local-branch-exists`
  * (refusals, before anything is spawned), `install-failed`, `session-failed`,
- * `nothing-committed`, `uncommitted-changes` (with `paths`), `push-failed`,
- * `pr-block-invalid`, `story-unreadable`, `replace-failed`. Every result after a
+ * `nothing-committed`, `uncommitted-changes` (with `paths`), `prompt-change-refused` (with
+ * `paths` and `reason`: ST-15/AC-7), `push-failed`, `pr-block-invalid`, `story-unreadable`,
+ * `replace-failed`. Every result after a
  * session carries `session`, and every one where the session completed carries
  * `draft` (the coder's choice, or null with no valid block) and `blocked`.
  */
 export async function retryStory({
   ctx, repoDir = process.cwd(), storyId, prNumber, findings, source, round, roundsRemaining,
   promptTemplate, baseEnv = process.env, sessionOptions = {}, install = installDependencies,
-  usage = readUsage, choice: named, codexUsage = readCodexUsage,
+  usage = readUsage, choice: named, codexUsage = readCodexUsage, codexSession = spawnCodexCoder,
   userConfig = () => readUserConfig({ env: process.env, homedir: homedir() }),
 }) {
   // Stopgap: the coder reads the story prefix from stories/stories.json. The coder's stories own
@@ -748,14 +840,11 @@ export async function retryStory({
     } catch (error) {
       return { status: 'install-failed', storyId, branch, prNumber, reason: error.message }
     }
-    const { classification, output } = await spawnSession({
-      ...sessionOptions,
-      role: 'coder',
+    const { classification, output } = await startCoderSession({
+      choice, machine, sessionOptions, codexSession, scratch,
       promptTemplate: template,
       repo: ctx.repo,
       story,
-      model: choice.model,
-      effort: choice.effort,
       branch,
       baseEnv,
       emptyGhConfigDir: ghConfigDir,
@@ -771,7 +860,10 @@ export async function retryStory({
     const block = classification.prText
     context.draft = block.status === 'parsed' ? block.draft : null
 
-    const push = await pushBranch({ cwd: tree, branch, baseSha })
+    // ST-15/AC-5: as in `dispatchCoder`, the dispatcher commits what a Codex session left.
+    const viaCodex = choice.tool === 'codex'
+    if (viaCodex) await commitSessionWork({ cwd: tree, storyId, title: titleOf(block) })
+    const push = await pushBranch({ cwd: tree, branch, baseSha, hooksOff: viaCodex })
     const decided = await readBlocked(tree, branch, filename)
     context.blocked = decided.blocked
     if (push.screenshots?.length > 0) context.untrackedScreenshots = push.screenshots

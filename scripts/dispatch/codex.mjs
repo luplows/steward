@@ -11,9 +11,15 @@
  *   rendered prompt on stdin and its last message written to a file. It is started through
  *   `runSession` (`spawn.mjs`), so it gets the same time limit, stall interval and process-tree
  *   kill as a Claude session, and never a shell.
+ *
+ * The coder through the same CLI (ST-15) is `codexCoderArgs` and `spawnCodexCoder`: under
+ * `-s workspace-write`, which refuses a commit, so the dispatcher commits for it (`coder.mjs`).
  */
 import { spawn } from 'node:child_process'
-import { readFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile } from 'node:fs/promises'
+import path from 'node:path'
+import { coderEnv } from './coder-env.mjs'
+import { parsePrBlock } from './outcome.mjs'
 import { DEFAULT_STALL_MS, DEFAULT_TIMEOUT_MS, killTree, runSession } from './spawn.mjs'
 
 export const CODEX_USAGE_TIMEOUT_MS = 30 * 1000
@@ -159,6 +165,14 @@ export async function spawnCodexReviewer({
 }) {
   const args = codexReviewerArgs({ checkout: cwd, model, effort, outputFile })
   const { record } = await run({ role: 'reviewer', executable, cwd, args, env, prompt, timeoutMs, stallMs })
+  return classifyCodexRecord(record, outputFile, readText)
+}
+
+/**
+ * How a `codex exec` session ended, in `spawnSession`'s result shape: `completed` means the process
+ * exited 0, unstopped, and left a last message in `outputFile`; its text is `output.result`.
+ */
+async function classifyCodexRecord(record, outputFile, readText) {
   const failed = (outcome, reason) => ({ classification: { outcome, reason }, output: null, record })
   if (record.stoppedFor === 'timeout') return failed('timed-out', 'stopped for exceeding its time limit')
   if (record.stoppedFor === 'stall') return failed('stalled', 'stopped for producing no output within the interval')
@@ -172,4 +186,69 @@ export async function spawnCodexReviewer({
   }
   if (text.trim() === '') return failed('malformed-output', `the last message in ${outputFile} is empty`)
   return { classification: { outcome: 'completed', reason: 'codex exec exited 0 with a last message' }, output: { result: text }, record }
+}
+
+/**
+ * The `codex exec` arguments for a coder (ST-15/AC-2), as the trial found they work
+ * (`docs/agent-workflow-design.md`, "Trials and measurements", "Codex as coder"); the prompt goes
+ * on stdin (`-`). Under `-s workspace-write`, with the two temporary-folder exclusions and the
+ * session's own temporary folder added, so that only the worktree and that folder are writable.
+ * `--ignore-user-config` drops the user's Codex configuration, and with it the Windows sandbox
+ * mode, which `windows.sandbox` names again.
+ */
+export function codexCoderArgs({ worktree, model, effort, windowsSandbox, sessionTemp, outputFile }) {
+  const named = { worktree, model, effort, windowsSandbox, sessionTemp, outputFile }
+  for (const [name, value] of Object.entries(named)) {
+    if (typeof value !== 'string' || value === '') throw new Error(`codexCoderArgs requires ${name}`)
+  }
+  return [
+    'exec', '-s', 'workspace-write', '-C', worktree, '-m', model,
+    '-c', `model_reasoning_effort="${effort}"`,
+    '-c', 'approval_policy="never"',
+    '-c', `windows.sandbox="${windowsSandbox}"`,
+    '-c', 'sandbox_workspace_write.exclude_tmpdir_env_var=true',
+    '-c', 'sandbox_workspace_write.exclude_slash_tmp=true',
+    '--add-dir', sessionTemp, '--ignore-user-config', '--json', '-o', outputFile, '--ephemeral', '-',
+  ]
+}
+
+/**
+ * Runs one Codex coder session (ST-15/AC-3), in `spawnSession`'s result shape, so that `coder.mjs`
+ * handles it as it handles a Claude one.
+ *
+ *   executable, model, effort, windowsSandbox   the choice's, and `tools.codex`'s
+ *   cwd         the worktree; the session runs there and `-C` names it
+ *   prompt      the rendered coder prompt (`buildInvocation`'s), written to stdin
+ *   baseEnv, emptyGhConfigDir   `coderEnv`'s inputs: the environment has no GitHub credential
+ *   scratch     the dispatch's scratch directory, outside the worktree. A new session temporary
+ *               folder is made in it, which is `--add-dir` and the value of `TMP`, `TEMP` and
+ *               `TMPDIR`, and the last message is written to a new file beside it
+ *   run         `runSession`; injectable for tests
+ *   readText    reads the last message; injectable for tests
+ *   makeFolder  `(parent) => Promise<folder>`, makes the session temporary folder; injectable
+ *
+ * Resolves `{ classification: { outcome, reason, prText? }, output: { result } | null, record }`.
+ * `outcome` is as `spawnCodexReviewer` gives it; when it is `completed`, `prText` is
+ * `parsePrBlock` of the last message, which is `output.result`.
+ */
+export async function spawnCodexCoder({
+  executable, cwd, model, effort, windowsSandbox, prompt, baseEnv, emptyGhConfigDir, scratch,
+  timeoutMs = DEFAULT_TIMEOUT_MS, stallMs = DEFAULT_STALL_MS, run = runSession,
+  readText = (file) => readFile(file, 'utf8'),
+  makeFolder = async (parent) => {
+    await mkdir(parent, { recursive: true })
+    return mkdtemp(path.join(parent, 'codex-session-'))
+  },
+}) {
+  if (typeof scratch !== 'string' || scratch === '') throw new Error('spawnCodexCoder requires scratch')
+  const sessionTemp = await makeFolder(scratch)
+  const outputFile = path.join(scratch, `${path.basename(sessionTemp)}-last-message.txt`)
+  const args = codexCoderArgs({ worktree: cwd, model, effort, windowsSandbox, sessionTemp, outputFile })
+  const env = { ...coderEnv(baseEnv ?? {}, emptyGhConfigDir), TMP: sessionTemp, TEMP: sessionTemp, TMPDIR: sessionTemp }
+  const { record } = await run({ role: 'coder', executable, cwd, args, env, prompt, timeoutMs, stallMs })
+  const result = await classifyCodexRecord(record, outputFile, readText)
+  if (result.classification.outcome === 'completed') {
+    result.classification.prText = parsePrBlock(result.output.result)
+  }
+  return result
 }

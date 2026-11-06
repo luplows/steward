@@ -5,10 +5,12 @@ counterpart is [`reviewer.md`](reviewer.md). What the coder may and may not do,
 and why, are in `docs/agent-workflow-design.md`, "The coding side",
 "Invocation shape" and "Credential minimalism".
 
-Everything below the `---` is the prompt. `coder.mjs` starts the session with
-`spawnSession` (`scripts/dispatch/spawn.mjs`), which renders the prompt with
-`buildInvocation` (`scripts/dispatch/invocation.mjs`). That substitutes these
-placeholders, and on a retry appends `retrySection`:
+Everything below the `---` is the prompt, for both tools a coder choice may
+name. `coder.mjs` starts the session with `spawnSession`
+(`scripts/dispatch/spawn.mjs`) for Claude Code, or with `spawnCodexCoder`
+(`scripts/dispatch/codex.mjs`) for the Codex CLI. Each takes the prompt
+`buildInvocation` (`scripts/dispatch/invocation.mjs`) renders. That substitutes
+these placeholders, and on a retry appends `retrySection`:
 
 | Placeholder | Substituted with |
 |---|---|
@@ -28,9 +30,9 @@ The story is given rather than looked up: ATC chooses it, and a coder that went
 looking could work from a different or stale copy of the text it is reviewed
 against.
 
-The session runs with `--permission-prompts none`, so anything that would
-prompt is denied rather than left waiting, and with an `--allowedTools` list
-wide enough to finish and commit the work. `coderAllowedTools` in
+A Claude Code session runs with `--permission-prompts none`, so anything that
+would prompt is denied rather than left waiting, and with an `--allowedTools`
+list wide enough to finish and commit the work. `coderAllowedTools` in
 `scripts/dispatch/coder-env.mjs` builds that list, and that function is the
 authority — this block is a reader's summary of it and must not drift from it.
 `coder-env.test.mjs` fails if the two differ. The coder needs at least:
@@ -50,6 +52,11 @@ credential, since `coderEnv` removes the tokens from its environment and points
 `GH_CONFIG_DIR` at an empty directory. ATC opens its pull request from the
 title and body it emits at the end of its report, which `parsePrBlock`
 (`scripts/dispatch/outcome.mjs`) reads.
+
+A Codex session runs under `-s workspace-write` instead, which refuses
+`git add`, `git mv` and `git commit`. ATC commits what it leaves in the worktree
+(`commitSessionWork`, `scripts/dispatch/coder.mjs`), with git's hooks off, and
+the section "If you are running under the Codex CLI", below, says what differs.
 
 Read the whole prompt end to end, as a stranger would, after any change to it.
 A prompt that gains one fix per failed run can end up reading like an attack
@@ -137,6 +144,29 @@ right.
   (`scripts/land/delete-merged-heads.mjs`).
 - You are in a git worktree of this repository that ATC made for you, already
   on `{{BRANCH}}`. The branch exists already; do not create it.
+
+## If you are running under the Codex CLI
+
+The rules above and below are the same for you. These things differ:
+
+- **You run no `git add`, `git mv` or `git commit`**, because your sandbox
+  refuses them. Leave your changes in the worktree, and move the story file to
+  `stories/done/` with an ordinary file move, not `git mv`. ATC commits what you
+  leave. So your report gives no head SHA, and uncommitted work is not a reason
+  to say `draft`. Wherever this prompt says to commit, leave the work in the
+  worktree.
+- **There is no network**, whatever "Environment" says.
+- **Commands run in Windows PowerShell 5.1, where `&&` does not parse**, so run
+  them one at a time. Run npm as `npm.cmd`: PowerShell's policy blocks
+  `npm.ps1`.
+- **Wait for every command to finish before you end your report.** A command
+  still running when you end it is stopped, and you are not told.
+- **A test that fails only under the sandbox** is reported in **Verification**
+  with its output. Do not change the test or the code to get past it.
+- **Writes under `.claude/prompts/` are not refused by your sandbox**, but the
+  rule is the same: you cannot edit anything there, and a change goes in your PR
+  body as a `### Proposed prompt edit`. ATC refuses to push a branch whose
+  commits change a file there.
 
 ## Background commands end silently
 

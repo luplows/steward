@@ -29,9 +29,12 @@ To run the review side, you need:
 - **The GitHub CLI, `gh`**, signed in with `gh auth login` as an account with write access to the
   repository. The scripts take its token from `gh auth token`.
 - **The Claude Code CLI, `claude`**, on your `PATH`, or its path in `CLAUDE_EXECUTABLE`. Coder
-  sessions run in it, and reviewer sessions do unless the user config chooses the Codex CLI.
-- **The Codex CLI, `codex`**, signed in, only if the user config gives the reviewer a choice
-  whose tool is `"codex"`. Its path goes in `tools.codex.executable`.
+  and reviewer sessions run in it unless the user config chooses the Codex CLI.
+- **The Codex CLI, `codex`**, signed in, only if the user config gives the coder or the reviewer a
+  choice whose tool is `"codex"`. Its path goes in `tools.codex.executable`. A Codex coder runs on
+  Windows only, needs `tools.codex.windowsSandbox`, and its session can read files outside its
+  worktree, such as `~/.codex/auth.json` and `~/.claude/.credentials.json`, so what it copies into
+  the worktree would be committed and pushed ([`docs/user-config.md`](docs/user-config.md)).
 - **The user config file**, `~/.steward/config.json` (or a nonempty `STEWARD_CONFIG`
   path). Each OS user running steward needs it: it holds the plan's usage limits and each
   role's default and available choices of tool, model and effort (and a strength, for a coder's

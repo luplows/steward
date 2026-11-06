@@ -26,8 +26,12 @@ const CHOICE_KEYS = ['tool', 'model', 'effort']
 // A coder's choice also has a `strength` (ST-35/AC-5); a reviewer's has none.
 const CODER_CHOICE_KEYS = [...CHOICE_KEYS, 'strength']
 const CHOICE_NAME_RE = /^[a-z0-9][a-z0-9._-]*$/
-// The tools each role may run: the Codex CLI for the reviewer only (ST-32); a Codex coder is ST-15's.
-export const ROLE_TOOLS = { coder: ['claude'], reviewer: ['claude', 'codex'] }
+// The tools each role may run: Claude Code, and the Codex CLI for either role (ST-32 for the reviewer,
+// ST-15 for the coder, which has been tried only on Windows: `CODER_CODEX_PLATFORM`).
+export const ROLE_TOOLS = { coder: ['claude', 'codex'], reviewer: ['claude', 'codex'] }
+export const CODER_CODEX_PLATFORM = 'win32'
+// `tools.codex.windowsSandbox` (ST-15/AC-1): the Windows sandbox mode a Codex coder is started with.
+export const WINDOWS_SANDBOXES = ['elevated', 'unelevated']
 export const TOOLS = ['claude', 'codex']
 // Each tool's effort levels: Claude Code's `--effort`, and Codex's `model_reasoning_effort`.
 export const TOOL_EFFORTS = {
@@ -35,7 +39,9 @@ export const TOOL_EFFORTS = {
   codex: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
 }
 export const EFFORTS = TOOL_EFFORTS.claude
-const TOOL_KEYS = { codex: ['executable'] }
+// Each tool's keys. `windowsSandbox` is optional here and required when a coder choice runs on Codex.
+const TOOL_KEYS = { codex: ['executable', 'windowsSandbox'] }
+const TOOL_REQUIRED_KEYS = { codex: ['executable'] }
 
 /** Whether `value` is a plain object: not null, not an array. */
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -127,11 +133,12 @@ function isFile(file) {
 }
 
 /**
- * Validates `tools` (ST-32/AC-1): an object whose only key is `codex`, itself with exactly
- * `executable`, an absolute path to a file that exists. `used` is the set of tools the choices
- * name; a tool named there must have its entry.
+ * Validates `tools` (ST-32/AC-1, ST-15/AC-1): an object whose only key is `codex`, itself with
+ * `executable`, an absolute path to a file that exists, and `windowsSandbox`, `"elevated"` or
+ * `"unelevated"`, which a coder choice on Codex requires. `used` is the set of tools the choices
+ * name; a tool named there must have its entry. `coderTools` is the set the coder's choices name.
  */
-function validateTools(filePath, value, used, fileExists) {
+function validateTools(filePath, value, used, coderTools, fileExists) {
   if (value !== undefined && !isObject(value)) {
     throw new Error(`${filePath}: 'tools' must be an object, got ${JSON.stringify(value)}`)
   }
@@ -146,7 +153,19 @@ function validateTools(filePath, value, used, fileExists) {
     }
     const entry = tools[tool]
     if (!isObject(entry)) throw new Error(`${filePath}: 'tools.${tool}' must be an object with 'executable', got ${JSON.stringify(entry)}`)
-    checkKeys(filePath, `tools.${tool}`, entry, TOOL_KEYS[tool])
+    const needsSandbox = tool === 'codex' && coderTools.has('codex')
+    const required = needsSandbox ? [...TOOL_REQUIRED_KEYS[tool], 'windowsSandbox'] : TOOL_REQUIRED_KEYS[tool]
+    for (const key of Object.keys(entry)) {
+      if (!TOOL_KEYS[tool].includes(key)) throw new Error(`${filePath}: unrecognised key 'tools.${tool}.${key}'`)
+    }
+    for (const key of required) {
+      if (key in entry) continue
+      const why = key === 'windowsSandbox' ? ", since a coder choice's tool is \"codex\"" : ''
+      throw new Error(`${filePath}: missing required key 'tools.${tool}.${key}'${why}`)
+    }
+    if (tool === 'codex' && 'windowsSandbox' in entry && !WINDOWS_SANDBOXES.includes(entry.windowsSandbox)) {
+      throw new Error(`${filePath}: 'tools.codex.windowsSandbox' must be one of ${JSON.stringify(WINDOWS_SANDBOXES)}, got ${JSON.stringify(entry.windowsSandbox)}`)
+    }
     const { executable } = entry
     if (typeof executable !== 'string' || !(path.isAbsolute(executable) || path.win32.isAbsolute(executable))) {
       throw new Error(`${filePath}: 'tools.${tool}.executable' must be an absolute path, got ${JSON.stringify(executable)}`)
@@ -179,9 +198,10 @@ function validateCoordinator(filePath, value) {
  * `strength`, ST-35/AC-5), and `tools` when the file has it. Throws, naming the file and the key
  * with all its parents, on a missing file, invalid JSON, a
  * missing or unknown key, or a value of the wrong form. `exists` says whether a tool's executable
- * names a file, not a directory; injectable for tests.
+ * names a file, not a directory; injectable for tests. So is `platform`: a coder choice whose tool is
+ * `"codex"` is refused on any but Windows, where alone it has been tried (ST-15/AC-1).
  */
-export async function readUserConfig({ env, homedir, exists = isFile } = {}) {
+export async function readUserConfig({ env, homedir, exists = isFile, platform = process.platform } = {}) {
   const filePath = userConfigPath({ env, homedir })
 
   let raw
@@ -218,8 +238,16 @@ export async function readUserConfig({ env, homedir, exists = isFile } = {}) {
     roles[role] = validateRole(filePath, `roles.${role}`, data.roles[role], ROLE_TOOLS[role], role === 'coder')
   }
 
+  for (const [choice, body] of Object.entries(roles.coder.available)) {
+    if (body.tool === 'codex' && platform !== CODER_CODEX_PLATFORM) {
+      throw new Error(
+        `${filePath}: 'roles.coder.available.${choice}.tool' is "codex", but the coder has been tried through the Codex CLI only on Windows, and this platform is ${platform}`,
+      )
+    }
+  }
+  const coderTools = new Set(Object.values(roles.coder.available).map((c) => c.tool))
   const used = new Set(USER_ROLES.flatMap((role) => Object.values(roles[role].available).map((c) => c.tool)))
-  const tools = validateTools(filePath, data.tools, used, exists)
+  const tools = validateTools(filePath, data.tools, used, coderTools, exists)
   const coordinator = validateCoordinator(filePath, data.coordinator)
   return tools === undefined ? { usageLimits, roles, coordinator } : { usageLimits, roles, tools, coordinator }
 }

@@ -1446,8 +1446,8 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
   other condition, a verdict the gate can parse, was met in the first trial.
 - **M2. Which role first.** **Decided 2026-10-08 by the owner: the reviewer.** Goal 2's value is
   largest there, and a reviewer that cannot write is a smaller guarantee to re-establish than a
-  coder's. **Planned (ST-15):** the coder is second, from a trial on 2026-11-04 (Part 3, "Decided
-  so far", "A Codex coder's work is committed by the dispatcher").
+  coder's. The coder is second, from a trial on 2026-11-04 (Part 3, "Decided so far", "A Codex
+  coder's work is committed by the dispatcher").
 - **M3. Guarantees before use.** **Decided 2026-10-08 by the owner:** no tool runs a role until that
   role's guarantees are shown to hold for it by tests, in the way the guarantee checks in OQ-73's
   Context test the coder's.
@@ -1524,7 +1524,8 @@ use, as the review side took the engine's reviewer, that part is described in Pa
    A story stopped with its PR open does not hold the update back.
    Each story then runs in its own process, so it loads the code as updated; the loop's own
    process keeps what it loaded at start.
-3. Coder implements, tests green, commits, and emits the PR title/body and a
+3. Coder implements, tests green, commits (a Codex coder cannot, and leaves its work in the
+   worktree for the dispatcher to commit), and emits the PR title/body and a
    draft-or-ready decision in its report. The dispatcher pushes the branch (`pushBranch` in
    `scripts/dispatch/coder.mjs`), so a model session has no write access to the remote, then opens
    the PR from that text, as a **draft** if the coder said draft.
@@ -1791,9 +1792,9 @@ shortened where it is long, so that it can be found there with its date.
 - **The move comes first** (decided 2026-10-07 by the owner).
   The workflow has moved to a repository of its own, steward; tower-workshop-paths adopting it is
   that repository's own work (its OQ-115, OQ-132, OQ-133 and OQ-134).
-  **Planned (ST-15):** coder sessions run through an adapter per agent tool, so that the coder can
-  be given another company's model. The reviewer can already be: a choice in the machine's settings
-  runs it through the Codex CLI (`codex.mjs`). OQ-115 was split on 2026-10-08 (below).
+  Coder sessions run through an adapter per agent tool, so that the coder can be given another
+  company's model: a choice in the machine's settings runs the coder or the reviewer through the
+  Codex CLI (`codex.mjs`). OQ-115 was split on 2026-10-08 (below).
 - **Goal 3 is about AI model companies, not GitHub** (decided 2026-10-07 by the owner). The gate
   stays on GitHub. Moving the hosting would be a far larger migration, and would depend on the
   target platform's rules much more than switching models does.
@@ -2455,8 +2456,9 @@ shortened where it is long, so that it can be found there with its date.
   the order choices are tried and cannot make two choices equally strong; a `stronger-than` key on
   each choice; a list of tiers per role; reading `weekly_scoped` to move between Claude models; the
   reviewer avoiding the model of every choice the coder could have moved to, instead of a record of
-  what ran; and leaving the coder's side to ST-15, which builds a Codex coder. Until ST-15 is built,
-  every coder choice runs on Claude Code, so the coder's move finds no other choice in practice.
+  what ran; and leaving the coder's side to ST-15, which builds a Codex coder. A coder choice may
+  run on Claude Code or the Codex CLI, and usage stays per tool, so with only Claude choices the
+  coder's move finds no other tool in practice.
 - **A reviewer that returns no verdict on an unchanged head could not review** (decided 2026-10-16
   by the owner, with the planning session, after the first rotation on the Codex reviewer).
   On #48, Codex's command tool would not start, because a helper was
@@ -3251,7 +3253,7 @@ shortened where it is long, so that it can be found there with its date.
   cleanup deleting another process's edits); retiring ST-56 for a new story, which would have
   changed every citation of it; a clean worktree of the caller's repository, which shares that
   repository's configuration, refs and hooks.
-- **Planned (ST-15): a Codex coder's work is committed by the dispatcher** (decided 2026-11-04 and
+- **A Codex coder's work is committed by the dispatcher** (decided 2026-11-04 and
   2026-11-05 by the owner, with the planning session, from "Trials and measurements", "Codex as
   coder"). The owner took the hold off ST-15 for this story on 2026-11-04, ahead of steward's other
   coder stories, and accepted the trial's recommendations on 2026-11-05. A coder choice may name
