@@ -3156,9 +3156,10 @@ shortened where it is long, so that it can be found there with its date.
     on `main`, `init` said the installation was complete, as it did in steward itself, whose
     workflows are its own. It now compares each workflow with its template, apart from the pin, and
     says which are not its own instead. Considered and not chosen: rewording the message alone.
-  - **Planned (ST-80): the reviewer reports every blocking finding it finds in one review.** On
-    playground #10, two reviews of one head blocked on two different parts of the description,
-    either of which a single review could have reported. In the owner's words: "I want as many
+  - **The reviewer reports every blocking finding it finds in one review**
+    (`.claude/prompts/reviewer.md`, "Your verdict"). On playground #10, two reviews of one head
+    blocked on two different parts of the description, either of which a single review could have
+    reported. In the owner's words: "I want as many
     fixes to be caught as reasonable. I don't expect the list to be perfect - that's a bad metric
     for software." A block on a pull request's description still counts toward the round bound
     like any other ("What the gate enforces", item 3). Considered and not chosen: counting such
