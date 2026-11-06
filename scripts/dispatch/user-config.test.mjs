@@ -538,9 +538,8 @@ describe('ST-15/AC-1: a Codex choice for the coder', () => {
   })
 
   it('ST-15/AC-1: windowsSandbox is required for a coder choice on Codex, and the error names it', async () => {
-    await expectRejected(withGpt((s) => { delete s.tools.codex.windowsSandbox }), 'tools.codex.windowsSandbox')
     await expect(readWith(withGpt((s) => { delete s.tools.codex.windowsSandbox })))
-      .rejects.toThrow("missing required key 'tools.codex.windowsSandbox'")
+      .rejects.toThrow("missing required key 'tools.codex.windowsSandbox', since a coder choice's tool is \"codex\"")
   })
 
   it('ST-15/AC-1: any value of windowsSandbox but elevated and unelevated is refused', async () => {
