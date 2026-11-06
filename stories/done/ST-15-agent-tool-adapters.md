@@ -83,7 +83,7 @@ session trying to get its work or a credential past them.
       `cleanUp` already keeps unpushed commits. Commits already at the base do not
       count, so a retry on a branch where someone applied a proposed prompt edit by
       hand still pushes.
-- [ ] **AC-8** — `.claude/prompts/coder.md` stays one prompt, and gains one
+- [x] **AC-8** — `.claude/prompts/coder.md` stays one prompt, and gains one
       section, headed `## If you are running under the Codex CLI`, that says the
       rules are the same and these things differ: the coder runs no `git add`,
       `git mv` or `git commit`, because the sandbox refuses them, and leaves its
