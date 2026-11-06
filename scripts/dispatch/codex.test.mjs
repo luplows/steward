@@ -1,11 +1,11 @@
 // @vitest-environment node
 
 import { spawn } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { codexReviewerArgs, rateLimitsRpc, readCodexUsage, spawnCodexReviewer } from './codex.mjs'
+import { codexCoderArgs, codexReviewerArgs, rateLimitsRpc, readCodexUsage, spawnCodexCoder, spawnCodexReviewer } from './codex.mjs'
 
 // What `account/rateLimits/read` answered on the ChatGPT Plus plan on 2026-10-16, trimmed.
 const PLUS = {
@@ -179,5 +179,141 @@ describe('ST-32/AC-2, AC-5: the Codex reviewer session', () => {
     expect(missing.classification.outcome).toBe('malformed-output')
     const empty = await spawnCodexReviewer({ ...base, readText: async () => '  \n' })
     expect(empty.classification.outcome).toBe('malformed-output')
+  })
+})
+
+describe('ST-15/AC-2: the Codex coder invocation', () => {
+  const given = {
+    worktree: 'C:/tmp/tw-coder-x/tree', model: 'gpt-6.1-sol', effort: 'high', windowsSandbox: 'elevated',
+    sessionTemp: 'C:/tmp/tw-coder-x/codex-session-1', outputFile: 'C:/tmp/tw-coder-x/codex-session-1-last-message.txt',
+  }
+
+  it('ST-15/AC-2: is exactly the trial list, in order', () => {
+    expect(codexCoderArgs(given)).toEqual([
+      'exec', '-s', 'workspace-write', '-C', 'C:/tmp/tw-coder-x/tree', '-m', 'gpt-6.1-sol',
+      '-c', 'model_reasoning_effort="high"',
+      '-c', 'approval_policy="never"',
+      '-c', 'windows.sandbox="elevated"',
+      '-c', 'sandbox_workspace_write.exclude_tmpdir_env_var=true',
+      '-c', 'sandbox_workspace_write.exclude_slash_tmp=true',
+      '--add-dir', 'C:/tmp/tw-coder-x/codex-session-1',
+      '--ignore-user-config', '--json', '-o', 'C:/tmp/tw-coder-x/codex-session-1-last-message.txt', '--ephemeral', '-',
+    ])
+  })
+
+  it('ST-15/AC-2: takes the Windows sandbox mode and the effort from its arguments', () => {
+    const args = codexCoderArgs({ ...given, windowsSandbox: 'unelevated', effort: 'xhigh' })
+    expect(args).toContain('windows.sandbox="unelevated"')
+    expect(args).toContain('model_reasoning_effort="xhigh"')
+  })
+
+  it('ST-15/AC-2: refuses a missing argument, and never widens the sandbox', () => {
+    for (const name of Object.keys(given)) {
+      expect(() => codexCoderArgs({ ...given, [name]: '' })).toThrow(`codexCoderArgs requires ${name}`)
+    }
+    for (const wider of ['read-only', 'danger-full-access', '--dangerously-bypass-approvals-and-sandbox', '--full-auto']) {
+      expect(codexCoderArgs(given)).not.toContain(wider)
+    }
+  })
+})
+
+describe('ST-15/AC-3: the Codex coder session', () => {
+  const REPORT = 'Done.\n\n## PR title\nDo the thing\n\n## PR body\n### What changed\n\nIt did.\n\n## Open as\nready'
+  const record = (over = {}) => ({ role: 'coder', exitCode: 0, signal: null, stdout: '{"type":"turn.completed"}\n', stoppedFor: null, ...over })
+  const base = (scratch, over = {}) => ({
+    executable: 'C:/codex.exe', cwd: path.join(scratch, 'tree'), model: 'gpt-6.1-sol', effort: 'high', windowsSandbox: 'elevated',
+    prompt: 'implement this', baseEnv: { PATH: '/bin', GH_TOKEN: 'secret', GITHUB_TOKEN: 'secret', TMP: 'C:/shared/tmp' },
+    emptyGhConfigDir: path.join(scratch, 'gh-config'), scratch, ...over,
+  })
+
+  it('ST-15/AC-3: runs through runSession with the prompt on stdin, the coder environment and the session temp folder', async () => {
+    const scratch = mkdtempSync(path.join(dir, 'coder-'))
+    const calls = []
+    const result = await spawnCodexCoder({
+      ...base(scratch), timeoutMs: 1234, stallMs: 567,
+      run: async (o) => { calls.push(o); return { record: record(), pid: 1 } },
+      readText: async () => REPORT,
+    })
+    expect(calls).toHaveLength(1)
+    const [call] = calls
+    expect(call).toMatchObject({ role: 'coder', executable: 'C:/codex.exe', cwd: path.join(scratch, 'tree'), prompt: 'implement this', timeoutMs: 1234, stallMs: 567 })
+    expect(call.args.slice(0, 3)).toEqual(['exec', '-s', 'workspace-write'])
+    const folder = call.args[call.args.indexOf('--add-dir') + 1]
+    const outputFile = call.args[call.args.indexOf('-o') + 1]
+    // The temporary variables name the session temp folder, which is new and in the scratch directory.
+    expect(call.env).toMatchObject({ TMP: folder, TEMP: folder, TMPDIR: folder, PATH: '/bin', GH_CONFIG_DIR: path.join(scratch, 'gh-config') })
+    expect(call.env).not.toHaveProperty('GH_TOKEN')
+    expect(call.env).not.toHaveProperty('GITHUB_TOKEN')
+    expect(path.dirname(folder)).toBe(scratch)
+    expect(existsSync(folder)).toBe(true)
+    expect(path.dirname(outputFile)).toBe(scratch)
+    expect(existsSync(outputFile)).toBe(false)
+    expect(path.relative(path.join(scratch, 'tree'), folder).startsWith('..')).toBe(true)
+    expect(path.relative(path.join(scratch, 'tree'), outputFile).startsWith('..')).toBe(true)
+    expect(result.classification).toMatchObject({ outcome: 'completed', prText: { status: 'parsed', title: 'Do the thing', draft: false } })
+    expect(result.output.result).toBe(REPORT)
+  })
+
+  it('ST-15/AC-3: each session gets its own new folder and output file', async () => {
+    const scratch = mkdtempSync(path.join(dir, 'coder-'))
+    const seen = []
+    for (let i = 0; i < 2; i++) {
+      await spawnCodexCoder({ ...base(scratch), run: async (o) => { seen.push(o.args); return { record: record(), pid: 1 } }, readText: async () => REPORT })
+    }
+    const folders = seen.map((args) => args[args.indexOf('--add-dir') + 1])
+    const files = seen.map((args) => args[args.indexOf('-o') + 1])
+    expect(new Set(folders).size).toBe(2)
+    expect(new Set(files).size).toBe(2)
+  })
+
+  it('ST-15/AC-3: reads the last message from the file it named', async () => {
+    const scratch = mkdtempSync(path.join(dir, 'coder-'))
+    const read = []
+    let named
+    await spawnCodexCoder({
+      ...base(scratch),
+      run: async (o) => { named = o.args[o.args.indexOf('-o') + 1]; return { record: record(), pid: 1 } },
+      readText: async (file) => { read.push(file); return REPORT },
+    })
+    expect(read).toEqual([named])
+  })
+
+  it('ST-15/AC-3: a report without a PR block is completed, with prText not parsed', async () => {
+    const scratch = mkdtempSync(path.join(dir, 'coder-'))
+    const result = await spawnCodexCoder({ ...base(scratch), run: async () => ({ record: record(), pid: 1 }), readText: async () => 'Just prose.' })
+    expect(result.classification.outcome).toBe('completed')
+    expect(result.classification.prText.status).not.toBe('parsed')
+    expect(result.output.result).toBe('Just prose.')
+  })
+
+  it.each([
+    ['timed-out', { stoppedFor: 'timeout' }],
+    ['stalled', { stoppedFor: 'stall' }],
+    ['died', { exitCode: 1 }],
+    ['died', { exitCode: null, signal: 'SIGKILL' }],
+  ])('ST-15/AC-3: the outcome is %s as the reviewer one is, with no output', async (outcome, over) => {
+    const scratch = mkdtempSync(path.join(dir, 'coder-'))
+    const run = async () => ({ record: record(over), pid: 1 })
+    const coder = await spawnCodexCoder({ ...base(scratch), run, readText: async () => 'never read' })
+    const reviewer = await spawnCodexReviewer({
+      executable: 'codex', cwd: 'C:/tmp/tree', model: 'm', effort: 'low', prompt: 'p', env: {}, outputFile: 'C:/tmp/o.txt',
+      run: async () => ({ record: record({ ...over, role: 'reviewer' }), pid: 1 }), readText: async () => 'never read',
+    })
+    expect(coder.classification.outcome).toBe(outcome)
+    expect(coder.classification.outcome).toBe(reviewer.classification.outcome)
+    expect(coder.output).toBeNull()
+  })
+
+  it('ST-15/AC-3: a missing or empty last message is malformed-output', async () => {
+    const scratch = mkdtempSync(path.join(dir, 'coder-'))
+    const run = async () => ({ record: record(), pid: 1 })
+    const missing = await spawnCodexCoder({ ...base(scratch), run, readText: async () => { throw new Error('ENOENT') } })
+    expect(missing.classification.outcome).toBe('malformed-output')
+    const empty = await spawnCodexCoder({ ...base(scratch), run, readText: async () => ' \n' })
+    expect(empty.classification.outcome).toBe('malformed-output')
+  })
+
+  it('ST-15/AC-3: requires the scratch directory of the dispatch', async () => {
+    await expect(spawnCodexCoder({ ...base(dir), scratch: undefined, run: async () => ({ record: record() }) })).rejects.toThrow('requires scratch')
   })
 })

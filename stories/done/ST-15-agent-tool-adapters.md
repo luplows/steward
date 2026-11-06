@@ -24,7 +24,7 @@ session trying to get its work or a credential past them.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `readUserConfig` accepts a choice in `roles.coder.available`
+- [x] **AC-1** — `readUserConfig` accepts a choice in `roles.coder.available`
       whose `tool` is `"codex"`, with its `strength`. `tools.codex` gains the
       key `windowsSandbox`, `"elevated"` or `"unelevated"`. It is required when
       a coder choice's tool is `"codex"`, and the error names
@@ -33,7 +33,7 @@ session trying to get its work or a credential past them.
       stays valid. A coder choice whose tool is `"codex"` is refused on a
       platform other than Windows, the error saying the coder has been tried
       only on Windows. The platform is injectable for tests.
-- [ ] **AC-2** — `codexCoderArgs` (`scripts/dispatch/codex.mjs`) returns exactly,
+- [x] **AC-2** — `codexCoderArgs` (`scripts/dispatch/codex.mjs`) returns exactly,
       in this order: `exec`, `-s`, `workspace-write`, `-C`, the worktree, `-m`,
       the model, `-c`, `model_reasoning_effort="<effort>"`, `-c`,
       `approval_policy="never"`, `-c`, `windows.sandbox="<windowsSandbox>"`,
@@ -41,7 +41,7 @@ session trying to get its work or a credential past them.
       `sandbox_workspace_write.exclude_slash_tmp=true`, `--add-dir`, the session
       temp folder, `--ignore-user-config`, `--json`, `-o`, the output file,
       `--ephemeral`, `-`. A test pins the list.
-- [ ] **AC-3** — `spawnCodexCoder` (`scripts/dispatch/codex.mjs`) runs the session
+- [x] **AC-3** — `spawnCodexCoder` (`scripts/dispatch/codex.mjs`) runs the session
       through `runSession` (`spawn.mjs`), with the prompt on stdin, and with
       `coderEnv`'s environment plus `TMP`, `TEMP` and `TMPDIR` set to the session
       temp folder. That folder and the output file are new, in the dispatch's
@@ -50,13 +50,13 @@ session trying to get its work or a credential past them.
       `spawnCodexReviewer` gives it, and `classification.prText` is `parsePrBlock`
       of the last message, so `coder.mjs` handles the result as it handles
       `spawnSession`'s. `output.result` is the last message.
-- [ ] **AC-4** — `dispatchCoder` and `retryStory` run a choice whose tool is
+- [x] **AC-4** — `dispatchCoder` and `retryStory` run a choice whose tool is
       `"codex"` through `spawnCodexCoder`, with `tools.codex.executable`, the
       choice's model and effort, `timeoutMs` and `stallMs` from `sessionOptions`
       when given, and the prompt `buildInvocation` renders, which on a retry
       includes `retrySection`. A choice whose tool is `"claude"` still runs
       through `spawnSession`, with the same arguments as before this story.
-- [ ] **AC-5** — After a Codex session whose outcome is `completed`, and before
+- [x] **AC-5** — After a Codex session whose outcome is `completed`, and before
       `pushBranch`, the dispatcher commits what the session left in the worktree,
       in `dispatchCoder` and in `retryStory`. The commit includes new, changed,
       deleted and moved files. Untracked files under `e2e/__screenshots__/`, which
@@ -67,14 +67,14 @@ session trying to get its work or a credential past them.
       it does for a Claude session. With nothing to commit it makes no commit, and
       `pushBranch` reports `nothing-committed` as today. After a session of any
       other outcome, or of a `"claude"` choice, it commits nothing.
-- [ ] **AC-6** — The commit of AC-5, and the push `pushBranch` then makes for a
+- [x] **AC-6** — The commit of AC-5, and the push `pushBranch` then makes for a
       Codex session, run with git's hooks off: `core.hooksPath` set to the null
       device for that command, and `--no-verify` on the commit. A test against
       real git, in a repository whose `core.hooksPath` names a folder in the
       worktree holding `pre-commit`, `commit-msg`, `post-commit` and `pre-push`
       hooks that write a marker file, finds no marker after the commit and the
       push.
-- [ ] **AC-7** — For any tool, `pushBranch` pushes nothing when the branch's
+- [x] **AC-7** — For any tool, `pushBranch` pushes nothing when the branch's
       commits beyond its base add, change, delete or rename a path under
       `.claude/prompts/`. It returns the new status `prompt-change-refused`, with
       those paths under `paths` and a `reason` naming them.
@@ -97,7 +97,7 @@ session trying to get its work or a credential past them.
       not changed. Writes under `.claude/prompts/` are not refused by the sandbox
       but the rule is the same, and ATC refuses to push them. The text above the
       file's `---`, which says how the session is started, covers both tools.
-- [ ] **AC-9** — `docs/user-config.md` describes `tools.codex.windowsSandbox` and
+- [x] **AC-9** — `docs/user-config.md` describes `tools.codex.windowsSandbox` and
       a coder choice whose tool is `"codex"`: what the session may do, that ATC
       commits for it, that the flags were tried on codex-cli 0.163.0 on Windows
       and nowhere else, and that such a session can read files outside its worktree, such as
@@ -110,11 +110,11 @@ session trying to get its work or a credential past them.
       come are corrected, and so is the sentence "Never commits on the coder's
       behalf" on `pushBranch`, which stays true of `pushBranch` and now says who
       does.
-- [ ] **AC-10** — `story.mjs`, `loop.mjs` and `land.mjs` are not in the diff.
+- [x] **AC-10** — `story.mjs`, `loop.mjs` and `land.mjs` are not in the diff.
       Replacing a coder's tool stays a change to the settings plus the tool's
       adapter (`docs/agent-workflow-design.md`, "Other companies' models (OQ-114)",
       M6).
-- [ ] **AC-11** — Every `**Planned (…)**` marker in
+- [x] **AC-11** — Every `**Planned (…)**` marker in
       `docs/agent-workflow-design.md` that names ST-15 loses `ST-15`, as that
       document's "Reading this document" note says. The sentence in the entry
       "A choice named by hand is final, and ATC moves off a spent tool" that begins

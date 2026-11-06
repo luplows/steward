@@ -3,15 +3,17 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { fixtureUserConfig, fixtureSettings } from './settings-fixture.mjs'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { coderAllowedTools } from './coder-env.mjs'
 import {
-  STUCK_AFTER_MS, branchFor, claimAgeMs, claimPushArgs, dispatchCoder as dispatchCoderWith, findPromptChange, machineLabel,
-  pushArgs, retryStory as retryStoryWith,
+  STUCK_AFTER_MS, branchFor, claimAgeMs, claimPushArgs, commitSessionWork, dispatchCoder as dispatchCoderWith, findPromptChange,
+  machineLabel, pushArgs, pushBranch, retryStory as retryStoryWith,
 } from './coder.mjs'
+import { spawnCodexCoder } from './codex.mjs'
+import { buildInvocation } from './invocation.mjs'
 import { createContext } from './github.mjs'
 import { pickStory } from './loop.mjs'
 
@@ -1815,7 +1817,7 @@ describe("ST-35: the coder's choice for a run", () => {
   const withCodex = (strength) => {
     const settings = fixtureUserConfig()
     settings.roles.coder.available.gpt = { tool: 'codex', model: 'gpt-6.1', effort: 'high', strength }
-    settings.tools = { codex: { executable: '/x/codex' } }
+    settings.tools = { codex: { executable: '/x/codex', windowsSandbox: 'elevated' } }
     return settings
   }
 
@@ -1950,13 +1952,17 @@ describe("ST-35: the coder's choice for a run", () => {
       const world = makeWorld()
       const claudeReads = []
       const codexReads = []
+      const codex = fakeCodex(finish)
       const { result, fake } = await dispatch(world, finish, {
         userConfig: configOf(withCodex(1)),
         usage: async (o) => { claudeReads.push(o); return OVER },
         codexUsage: async (o) => { codexReads.push(o); return UNDER_LIMITS },
+        codexSession: codex.codexSession,
       })
       expect(result.status).toBe('opened')
-      expect(valueAfter(fake.calls[0].args, '--model')).toBe('gpt-6.1')
+      // ST-15/AC-4: a Codex choice runs through spawnCodexCoder, no longer through spawnSession.
+      expect(codex.calls[0]).toMatchObject({ model: 'gpt-6.1', effort: 'high' })
+      expect(fake.calls).toHaveLength(0)
       expect(result.choice).toEqual({ name: 'gpt', tool: 'codex', model: 'gpt-6.1', effort: 'high', why: 'usage' })
       // sonnet, then opus (as strong, same tool: not read again), then gpt.
       expect(result.skipped).toEqual([OVER_ENTRY('sonnet'), OVER_ENTRY('opus')])
@@ -1968,7 +1974,7 @@ describe("ST-35: the coder's choice for a run", () => {
       const world = makeWorld()
       const { result } = await dispatch(world, finish, {
         userConfig: configOf(withCodex(1)), usage: async () => ({ ok: false, reason: 'no report' }),
-        codexUsage: async () => UNDER_LIMITS,
+        codexUsage: async () => UNDER_LIMITS, codexSession: fakeCodex(finish).codexSession,
       })
       expect(result.choice.name).toBe('gpt')
       expect(result.skipped[0]).toEqual({ name: 'sonnet', status: 'usage-unknown', reason: 'no report' })
@@ -2009,6 +2015,7 @@ describe("ST-35: the coder's choice for a run", () => {
       setModel(equalWorld, 'null')
       const moved = await dispatch(equalWorld, finish, {
         userConfig: configOf(equal), usage: spent, codexUsage: async () => UNDER_LIMITS,
+        codexSession: fakeCodex(finish).codexSession,
       })
       expect(moved.result.status).toBe('opened')
       expect(moved.result.choice).toMatchObject({ name: 'gpt', why: 'usage' })
@@ -2024,11 +2031,14 @@ describe("ST-35: the coder's choice for a run", () => {
 
     it("ST-35/AC-6: retryStory runs on an available choice of equal strength when the story's is spent", async () => {
       const world = makeRetryWorld()
-      const { result, fake } = await retry(world, ({ cwd }) => (commitWork(cwd), block()), {
+      const codex = fakeCodex(({ cwd }) => (commitWork(cwd), block()))
+      const { result, fake } = await retry(world, refuseToRun, {
         userConfig: configOf(withCodex(1)), usage: async () => OVER, codexUsage: async () => UNDER_LIMITS,
+        codexSession: codex.codexSession,
       })
       expect(result.status).toBe('retried')
-      expect(valueAfter(fake.calls[0].args, '--model')).toBe('gpt-6.1')
+      expect(codex.calls[0]).toMatchObject({ model: 'gpt-6.1', effort: 'high' })
+      expect(fake.calls).toHaveLength(0)
       expect(result.choice.why).toBe('usage')
       expect(result.skipped).toEqual([OVER_ENTRY('sonnet'), OVER_ENTRY('opus')])
     })
@@ -2114,5 +2124,494 @@ describe("ST-40/AC-2: the coder's prompt names the run's repository", () => {
   it('ST-40/AC-2: a retry passes ctx.repo', async () => {
     const { fake } = await retry(makeRetryWorld(), ({ cwd }) => { commitWork(cwd); return block() })
     expect(named(fake.calls[0].prompt)).toBe(true)
+  })
+})
+
+// ------------------------------------------------------ ST-15: the Codex coder
+
+const CODEX_EXE = 'C:/codex.exe'
+const GPT_BRANCH = 'story/OQ-98-first'
+
+/** The fixture user config plus a Codex coder choice, `gpt`, and the `tools.codex` it needs. */
+function codexUserConfig() {
+  const config = fixtureUserConfig()
+  config.roles.coder.available.gpt = { tool: 'codex', model: 'gpt-6.1-sol', effort: 'high', strength: 1 }
+  config.tools = { codex: { executable: CODEX_EXE, windowsSandbox: 'elevated' } }
+  return config
+}
+
+/**
+ * A fake `codexSession` that plays the coder through the real `spawnCodexCoder`: `behave` does what the
+ * Codex session does in its worktree, with no git, and returns its last message.
+ */
+function fakeCodex(behave, { exitCode = 0 } = {}) {
+  const calls = []
+  const runs = []
+  const codexSession = async (options) => {
+    calls.push(options)
+    let report = ''
+    const run = async (o) => {
+      runs.push(o)
+      report = await behave(o)
+      return { record: { role: 'coder', exitCode, signal: null, stdout: '{"type":"turn.completed"}\n', stoppedFor: null }, pid: 1 }
+    }
+    return spawnCodexCoder({ ...options, run, readText: async () => report })
+  }
+  return { codexSession, calls, runs }
+}
+
+// An injected block's markers carry a nonce that differs on every render.
+const unnonced = (prompt) => prompt.replace(/\b[0-9a-f]{12}\b/g, 'NONCE')
+const CODEX_BASE_ENV = { PATH: '/bin', GH_TOKEN: 'secret', GITHUB_TOKEN: 'secret' }
+const neverClaude = () => fakeRun(() => { throw new Error('a Codex choice must not run through spawnSession') })
+
+async function dispatchCodex(world, behave, { codexOptions, sessionOptions = {}, ...extra } = {}) {
+  const gh = fakeGitHub()
+  const fake = fakeCodex(behave, codexOptions)
+  const claude = neverClaude()
+  const result = await dispatchCoder({
+    ctx: gh.ctx,
+    repoDir: world.repoDir,
+    promptTemplate: TEMPLATE,
+    baseEnv: CODEX_BASE_ENV,
+    sessionOptions: { executable: 'fake-claude', run: claude.run, ...sessionOptions },
+    install: async () => {},
+    userConfig: configOf(codexUserConfig()),
+    codexUsage: async () => UNDER_LIMITS,
+    codexSession: fake.codexSession,
+    choice: 'gpt',
+    ...extra,
+  })
+  return { result, gh, fake, claude }
+}
+
+async function retryCodex(world, behave, { github = {}, codexOptions, sessionOptions = {}, ...extra } = {}) {
+  const gh = fakeRetryGitHub(github)
+  const fake = fakeCodex(behave, codexOptions)
+  const claude = neverClaude()
+  const result = await retryStory({
+    ctx: gh.ctx,
+    repoDir: world.repoDir,
+    promptTemplate: TEMPLATE,
+    baseEnv: CODEX_BASE_ENV,
+    sessionOptions: { executable: 'fake-claude', run: claude.run, ...sessionOptions },
+    install: async () => {},
+    storyId: 'OQ-98',
+    prNumber: 7,
+    findings: 'Item 17: AC-1 is not exercised.',
+    source: 'review',
+    round: 2,
+    roundsRemaining: 1,
+    userConfig: configOf(codexUserConfig()),
+    codexUsage: async () => UNDER_LIMITS,
+    codexSession: fake.codexSession,
+    choice: 'gpt',
+    ...extra,
+  })
+  return { result, gh, fake, claude }
+}
+
+/** What a Codex session leaves: the story moved and ticked with plain file moves, and a new file. */
+function leaveWork(cwd, { file = 'OQ-98-first.md' } = {}) {
+  const done = path.join(cwd, 'stories', 'done', file)
+  mkdirSync(path.dirname(done), { recursive: true })
+  renameSync(path.join(cwd, 'stories', file), done)
+  writeFileSync(done, readFileSync(done, 'utf8').replace('- [ ]', '- [x]'))
+  writeFileSync(path.join(cwd, 'work.txt'), 'work')
+}
+
+/** The commits of `branch` beyond main on a bare `origin`, newest first: `{ sha, name, email, subject }`. */
+const remoteCommits = (world, branch = GPT_BRANCH) => git(
+  world.dir, '--git-dir', world.origin, 'log', '--format=%H%x09%an%x09%ae%x09%s', `refs/heads/main..refs/heads/${branch}`,
+).split('\n').filter(Boolean).map((line) => {
+  const [sha, name, email, subject] = line.split('\t')
+  return { sha, name, email, subject }
+})
+const remoteNameStatus = (world, sha) => git(world.dir, '--git-dir', world.origin, 'diff', '--name-status', '--no-renames', `${sha}~1`, sha)
+  .split('\n').filter(Boolean).sort()
+
+describe('ST-15/AC-4: a Codex choice runs through spawnCodexCoder', () => {
+  it('ST-15/AC-4: dispatchCoder gives it the executable, sandbox mode, model, effort, limits and the rendered prompt', async () => {
+    const world = makeWorld()
+    const { result, fake, claude } = await dispatchCodex(world, () => block(), { sessionOptions: { timeoutMs: 1234, stallMs: 567 } })
+    expect(result.status).toBe('nothing-committed')
+    expect(claude.calls).toHaveLength(0)
+    expect(fake.calls).toHaveLength(1)
+    const [call] = fake.calls
+    expect(call).toMatchObject({
+      executable: CODEX_EXE, windowsSandbox: 'elevated', model: 'gpt-6.1-sol', effort: 'high', timeoutMs: 1234, stallMs: 567,
+    })
+    expect(fake.runs[0]).toMatchObject({ role: 'coder', executable: CODEX_EXE, timeoutMs: 1234, stallMs: 567 })
+    const expected = buildInvocation({
+      role: 'coder', promptTemplate: TEMPLATE, repo: REPO, branch: GPT_BRANCH, baseEnv: CODEX_BASE_ENV, emptyGhConfigDir: 'x',
+      story: { id: 'OQ-98', path: 'stories/OQ-98-first.md', text: story('OQ-98'), model: 'sonnet' }, model: 'gpt-6.1-sol', effort: 'high',
+    })
+    expect(unnonced(call.prompt)).toBe(unnonced(expected.prompt))
+    expect(fake.runs[0].prompt).toBe(call.prompt)
+    expect(fake.runs[0].env).not.toHaveProperty('GH_TOKEN')
+    expect(result.choice).toMatchObject({ name: 'gpt', tool: 'codex', model: 'gpt-6.1-sol', effort: 'high' })
+  })
+
+  it('ST-15/AC-4: without timeoutMs and stallMs in sessionOptions, the defaults of the session apply', async () => {
+    const { fake } = await dispatchCodex(makeWorld(), () => block())
+    expect(fake.calls[0]).not.toHaveProperty('timeoutMs')
+    expect(fake.calls[0]).not.toHaveProperty('stallMs')
+    expect(fake.runs[0].timeoutMs).toBeGreaterThan(0)
+    expect(fake.runs[0].stallMs).toBeGreaterThan(0)
+  })
+
+  it('ST-15/AC-4: retryStory runs it too, with the prompt including retrySection', async () => {
+    const world = makeRetryWorld()
+    const { result, fake, claude } = await retryCodex(world, ({ cwd }) => { writeFileSync(path.join(cwd, 'fix.txt'), 'fix'); return block() }, {
+      sessionOptions: { timeoutMs: 4321, stallMs: 765 },
+    })
+    expect(result.status).toBe('retried')
+    expect(claude.calls).toHaveLength(0)
+    expect(fake.calls[0]).toMatchObject({ executable: CODEX_EXE, windowsSandbox: 'elevated', model: 'gpt-6.1-sol', effort: 'high', timeoutMs: 4321, stallMs: 765 })
+    expect(fake.calls[0].prompt).toContain('## This is a retry')
+    expect(fake.calls[0].prompt).toContain('Item 17: AC-1 is not exercised.')
+    const expected = buildInvocation({
+      role: 'coder', promptTemplate: TEMPLATE, repo: REPO, branch: RETRY_BRANCH, baseEnv: CODEX_BASE_ENV, emptyGhConfigDir: 'x',
+      story: { id: 'OQ-98', path: 'stories/OQ-98-first.md', text: story('OQ-98'), model: 'sonnet' }, model: 'gpt-6.1-sol', effort: 'high',
+      retry: { round: 2, roundsRemaining: 1, findings: 'Item 17: AC-1 is not exercised.', source: 'review', storyMoved: true },
+    })
+    expect(unnonced(fake.calls[0].prompt)).toBe(unnonced(expected.prompt))
+  })
+
+  it('ST-15/AC-4: a claude choice still runs through spawnSession with its arguments, and never spawnCodexCoder', async () => {
+    const never = vi.fn(async () => { throw new Error('a Claude choice must not run through Codex') })
+    const { result, fake } = await dispatch(makeWorld(), ({ cwd }) => { finishStory(cwd); return block() }, {
+      userConfig: configOf(codexUserConfig()), codexSession: never,
+    })
+    expect(result.status).toBe('opened')
+    expect(never).not.toHaveBeenCalled()
+    expect(fake.calls).toHaveLength(1)
+    expect(fake.calls[0].executable).toBe('fake-claude')
+    expect(fake.calls[0].args).toEqual(expect.arrayContaining(['-p', '--model', 'sonnet', '--effort', 'medium', '--permission-mode', 'acceptEdits']))
+    expect(fake.calls[0].args).not.toContain('exec')
+  })
+})
+
+describe('ST-15/AC-5: the dispatcher commits what a completed Codex session left', () => {
+  it('ST-15/AC-5: new, changed, deleted and moved files are committed, with the claim identity and the PR title', async () => {
+    const world = makeWorld()
+    const { result, gh } = await dispatchCodex(world, ({ cwd }) => {
+      leaveWork(cwd)
+      unlinkSync(path.join(cwd, 'stories', 'OQ-99-second.md'))
+      return block('Ship the thing')
+    })
+    expect(result.status).toBe('opened')
+    expect(pulls(gh)).toHaveLength(1)
+    const commits = remoteCommits(world)
+    expect(commits).toHaveLength(2)
+    const [work, claim] = commits
+    expect(work.subject).toBe('Ship the thing')
+    expect(claim.subject).toMatch(/^Claim OQ-98 on /)
+    expect([work.name, work.email]).toEqual([claim.name, claim.email])
+    expect(work.name).toBe('tw-dispatch')
+    expect(remoteNameStatus(world, work.sha)).toEqual([
+      'A\tstories/done/OQ-98-first.md', 'A\twork.txt', 'D\tstories/OQ-98-first.md', 'D\tstories/OQ-99-second.md',
+    ])
+    expect(git(world.dir, '--git-dir', world.origin, 'show', `${work.sha}:stories/done/OQ-98-first.md`)).toContain('- [x]')
+    expect(result.headSha).toBe(work.sha)
+  })
+
+  it('ST-15/AC-5: an untracked file under e2e/__screenshots__/ stays uncommitted and is reported', async () => {
+    const world = makeWorld()
+    const { result } = await dispatchCodex(world, ({ cwd }) => {
+      leaveWork(cwd)
+      mkdirSync(path.join(cwd, 'e2e', '__screenshots__'), { recursive: true })
+      writeFileSync(path.join(cwd, 'e2e', '__screenshots__', 'new.png'), 'png')
+      return block()
+    })
+    expect(result.status).toBe('opened')
+    expect(result.untrackedScreenshots).toEqual(['e2e/__screenshots__/new.png'])
+    expect(remoteNameStatus(world, remoteCommits(world)[0].sha).join('\n')).not.toContain('e2e/')
+  })
+
+  it('ST-15/AC-5: a block that did not parse is committed under the story id, and the branch is pushed with no pull request', async () => {
+    const world = makeWorld()
+    const { result, gh } = await dispatchCodex(world, ({ cwd }) => { leaveWork(cwd); return 'I finished, but wrote no block.' })
+    expect(result.status).toBe('pr-block-invalid')
+    expect(pulls(gh)).toHaveLength(0)
+    expect(remoteCommits(world)[0].subject).toBe("OQ-98: the coder's work")
+    expect(result.headSha).toBe(remoteCommits(world)[0].sha)
+  })
+
+  it('ST-15/AC-5: with nothing left it makes no commit, and pushBranch reports nothing-committed', async () => {
+    const world = makeWorld()
+    const { result, gh } = await dispatchCodex(world, () => block())
+    expect(result.status).toBe('nothing-committed')
+    expect(pulls(gh)).toHaveLength(0)
+    remoteClaimOnly(world)
+    // The claim is the only commit, so the local branch was not kept either.
+    expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', `refs/heads/${GPT_BRANCH}`)).toBeNull()
+  })
+
+  it('ST-15/AC-5: after a session of any other outcome it commits nothing', async () => {
+    const world = makeWorld()
+    const { result } = await dispatchCodex(world, ({ cwd }) => { leaveWork(cwd); return block() }, { codexOptions: { exitCode: 1 } })
+    expect(result).toMatchObject({ status: 'session-failed', outcome: 'died' })
+    remoteClaimOnly(world)
+    // A commit would be an unpushed one, which the clean-up keeps.
+    expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', `refs/heads/${GPT_BRANCH}`)).toBeNull()
+  })
+
+  it('ST-15/AC-5: after a claude session it commits nothing: what it left uncommitted stays so', async () => {
+    const world = makeWorld()
+    const { result } = await dispatch(world, ({ cwd }) => { writeFileSync(path.join(cwd, 'left.txt'), 'left'); return block() })
+    expect(result.status).toBe('nothing-committed')
+    expect(result.paths).toEqual(['left.txt'])
+    remoteClaimOnly(world)
+  })
+
+  it('ST-15/AC-5: retryStory commits the work too, with the title of the new block', async () => {
+    const world = makeRetryWorld()
+    const { result, gh } = await retryCodex(world, ({ cwd }) => { writeFileSync(path.join(cwd, 'fix.txt'), 'fix'); return block('Fixed it') })
+    expect(result.status).toBe('retried')
+    expect(patches(gh)).toHaveLength(1)
+    const tip = remoteTipOf(world)
+    expect(tip).not.toBe(world.tip)
+    expect(git(world.dir, '--git-dir', world.origin, 'log', '-1', '--format=%s%x09%an', tip)).toBe('Fixed it\ttw-dispatch')
+    expect(result.headSha).toBe(tip)
+  })
+
+  it('ST-15/AC-5: retryStory with an unparsed block commits under the story id, and with no change reports nothing-committed', async () => {
+    const world = makeRetryWorld()
+    const first = await retryCodex(world, ({ cwd }) => { writeFileSync(path.join(cwd, 'fix.txt'), 'fix'); return 'no block' })
+    expect(first.result.status).toBe('pr-block-invalid')
+    expect(git(world.dir, '--git-dir', world.origin, 'log', '-1', '--format=%s', remoteTipOf(world))).toBe("OQ-98: the coder's work")
+    const second = await retryCodex(makeRetryWorld(), () => 'no block')
+    expect(second.result.status).toBe('nothing-committed')
+  })
+
+  it('ST-15/AC-5: commitSessionWork makes no commit when the worktree holds only untracked screenshots', async () => {
+    const repo = makeHookRepo()
+    mkdirSync(path.join(repo.work, 'e2e', '__screenshots__'), { recursive: true })
+    writeFileSync(path.join(repo.work, 'e2e', '__screenshots__', 'a.png'), 'png')
+    expect(await commitSessionWork({ cwd: repo.work, storyId: 'OQ-98', title: 'T' })).toEqual({ committed: false })
+    expect(git(repo.work, 'rev-parse', 'HEAD')).toBe(repo.base)
+  })
+})
+
+/**
+ * A scratch repository for the hook tests: a bare origin, a clone whose `core.hooksPath` names
+ * `.githooks`, a folder in the worktree holding `pre-commit`, `commit-msg`, `post-commit` and
+ * `pre-push` hooks that each write a marker file outside it, a base commit and a story branch.
+ */
+function makeHookRepo({ prompts = false } = {}) {
+  const dir = path.join(root, `hooks-${count++}`)
+  const origin = path.join(dir, 'origin.git')
+  const work = path.join(dir, 'work')
+  const markers = path.join(dir, 'markers')
+  mkdirSync(dir)
+  mkdirSync(markers)
+  git(dir, 'init', '-q', '--bare', '-b', 'main', origin)
+  git(dir, 'clone', '-q', origin, work)
+  git(work, 'checkout', '-q', '-b', 'main')
+  mkdirSync(path.join(work, '.githooks'))
+  for (const hook of ['pre-commit', 'commit-msg', 'post-commit', 'pre-push']) {
+    const marker = path.join(markers, hook).replaceAll('\\', '/')
+    const refuse = path.join(markers, 'refuse').replaceAll('\\', '/')
+    writeFileSync(path.join(work, '.githooks', hook), `#!/bin/sh\necho ran >> "${marker}"\n[ -e "${refuse}" ] && exit 1\nexit 0\n`, { mode: 0o755 })
+  }
+  writeFileSync(path.join(work, 'a.txt'), 'a')
+  if (prompts) {
+    mkdirSync(path.join(work, '.claude', 'prompts'), { recursive: true })
+    writeFileSync(path.join(work, '.claude', 'prompts', 'coder.md'), 'coder\n')
+    writeFileSync(path.join(work, '.claude', 'prompts', 'reviewer.md'), 'reviewer\n')
+  }
+  git(work, 'add', '.')
+  git(work, 'commit', '-q', '-m', 'base')
+  git(work, 'push', '-q', 'origin', 'main')
+  git(work, 'config', 'core.hooksPath', '.githooks')
+  git(work, 'checkout', '-q', '-b', GPT_BRANCH)
+  const fired = () => readdirSync(markers).filter((name) => name !== 'refuse').sort()
+  const clear = () => { for (const name of readdirSync(markers)) rmSync(path.join(markers, name)) }
+  return { dir, origin, work, markers, base: git(work, 'rev-parse', 'HEAD'), fired, clear }
+}
+
+const onOrigin = (repo, branch = GPT_BRANCH) => gitOk(repo.dir, '--git-dir', repo.origin, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`)
+
+describe('ST-15/AC-6: the commit and the push of a Codex session run with git hooks off', () => {
+  it('ST-15/AC-6: a plain commit and push in the repository do fire the four hooks (the control)', () => {
+    const repo = makeHookRepo()
+    writeFileSync(path.join(repo.work, 'b.txt'), 'b')
+    git(repo.work, 'add', '.')
+    git(repo.work, 'commit', '-q', '-m', 'plain')
+    git(repo.work, 'push', '-q', 'origin', GPT_BRANCH)
+    expect(repo.fired()).toEqual(['commit-msg', 'post-commit', 'pre-commit', 'pre-push'])
+  })
+
+  it('ST-15/AC-6: commitSessionWork and pushBranch with hooksOff write no marker', async () => {
+    const repo = makeHookRepo()
+    writeFileSync(path.join(repo.work, 'b.txt'), 'b')
+    const commit = await commitSessionWork({ cwd: repo.work, storyId: 'OQ-98', title: 'Work' })
+    expect(commit).toEqual({ committed: true, subject: 'Work' })
+    expect(repo.fired()).toEqual([])
+    const push = await pushBranch({ cwd: repo.work, branch: GPT_BRANCH, baseSha: repo.base, hooksOff: true })
+    expect(push.status).toBe('pushed')
+    expect(onOrigin(repo)).toBe(push.headSha)
+    expect(repo.fired()).toEqual([])
+  })
+
+  it('ST-15/AC-6: the commit goes through when a hook would refuse it', async () => {
+    const repo = makeHookRepo()
+    writeFileSync(path.join(repo.markers, 'refuse'), '')
+    writeFileSync(path.join(repo.work, 'b.txt'), 'b')
+    expect((await commitSessionWork({ cwd: repo.work, storyId: 'OQ-98', title: 'Work' })).committed).toBe(true)
+    expect(git(repo.work, 'log', '-1', '--format=%s')).toBe('Work')
+    expect(repo.fired()).toEqual([])
+  })
+
+  it('ST-15/AC-6: without hooksOff the push fires pre-push, so the option is what keeps it quiet', async () => {
+    const repo = makeHookRepo()
+    writeFileSync(path.join(repo.work, 'b.txt'), 'b')
+    git(repo.work, 'add', '.')
+    git(repo.work, '-c', 'core.hooksPath=NUL', 'commit', '-q', '-m', 'quiet')
+    repo.clear()
+    expect((await pushBranch({ cwd: repo.work, branch: GPT_BRANCH, baseSha: repo.base })).status).toBe('pushed')
+    expect(repo.fired()).toEqual(['pre-push'])
+  })
+
+  it('ST-15/AC-6: dispatchCoder and retryStory run a Codex session commit and push with the hooks off', async () => {
+    const hookFiles = (dir, marks) => {
+      mkdirSync(path.join(dir, '.githooks'), { recursive: true })
+      for (const hook of ['pre-commit', 'commit-msg', 'post-commit', 'pre-push']) {
+        const marker = marks.replaceAll('\\', '/')
+        writeFileSync(path.join(dir, '.githooks', hook), `#!/bin/sh\necho "${hook}" >> "${marker}"\nexit 0\n`, { mode: 0o755 })
+      }
+    }
+    // The claim commit and push are the dispatcher's own and run the hooks; the session's must add none.
+    const world = makeWorld()
+    const marks = path.join(world.dir, 'dispatch-markers.txt')
+    hookFiles(world.seed, marks)
+    git(world.seed, 'add', '.')
+    git(world.seed, 'commit', '-q', '-m', 'hooks')
+    git(world.seed, 'push', '-q', 'origin', 'main')
+    git(world.repoDir, 'config', 'core.hooksPath', '.githooks')
+    const { result } = await dispatchCodex(world, ({ cwd }) => { leaveWork(cwd); return block() })
+    expect(result.status).toBe('opened')
+    expect(readFileSync(marks, 'utf8').split('\n').filter(Boolean).sort()).toEqual(['commit-msg', 'post-commit', 'pre-commit', 'pre-push'])
+
+    const retryWorld = makeRetryWorld()
+    const retryMarks = path.join(retryWorld.dir, 'retry-markers.txt')
+    hookFiles(retryWorld.seed, retryMarks)
+    git(retryWorld.seed, 'add', '.')
+    git(retryWorld.seed, 'commit', '-q', '-m', 'hooks')
+    git(retryWorld.seed, 'push', '-q', 'origin', RETRY_BRANCH)
+    git(retryWorld.repoDir, 'config', 'core.hooksPath', '.githooks')
+    const retried = await retryCodex(retryWorld, ({ cwd }) => { writeFileSync(path.join(cwd, 'fix.txt'), 'fix'); return block() })
+    expect(retried.result.status).toBe('retried')
+    expect(existsSync(retryMarks)).toBe(false)
+  })
+})
+
+describe('ST-15/AC-7: nothing under .claude/prompts/ is pushed', () => {
+  const commitAll = (repo, message) => {
+    git(repo.work, 'add', '-A')
+    git(repo.work, '-c', 'core.hooksPath=NUL', 'commit', '-q', '-m', message)
+  }
+
+  it.each([
+    ['adds', (work) => writeFileSync(path.join(work, '.claude', 'prompts', 'new.md'), 'new'), ['.claude/prompts/new.md']],
+    ['changes', (work) => writeFileSync(path.join(work, '.claude', 'prompts', 'coder.md'), 'changed\n'), ['.claude/prompts/coder.md']],
+    ['deletes', (work) => unlinkSync(path.join(work, '.claude', 'prompts', 'coder.md')), ['.claude/prompts/coder.md']],
+    ['renames out of', (work) => renameSync(path.join(work, '.claude', 'prompts', 'coder.md'), path.join(work, 'coder.md')), ['.claude/prompts/coder.md']],
+    ['renames into', (work) => renameSync(path.join(work, 'a.txt'), path.join(work, '.claude', 'prompts', 'a.txt')), ['.claude/prompts/a.txt']],
+  ])('ST-15/AC-7: pushBranch refuses a branch whose commits %s a prompt, and pushes nothing', async (_what, change, expected) => {
+    const repo = makeHookRepo({ prompts: true })
+    change(repo.work)
+    commitAll(repo, 'touch')
+    const push = await pushBranch({ cwd: repo.work, branch: GPT_BRANCH, baseSha: repo.base, hooksOff: true })
+    expect(push.status).toBe('prompt-change-refused')
+    expect(push.paths).toEqual(expected)
+    for (const p of expected) expect(push.reason).toContain(p)
+    expect(onOrigin(repo)).toBeNull()
+  })
+
+  it('ST-15/AC-7: a prompt changed by one commit and changed back by the next is still refused', async () => {
+    const repo = makeHookRepo({ prompts: true })
+    writeFileSync(path.join(repo.work, '.claude', 'prompts', 'coder.md'), 'changed\n')
+    commitAll(repo, 'change')
+    writeFileSync(path.join(repo.work, '.claude', 'prompts', 'coder.md'), 'coder\n')
+    commitAll(repo, 'back')
+    expect((await pushBranch({ cwd: repo.work, branch: GPT_BRANCH, baseSha: repo.base })).status).toBe('prompt-change-refused')
+  })
+
+  it('ST-15/AC-7: commits already at the base do not count, and other .claude paths are pushed', async () => {
+    const repo = makeHookRepo({ prompts: true })
+    writeFileSync(path.join(repo.work, '.claude', 'prompts', 'coder.md'), 'applied by hand\n')
+    commitAll(repo, 'applied by hand')
+    const baseSha = git(repo.work, 'rev-parse', 'HEAD')
+    mkdirSync(path.join(repo.work, '.claude', 'prompts-notes'), { recursive: true })
+    writeFileSync(path.join(repo.work, '.claude', 'prompts-notes', 'n.md'), 'n')
+    writeFileSync(path.join(repo.work, '.claude', 'settings.json'), '{}')
+    commitAll(repo, 'other')
+    const push = await pushBranch({ cwd: repo.work, branch: GPT_BRANCH, baseSha })
+    expect(push.status).toBe('pushed')
+    expect(onOrigin(repo)).toBe(push.headSha)
+  })
+
+  it('ST-15/AC-7: dispatchCoder returns prompt-change-refused for a claude session, opens no pull request and keeps the commits', async () => {
+    const world = makeWorld()
+    const { result, gh } = await dispatch(world, ({ cwd }) => {
+      finishStory(cwd)
+      mkdirSync(path.join(cwd, '.claude', 'prompts'), { recursive: true })
+      writeFileSync(path.join(cwd, '.claude', 'prompts', 'coder.md'), 'mine')
+      git(cwd, 'add', '.')
+      git(cwd, 'commit', '-q', '-m', 'edit the prompt')
+      return block()
+    })
+    expect(result.status).toBe('prompt-change-refused')
+    expect(result.paths).toEqual(['.claude/prompts/coder.md'])
+    expect(result.reason).toContain('.claude/prompts/coder.md')
+    expect(pulls(gh)).toHaveLength(0)
+    remoteClaimOnly(world)
+    expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', `refs/heads/${GPT_BRANCH}`)).not.toBeNull()
+  })
+
+  it('ST-15/AC-7: a Codex session\'s edit of a prompt, which the sandbox allows, is committed and then refused', async () => {
+    const world = makeWorld()
+    const { result, gh } = await dispatchCodex(world, ({ cwd }) => {
+      leaveWork(cwd)
+      mkdirSync(path.join(cwd, '.claude', 'prompts'), { recursive: true })
+      writeFileSync(path.join(cwd, '.claude', 'prompts', 'coder.md'), 'mine')
+      return block()
+    })
+    expect(result.status).toBe('prompt-change-refused')
+    expect(pulls(gh)).toHaveLength(0)
+    remoteClaimOnly(world)
+    expect(git(world.repoDir, 'log', '--format=%s', `refs/heads/${GPT_BRANCH}`).split('\n')[0]).toBe('Do the thing')
+  })
+
+  it('ST-15/AC-7: retryStory returns it and replaces no pull request; the tip on origin does not move', async () => {
+    const world = makeRetryWorld()
+    const { result, gh } = await retry(world, ({ cwd }) => {
+      mkdirSync(path.join(cwd, '.claude', 'prompts'), { recursive: true })
+      writeFileSync(path.join(cwd, '.claude', 'prompts', 'coder.md'), 'mine')
+      git(cwd, 'add', '.')
+      git(cwd, 'commit', '-q', '-m', 'edit the prompt')
+      return block()
+    })
+    expect(result.status).toBe('prompt-change-refused')
+    expect(patches(gh)).toHaveLength(0)
+    expect(remoteTipOf(world)).toBe(world.tip)
+  })
+
+  it('ST-15/AC-7: a retry on a branch where the prompt edit is already at the base still pushes', async () => {
+    const world = makeRetryWorld()
+    mkdirSync(path.join(world.seed, '.claude', 'prompts'), { recursive: true })
+    writeFileSync(path.join(world.seed, '.claude', 'prompts', 'coder.md'), 'applied by hand')
+    git(world.seed, 'add', '.')
+    git(world.seed, 'commit', '-q', '-m', 'apply the proposed prompt edit')
+    git(world.seed, 'push', '-q', 'origin', RETRY_BRANCH)
+    const { result } = await retry(world, ({ cwd }) => { commitWork(cwd); return block() })
+    expect(result.status).toBe('retried')
+  })
+
+  it('ST-15/AC-7: the CLI exits 1 for it: it is not among the non-failures', () => {
+    const line = SOURCE.match(/const NON_FAILURES = \[(.*)\]/)[1]
+    expect(line).not.toContain('prompt-change-refused')
   })
 })

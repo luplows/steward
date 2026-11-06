@@ -101,19 +101,27 @@ and a coder's choice has `strength` besides:
 
 | Key | Form | What it is for |
 |---|---|---|
-| `tool` | `"claude"`, or `"codex"` for a reviewer | The tool the session runs in: Claude Code, or the Codex CLI. A coder choice must be `"claude"`. |
+| `tool` | `"claude"` or `"codex"` | The tool the session runs in: Claude Code, or the Codex CLI. A coder choice on `"codex"` is refused on a platform other than Windows, the only one it has been tried on. |
 | `model` | A non-empty string | The model, as the tool names it (`--model`). |
 | `effort` | `low`, `medium`, `high`, `xhigh` or `max`; for a `"codex"` choice, `ultra` too | The effort level: Claude Code's `--effort`, or Codex's `model_reasoning_effort`. |
 | `strength` | A positive integer; a coder's choices only | How strong the choice is: a larger number is stronger, and equal numbers are equally strong, whatever the tools. A story is never run on a weaker choice than its own. A reviewer's choice has no `strength`, and one there is refused as an unknown key. |
 
 ### `tools`
 
-An object whose only key is `codex`, itself an object with exactly the key `executable`: the
-absolute path of the `codex` executable, which must name a file that exists. The Codex desktop app
+An object whose only key is `codex`, itself an object with the keys `executable` and
+`windowsSandbox`. `executable` is the absolute path of the `codex` executable, which must name a
+file that exists. The Codex desktop app
 installs it under a versioned folder,
 `C:\Program Files\WindowsApps\OpenAI.Codex_<version>…\app\resources\`, which is not on `PATH`, so
 the path changes when the app updates; the file is then refused, naming this key, until it is
 corrected. In JSON, each backslash in the path is written twice.
+
+`windowsSandbox` is `"elevated"` or `"unelevated"`, any other value being refused. It is required
+when a coder choice's tool is `"codex"`, and the error then names `tools.codex.windowsSandbox`. It
+is the Windows sandbox mode a Codex coder session is started with (`-c windows.sandbox=…`). The
+session ignores the user's own Codex configuration, which is where that mode is otherwise set, and
+without a mode every command in it is refused. In the trial only `elevated` ran a whole story. A
+file that gives Codex to the reviewer alone may leave it out.
 
 ## How the choices are used
 
@@ -154,9 +162,9 @@ corrected. In JSON, each backslash in the path is written twice.
   every other choice in `roles.coder.available`, in the file's order, whose `strength` is at least
   that first choice's; a story never runs on a weaker one. When no choice's tool can start, the
   call returns the first choice's refusal, `over-usage` or `usage-unknown`, before anything is
-  claimed, made or installed and with no session started. Until a Codex coder is built (ST-15),
-  every coder choice runs on `claude`, whose usage covers every Claude model, so the coder's move
-  finds no other choice in practice.
+  claimed, made or installed and with no session started. With only Claude choices the move finds no
+  other tool in practice, since `claude`'s usage covers every Claude model; a Codex coder choice is
+  a second tool for it to move to, and back from.
 - **A result reports the choice.** Every result returned after a session started carries `choice`:
   its `name`, `tool`, `model` and `effort`, and `why`, which is `crew` for a named choice, `unit`
   for the choice a story's `model:` names, `default`, `coder-model` for a reviewer's default that
@@ -165,6 +173,33 @@ corrected. In JSON, each backslash in the path is written twice.
   started, in the order tried, with the choice's `name` and the `status` its usage gave
   (`over-usage`, with `window`, `percent` and `limit`; or `usage-unknown`, with `reason`). The
   command lines print both, as part of the result's JSON.
+- **A coder choice whose `tool` is `"codex"`** runs `codex exec -s workspace-write` in the coder's
+  worktree (`spawnCodexCoder`, `codex.mjs`), with the same prompt a Claude coder gets on stdin, its
+  `model`, its `effort` as `model_reasoning_effort`, and `tools.codex.windowsSandbox`. What the
+  session may do:
+  - It may write only to the worktree and to a temporary folder of its own, which ATC makes in the
+    dispatch's scratch directory and names in `TMP`, `TEMP` and `TMPDIR`. It runs with no network
+    and no GitHub credential, and with `--ignore-user-config`, so that none of the user's Codex
+    plugins or `notify` programs run in it.
+  - It cannot run `git add`, `git mv` or `git commit`: the sandbox refuses them. **ATC commits for
+    it**, after a session that ended `completed`, in `dispatchCoder` and in `retryStory`, before the
+    push. The commit holds what the session left in the worktree, new, changed, deleted and moved
+    files, but not an untracked file under `e2e/__screenshots__/`; its subject is the title of the
+    session's PR block, or `<story id>: the coder's work` when the block did not parse; and it, and
+    the push that follows, run with git's hooks off, since the worktree may hold hook scripts the
+    session could edit. A session that left nothing gives `nothing-committed`, as a Claude one does.
+  - It can edit files under `.claude/prompts/`, which the sandbox allows. For any tool, ATC pushes
+    nothing when the branch's commits beyond its base change one, and returns
+    `prompt-change-refused` with the paths. The commits stay on the local branch.
+  - **It can read files outside its worktree**, such as `~/.codex/auth.json` and
+    `~/.claude/.credentials.json`. What it copies into the worktree would be committed and pushed,
+    and ATC does not check what the commit holds. Keeping a session from reading credentials is
+    isolation, which is planned for 0.4 (`docs/outline.md`); the threat model here is an honest
+    model that makes mistakes, run by one member of the crew.
+  - The flags were tried on codex-cli 0.163.0 on Windows, and nowhere else
+    (`docs/agent-workflow-design.md`, "Trials and measurements", "Codex as coder"), which is why a
+    coder choice on `"codex"` is refused on another platform. The crew's first run of `coder.mjs`
+    on one has not yet been made.
 - **A reviewer choice whose `tool` is `"codex"`** runs `codex exec -s read-only` in the review's
   checkout, with the same prompt a Claude reviewer gets on stdin, its `model`, and its `effort` as
   `model_reasoning_effort` (`spawnCodexReviewer`, `codex.mjs`). Its last message is parsed as a
@@ -201,7 +236,8 @@ With this file, a story whose `model:` is `opus` runs the coder on `opus` at `hi
 reviewer moves to `sonnet` at `high` effort, since `opus` is the coder's model. A story whose
 `model:` is `null` runs the coder on `sonnet` at `medium` effort, and its reviewer on `opus`.
 
-To review through the Codex CLI instead, the reviewer's part and `tools` become:
+To review through the Codex CLI instead, the reviewer's part and `tools` become (`windowsSandbox`
+is only needed with a Codex coder choice):
 
 ```json
     "reviewer": {
@@ -223,3 +259,23 @@ cannot be read: ATC then reviews on `opus`, unless the coder ran `opus` on that 
 story's `model:` is `opus`, or its `Coder:` line names `opus`). Then no choice is left whose model
 differs from the coder's, and the review returns `over-usage` or `usage-unknown` and starts
 nothing.
+
+To run the coder through the Codex CLI too, on Windows, the coder's part gains a choice, and
+`tools.codex` gains `windowsSandbox`:
+
+```json
+    "coder": {
+      "default": "sonnet",
+      "available": {
+        "sonnet": { "tool": "claude", "model": "sonnet", "effort": "medium", "strength": 1 },
+        "sol-6.1": { "tool": "codex", "model": "gpt-6.1-sol", "effort": "high", "strength": 2 }
+      }
+    }
+  },
+  "tools": {
+    "codex": { "executable": "C:\\Program Files\\WindowsApps\\...\\codex.exe", "windowsSandbox": "elevated" }
+  }
+```
+
+A story whose `model:` is `sol-6.1` then runs the coder on `gpt-6.1-sol` through the Codex CLI, and
+its reviewer runs on a model other than `gpt-6.1-sol`, as `chooseReviewer` picks it.
