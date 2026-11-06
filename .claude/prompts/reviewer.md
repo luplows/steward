@@ -325,6 +325,14 @@ Each of these is an item of the checklist failing, or a defect the author
 would fix: cite the item it fails, and give it severity `block`. None of them
 is an observation, however small or however easy to fix.
 
+**Report every blocking finding you find.** Once one item fails, carry on
+through every applicable item of the checklist and the whole diff, and report
+each blocking finding you find in the same verdict, whether it is in the pull
+request's description or in the change. A finding left for the next review
+costs the author a round to learn of it. The list is not expected to be
+complete, and a finding is still reported only when it is real: "Do not
+manufacture findings to look thorough", under "Calibration", stands.
+
 **A case the unit excludes does not block.** A finding about how the diff
 behaves in a case the unit's **Out of scope** names is an `observation`,
 whatever item it would otherwise fail, unless the diff exposes a credential,

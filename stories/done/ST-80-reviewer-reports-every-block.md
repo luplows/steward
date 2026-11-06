@@ -20,18 +20,18 @@ review could have reported both.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `.claude/prompts/reviewer.md`, "Your verdict", says that once
+- [x] **AC-1** — `.claude/prompts/reviewer.md`, "Your verdict", says that once
       one item fails, the reviewer carries on through every applicable item of
       the checklist and the whole diff, and reports each blocking finding it
       finds in the same verdict, findings in the description and in the change
       alike.
-- [ ] **AC-2** — The same text says that the list is not expected to be
+- [x] **AC-2** — The same text says that the list is not expected to be
       complete, and that a finding is still reported only when it is real:
       "Calibration"'s "Do not manufacture findings to look thorough" stands, and
       is not contradicted.
-- [ ] **AC-3** — Nothing else in `reviewer.md` changes, and neither does
+- [x] **AC-3** — Nothing else in `reviewer.md` changes, and neither does
       `REVIEW.md`, `templates/review-checklist.md` or any code.
-- [ ] **AC-4** — The `**Planned (ST-80)**` marker in
+- [x] **AC-4** — The `**Planned (ST-80)**` marker in
       `docs/agent-workflow-design.md` loses `ST-80`.
 
 ## Out of scope
