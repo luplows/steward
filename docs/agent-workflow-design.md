@@ -3163,15 +3163,15 @@ shortened where it is long, so that it can be found there with its date.
     for software." A block on a pull request's description still counts toward the round bound
     like any other ("What the gate enforces", item 3). Considered and not chosen: counting such
     blocks differently, which can be revisited with numbers after the prompt changes.
-  - **Planned (ST-81): a session's output that arrives after its process exits is kept.**
-    `runSession` builds its record from the stdout it holds when `exit` fires. Tower-workshop-paths'
-    CI run 41784405916, on Ubuntu, failed `spawn.test.mjs`'s streaming test with
-    `malformed-output`, which lost output would give. 1,040 runs on Windows lost none. The wait for
-    the rest of the output after the exit is bounded by a `runSession` option, `drainMs`, as
-    `runSession` takes `timeoutMs` and `stallMs`. Its default of 5000 is not exported, and
-    `spawnSession` does not pass the option. Considered and not chosen (crew, 2026-11-05): an
-    exported constant, which the test of `spawn.mjs`'s exports would fail, and which a test could
-    not shorten.
+  - **A session's output that arrives after its process exits is kept.** After `exit` fires,
+    `runSession` waits for the child's stdout to end before building its record, where it had built
+    it from the stdout it held when `exit` fired. Tower-workshop-paths' CI run 41784405916, on
+    Ubuntu, failed `spawn.test.mjs`'s streaming test with `malformed-output`, which lost output
+    would give. 1,040 runs on Windows lost none. The wait for the rest of the output after the exit
+    is bounded by a `runSession` option, `drainMs`, as `runSession` takes `timeoutMs` and `stallMs`.
+    Its default of 5000 is not exported, and `spawnSession` does not pass the option. Considered and
+    not chosen (crew, 2026-11-05): an exported constant, which the test of `spawn.mjs`'s exports
+    would fail, and which a test could not shorten.
   - **Planned (ST-82): steward's own gate is converted to the thin workflows**, kept in 0.2 and
     timed when 0.2 is cut, since nothing else in the 0.2 slice depends on it. Steward's gate cannot
     review the pull request that installs it, so the crew merges that one by hand, as in
