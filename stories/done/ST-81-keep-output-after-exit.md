@@ -19,22 +19,22 @@ the child's stdio streams might still be open then.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — After the child's `exit`, `runSession` waits for its stdout to
+- [x] **AC-1** — After the child's `exit`, `runSession` waits for its stdout to
       end before building the record, for at most `drainMs`, an option of
       `runSession` that defaults to 5000. The default is not exported, and
       `spawnSession` does not pass the option. Data that arrives in that time
       is in `record.stdout`. When stdout has not ended by then, as when a
       descendant holds the pipe, it builds the record from what it has, as
       today.
-- [ ] **AC-2** — A test whose injected `spawnFn` returns a stand-in child that
+- [x] **AC-2** — A test whose injected `spawnFn` returns a stand-in child that
       emits `exit`, then a chunk of stdout, then the end of stdout, finds the
       chunk in `record.stdout`. A second, whose stdout never ends and which
       passes a short `drainMs`, finds `runSession` resolving after about
       `drainMs`, with what arrived before.
-- [ ] **AC-3** — A session stopped for its time limit or stall interval is
+- [x] **AC-3** — A session stopped for its time limit or stall interval is
       reported as today, and every existing test in `spawn.test.mjs` passes
       unchanged, including the test of the module's exports.
-- [ ] **AC-4** — The `**Planned (ST-81)**` marker in
+- [x] **AC-4** — The `**Planned (ST-81)**` marker in
       `docs/agent-workflow-design.md` loses `ST-81`.
 
 ## Out of scope

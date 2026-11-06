@@ -42,7 +42,12 @@ export const DEFAULT_TIMEOUT_MS = 60 * 60 * 1000
 const STALL_MARGIN_MS = 2 * 60 * 1000
 export const DEFAULT_STALL_MS = Number(SHELL_TIMEOUT_MS) + STALL_MARGIN_MS
 
-const REAL_BINARY = path.join('node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe')
+// How long `runSession` waits, after the child exits, for its stdout to end
+// (ST-81). Node's `exit` can fire with output still in the pipe. Not exported:
+// a caller that wants another bound passes `drainMs`.
+const DEFAULT_DRAIN_MS = 5000
+
+const REAL_BINARY =path.join('node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe')
 
 /**
  * The real `claude` binary, found without a shell. `claude` on PATH is a shim,
@@ -128,22 +133,27 @@ export function killTree(child, spawnFn) {
  *   args, env, prompt
  *   timeoutMs   hard limit on the whole session
  *   stallMs     terminate when no stdout or stderr arrives for this long
+ *   drainMs     after the child exits, how long to wait for its stdout to end
+ *               before building the record; defaults to 5000
  *   spawnFn     `child_process.spawn`; injectable for tests
  *
- * Resolves `{ record, pid }` once the child has exited. `record` is the raw
+ * Resolves `{ record, pid }` once the child has exited and its stdout has ended,
+ * or `drainMs` has passed since the exit. `record` is the raw
  * record `outcome.mjs` defines, and is validated against it before returning.
  * When the session is stopped, its whole process tree has been killed and the
  * child has exited by the time this resolves. Rejects if the process cannot be
  * started, or if `cwd` does not exist.
  */
 export function runSession({
-  role, executable, cwd, args = [], env, prompt, timeoutMs, stallMs, spawnFn = spawn,
+  role, executable, cwd, args = [], env, prompt, timeoutMs, stallMs, drainMs = DEFAULT_DRAIN_MS,
+  spawnFn = spawn,
 }) {
   // No default: the caller's own directory is what a session used to run in by
   // accident (OQ-77).
   if (typeof cwd !== 'string' || cwd === '') throw new Error('runSession requires a cwd')
   if (!(Number.isFinite(timeoutMs) && timeoutMs > 0)) throw new Error('runSession requires a positive timeoutMs')
   if (!(Number.isFinite(stallMs) && stallMs > 0)) throw new Error('runSession requires a positive stallMs')
+  if (!(Number.isFinite(drainMs) && drainMs > 0)) throw new Error('runSession requires a positive drainMs')
   if (typeof prompt !== 'string') throw new Error('runSession requires a prompt string')
 
   return new Promise((resolve, reject) => {
@@ -181,14 +191,20 @@ export function runSession({
       treeKilled = killTree(child, spawnFn)
     }
     const armStall = () => {
+      // Output that arrives while the exit handler waits for stdout to end
+      // must not start a new stall timer for a session that has ended.
+      if (settled) return
       clearTimeout(stallTimer)
       stallTimer = setTimeout(() => stop('stall'), stallMs)
     }
     const timeoutTimer = setTimeout(() => stop('timeout'), timeoutMs)
     armStall()
 
+    let stdoutEnded = false
+    let onStdoutEnd = () => {}
     child.stdout.setEncoding('utf8')
     child.stdout.on('data', (chunk) => { stdout += chunk; armStall() })
+    child.stdout.on('end', () => { stdoutEnded = true; onStdoutEnd() })
     child.stderr.on('data', armStall)
 
     child.on('error', (error) => {
@@ -202,10 +218,16 @@ export function runSession({
       if (settled) return
       settled = true
       clearTimers()
-      // Take what the pipes already hold, then release them: a grandchild that
-      // inherited a pipe would otherwise keep `close` from ever firing.
-      const record = { role, exitCode, signal, stdout, stoppedFor }
-      setImmediate(() => {
+      // `exit` can fire while stdout still holds output (ST-81), so wait for
+      // stdout to end, but for no longer than `drainMs`: a grandchild that
+      // inherited the pipe would otherwise keep it open, and `close` from ever
+      // firing, for as long as it lives. Then take what stdout holds and
+      // release the pipes.
+      let drainTimer = null
+      const finish = () => {
+        clearTimeout(drainTimer)
+        onStdoutEnd = () => {}
+        const record = { role, exitCode, signal, stdout, stoppedFor }
         child.stdout.destroy()
         child.stderr.destroy()
         // The child can exit before `taskkill` has finished with its
@@ -218,7 +240,13 @@ export function runSession({
             reject(error)
           }
         })
-      })
+      }
+      if (stdoutEnded) {
+        finish()
+      } else {
+        drainTimer = setTimeout(finish, drainMs)
+        onStdoutEnd = finish
+      }
     })
 
     // A child that dies before reading its stdin raises EPIPE; the exit

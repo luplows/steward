@@ -2,10 +2,12 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { createHash } from 'node:crypto'
+import { EventEmitter } from 'node:events'
 import { mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { PassThrough } from 'node:stream'
 import * as spawnModule from './spawn.mjs'
 import { DEFAULT_STALL_MS, DEFAULT_TIMEOUT_MS, resolveClaudeExecutable, runSession, spawnSession } from './spawn.mjs'
 import { buildInvocation, SHELL_TIMEOUT_MS } from './invocation.mjs'
@@ -342,5 +344,57 @@ describe('OQ-76/AC-6 spawnSession\'s output stays the result object, not the str
       type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn', result: 'stand-in done',
     })
     expect(typeof result.output).toBe('object')
+  })
+})
+
+// A stand-in child, not a real process, so that the order of `exit`, stdout's
+// data and stdout's end is the test's to choose. `script` runs once runSession
+// has attached its listeners.
+const fakeChild = (script) => {
+  const child = new EventEmitter()
+  child.pid = 4242
+  child.kill = vi.fn()
+  child.stdout = new PassThrough()
+  child.stderr = new PassThrough()
+  child.stdin = new PassThrough()
+  setImmediate(() => script(child))
+  return child
+}
+
+describe('ST-81/AC-1 runSession waits for stdout to end after the child exits', () => {
+  it('takes drainMs as an option, rejecting one that is not a positive number', () => {
+    const spy = vi.fn()
+    expect(() => run('exit', 0, { drainMs: 0, spawnFn: spy })).toThrow(/requires a positive drainMs/)
+    expect(() => run('exit', 0, { drainMs: Number.NaN, spawnFn: spy })).toThrow(/requires a positive drainMs/)
+    expect(spy).not.toHaveBeenCalled()
+  })
+})
+
+describe('ST-81/AC-2 output that arrives after the exit is kept, for at most drainMs', () => {
+  it('keeps a chunk of stdout that arrives after exit and before stdout ends', async () => {
+    const spawnFn = vi.fn(() => fakeChild((child) => {
+      child.stdout.write('before exit\n')
+      child.emit('exit', 0, null)
+      child.stdout.write('after exit\n')
+      child.stdout.end()
+    }))
+    const { record } = await run('exit', 0, { spawnFn })
+    expect(record).toMatchObject({ exitCode: 0, stoppedFor: null })
+    expect(record.stdout).toBe('before exit\nafter exit\n')
+  })
+
+  it('resolves after about drainMs with what arrived, when stdout never ends', async () => {
+    const drainMs = 300
+    const spawnFn = vi.fn(() => fakeChild((child) => {
+      child.stdout.write('before exit\n')
+      child.emit('exit', 0, null)
+    }))
+    const started = Date.now()
+    const { record } = await run('exit', 0, { spawnFn, drainMs })
+    const elapsed = Date.now() - started
+    expect(elapsed).toBeGreaterThanOrEqual(drainMs - 20)
+    expect(elapsed).toBeLessThan(drainMs + 2000)
+    expect(record).toMatchObject({ exitCode: 0, stoppedFor: null })
+    expect(record.stdout).toBe('before exit\n')
   })
 })
