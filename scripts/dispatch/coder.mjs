@@ -304,12 +304,19 @@ export async function pushBranch({ cwd, branch, baseSha, hooksOff = false }) {
 /**
  * The paths under `.claude/prompts/` that the commits of `branch` beyond `baseSha` add, change,
  * delete or move (ST-15/AC-7), each once. A move counts as the deletion of the old path and the
- * addition of the new one (`--no-renames`), so either side under the folder is named. A path
- * touched only by commits already at `baseSha` is not named.
+ * addition of the new one (`--no-renames`), so either side under the folder is named. Every commit
+ * beyond `baseSha` is inspected (`--full-history`, so no history simplification hides one). A merge
+ * commit counts for its own changes only, those that differ from every parent (`--cc`), so a prompt
+ * change made in a conflict resolution is named. A commit that is on `origin/main` does not count,
+ * since it is at the base, so merging `main` into the branch names no prompt change that came from
+ * `main`, and neither does a path touched only by commits already at `baseSha`.
  */
 async function promptPathsTouched(cwd, baseSha, branch) {
+  const main = `refs/remotes/${REMOTE}/${BASE}`
+  const hasMain = (await gitOrNull(cwd, ['rev-parse', '--verify', '--quiet', main])) !== null
   const out = await git(cwd, [
-    'log', '--no-renames', '--name-only', '--format=', '-z', `${baseSha}..refs/heads/${branch}`, '--', PROMPTS_DIR,
+    'log', '--full-history', '--cc', '--no-renames', '--name-only', '--format=', '-z',
+    `${baseSha}..refs/heads/${branch}`, ...(hasMain ? ['--not', main] : []), '--', PROMPTS_DIR,
   ])
   return [...new Set(out.split('\0').map((p) => p.trim()).filter((p) => p !== ''))]
 }

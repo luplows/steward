@@ -2610,6 +2610,59 @@ describe('ST-15/AC-7: nothing under .claude/prompts/ is pushed', () => {
     expect(result.status).toBe('retried')
   })
 
+  describe('merge commits', () => {
+    const SIDE = 'side'
+    const commitFile = (repo, name, text = name) => {
+      writeFileSync(path.join(repo.work, name), text)
+      commitAll(repo, `add ${name}`)
+    }
+    const promptFile = (repo) => path.join(repo.work, '.claude', 'prompts', 'coder.md')
+
+    it('ST-15/AC-7: a prompt change made only in a merge commit resolution is refused', async () => {
+      const repo = makeHookRepo({ prompts: true })
+      git(repo.work, 'checkout', '-q', '-b', SIDE, repo.base)
+      commitFile(repo, 'side.txt')
+      git(repo.work, 'checkout', '-q', GPT_BRANCH)
+      commitFile(repo, 'own.txt')
+      git(repo.work, 'merge', '--no-commit', '--no-ff', SIDE)
+      writeFileSync(promptFile(repo), 'changed in the resolution\n')
+      git(repo.work, 'add', '-A')
+      git(repo.work, '-c', 'core.hooksPath=NUL', 'commit', '-q', '-m', 'merge side')
+      const push = await pushBranch({ cwd: repo.work, branch: GPT_BRANCH, baseSha: repo.base })
+      expect(push.status).toBe('prompt-change-refused')
+      expect(push.paths).toEqual(['.claude/prompts/coder.md'])
+      expect(onOrigin(repo)).toBeNull()
+    })
+
+    it('ST-15/AC-7: a prompt change on a side branch merged into the story branch is refused', async () => {
+      const repo = makeHookRepo({ prompts: true })
+      git(repo.work, 'checkout', '-q', '-b', SIDE, repo.base)
+      writeFileSync(promptFile(repo), 'changed on the side\n')
+      commitAll(repo, 'side prompt')
+      git(repo.work, 'checkout', '-q', GPT_BRANCH)
+      commitFile(repo, 'own.txt')
+      git(repo.work, '-c', 'core.hooksPath=NUL', 'merge', '--no-ff', '-q', '-m', 'merge side', SIDE)
+      const push = await pushBranch({ cwd: repo.work, branch: GPT_BRANCH, baseSha: repo.base })
+      expect(push.status).toBe('prompt-change-refused')
+      expect(push.paths).toEqual(['.claude/prompts/coder.md'])
+      expect(onOrigin(repo)).toBeNull()
+    })
+
+    it('ST-15/AC-7: merging a base that holds a prompt change, with no prompt change of its own, still pushes', async () => {
+      const repo = makeHookRepo({ prompts: true })
+      git(repo.work, 'checkout', '-q', 'main')
+      writeFileSync(promptFile(repo), 'applied by hand on main\n')
+      commitAll(repo, 'prompt on main')
+      git(repo.work, 'push', '-q', '--no-verify', 'origin', 'main')
+      git(repo.work, 'checkout', '-q', GPT_BRANCH)
+      commitFile(repo, 'own.txt')
+      git(repo.work, '-c', 'core.hooksPath=NUL', 'merge', '--no-ff', '-q', '-m', 'merge main', 'origin/main')
+      const push = await pushBranch({ cwd: repo.work, branch: GPT_BRANCH, baseSha: repo.base })
+      expect(push.status).toBe('pushed')
+      expect(onOrigin(repo)).toBe(push.headSha)
+    })
+  })
+
   it('ST-15/AC-7: the CLI exits 1 for it: it is not among the non-failures', () => {
     const line = SOURCE.match(/const NON_FAILURES = \[(.*)\]/)[1]
     expect(line).not.toContain('prompt-change-refused')
