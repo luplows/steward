@@ -194,7 +194,7 @@ file that gives Codex to the reviewer alone may leave it out.
   - **It can read files outside its worktree**, such as `~/.codex/auth.json` and
     `~/.claude/.credentials.json`. What it copies into the worktree would be committed and pushed,
     and ATC does not check what the commit holds. Keeping a session from reading credentials is
-    isolation, which is planned for 0.4 (`docs/outline.md`); the threat model here is an honest
+    isolation, which is planned for 0.5 (`docs/outline.md`); the threat model here is an honest
     model that makes mistakes, run by one member of the crew.
   - The flags were tried on codex-cli 0.163.0 on Windows, and nowhere else
     (`docs/agent-workflow-design.md`, "Trials and measurements", "Codex as coder"), which is why a

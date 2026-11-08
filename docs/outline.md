@@ -185,6 +185,7 @@ fixing slices because of technical complexity and potential impact on usability.
 Earlier releases must accurately document their security limitations; no credential or filesystem
 isolation may be claimed until implemented and validated. Existing tool restrictions, timeouts,
 usage limits and review safeguards still apply before isolation.
+
 ### Toward 1.0
 
 Automated coding and automated fixing are both essential before 1.0, together with demonstrated

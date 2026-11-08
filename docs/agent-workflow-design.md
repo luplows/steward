@@ -2972,7 +2972,7 @@ shortened where it is long, so that it can be found there with its date.
   trackers or sophisticated cancellation early prerequisites; and exporting this repository's
   release-review procedure to clients. Existing ST-48, ST-52, ST-6, ST-11/ST-12, ST-2 and ST-53
   require the explicit follow-up reconciliation in the roadmap; none is retired by this decision.
-The older release branch and PR #86 are left for the crew's later release-review reconciliation.
+  The older release branch and PR #86 are left for the crew's later release-review reconciliation.
 - **Milestone resequencing and bounded landing scans** (crew, 2026-11-07).
   Superseding the version numbers in the 2026-10-26 sequencing decision above,
   0.2 now delivers opt-in unattended landing and a bounded upgrade command;
