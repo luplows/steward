@@ -56,6 +56,7 @@ import { INSPECTION_LABEL, isLabelAlreadyExists } from './inspect.mjs'
 import { userConfigPath, TOOL_EFFORTS } from './user-config.mjs'
 import { isRulesFilePath } from './rules-file-path.mjs'
 import { readRules } from './rules.mjs'
+import { sameWorkflowApartFromPin } from './workflow-text.mjs'
 import { BREAKER_OVERRIDE_LABEL, REVIEW_BLOCKED_LABEL } from '../land/runway.mjs'
 
 const API = 'https://api.github.com'
@@ -685,6 +686,9 @@ export function checklistWarning(rulesFile, problems, { complete = false } = {})
   ]
 }
 
+/** What the pull request's list of files left says of a workflow that is not the one this version of `init` writes. */
+const DIFFERS_NOTE = ' (differs from the workflow this version of init writes, apart from the pin)'
+
 /** The draft pull request's title: steward and its version. */
 export const pullTitle = (version) => `Install steward ${version}`
 
@@ -694,8 +698,8 @@ export const pullTitle = (version) => `Install steward ${version}`
  * does not parse (`rulesProblems`), a warning naming it and each problem comes straight after the
  * first paragraph, before anything else.
  */
-export function pullBody({ version, pin, added, left, landing, template, rulesFile = null, rulesProblems = [] }) {
-  const list = (files) => (files.length === 0 ? ['- none'] : files.map((rel) => `- \`${rel}\``))
+export function pullBody({ version, pin, added, left, landing, template, rulesFile = null, rulesProblems = [], differing = [] }) {
+  const list = (files) => (files.length === 0 ? ['- none'] : files.map((rel) => `- \`${rel}\`${differing.includes(rel) ? DIFFERS_NOTE : ''}`))
   const warning =
     rulesProblems.length === 0
       ? []
@@ -971,6 +975,14 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   const added = files.map(([rel]) => rel).filter((rel) => !existsSync(path.join(clone, ...rel.split('/'))))
   const left = files.map(([rel]) => rel).filter((rel) => !added.includes(rel))
   // A checklist main already has is checked as the reviewer reads it, from main, and left as it is.
+  // A workflow main already has is this version's own only if it is the template, apart from the pin.
+  const differing = []
+  for (const file of workflows) {
+    const rel = `.github/workflows/${file}`
+    if (!left.includes(rel)) continue
+    const installed = await readFile(path.join(clone, ...rel.split('/')), 'utf8')
+    if (!sameWorkflowApartFromPin(installed, await readFile(template(`workflows/${file}`), 'utf8'))) differing.push(rel)
+  }
   const rules = left.includes(rulesFile) ? await readRules({ repoDir: clone, base: 'main', rulesFile }) : { ok: true }
   const rulesProblems = rules.ok ? [] : rules.problems
 
@@ -1050,6 +1062,16 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   }
 
   const landing = landingNotes(settingsLeft ? 'left' : 'wrote', answers, flags)
+  if (added.length === 0 && differing.length > 0) {
+    out(`main has every file init installs, but ${differing.length === 1 ? 'this workflow differs' : 'these workflows differ'} from what this version of init writes, apart from the pin:`)
+    for (const rel of differing) out(`  ${rel}`)
+    out(
+      "The installation is not this version's. A project's own workflows with these names must be removed or renamed before init can install. " +
+        'init made no branch, commit, push or pull request.',
+    )
+    out(`Your own checkout was not changed. ${keptLine(clone)}`)
+    return 1
+  }
   if (added.length === 0) {
     out("main already has every file init installs: the installation is already complete, so init made no branch, commit, push or pull request.")
     for (const line of landing) out(line)
@@ -1070,7 +1092,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   )
   progress.pushed = true
   const templateText = await readFile(bodyTemplate === null ? template('pull_request_template.md') : path.join(clone, ...bodyTemplate.split('/')), 'utf8')
-  const body = pullBody({ version, pin, added, left: [...left, ...templates], landing, template: templateText, rulesFile, rulesProblems })
+  const body = pullBody({ version, pin, added, left: [...left, ...templates], landing, template: templateText, rulesFile, rulesProblems, differing })
   const pull = await step('opening the draft pull request', 'GitHub', async () => {
     const response = await ctx.send(buildCreateDraftPull(repo, { branch, title, body }))
     if (!ok(response)) throw new Error(githubSaid(response))
@@ -1091,6 +1113,11 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
     "Review it, fill in the project's template in its body, and mark it ready when it is. Merge it as the project normally merges: " +
       'the gate cannot review the pull request that installs it. Merging it starts nothing on any machine: running steward on a machine is a separate step.',
   )
+  if (differing.length > 0) {
+    out(`${differing.length === 1 ? 'This workflow' : 'These workflows'} main already has ${differing.length === 1 ? 'differs' : 'differ'} from what this version of init writes, apart from the pin, so the installation is not this version's:`)
+    for (const rel of differing) out(`  ${rel}`)
+    out("A project's own workflows with these names must be removed or renamed before init can install.")
+  }
   out('Steward is then set up. To have GitHub stop a merge that has not passed review, run `steward protect` once it has merged.')
   out(`Your own checkout was not changed. ${keptLine(clone)}`)
   return 0

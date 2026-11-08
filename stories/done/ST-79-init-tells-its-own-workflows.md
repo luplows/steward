@@ -24,25 +24,25 @@ defence against a file made to look like `init`'s.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — A function, exported from a module ST-69 can import, says
+- [x] **AC-1** — A function, exported from a module ST-69 can import, says
       whether a workflow's text is a template's text with only the pin
       different: the reference after `github:luplows/steward#`, whatever it is.
       Line endings are ignored. Tests: a template filled with two different pins
       matches; one with any other line changed, added or removed does not.
-- [ ] **AC-2** — When `main` has every file `init` would add, `init` compares
+- [x] **AC-2** — When `main` has every file `init` would add, `init` compares
       each workflow it would write (`GATE_WORKFLOWS`, and `INSPECTION_WORKFLOW`
       when inspection is asked for) with this version's template through AC-1's
       function. When all match, it prints the message it prints today and exits
       0.
-- [ ] **AC-3** — When any does not match, it prints that the files are there
+- [x] **AC-3** — When any does not match, it prints that the files are there
       but that each named workflow differs from what this version of `init`
       writes, so the installation is not this version's, and that a project's own
       workflows with these names must be removed or renamed before `init` can
       install. It makes no branch, commit, push or pull request, and exits 1.
-- [ ] **AC-4** — When some files are missing, so `init` opens its pull
+- [x] **AC-4** — When some files are missing, so `init` opens its pull
       request, each workflow it kept that does not match is named as such in the
       body's list of files left, and in the closing message.
-- [ ] **AC-5** — `README.md`'s description of `init`, where it describes this
+- [x] **AC-5** — `README.md`'s description of `init`, where it describes this
       case, says what AC-2 to AC-4 do. The `**Planned (ST-79)**` marker in
       `docs/agent-workflow-design.md` loses `ST-79`.
 
