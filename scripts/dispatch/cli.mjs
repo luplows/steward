@@ -33,6 +33,7 @@ export const COMMANDS = {
   lint: path.join(SCRIPTS_DIR, 'lint-stories.mjs'),
   inspect: path.join(DISPATCH_DIR, 'inspect.mjs'),
   init: path.join(DISPATCH_DIR, 'init.mjs'),
+  upgrade: path.join(DISPATCH_DIR, 'upgrade.mjs'),
   protect: path.join(DISPATCH_DIR, 'protect.mjs'),
   project: path.join(DISPATCH_DIR, 'project.mjs'),
   coordinator: path.join(DISPATCH_DIR, 'coordinator.mjs'),

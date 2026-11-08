@@ -14,29 +14,29 @@ As a member of the crew using steward in an existing project, I want a mostly au
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `steward upgrade --to vX.Y.Z` or `steward upgrade --ref <full SHA>`, exactly one of the two, prepares a draft pull request targeting the project's `main`, reporting its URL. It does not merge or mark ready, change protection, activate the project, start or stop the coordinator, or authorize coding.
-- [ ] **AC-2** — The target pin is checked against `luplows/steward` on GitHub before anything is cloned, branched or pushed:
+- [x] **AC-1** — `steward upgrade --to vX.Y.Z` or `steward upgrade --ref <full SHA>`, exactly one of the two, prepares a draft pull request targeting the project's `main`, reporting its URL. It does not merge or mark ready, change protection, activate the project, start or stop the coordinator, or authorize coding.
+- [x] **AC-2** — The target pin is checked against `luplows/steward` on GitHub before anything is cloned, branched or pushed:
       - `--to` must name a tag there of the form `vX.Y.Z`;
       - `--ref` must be a full commit SHA, 40 hexadecimal characters, of a commit there. A tag or a short SHA is refused, as `init --ref` refuses them.
 
       Giving both, or neither, is refused. Each refusal names the value and the condition it failed.
-- [ ] **AC-3** — The pin the command writes is the tag, or the SHA in lower case. The pull request's title and body say which: a release, or a commit, with the version its `package.json` gives at that commit. So a commit is described as a candidate of that version, or as a development commit when that version is `0.0.0`. They never say a commit is a release.
-- [ ] **AC-4** — Identify the installed version from managed workflow references on `main`. The managed workflows are `review-gate.yml` and `land-approved.yml`, and `inspection.yml` when present (`GATE_WORKFLOWS` and `INSPECTION_WORKFLOW`, `scripts/dispatch/init.mjs`).
+- [x] **AC-3** — The pin the command writes is the tag, or the SHA in lower case. The pull request's title and body say which: a release, or a commit, with the version its `package.json` gives at that commit. So a commit is described as a candidate of that version, or as a development commit when that version is `0.0.0`. They never say a commit is a release.
+- [x] **AC-4** — Identify the installed version from managed workflow references on `main`. The managed workflows are `review-gate.yml` and `land-approved.yml`, and `inspection.yml` when present (`GATE_WORKFLOWS` and `INSPECTION_WORKFLOW`, `scripts/dispatch/init.mjs`).
       - All of them must carry the same pin, and it must resolve in `luplows/steward` to a tag or a commit. Missing, inconsistent or unresolvable references cause refusal naming the findings.
       - When the installed pin is the pin AC-3 would write, the upgrade is a reported no-op: no clone, branch or pull request. It is also a no-op, reported as already on that release, when a tag is installed and `--ref` gives the tag's own commit.
       - When a SHA is installed and `--to` names a tag on that same commit, as when a candidate is the commit later tagged, the upgrade proposes only the change of pin, from the SHA to the tag.
       - When GitHub's comparison of the installed commit with the target's reports the target `behind`, it is refused as a downgrade. `ahead` and `diverged` targets are upgraded; a release branch diverges from `main`.
-- [ ] **AC-5** — Compare each installed managed workflow with the template of the same name in `templates/workflows/` of `luplows/steward` at the installed pin, read from GitHub. Only the pin may differ, through ST-79's comparison. A customized file, or one with no template at the installed pin, causes refusal naming each file and explaining manual reconciliation, without silently replacing or attempting a general merge.
-- [ ] **AC-6** — Propose the managed workflows from `templates/workflows/` at the target pin, read from GitHub and filled with the target pin as `init` fills them (`fillPin`, `scripts/dispatch/init.mjs`), preserving which optional workflows were installed. A managed workflow with no template at the target is refused, naming it. Tests inspect resulting workflow contents and references. Do not change unrelated project files.
-- [ ] **AC-7** — Inspect `steward.config.json` and its configured review-rules file from `main`. Preserve compatible choices, explicitly including `land`, `landWhen`, `unitLinks` and `rulesFile`; an upgrade never grants unattended landing. Propose only target-release changes established by explicit, unambiguous migration rules, explaining each project-owned edit. Where a project-policy decision is required, report it without guessing. The optional per-user landing scan interval is not a project migration.
-- [ ] **AC-8** — Validate the proposed result against the running package's settings requirements and ST-78's review-rule parser before claiming the upgrade is ready for crew consideration. An invalid result identifies the affected file and reason and is not reported as validated.
-- [ ] **AC-9** — The draft PR names:
+- [x] **AC-5** — Compare each installed managed workflow with the template of the same name in `templates/workflows/` of `luplows/steward` at the installed pin, read from GitHub. Only the pin may differ, through ST-79's comparison. A customized file, or one with no template at the installed pin, causes refusal naming each file and explaining manual reconciliation, without silently replacing or attempting a general merge.
+- [x] **AC-6** — Propose the managed workflows from `templates/workflows/` at the target pin, read from GitHub and filled with the target pin as `init` fills them (`fillPin`, `scripts/dispatch/init.mjs`), preserving which optional workflows were installed. A managed workflow with no template at the target is refused, naming it. Tests inspect resulting workflow contents and references. Do not change unrelated project files.
+- [x] **AC-7** — Inspect `steward.config.json` and its configured review-rules file from `main`. Preserve compatible choices, explicitly including `land`, `landWhen`, `unitLinks` and `rulesFile`; an upgrade never grants unattended landing. Propose only target-release changes established by explicit, unambiguous migration rules, explaining each project-owned edit. Where a project-policy decision is required, report it without guessing. The optional per-user landing scan interval is not a project migration.
+- [x] **AC-8** — Validate the proposed result against the running package's settings requirements and ST-78's review-rule parser before claiming the upgrade is ready for crew consideration. An invalid result identifies the affected file and reason and is not reported as validated.
+- [x] **AC-9** — The draft PR names:
       - the installed pin and the target pin, and whether the target is a release or a commit, with its version;
       - the changed managed files, and any justified project-owned changes;
       - the validation outcome, unresolved actions and manual post-merge steps.
 
       It makes no claim the project was already upgraded.
-- [ ] **AC-10** — On failed preparation report any remaining branch, clone or PR and how to recover. Tests, with GitHub's answers injected, cover:
+- [x] **AC-10** — On failed preparation report any remaining branch, clone or PR and how to recover. Tests, with GitHub's answers injected, cover:
       - a no-op, including a tag installed and its own commit given as `--ref`;
       - each way AC-2 refuses;
       - a downgrade;
@@ -47,10 +47,10 @@ As a member of the crew using steward in an existing project, I want a mostly au
       - a failed preparation.
 
       Do not claim rollback without evidence.
-- [ ] **AC-11** — Document the bounded upgrade process, approval and effective-pin verification, and any *manual* coordinator stop/restart required. Say to run the command from steward installed at the target pin, since the settings validation of AC-8 is the running package's. The command never changes local coordinator or per-user state. `docs/release-review.md`'s walkthrough adds the upgrade:
+- [x] **AC-11** — Document the bounded upgrade process, approval and effective-pin verification, and any *manual* coordinator stop/restart required. Say to run the command from steward installed at the target pin, since the settings validation of AC-8 is the running package's. The command never changes local coordinator or per-user state. `docs/release-review.md`'s walkthrough adds the upgrade:
       - on a project installed at the previous release's pin, run `steward upgrade --ref <commit>`, `<commit>` being the release branch's last commit, and again after each fix lands into the branch;
       - after the tag, a project upgraded to a candidate moves to the release with `steward upgrade --to vX.Y.Z`.
-- [ ] **AC-12** — Resolve the `**Planned (ST-69)**` marker in `docs/agent-workflow-design.md` in the implementing PR, correcting the design passage if necessary.
+- [x] **AC-12** — Resolve the `**Planned (ST-69)**` marker in `docs/agent-workflow-design.md` in the implementing PR, correcting the design passage if necessary.
 
 ## Out of scope
 
