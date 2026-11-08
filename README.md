@@ -142,11 +142,17 @@ parse is left as it is, and the installation goes ahead: `init`'s output and, at
 draft pull request's body, a warning name the file and each problem, such as a section with no
 numbered item, and say to repair it before merging the installation (see
 [When the checklist does not parse](#when-the-checklist-does-not-parse)). When `main`
-already has every file, `init` says the installation is already complete and makes no branch,
-commit, push or pull request. It refuses, with exit 2, when the branch is already on `origin` or a
-pull request is open from it. When a step fails it stops, says which, with Git's or GitHub's own
-message, what now exists and what to do next, and undoes nothing. It keeps its clone after every
-run, and its closing message gives the folder's path, to remove when you are done with it.
+already has every file, `init` compares each workflow it would write with its own template,
+apart from the pin. If all match, it says the installation is already complete and makes no
+branch, commit, push or pull request. If any does not, it names it, says the installation is not
+this version's and that a project's own workflows with those names must be removed or renamed
+before `init` can install, makes no branch, commit, push or pull request, and exits 1. When some
+files are missing, a kept workflow that does not match is named as such in the pull request's list
+of files left, and in the closing message. It refuses, with exit 2, when the branch is already
+on `origin` or a pull request is open from it. When a step fails it stops, says which, with Git's
+or GitHub's own message, what now exists and what to do next, and undoes nothing. It keeps its
+clone after every run, and its closing message gives the folder's path, to remove when you are
+done with it.
 
 `init` asks whether steward may land pull requests unattended, and the default is no, with `--yes`
 too: a new `steward.config.json` has `land: false`, so steward reviews and the project merges. Only

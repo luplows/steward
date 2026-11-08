@@ -1820,3 +1820,88 @@ describe('ST-78/AC-5: D5, a section with prose and no numbered item', () => {
     expect(out).not.toMatch(/ST-\d|AC-\d|scripts\/|\.mjs/)
   })
 })
+
+describe('ST-79: init tells its own workflows from a project\'s', () => {
+  const opened = (gh) => writes(gh).find((r) => r.rest === '/pulls')?.body
+
+  /** Install, adopt, then push `files` over main from a scratch clone. */
+  async function installedWith(args, files) {
+    const cwd = makeRepo()
+    expect((await runInit(args, { cwd })).code).toBe(0)
+    adopt(cwd)
+    const scratch = fresh('scratch')
+    git(scratch, 'clone', '-q', ORIGINS.get(cwd).bare, '.')
+    put(scratch, files)
+    git(scratch, 'commit', '-q', '-am', 'the project own')
+    git(scratch, 'push', '-q', 'origin', 'main')
+    return cwd
+  }
+
+  it('ST-79/AC-2: with every file on main and each workflow this version\'s, apart from the pin, it says the installation is complete and exits 0', async () => {
+    const cwd = makeRepo()
+    const pkg = makePackage()
+    expect((await runInit(['--yes', '--inspection', 'yes'], { cwd, pkg })).code).toBe(0)
+    adopt(cwd)
+    const scratch = fresh('scratch')
+    git(scratch, 'clone', '-q', ORIGINS.get(cwd).bare, '.')
+    for (const file of [...GATE_WORKFLOWS, INSPECTION_WORKFLOW]) {
+      const rel = `.github/workflows/${file}`
+      put(scratch, { [rel]: read(scratch, rel).replaceAll('github:luplows/steward#v9.8.7', 'github:luplows/steward#v0.0.1').replaceAll('\n', '\r\n') })
+    }
+    git(scratch, 'commit', '-q', '-am', 'older pin, other line endings')
+    git(scratch, 'push', '-q', 'origin', 'main')
+    const { code, out } = await runInit(['--yes', '--inspection', 'yes'], { cwd, pkg })
+    expect(code).toBe(0)
+    expect(out).toMatch(/the installation is already complete, so init made no branch, commit, push or pull request/)
+  })
+
+  it('ST-79/AC-3: with every file on main and a workflow that differs, it names it, makes no branch, commit, push or pull request, and exits 1', async () => {
+    const cwd = await installedWith(['--yes'], { '.github/workflows/review-gate.yml': 'name: mine\n' })
+    const refsBefore = originRefs(cwd)
+    const gh = fakeGitHub()
+    const { code, out, clone } = await runInit(['--yes'], { cwd, gh })
+    expect(code).toBe(1)
+    expect(out).toContain('  .github/workflows/review-gate.yml')
+    expect(out).not.toContain('  .github/workflows/land-approved.yml')
+    expect(out).toMatch(/this workflow differs from what this version of init writes/)
+    expect(out).toMatch(/The installation is not this version's/)
+    expect(out).toMatch(/must be removed or renamed before init can install/)
+    expect(out).not.toMatch(/already complete/)
+    expect(originRefs(cwd)).toBe(refsBefore)
+    expect(git(clone, 'symbolic-ref', 'HEAD')).toBe('refs/heads/main')
+    expect(gh.requests.some((r) => r.rest.startsWith('/pulls'))).toBe(false)
+  })
+
+  it('ST-79/AC-3: the inspection workflow is compared only when inspection is asked for', async () => {
+    const cwd = await installedWith(['--yes', '--inspection', 'yes'], { '.github/workflows/inspection.yml': 'name: mine\n' })
+    const without = await runInit(['--yes', '--inspection', 'no'], { cwd })
+    expect(without.code).toBe(0)
+    expect(without.out).toMatch(/already complete/)
+    const withIt = await runInit(['--yes', '--inspection', 'yes'], { cwd })
+    expect(withIt.code).toBe(1)
+    expect(withIt.out).toContain('  .github/workflows/inspection.yml')
+  })
+
+  it('ST-79/AC-4: with some files missing, each kept workflow that differs is named in the body and in the closing message', async () => {
+    const cwd = makeRepo({ files: { '.github/workflows/review-gate.yml': 'name: mine\n' } })
+    const gh = fakeGitHub()
+    const { code, out } = await runInit(['--yes'], { cwd, gh })
+    expect(code).toBe(0)
+    const body = opened(gh).body
+    expect(body).toMatch(/- `\.github\/workflows\/review-gate\.yml` \(differs from the workflow this version of init writes, apart from the pin\)/)
+    expect(body).not.toMatch(/land-approved\.yml` \(differs/)
+    expect(out).toMatch(/This workflow main already has differs from what this version of init writes/)
+    expect(out).toContain('  .github/workflows/review-gate.yml')
+  })
+
+  it('ST-79/AC-4: a kept workflow that matches is not named as differing', async () => {
+    const pkg = makePackage()
+    const template = readFileSync(path.join(pkg, 'templates', 'workflows', 'review-gate.yml'), 'utf8').replaceAll('v{{STEWARD_VERSION}}', () => 'v0.0.1')
+    const cwd = makeRepo({ files: { '.github/workflows/review-gate.yml': template } })
+    const gh = fakeGitHub()
+    const { code, out } = await runInit(['--yes'], { cwd, gh, pkg })
+    expect(code).toBe(0)
+    expect(opened(gh).body).not.toMatch(/differs from the workflow/)
+    expect(out).not.toMatch(/differ from what this version of init writes/)
+  })
+})

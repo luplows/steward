@@ -3209,10 +3209,10 @@ shortened where it is long, so that it can be found there with its date.
 
 - **Loose ends from the v0.1.0 release** (decided 2026-11-05 by the owner, with the planning
   session, from the release review's brief). Each is planned in the story named:
-  - **Planned (ST-79): `init` tells its own workflows from a project's.** With every file already
-    on `main`, `init` said the installation was complete, as it did in steward itself, whose
-    workflows are its own. It now compares each workflow with its template, apart from the pin, and
-    says which are not its own instead. Considered and not chosen: rewording the message alone.
+  - **`init` tells its own workflows from a project's.** With every file already on `main`, `init`
+    said the installation was complete, as it did in steward itself, whose workflows are its own.
+    It now compares each workflow with its template, apart from the pin, and says which are not its
+    own instead. Considered and not chosen: rewording the message alone.
   - **The reviewer reports every blocking finding it finds in one review**
     (`.claude/prompts/reviewer.md`, "Your verdict"). On playground #10, two reviews of one head
     blocked on two different parts of the description, either of which a single review could have
