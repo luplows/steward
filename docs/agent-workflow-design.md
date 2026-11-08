@@ -53,12 +53,17 @@ and rules, proposes only deterministic changes justified by the target release,
 and validates the proposed result. The crew approves and lands the PR. Local
 coordinator stop/restart, activation and authorization remain separate and manual.
 General historical migrations and automatic conflict resolution are not promised.
-(crew, 2026-11-07) `--ref <full SHA>` pins a release candidate instead of the release tag, so
-that the release review can try the upgrade on the release branch's exact commit before the tag
-exists, as `init --ref` does. The commit must be steward's and carry the target version. A
-project on a candidate moves to the tag with the same command, and one already on the tag is a
-no-op. Enabling unattended landing stays the crew's own settings pull request, never an effect of
-upgrading.
+(crew, 2026-11-07) Both sides of the comparison are read from `luplows/steward` on GitHub at
+their pins: an installed workflow is compared with the template at the pin it carries, and the
+proposed one is the template at the target pin. So nothing extra is shipped, the installed pin
+need not be one of a fixed list, and the target can be a tag (`--to vX.Y.Z`) or any steward
+commit (`--ref <full SHA>`). That lets the release review try the upgrade on the release
+branch's exact candidate commit before the tag exists, as `init --ref` does, and lets the crew
+try one from `main` before a release is cut. A target behind the installed commit is refused as
+a downgrade. Enabling unattended landing stays the crew's own settings pull request, never an
+effect of upgrading. Considered and not chosen: shipping the previous release's templates in the
+package; and versioned migrations for workflows, which the templates at the two pins already
+give. Migrations of project-owned settings are draft ST-87, for when a release first needs one.
 
 (crew, 2026-11-04) Existing configured review rules are checked through the
 reviewer's parser (`validateRules`, `scripts/dispatch/rules.mjs`: `parseRules`
