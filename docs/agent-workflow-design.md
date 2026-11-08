@@ -123,12 +123,33 @@ open it. It adds only the files `main` lacks, follows the project's pull request
 neither creating nor merging that pull request activates a project locally. See "Installation
 through a reviewable pull request", Part 3, for what it does and does not guard against.
 
-The roadmap schedules the ST-6 isolation investigation and its resulting implementation for 0.4,
+The roadmap schedules the ST-6 isolation investigation and its resulting implementation for 0.5,
 deliberately after the first coding and fixing slices. Earlier releases retain their resource
 bounds and existing safeguards but must disclose that stronger credential/filesystem isolation
-has not been delivered. Approval-order scheduling in 0.2 applies to explicitly authorized
+has not been delivered. Approval-order scheduling in 0.3 applies to explicitly authorized
 handoffs; it does not silently change steward's current story queue or retire ST-2. The roadmap's
 follow-up table names the existing stories requiring reconciliation before overlapping work runs.
+
+### Planned unattended landing and concurrency
+
+**Planned (ST-83, ST-84)** (crew, 2026-11-07) The coordinator discovers landing
+candidates from explicitly activated projects, independently of whether it reviewed the PR,
+only where `land: true` is set on the project's `main`. Landing discovery shares the
+review `scanIntervalMinutes` by default. An optional per-user
+`landingScanIntervalMinutes` gives landing a separate due interval. The current
+sequential coordinator can delay either scan while admitted work runs; these are
+due intervals, not independent worker clocks. ST-83 provides candidate discovery and
+configuration without dispatching landing. ST-84 admits the pilot's bounded
+`landPullRequest` in unattended `once: true` mode, reports outcomes and prevents
+overlapping local attempts for one PR/head. A later scan may retry still-eligible
+work; no durable exactly-once landing ledger is required. The runway's checks
+remain authoritative. Installation or activation never authorizes landing by itself.
+
+**Planned (ST-85)** (crew, 2026-11-07) In 0.4, separate due discovery from
+admitted review, coding, fixing and landing work, so a long session cannot delay
+due scans. Execution capacity, duplicate prevention, restart and stop semantics
+are work-type-specific. This is a draft to refine after 0.3 coding evidence;
+it does not defer 0.3's bounded execution, duplicate prevention or recovery.
 
 ## Principles
 
@@ -2703,7 +2724,8 @@ shortened where it is long, so that it can be found there with its date.
   commit, before the release notes and the tag ([the record](validation/ST-48-review-installation.md)).
   ST-48's criteria do not cover steward itself. There the crew changed the plan, 2026-11-04, after
   tower-workshop-paths had to remove its old engine before `init` could take over: `init` runs once
-  at the release commit, and converting steward's own gate to the thin workflows moves to 0.2. A defect found after the cut is fixed on `main` and cherry-picked, as for
+  at the release commit, and converting steward's own gate to the thin workflows
+  was then assigned to 0.2 (moved to 0.3 by the crew on 2026-11-07). A defect found after the cut is fixed on `main` and cherry-picked, as for
   any release. The rule that a tagged release branch is
   never moved or deleted is unchanged. Considered and not chosen: one pull request bringing `main`'s
   changes outside `stories/` into the old branch, a very large diff for one review; keeping the old
@@ -2951,6 +2973,16 @@ shortened where it is long, so that it can be found there with its date.
   release-review procedure to clients. Existing ST-48, ST-52, ST-6, ST-11/ST-12, ST-2 and ST-53
   require the explicit follow-up reconciliation in the roadmap; none is retired by this decision.
   The older release branch and PR #86 are left for the crew's later release-review reconciliation.
+- **Milestone resequencing and bounded landing scans** (crew, 2026-11-07).
+  Superseding the version numbers in the 2026-10-26 sequencing decision above,
+  0.2 now delivers opt-in unattended landing and a bounded upgrade command;
+  coding moves to 0.3, fixing and draft general concurrency to 0.4, and
+  credential isolation to 0.5. Landing shares review's scan interval by default,
+  with an optional separate per-user interval. A due scan may be delayed by
+  currently admitted operations in 0.2. Considered and not chosen: calling the
+  intermediate capability 0.1.5 against the release version convention;
+  a durable exactly-once landing ledger; general execution concurrency as a
+  0.2 prerequisite; and treating activation as landing authorization.
 
 - **Per-user coordinator foundations and manual independence** (crew, 2026-10-27).
   - Explicit per-user local activation is separate from installation:
@@ -3175,9 +3207,11 @@ shortened where it is long, so that it can be found there with its date.
     Its default of 5000 is not exported, and `spawnSession` does not pass the option. Considered and
     not chosen (crew, 2026-11-05): an exported constant, which the test of `spawn.mjs`'s exports
     would fail, and which a test could not shorten.
-  - **Planned (ST-82): steward's own gate is converted to the thin workflows**, kept in 0.2 and
-    timed when 0.2 is cut, since nothing else in the 0.2 slice depends on it. Steward's gate cannot
-    review the pull request that installs it, so the crew merges that one by hand, as in
+  - **Planned (ST-82): steward's own gate is converted to the thin workflows**.
+    It was kept in 0.2 and timed for that cut on 2026-11-05; the crew moved
+    it to 0.3 on 2026-11-07, with coding. The landing-and-upgrade 0.2 release
+    does not depend on this conversion. Steward's gate cannot review the pull
+    request that installs it, so the crew merges that one by hand, as in
     tower-workshop-paths.
 
 - **Installation through a reviewable pull request** (crew, 2026-10-26).
@@ -3248,7 +3282,8 @@ shortened where it is long, so that it can be found there with its date.
   installers and unusual Git configuration are not guarded against: the draft pull request,
   reviewed before anything lands, is the backstop. The four passages above marked superseded are
   kept as the record of the contract #92 implemented; #92 was blocked eleven times and is closed.
-  Follow-ups are candidates for 0.2, held in draft ST-65. Considered and not chosen: narrowing the
+  Follow-ups were candidates for 0.2, held in draft ST-65; on 2026-11-07
+  the crew moved their candidate milestone to 0.3. Considered and not chosen: narrowing the
   earlier contract one acceptance criterion at a time (proposed after its eleventh block, on
   cleanup deleting another process's edits); retiring ST-56 for a new story, which would have
   changed every citation of it; a clean worktree of the caller's repository, which shares that
@@ -3269,8 +3304,8 @@ shortened where it is long, so that it can be found there with its date.
   has been tried only on Windows, so another platform is refused until a trial there. **A limit
   this leaves:** such a session can read `~/.codex/auth.json` and `~/.claude/.credentials.json`,
   and what it copies into the worktree would be committed and pushed. That is outside the story's
-  threat model, of an honest model and one member of the crew, and stays with ST-6, for 0.4; the
-  documentation says so, as `outline.md`, 0.4.0, asks. Considered and not chosen: adding the git
+  threat model, of an honest model and one member of the crew, and stays with ST-6, now planned for 0.5 after the 2026-11-07
+  resequencing; `outline.md` is the current milestone authority. Considered and not chosen: adding the git
   folders with `--add-dir` so that the session commits, which still could not commit in the trial
   and made the hooks folder writable; keeping the user's Codex configuration; leaving the temporary
   folder as it is; and waiting for the rest of steward's coder stories.

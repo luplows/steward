@@ -18,7 +18,7 @@ As a member of the crew using steward in an existing project, I want a mostly au
 - [ ] **AC-2** — Identify the installed version from managed workflow references on `main`. The managed workflows are `review-gate.yml` and `land-approved.yml`, and `inspection.yml` when present (`GATE_WORKFLOWS` and `INSPECTION_WORKFLOW`, `scripts/dispatch/init.mjs`). A v0.1.0 installation is one whose managed workflows all carry the same one of exactly three pins: `v0.1.0`, the tag's commit `0b1d8b3ae9fd295506fa0af39b7e19bab207e430`, or `935fb5b81398420acd5e7476d2b94bec94bbad02`. For it, propose v0.2.0. Missing, inconsistent or unrecognized references cause refusal naming the findings; a consistent v0.2.0 installation is a reported no-op with no PR.
 - [ ] **AC-3** — Compare installed Steward-managed workflow files with the corresponding v0.1.0 templates allowing only version-pin substitution, through ST-79's comparison. Customized managed files cause refusal naming each file and explaining manual reconciliation, without silently replacing or attempting a general merge.
 - [ ] **AC-4** — Propose v0.2.0 managed workflows and pins, preserving which optional workflows were installed. Tests inspect resulting workflow contents and references. Do not change unrelated project files.
-- [ ] **AC-5** — Inspect `steward.config.json` and its configured review-rules file from `main`. Preserve compatible choices; propose only target-release changes established by explicit, unambiguous migration rules, explaining each project-owned edit. Where a project-policy decision is required, report it without guessing.
+- [ ] **AC-5** — Inspect `steward.config.json` and its configured review-rules file from `main`. Preserve compatible choices, explicitly including `land`, `landWhen`, `unitLinks` and `rulesFile`; an upgrade never grants unattended landing. Propose only target-release changes established by explicit, unambiguous migration rules, explaining each project-owned edit. Where a project-policy decision is required, report it without guessing. The optional per-user landing scan interval is not a project migration.
 - [ ] **AC-6** — Validate the proposed result against the target release's applicable settings requirements and ST-78's review-rule parser before claiming the upgrade is ready for crew consideration. An invalid result identifies the affected file and reason and is not reported as validated.
 - [ ] **AC-7** — The draft PR names source and target versions, changed managed files, any justified project-owned changes, validation outcome, unresolved actions and manual post-merge steps; it makes no claim the project was already upgraded.
 - [ ] **AC-8** — On failed preparation report any remaining branch, clone or PR and how to recover. Tests cover a no-op, inconsistent pins, customized workflows, invalid proposed rules and a failed preparation; do not claim rollback without evidence.
@@ -49,7 +49,11 @@ As a member of the crew using steward in an existing project, I want a mostly au
 - `templates/workflows/`, `scripts/dispatch/init.mjs` and `docs/release-review.md` supply the existing installed-workflow and release context.
 - The three pins (crew, 2026-11-05): pinpoint and tower-workshop-paths pin every managed workflow to `935fb5b`'s full SHA, `init` with no `--ref` writes `v0.1.0`, and `--ref` takes only a full SHA, such as the tag's commit. `git diff --stat 935fb5b v0.1.0^{commit}` shows `package.json`, `package-lock.json` and `releases/v0.1.0.md`, and no other file.
 - ST-79 builds the comparison of a workflow with its template, apart from the pin, that AC-3 uses.
+- Crew decision, 2026-11-07: 0.2 is the landing-and-upgrade release, not the coding slice.
+  Project `land` permission already exists, and a separate landing interval is per-user.
+  Any substantial newly discovered migration of project-owned configuration is a
+  separate story, not an expansion of this bounded command.
 
 ## Open questions
 
-- If v0.2.0 requires substantial migration of project-owned configuration, decide whether to separate that migration rather than expanding this story.
+*(none)*

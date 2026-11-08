@@ -1,6 +1,6 @@
 ---
 id: ST-65
-title: Follow up init's installation pull request for 0.2
+title: Follow up init's installation pull request for 0.3
 tier: later
 kind: product
 depends_on: [ST-56]
@@ -11,7 +11,7 @@ blocked: null
 ## Intent
 
 As a member of the crew installing steward, I want the parts of `init`'s installation pull
-request that 0.1 leaves out to be considered for 0.2, so that they are chosen from real use
+request that 0.1 leaves out to be considered for 0.3, so that they are chosen from real use
 rather than built ahead of it. This is a placeholder: it holds the candidates, and is split or
 refined into stories once the crew picks among them.
 
@@ -38,12 +38,14 @@ To be written when the crew chooses which candidates to build (Open questions).
   Out of scope names these candidates for 0.2.
 - Crew decision, 2026-10-31: the first `init` story goes in 0.1; follow-ups are planned for 0.2
   for now.
+- Crew decision, 2026-11-07: move these still-unselected installation follow-ups to
+  the 0.3 candidate milestone while 0.2 delivers landing and upgrades.
 - #92, ST-56's earlier implementation, closed 2026-10-31: its eleven reviews show the cases a
   wider contract would meet.
 
 ## Open questions
 
-Candidates for 0.2, for the crew to choose among:
+Candidates for 0.3, for the crew to choose among:
 
 - **Remove the clone after a success.** In 0.1 the clone is always kept and the closing message
   asks the person to remove it (crew, 2026-10-31).
