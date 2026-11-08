@@ -13,7 +13,7 @@ import { createContext, parseComments, parseMarkerComment } from './github.mjs'
 import { parseRules } from './rules.mjs'
 import {
   assertReviewableCheckout, chooseReviewer, formatFindings, HONOURED_ASSOCIATIONS, NON_FAILURES,
-  parseReviewerVerdict, reviewerCandidates, unitCoderModel, unitModel, reviewPullRequest as reviewPullRequestWith,
+  main as reviewMain, parseReviewerVerdict, reviewerCandidates, unitCoderModel, unitModel, reviewPullRequest as reviewPullRequestWith,
 } from './review.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -1817,5 +1817,113 @@ describe('ST-35/AC-8: the reviewer differs from the models on the Coder: line', 
     expect(chooseReviewer(settings, ['opus', 'sonnet']).name).toBe('haiku')
     expect(chooseReviewer(settings, []).name).toBe('opus')
     expect(reviewerCandidates(settings, ['opus']).map((c) => c.name)).toEqual(['sonnet', 'haiku'])
+  })
+})
+
+describe("ST-86/AC-4, AC-5: review --repo for another repository works in that repository's manual checkout", () => {
+  const BRANCH = 'story/OQ-99-thing'
+  const url = (repo) => `https://github.com/${repo}.git`
+
+  // `cwd` is a checkout of another repository, with no origin to fetch from and without the
+  // branch. Its `origin` is reported as `luplows/steward` and the requested repository's as
+  // `REPO`, so no real remote is read; every other Git command runs for real, in the directory it
+  // is given, and the requested repository's "GitHub" is the local bare `originDir`.
+  function setup() {
+    const home = mkdtempSync(path.join(root, 'home-'))
+    const invoking = mkdtempSync(path.join(root, 'invoking-'))
+    git(invoking, 'init', '-q', '-b', 'main')
+    writeFileSync(path.join(invoking, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: 'luplows/steward' })))
+    const manual = path.join(home, '.steward', 'state', 'manual-checkouts', ...REPO.split('/'))
+    const seen = []
+    const clones = []
+    const manualCheckout = {
+      git: async (cwd, args) => {
+        seen.push({ dir: cwd, command: args[0] })
+        if (args[0] === 'remote') return url(cwd === invoking ? 'luplows/steward' : REPO)
+        return git(cwd, ...args)
+      },
+      cloneRepo: async (_repo, dir) => {
+        clones.push(dir)
+        git(root, 'clone', '-q', originDir, dir)
+      },
+    }
+    const github = fakeGitHub({ branch: BRANCH, states: [shas[BRANCH]] })
+    const session = standIn(verdictText(shas[BRANCH]))
+    const reviewed = []
+    const deps = {
+      manualCheckout,
+      createContext: () => github.ctx,
+      reviewPullRequest: (args) => {
+        reviewed.push(args.repoDir)
+        return reviewPullRequestWith({ usage: async () => UNDER_LIMITS, userConfig: configOf(), baseEnv: {}, sessionOptions: session.sessionOptions, ...args })
+      },
+    }
+    const out = []
+    const run = (argv) => reviewMain(argv, { cwd: invoking, homedir: home, deps, out: (line) => out.push(line) })
+    return { run, out, invoking, manual, seen, clones, github, session, reviewed }
+  }
+
+  it("ST-86/AC-5: #24's case, a head branch that exists only in the requested repository, is reviewed in its manual checkout", async () => {
+    const w = setup()
+    await w.run(['7', '--repo', REPO])
+    expect(JSON.parse(w.out.join('\n'))).toMatchObject({ status: 'recorded', verdict: 'pass', headSha: shas[BRANCH] })
+    expect(w.reviewed).toEqual([w.manual])
+    expect(w.github.posted).toHaveLength(1)
+    // The branch was fetched into the manual checkout, and the invoking checkout never saw it.
+    expect(git(w.manual, 'rev-parse', `origin/${BRANCH}`)).toBe(shas[BRANCH])
+    expect(git(w.manual, 'status', '--porcelain', '--untracked-files=all')).toBe('')
+    expect(() => git(w.invoking, 'rev-parse', '--verify', '--quiet', `origin/${BRANCH}`)).toThrow()
+    // The reviewer ran in a worktree of the manual checkout.
+    expect(w.session.calls[0].checkout.head).toBe(git(originDir, 'rev-parse', 'main'))
+    // The only Git command given to the invoking checkout was the read of its origin.
+    expect(w.seen.filter((s) => s.dir === w.invoking)).toEqual([{ dir: w.invoking, command: 'remote' }])
+    expect(w.clones).toEqual([w.manual])
+  }, REVIEW_TEST_TIMEOUT)
+
+  it('ST-86/AC-5: a manual checkout that is present is reused, not cloned again', async () => {
+    const w = setup()
+    await w.run(['7', '--repo', REPO])
+    await w.run(['7', '--repo', REPO])
+    expect(w.reviewed).toEqual([w.manual, w.manual])
+    expect(w.clones).toEqual([w.manual])
+  }, REVIEW_TEST_TIMEOUT)
+
+  it("ST-86/AC-1, AC-4: --repo naming the invoking checkout's origin, or no --repo, reviews in the invoking checkout", async () => {
+    const w = setup()
+    const stub = { reviewPullRequest: async (args) => ({ status: 'recorded', repoDir: args.repoDir }), createContext: () => ({}) }
+    const own = (repo) => ({ ...stub, manualCheckout: { git: async () => url(repo) } })
+    for (const argv of [['7'], ['7', '--repo', 'luplows/steward']]) {
+      const out = []
+      await reviewMain(argv, { cwd: w.invoking, deps: own('luplows/steward'), out: (line) => out.push(line) })
+      expect(JSON.parse(out.join('\n')).repoDir).toBe(w.invoking)
+    }
+  })
+
+  it('ST-86/AC-2, AC-4: a refused manual checkout ends the command before any review', async () => {
+    const w = setup()
+    const deps = {
+      manualCheckout: { git: async (_cwd, args) => (args[0] === 'remote' ? url('someone/else') : ''), cloneRepo: async () => {}, isCheckout: () => true },
+      reviewPullRequest: async () => {
+        throw new Error('must not review')
+      },
+      createContext: () => ({}),
+    }
+    await expect(reviewMain(['7', '--repo', REPO], { cwd: w.invoking, homedir: path.join(root, 'elsewhere'), deps, out: () => {} }))
+      .rejects.toThrow(/manual-checkouts.*is refused/)
+  })
+})
+
+describe('ST-86/AC-4: review --repo without a value is refused', () => {
+  it('ST-86/AC-4: --repo given with no value is a usage error and reviews nothing', async () => {
+    for (const argv of [['7', '--repo'], ['--repo', '7']]) {
+      const deps = {
+        reviewPullRequest: async () => {
+          throw new Error('must not review')
+        },
+        readSettings: async () => ({ repo: 'o/n' }),
+        createContext: () => ({}),
+      }
+      await expect(reviewMain(argv, { cwd: root, deps, out: () => {} })).rejects.toThrow(/usage/)
+    }
   })
 })

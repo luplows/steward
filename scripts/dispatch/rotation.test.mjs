@@ -1,7 +1,9 @@
 // @vitest-environment node
 
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_MAX_REVIEWS, listLandingPullRequests, parseArgs, runRotation } from './rotation.mjs'
+import path from 'node:path'
+import { DEFAULT_MAX_REVIEWS, listLandingPullRequests, parseArgs, rotate, runRotation } from './rotation.mjs'
+import { ownedCheckoutPath } from './project.mjs'
 
 const SHA = (c) => c.repeat(40)
 const CHECKED_OUT = SHA('c')
@@ -762,5 +764,197 @@ describe('ST-54/AC-2: a rotation never requests a manual landing', () => {
     expect(landsOf(h.calls)).toEqual([])
     expect(h.lines).toContain('#1 not landed: landing is off in the settings')
     expect(result.exitCode).toBe(0)
+  })
+})
+
+describe("ST-86: a rotation for another repository works in that repository's manual checkout", () => {
+  const HOME = path.resolve('/home/crew')
+  const INVOKING = path.resolve('/work/steward-controller')
+  const OTHER = 'luplows/playground'
+  const MANUAL = path.join(HOME, '.steward', 'state', 'manual-checkouts', 'luplows', 'playground')
+  const url = (repo) => `https://github.com/${repo}.git`
+  const OWN = { repo: 'luplows/steward', land: false, landWhen: 'all' }
+
+  // The harness's dependencies, with every directory a project-side step was given recorded in
+  // `seen`, and Git, `gh repo clone` and the file system for the manual checkout injected.
+  function foreign({ origins = { [INVOKING]: url('luplows/steward') }, present = [], settingsOf, harnessOptions = {} } = {}) {
+    // The pull request has no verdict until the review has run, and a passing one after it.
+    let reviewed = false
+    const h = harness({
+      lists: [[pr(1)], [pr(1)]], comments: { 1: () => (reviewed ? [marker(SHA('a'), 'pass')] : []) }, ...harnessOptions,
+    })
+    const seen = []
+    const touched = []
+    const cloned = []
+    const have = new Set(present)
+    const settingsByDir = settingsOf ?? {
+      [INVOKING]: OWN,
+      [MANUAL]: { repo: OTHER, land: true, landWhen: ['playground'] },
+    }
+    const inner = h.deps
+    const deps = {
+      ...inner,
+      requireOwnWorktree: async (dir) => {
+        seen.push({ what: 'requireOwnWorktree', dir })
+        return inner.requireOwnWorktree(dir)
+      },
+      updateCheckout: async (dir) => {
+        seen.push({ what: 'updateCheckout', dir })
+        return inner.updateCheckout(dir)
+      },
+      readSettings: async (dir) => {
+        seen.push({ what: 'readSettings', dir })
+        return settingsByDir[dir]
+      },
+      createLandContext: ({ repo, landing, landWhen }) => ({ repo, landing, landWhen, kind: 'land' }),
+      git: async (dir, args) => {
+        seen.push({ what: 'git', dir })
+        return inner.git(dir, args)
+      },
+      reviewPullRequest: async (args) => {
+        seen.push({ what: 'reviewPullRequest', dir: args.repoDir })
+        reviewed = true
+        return { status: 'recorded', verdict: 'pass' }
+      },
+      inspection: async (args) => {
+        seen.push({ what: 'inspection', dir: args.cwd })
+        return 0
+      },
+      manualCheckout: {
+        git: async (cwd, args) => {
+          touched.push(cwd)
+          if (args[0] === 'remote') {
+            if (origins[cwd] === undefined) throw new Error('no origin')
+            return origins[cwd]
+          }
+          return ''
+        },
+        cloneRepo: async (repo, dir) => {
+          touched.push(dir)
+          cloned.push(dir)
+          have.add(dir)
+          origins[dir] ??= url(repo)
+        },
+        isCheckout: (dir) => have.has(dir),
+        makeDirectory: async (dir) => {
+          touched.push(dir)
+        },
+      },
+    }
+    const lines = []
+    const run = (...given) => rotate({
+      cwd: INVOKING, repo: given.length === 0 ? OTHER : given[0], homedir: HOME, deps, out: (line) => lines.push(line),
+    })
+    return { run, seen, touched, cloned, lines, calls: h.calls }
+  }
+
+  it('ST-86/AC-2, AC-5: the manual checkout is cloned when absent and reused when present', async () => {
+    const absent = foreign()
+    expect(await absent.run()).toMatchObject({ status: 'finished', exitCode: 0 })
+    expect(absent.cloned).toEqual([MANUAL])
+
+    const present = foreign({ present: [MANUAL], origins: { [INVOKING]: url('luplows/steward'), [MANUAL]: url(OTHER) } })
+    expect(await present.run()).toMatchObject({ status: 'finished', exitCode: 0 })
+    expect(present.cloned).toEqual([])
+    expect(present.seen.every((s) => s.dir === MANUAL)).toBe(true)
+  })
+
+  it('ST-86/AC-3: every project-side step is made in the manual checkout and none in the invoking one', async () => {
+    const w = foreign()
+    await w.run()
+    expect(w.seen.map((s) => s.what)).toEqual([
+      'requireOwnWorktree', 'updateCheckout', 'readSettings', 'reviewPullRequest', 'git', 'git', 'inspection',
+    ])
+    expect(w.seen.every((s) => s.dir === MANUAL)).toBe(true)
+  })
+
+  it("ST-86/AC-3, AC-5: the manual checkout's settings, not the invoking checkout's, decide landing", async () => {
+    const landed = []
+    const w = foreign({
+      harnessOptions: {
+        land: async (args) => {
+          landed.push(args.ctx)
+          return { status: 'merged' }
+        },
+      },
+    })
+    await w.run()
+    // The invoking checkout's settings say land: false; the manual checkout's say true.
+    expect(landed).toEqual([{ repo: OTHER, landing: true, landWhen: ['playground'], kind: 'land' }])
+
+    const off = foreign({
+      settingsOf: { [INVOKING]: { ...OWN, land: true }, [MANUAL]: { repo: OTHER, land: false, landWhen: 'all' } },
+      harnessOptions: { land: async () => ({ status: 'merged' }) },
+    })
+    await off.run()
+    expect(off.lines).toContain('#1 not landed: landing is off in the settings')
+  })
+
+  it('ST-86/AC-3: the branch check is made on the manual checkout, not on the invoking one', async () => {
+    const w = foreign({ harnessOptions: { worktree: 'has a branch checked out' } })
+    const result = await w.run()
+    expect(result.status).toBe('branch-checked-out')
+    expect(w.seen).toEqual([{ what: 'requireOwnWorktree', dir: MANUAL }])
+  })
+
+  it('ST-86/AC-3: the uncommitted check is made on the manual checkout', async () => {
+    const w = foreign({ harnessOptions: { checkout: { status: 'dirty', paths: ['x.txt'] } } })
+    const result = await w.run()
+    expect(result).toMatchObject({ status: 'dirty', exitCode: 1 })
+    expect(result.lines.at(-1)).toContain(MANUAL)
+    expect(w.seen.some((s) => s.dir === INVOKING)).toBe(false)
+  })
+
+  it('ST-86/AC-3: the check after each review that the files have not changed is made on the manual checkout', async () => {
+    const w = foreign({ harnessOptions: { gitStatus: () => ' M x' } })
+    const result = await w.run()
+    expect(result.status).toBe('worktree-changed')
+    expect(result.lines.at(-1)).toContain(MANUAL)
+    expect(w.seen.filter((s) => s.what === 'git').map((s) => s.dir)).toEqual([MANUAL, MANUAL])
+  })
+
+  it('ST-86/AC-2, AC-5: a foreign origin in the manual checkout is refused, and nothing else runs', async () => {
+    const w = foreign({ present: [MANUAL], origins: { [INVOKING]: url('luplows/steward'), [MANUAL]: url('someone/else') } })
+    const result = await w.run()
+    expect(result).toMatchObject({ status: 'checkout-refused', exitCode: 1 })
+    expect(result.lines).toHaveLength(1)
+    expect(result.lines[0]).toMatch(/^rotation stopped \(checkout-refused\): /)
+    expect(result.lines[0]).toContain(MANUAL)
+    expect(w.lines).toEqual(result.lines)
+    expect(w.seen).toEqual([])
+    expect(w.calls).toEqual([])
+  })
+
+  it("ST-86/AC-5: the coordinator's owned checkout path is never touched", async () => {
+    const owned = ownedCheckoutPath(HOME, OTHER)
+    const w = foreign({ origins: { [INVOKING]: url('luplows/steward'), [owned]: url(OTHER) }, present: [owned] })
+    await w.run()
+    const ownedRoot = path.dirname(path.dirname(owned))
+    const inOwned = (dir) => dir === ownedRoot || dir.startsWith(ownedRoot + path.sep)
+    expect(w.touched.filter(inOwned)).toEqual([])
+    expect(w.seen.filter((s) => inOwned(s.dir))).toEqual([])
+    expect(w.cloned).toEqual([MANUAL])
+  })
+
+  it('ST-86/AC-3, AC-5: inspection gets the manual checkout as its working directory', async () => {
+    const w = foreign()
+    await w.run()
+    expect(w.seen.filter((s) => s.what === 'inspection')).toEqual([{ what: 'inspection', dir: MANUAL }])
+  })
+
+  it("ST-86/AC-1: --repo naming the invoking checkout's origin works in the invoking checkout, with no manual checkout", async () => {
+    const w = foreign({ settingsOf: { [INVOKING]: OWN } })
+    const result = await w.run('luplows/steward')
+    expect(result.status).toBe('finished')
+    expect(w.seen.every((s) => s.dir === INVOKING)).toBe(true)
+    expect(w.touched).toEqual([INVOKING])
+  })
+
+  it('ST-86/AC-1: without --repo the rotation works in the invoking checkout and runs no Git or clone for it', async () => {
+    const w = foreign({ settingsOf: { [INVOKING]: OWN } })
+    const result = await w.run(undefined)
+    expect(result.status).toBe('finished')
+    expect(w.seen.every((s) => s.dir === INVOKING)).toBe(true)
+    expect(w.touched).toEqual([])
   })
 })

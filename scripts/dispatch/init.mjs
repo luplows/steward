@@ -51,6 +51,7 @@ import { homedir as osHomedir, tmpdir as osTmpdir } from 'node:os'
 import path from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { fileURLToPath } from 'node:url'
+import { repoFromRemoteUrl } from './checkout-main.mjs'
 import { ghAuthToken } from './github.mjs'
 import { INSPECTION_LABEL, isLabelAlreadyExists } from './inspect.mjs'
 import { userConfigPath, TOOL_EFFORTS } from './user-config.mjs'
@@ -346,13 +347,8 @@ export function gitRoot(cwd) {
   }
 }
 
-const ORIGIN_RE = /^(?:https?:\/\/(?:[^@/]+@)?|ssh:\/\/(?:[^@/]+@)?|git@)github\.com[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/
-
-/** `owner/name` from an `https` or an `ssh` URL of a GitHub repository, or `null`. */
-export function repoFromRemoteUrl(url) {
-  const match = ORIGIN_RE.exec(String(url).trim())
-  return match ? `${match[1]}/${match[2]}` : null
-}
+// `repoFromRemoteUrl` is defined in `checkout-main.mjs` and exported from here too.
+export { repoFromRemoteUrl }
 
 /** The `origin` remote's repository and URL; refuses when there is none or it is not on GitHub. */
 function originRepo(root) {

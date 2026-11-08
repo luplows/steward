@@ -851,17 +851,21 @@ the worktree has anything uncommitted. The scripts take the project from the wor
 their prompts from the checkout they are loaded from (`ENGINE_ROOT`, `coder.mjs`; OQ-123, OQ-130),
 so those are what has landed, and the main checkout is left free for whoever else is working.
 
-**Planned (ST-86)** (crew, 2026-11-07) `--repo owner/name` naming another repository than the
-working directory's makes `rotation`, `review` and `inspect` work against a checkout of that
-repository kept for manual commands, `~/.steward/state/manual-checkouts/<owner>/<name>`, cloned
-when absent and brought to `origin`'s `main`, detached. Its settings, Git operations, review
-worktree and inspection are that repository's, and the invoking checkout is not read. Until then
-only the GitHub calls follow `--repo`: run from steward's controller worktree for
-`luplows/playground`, a review threw on a head branch steward's checkout does not have. The
-coordinator's owned checkouts are never used for this. Considered and not chosen: refusing
-`--repo` from another checkout, which leaves one controller unable to serve several projects;
-reusing the coordinator's owned checkout, which a running coordinator updates and reviews from;
-and a new clone for each command, which repeats the clone on every rotation.
+`--repo owner/name` naming another repository than the one the working directory's `origin` names
+(`manual-checkout.mjs`; crew, 2026-11-07) makes `rotation`, `review` and `inspect` work against a
+checkout of that repository kept for manual commands,
+`~/.steward/state/manual-checkouts/<owner>/<name>`, cloned with `gh repo clone` when absent and
+brought to `origin`'s `main`, detached, each time. Its settings, Git operations, review worktree and
+inspection are that repository's, and of the invoking checkout only its `origin` is read. Without
+`--repo`, or with the invoking checkout's own repository, the command works in the invoking
+checkout as before. Before this, only the GitHub calls followed `--repo`: run from steward's
+controller worktree for `luplows/playground`, a review threw on a head branch steward's checkout
+does not have. A manual checkout that cannot be cloned or brought to `main`, or whose `origin` is
+another repository, is refused, naming its path. The coordinator's owned checkouts are never used
+for this. Considered and not chosen: refusing `--repo` from another checkout, which leaves one
+controller unable to serve several projects; reusing the coordinator's owned checkout, which a
+running coordinator updates and reviews from; and a new clone for each command, which repeats the
+clone on every rotation.
 
 **It may land, and only through the pilot.** The rotation runs `land.mjs`, with `once`, for a pull
 request whose head has an honoured `pass` or `pass-with-observations` verdict, with no further

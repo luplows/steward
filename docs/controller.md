@@ -57,7 +57,15 @@ node scripts/dispatch/cli.mjs rotation
 
 - Add `--max-reviews N`, a positive integer, only when the crew gives a number. Without it a
   rotation starts at most five reviews. Add `--repo owner/name` only when the crew names a
-  repository other than the one in `steward.config.json`.
+  repository other than the one in `steward.config.json`. For such a repository the rotation, and
+  the `review` and `inspect` commands with the same flag, work in a checkout kept for manual
+  commands at `~/.steward/state/manual-checkouts/<owner>/<name>`: cloned with `gh repo clone` when
+  absent, and brought to `origin`'s `main`, detached, each time. Its settings decide landing, and
+  the rotation does not check, update or read your own worktree, apart from its `origin`. A checkout
+  there that cannot be cloned or brought to `main`, or whose `origin` is another repository,
+  stops the rotation with `checkout-refused`, naming its path. A `--repo` that is not
+  `owner/name` stops it the same way. A `--repo` naming the repository of your worktree's `origin`
+  works in your worktree, as without the flag.
 - The command takes no pull request numbers, and a request names none. It considers each open pull
   request against `main` or a release branch (`release/vX.Y.Z`; `docs/release-review.md`). When
   order matters, the crew holds pull requests back as drafts or with `review-blocked`.
@@ -84,7 +92,8 @@ node scripts/dispatch/cli.mjs rotation
 - A pull request's outcome, whatever its status, is a line to report. It is not a reason to run
   anything else. A `sweep-pending` is left to a later rotation, which is a later request.
 - When the command exits non-zero, the rotation has stopped, and its last line, `rotation stopped`,
-  says why: the worktree has a branch checked out, cannot be brought to `origin/main`, or has
+  says why: the manual checkout of `--repo` is refused (`checkout-refused`); the worktree has a
+  branch checked out, cannot be brought to `origin/main`, or has
   anything uncommitted; the settings do not read; a listing failed; a script threw instead of
   returning a status; a review changed the worktree the pilot runs from; or the reviewer could not
   review (`cannot-review`: it returned no verdict on a head that had not moved, so it would fail
