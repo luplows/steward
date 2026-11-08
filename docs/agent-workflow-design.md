@@ -1142,9 +1142,9 @@ cut on a branch of its own, and `main` itself is never released.
 The release review cuts each release on a branch of its own, `release/vX.Y.Z`, from `main` at the
 batch's end, so that the batch is fixed while work on `main` goes on, and nothing needs pausing.
 The branch changes only through pull requests into it, reviewed and landed through the gate: the
-release notes with the version, a fix that landed on `main` first and is cherry-picked, and a
-revert of a capability deferred from the release. None of them changes anything under `stories/`,
-since stories are written and moved on `main`. Its last commit is tagged, and the branch is then
+release notes (with the version in the first of them, for a release after v0.1.0), a fix that
+landed on `main` first and is cherry-picked, and a revert of a capability deferred from the release.
+None of them changes anything under `stories/`, since stories are written and moved on `main`. Its last commit is tagged, and the branch is then
 kept as the release's record; until it has a tag it may be replaced; the next batch is everything on `main` since the branch was cut, with
 every capability the release deferred, which is still on `main`. A patch release repairs the
 newest release on a branch cut from its tag, and its batch is only the pull requests into that
@@ -1224,8 +1224,10 @@ releases/v0.4.0.md    ← on the release branch: capabilities, with a verdict on
 `accepted` / `accepted-with-followup` / `blocks-release`. Blockers become `fix` stories that jump
 the queue: a fix lands on `main` and is cherry-picked into the release branch, or the crew defers
 the capability, which a revert on the release branch alone takes out. Acceptance of the whole batch
-→ tag. The notes and the new version go in one pull request into the release branch, and the
-release review tags the branch's last commit, on the crew's word. A tag is never moved or deleted.
+→ tag. For a release after v0.1.0, the first pull request into the release branch sets the version
+and adds the notes with `Pending release review` placeholders, and the last one completes the notes
+and changes nothing else; v0.1.0 had both in one pull request. The release review tags the
+branch's last commit, on the crew's word. A tag is never moved or deleted.
 The notes' **For projects** section lists every change a project must act on when it moves to the
 tag. Versions are semantic, `0.x.y` for now: a new minor version when anything a project uses
 changes, otherwise a new patch version ("A release branch for each release", above; Part 3,
@@ -2719,7 +2721,7 @@ shortened where it is long, so that it can be found there with its date.
   already-reviewed PR, its line names the verdict governing the current head. Not chosen:
   creating worktrees automatically, or splitting the small related guidance and reporting
   changes into separate stories.
-- **Planned (ST-73)** **Release version and provisional notes are committed first**
+- **Release version and provisional notes are committed first**
   (crew, 2026-11-04; applies after v0.1.0). The crew fixes the version before cutting a
   release branch. After the branch is protected, the release review reads back its actual
   required checks and administrator enforcement before the first reviewed PR. That PR sets
