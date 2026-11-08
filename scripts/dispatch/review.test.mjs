@@ -1332,23 +1332,16 @@ describe('OQ-123: the project root is the working directory, not the engine root
     }
   })
 
-  it("OQ-123/AC-1, AC-3: the reviewer's prompt is still read from the engine root under a foreign project root", () => {
+  it("OQ-123/AC-1, AC-3: the reviewer's prompt is still read from the engine root under a foreign project root", async () => {
     const dir = mkdtempSync(path.join(root, 'project-'))
     try {
-      git(dir, 'init', '-q', '-b', 'main')
       writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: 'owner/other' })))
-      let threw
-      try {
-        execFileSync('node', [path.join(here, 'review.mjs'), '7'], { cwd: dir, encoding: 'utf8' })
-      } catch (error) {
-        threw = error
-      }
-      expect(threw).toBeTruthy()
-      // Settings (owner/other, read from `dir`) and the prompt (engine root) both
-      // resolved; the run only then fails trying to reach GitHub for pull request
-      // 7. Had the prompt instead been sought under `dir`, the failure would name
-      // `.claude` -- it does not.
-      expect(threw.stderr).not.toContain('.claude')
+      const ctx = { repo: 'owner/other', send: async () => { throw new Error('GitHub was reached') } }
+      // `dir` has no `.claude`: had the prompt been sought there, its read would throw.
+      // The prompt and the settings (read from `dir`) both resolve, and a choice that is
+      // not available then stops the run before GitHub is reached.
+      const result = await reviewPullRequest({ number: 7, ctx, repoDir: dir, choice: 'no-such-choice' })
+      expect(result.status).toBe('choice-unavailable')
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

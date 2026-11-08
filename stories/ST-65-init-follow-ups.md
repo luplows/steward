@@ -33,7 +33,7 @@ To be written when the crew chooses which candidates to build (Open questions).
 
 ## Context
 
-- ST-56 (`stories/ST-56-init-installation-pr.md`), rescoped by the crew on 2026-10-31 to the happy
+- ST-56 (`stories/done/ST-56-init-installation-pr.md`), rescoped by the crew on 2026-10-31 to the happy
   path for 0.1: one member of the crew, one run, an ordinary checkout, made in a fresh clone. Its
   Out of scope names these candidates for 0.2.
 - Crew decision, 2026-10-31: the first `init` story goes in 0.1; follow-ups are planned for 0.2
