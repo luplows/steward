@@ -281,7 +281,7 @@ async function start({ homedir, env, spawnFn, pollMs, waitMs, out, err }) {
 }
 
 /** The lines `status` adds to its first, for the fields in `result`. */
-function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, nextLandingScanAt, landingCandidates, active, lastOutcome, usage, recordsProblem, projectProblems, failedHeads: failed, reviewsProblem }) {
+function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, nextLandingScanAt, landingCandidates, active, lastOutcome, usage, recordsProblem, projectProblems, landingProblems, failedHeads: failed, reviewsProblem }) {
   const pull = ({ repo, number, headSha }) => `${repo} pull request #${number}, head ${headSha}`
   const lines = []
   if (intervalMinutes !== undefined) lines.push(`Scan interval: ${intervalMinutes} minutes.`)
@@ -300,6 +300,7 @@ function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, 
   if (usage) lines.push(`No more reviews until the next scan: ${usage.status}: ${usage.reason}.`)
   if (recordsProblem) lines.push(`No automatic review starts: the project records cannot be read: ${recordsProblem}`)
   for (const { repo, reason } of projectProblems ?? []) lines.push(`${repo}: no review until a later scan: ${reason}`)
+  for (const { repo, reason } of landingProblems ?? []) lines.push(`${repo}: no landing candidates from this project until a later scan: ${reason}`)
   if (failed) {
     lines.push('Not reviewed again automatically, as a review of the head failed; a manual review, or a new head, is how it gets a verdict:')
     for (const head of failed) lines.push(`  ${pull(head)}: ${head.status}, at ${head.endedAt}`)

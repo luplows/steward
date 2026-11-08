@@ -36,8 +36,12 @@
  *   lastOutcome      { repo, number, headSha, status, counted?, reason?, at } of the latest review
  *   usage            { status, reason } of a usage refusal, until the next scan, or null
  *   recordsProblem   why the records could not be read, or null
- *   projectProblems  [{ repo, reason }]: discovery, checkout or settings failures, until the next
- *                    scan works
+ *   projectProblems  [{ repo, reason }]: discovery or checkout failures that stop the project's
+ *                    reviews, until the next scan works
+ *   landingProblems  [{ repo, reason }]: why a landing scan gave no candidates for the project
+ *                    (settings unreadable or invalid, checkout not updated, discovery failed).
+ *                    These stop no review. Only with discovery. A project with `land` false is
+ *                    no problem and is not listed
  */
 import { createContext } from './github.mjs'
 import { createInspectContext } from './inspect.mjs'
@@ -123,14 +127,16 @@ export async function scheduleReviews({
   let position = null
   const separateLanding = landing?.intervalMinutes !== undefined
 
+  const entries = (map) => [...map].map(([repo, reason]) => ({ repo, reason }))
   const reportProblems = () => report({
-    projectProblems: [...problems, ...landingProblems].map(([repo, reason]) => ({ repo, reason })),
+    projectProblems: entries(problems), ...(landing !== undefined && { landingProblems: entries(landingProblems) }),
   })
 
   /**
    * Whether the current `main` of `repo` authorizes landing candidates (ST-83/AC-4): only `land`
    * exactly `true` does. A checkout that cannot be brought to `main`, or settings that cannot be
-   * read or are not valid, authorize nothing, and are reported.
+   * read or are not valid, authorize nothing, and are reported as landing problems, which stop no
+   * review.
    */
   const landAllowed = async (repo) => {
     const repoDir = ownedCheckoutPath(homedir, repo)
@@ -140,7 +146,7 @@ export async function scheduleReviews({
       landingProblems.delete(repo)
       return settings.land === true
     } catch (error) {
-      landingProblems.set(repo, withoutCredentials(`no landing candidates: ${error.message}`))
+      landingProblems.set(repo, withoutCredentials(`settings or checkout: ${error.message}`))
       return false
     }
   }
@@ -185,10 +191,11 @@ export async function scheduleReviews({
         try {
           listed = review || landable ? await listCandidates(contexts(repo)) : []
           if (review) problems.delete(repo)
-          else if (landable) landingProblems.delete(repo)
+          if (landable) landingProblems.delete(repo)
         } catch (error) {
-          if (review) problems.set(repo, withoutCredentials(`discovery failed: ${error.message}`))
-          else landingProblems.set(repo, withoutCredentials(`landing discovery failed: ${error.message}`))
+          const reason = withoutCredentials(`discovery failed: ${error.message}`)
+          if (review) problems.set(repo, reason)
+          if (landable) landingProblems.set(repo, reason)
           continue
         }
         if (landable) found.push(...landingCandidates(listed))

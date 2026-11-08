@@ -340,9 +340,10 @@ default, or on a due time of its own when `coordinator.landingScanIntervalMinute
 activated project it brings the owned checkout to `origin`'s `main` and reads that `main`'s
 `steward.config.json`; only `land` exactly `true` admits the project's candidates. `land: false`
 admits none, silently, as that is the project's choice. Settings that are malformed or unreadable
-admit none too, and `status` gives the reason. A candidate is an
-open, non-draft pull request on a supported base, whether or not this coordinator reviewed it, and
-including a current head that already has a verdict. It is identified by `{ repo, number, headSha }`,
+admit none too, and `status` gives the reason, as a landing problem that stops no review. A
+candidate is an open, non-draft pull request on a supported base, whether or not this coordinator
+reviewed it, and including a current head that already has a verdict. One by an author the gate does
+not honour, or labelled `review-blocked`, is left out, as the pilot would refuse it. It is identified by `{ repo, number, headSha }`,
 once for each repository, number and head however many times discovery lists it, and the latest
 scan's candidates are in the record and shown by `status`. Nothing lands from them yet: a later
 story hands them to the pilot, whose checks and the runway's keep the final say. The intervals make

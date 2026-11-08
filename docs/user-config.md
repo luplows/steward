@@ -57,8 +57,8 @@ Zero, negatives, fractions, booleans, malformed objects, missing keys and unknow
 the file path and offending key. The default never rescues a missing or invalid whole file.
 
 `landingScanIntervalMinutes` (ST-83) is how often the coordinator discovers pull requests that
-unattended landing may consider. When it is absent, landing discovery shares the review scan, and
-the default does not add it. When present, landing is due on its own interval, and an idle
+unattended landing may consider. When it is absent, landing discovery shares the review scan; there
+is no default value. When present, landing is due on its own interval, and an idle
 coordinator wakes at the earlier of the two due times. An interval makes a scan due; the
 coordinator's one-review-at-a-time loop runs it between reviews, so a running review delays it. The
 setting is no permission to land: a project's candidates are admitted only where `land` is exactly

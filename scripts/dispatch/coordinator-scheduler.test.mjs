@@ -1136,11 +1136,13 @@ describe('ST-83: landing candidates are discovered on the coordinator cadence', 
     })
     await idle(h)
     expect(h.delivered).toEqual([[found(C, 3)]])
-    const reasons = Object.fromEntries(recordOf(h).projectProblems.map(({ repo, reason }) => [repo, reason]))
+    const reasons = Object.fromEntries(recordOf(h).landingProblems.map(({ repo, reason }) => [repo, reason]))
     expect(reasons).toEqual({
-      [A]: 'no landing candidates: steward.config.json: invalid JSON',
-      [D]: 'no landing candidates: could not fetch',
+      [A]: 'settings or checkout: steward.config.json: invalid JSON',
+      [D]: 'settings or checkout: could not fetch',
     })
+    // D's review turn fails on the same update, which is a review problem of its own.
+    expect(recordOf(h).projectProblems.map(({ repo }) => repo)).toEqual([D])
   })
 
   it('ST-83/AC-4: a cadence setting is no permission: with every project at land false, nothing is delivered', async () => {
@@ -1207,10 +1209,46 @@ describe('ST-83: landing candidates are discovered on the coordinator cadence', 
     await idle(h)
     expect(h.delivered).toEqual([[]])
     expect(recordOf(h).projectProblems).toEqual([{ repo: A, reason: 'discovery failed: GitHub said 502' }])
+    expect(recordOf(h).landingProblems).toEqual([{ repo: A, reason: 'discovery failed: GitHub said 502' }])
     h.listings[A] = [{ ...eligible(A, 1), status: 'already-reviewed' }]
     await nextScan(h, 2)
     expect(h.delivered[1]).toEqual([found(A, 1)])
     // The afterEach checks that land, the runway, rotation, the coder and inspection were never reached.
+  })
+
+  it('ST-83/AC-4: a landing read that fails on a shared scan is shown as a landing problem only, while the review still runs', async () => {
+    const home = freshHome()
+    let failing = true
+    const h = discover({
+      home, repos: [A], settings: landOn(A), listings: { [A]: [eligible(A, 1)] },
+      updateCheckout: vi.fn(async () => { if (failing) { failing = false; throw new Error('could not fetch') } }),
+    })
+    await idle(h)
+    expect(h.reviewed).toEqual([`${A}#1`])
+    expect(h.delivered).toEqual([[]])
+    expect(recordOf(h).projectProblems).toEqual([])
+    expect(recordOf(h).landingProblems).toEqual([{ repo: A, reason: 'settings or checkout: could not fetch' }])
+    const text = (await command(['status'], home)).out
+    expect(text).toContain(`${A}: no landing candidates from this project until a later scan: settings or checkout: could not fetch`)
+    expect(text).not.toContain('no review until a later scan')
+    expect(JSON.parse((await command(['status', '--json'], home)).out).landingProblems).toHaveLength(1)
+
+    await nextScan(h, 2)
+    expect(h.delivered[1]).toEqual([found(A, 1)])
+    expect(recordOf(h).landingProblems).toEqual([])
+  })
+
+  it('ST-83/AC-4: a failure that stops reviews keeps the review wording, and a landing problem has its own', async () => {
+    const home = freshHome()
+    const h = discover({
+      home, repos: [A, B], settings: landOn(A, B), listings: { [A]: [eligible(A, 1)], [B]: [eligible(B, 2)] },
+      updateCheckout: vi.fn(async (dir) => { if (dir === ownedCheckoutPath(home, B)) throw new Error('could not fetch') }),
+    })
+    await idle(h)
+    const lines = (await command(['status'], home)).out.split(/\r?\n/)
+    expect(lines).toContain(`${B}: no landing candidates from this project until a later scan: settings or checkout: could not fetch`)
+    expect(lines).toContain(`${B}: no review until a later scan: could not bring the owned checkout to origin's main: could not fetch`)
+    expect(lines.filter((line) => line.startsWith(`${A}:`))).toEqual([])
   })
 
   it('ST-83: without landing options a scan reads no settings and delivers nothing', async () => {
@@ -1219,5 +1257,6 @@ describe('ST-83: landing candidates are discovered on the coordinator cadence', 
     await idle(h)
     expect(readSettings).not.toHaveBeenCalled()
     expect(recordOf(h)).not.toHaveProperty('landingCandidates')
+    expect(recordOf(h)).not.toHaveProperty('landingProblems')
   })
 })
