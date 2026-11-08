@@ -53,6 +53,12 @@ and rules, proposes only deterministic changes justified by the target release,
 and validates the proposed result. The crew approves and lands the PR. Local
 coordinator stop/restart, activation and authorization remain separate and manual.
 General historical migrations and automatic conflict resolution are not promised.
+(crew, 2026-11-07) `--ref <full SHA>` pins a release candidate instead of the release tag, so
+that the release review can try the upgrade on the release branch's exact commit before the tag
+exists, as `init --ref` does. The commit must be steward's and carry the target version. A
+project on a candidate moves to the tag with the same command, and one already on the tag is a
+no-op. Enabling unattended landing stays the crew's own settings pull request, never an effect of
+upgrading.
 
 (crew, 2026-11-04) Existing configured review rules are checked through the
 reviewer's parser (`validateRules`, `scripts/dispatch/rules.mjs`: `parseRules`
@@ -815,6 +821,18 @@ checkout with a branch checked out (`requireOwnWorktree`, `scripts/dispatch/loop
 the worktree has anything uncommitted. The scripts take the project from the working directory and
 their prompts from the checkout they are loaded from (`ENGINE_ROOT`, `coder.mjs`; OQ-123, OQ-130),
 so those are what has landed, and the main checkout is left free for whoever else is working.
+
+**Planned (ST-86)** (crew, 2026-11-07) `--repo owner/name` naming another repository than the
+working directory's makes `rotation`, `review` and `inspect` work against a checkout of that
+repository kept for manual commands, `~/.steward/state/manual-checkouts/<owner>/<name>`, cloned
+when absent and brought to `origin`'s `main`, detached. Its settings, Git operations, review
+worktree and inspection are that repository's, and the invoking checkout is not read. Until then
+only the GitHub calls follow `--repo`: run from steward's controller worktree for
+`luplows/playground`, a review threw on a head branch steward's checkout does not have. The
+coordinator's owned checkouts are never used for this. Considered and not chosen: refusing
+`--repo` from another checkout, which leaves one controller unable to serve several projects;
+reusing the coordinator's owned checkout, which a running coordinator updates and reviews from;
+and a new clone for each command, which repeats the clone on every rotation.
 
 **It may land, and only through the pilot.** The rotation runs `land.mjs`, with `once`, for a pull
 request whose head has an honoured `pass` or `pass-with-observations` verdict, with no further
