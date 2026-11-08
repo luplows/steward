@@ -36,8 +36,8 @@ accurately while the final notes still record the crew's acceptance decision.
       changes. It is made ready and landed only after crew acceptance, before tagging.
 - [ ] **AC-5** — `docs/release-review.md` keeps the crew's explicit authorization for the
       immutable tag and the rule that no tag or already-tagged release branch moves. It says
-      the early-version process starts with releases after v0.1.0; the in-progress v0.1.0
-      review follows its existing procedure. The selected version is not routinely revised
+      the early-version process starts with the release after v0.1.0, which was reviewed and
+      tagged under the earlier procedure on 2026-11-05. The selected version is not routinely revised
       during stabilization: an exceptional proposed change stops for a separate crew decision.
 - [ ] **AC-6** — Remove the `**Planned (ST-73)**` marker from the corresponding decision in
       `docs/agent-workflow-design.md` when the revised release procedure is implemented.
@@ -45,7 +45,9 @@ accurately while the final notes still record the crew's acceptance decision.
 ## Out of scope
 
 - Changing `scripts/dispatch/init.mjs`'s PR title or commit-message formatting.
-- Altering the ongoing v0.1.0 stabilization, release PRs or planned tag.
+- Altering v0.1.0's release branch, release notes or tag.
+- Changing the walkthrough's upgrade step, which ST-69 added to `docs/release-review.md`. It
+  stays part of the walkthrough, which AC-3 places after the first release PR lands.
 - Supporting automatic version renegotiation or re-cutting a release branch after an
   exceptional crew decision.
 - Automatically changing branch protection or tagging without crew authorization.
@@ -65,6 +67,11 @@ accurately while the final notes still record the crew's acceptance decision.
   including when the installer is pinned with `--ref`.
 - The 2026-11-04 scratch walkthrough generated "Install steward 0.0.0" for the untagged
   v0.1.0 candidate.
+- v0.1.0 was tagged on 2026-11-05, at `0b1d8b3`, after this story was written; its review
+  followed the earlier procedure.
+- ST-69 (landed) added "Run the upgrade as a project would" to the walkthrough in
+  `docs/release-review.md`: an installation at the previous release is upgraded with
+  `steward upgrade --ref <commit>`, the release branch's last commit.
 - Crew decision, 2026-11-04: starting after v0.1.0, the first release PR carries a fixed
   version and provisional notes, and the final PR completes the notes. Branch protection
   is read back before that first PR; no routine version changes are expected.
