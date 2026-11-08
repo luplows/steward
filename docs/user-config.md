@@ -43,17 +43,27 @@ choice runs on the Codex CLI), and optional `coordinator`. No other top-level ke
 | `usageLimits` | An object (below) | The share of the plan's usage at or over which steward starts no coder or reviewer session. |
 | `roles` | An object with exactly the keys `coder` and `reviewer` | For each role, the choice it runs by default, and the choices available. |
 | `tools` | An object (below); required when a choice's `tool` is `"codex"`, and may be left out otherwise | What a tool other than Claude Code needs to be started. |
-| `coordinator` | Optional object with exactly `scanIntervalMinutes` (below) | How often the coordinator scans for new work; `steward coordinator start` reads it. |
+| `coordinator` | Optional object with `scanIntervalMinutes` and, optionally, `landingScanIntervalMinutes` (below) | How often the coordinator scans for new work, and for landing candidates; `steward coordinator start` reads it. |
 
 ### `coordinator`
 
 When this entire section is absent from an otherwise valid file, the reader returns
-`{ "scanIntervalMinutes": 15 }`. When present, it must contain exactly `scanIntervalMinutes`, a
-positive JSON integer. There is no product-imposed upper bound or 60-minute cap: multi-day
-intervals are valid. Values must remain safe integers after conversion to milliseconds
-(`scanIntervalMinutes * 60_000`); `validateCoordinator` in `user-config.mjs` defines that check.
+`{ "scanIntervalMinutes": 15 }`. When present, it must contain `scanIntervalMinutes`, a positive
+JSON integer, and may contain `landingScanIntervalMinutes`. There is no product-imposed upper bound
+or 60-minute cap: multi-day intervals are valid. Values must remain safe integers after conversion
+to milliseconds (`scanIntervalMinutes * 60_000`); `validateCoordinator` in `user-config.mjs`
+defines that check, for both keys alike.
 Zero, negatives, fractions, booleans, malformed objects, missing keys and unknown keys fail with
 the file path and offending key. The default never rescues a missing or invalid whole file.
+
+`landingScanIntervalMinutes` (ST-83) is how often the coordinator discovers pull requests that
+unattended landing may consider. When it is absent, landing discovery shares the review scan, and
+the default does not add it. When present, landing is due on its own interval, and an idle
+coordinator wakes at the earlier of the two due times. An interval makes a scan due; the
+coordinator's one-review-at-a-time loop runs it between reviews, so a running review delays it. The
+setting is no permission to land: a project's candidates are admitted only where `land` is exactly
+`true` on its `main` (`steward.config.json`, [`docs/settings.md`](settings.md)). It is a per-user
+setting only; the project owns no cadence key.
 
 For example, `"coordinator": { "scanIntervalMinutes": 10080 }` selects a week. A later read sees
 a valid manual edit. The reader starts no scan loop, daemon, reviewer or session and writes no

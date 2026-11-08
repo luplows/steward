@@ -13,8 +13,13 @@
  * interval and scans again. The position in that order is kept in memory, so a restart begins a new
  * round.
  *
- * This only reviews. Landing, the runway, a rotation, inspection, the coder and the fixer are not
- * reached from here, whatever a project's `land` says. Verdicts go through the existing gate.
+ * This reviews, and discovers (ST-83). Landing, the runway, a rotation, inspection, the coder and
+ * the fixer are not reached from here, whatever a project's `land` says. Verdicts go through the
+ * existing gate. When `landing` is given, discovery of landing candidates runs on the review scan,
+ * or on a due time of its own when `landing.intervalMinutes` is given. Each time it hands
+ * `landing.onCandidates` the open, non-draft pull requests, on supported bases, of the projects
+ * whose current `main` settings have `land` exactly `true`, as `landingCandidates` shapes them.
+ * Scans run between reviews, never beside one: a review that runs past a due time delays that scan.
  *
  * The threat model is one member of the crew, one coordinator, one automatic review at a time, on
  * one machine. The bounds on usage are these turns and the reviewer's own checks. A person sees what
@@ -22,18 +27,24 @@
  * to the coordinator's record:
  *
  *   active           { repo, number, headSha } under review, or null
- *   nextScanAt       when the next scan is due, or null during a scan and its turns, and when that
- *                    time is past what a Date can hold, as the largest interval accepted is
+ *   nextScanAt       when the next scan, of either kind, is due, or null during a scan and its
+ *                    turns, and when that time is past what a Date can hold, as the largest
+ *                    interval accepted is
+ *   nextLandingScanAt  when the landing scan is next due; only with a cadence of its own
+ *   landingCandidates  [{ repo, number, headSha }] the latest landing scan found; only with
+ *                    discovery
  *   lastOutcome      { repo, number, headSha, status, counted?, reason?, at } of the latest review
  *   usage            { status, reason } of a usage refusal, until the next scan, or null
  *   recordsProblem   why the records could not be read, or null
- *   projectProblems  [{ repo, reason }]: discovery or checkout failures, until the next scan works
+ *   projectProblems  [{ repo, reason }]: discovery, checkout or settings failures, until the next
+ *                    scan works
  */
 import { createContext } from './github.mjs'
 import { createInspectContext } from './inspect.mjs'
 import { ownedCheckoutPath, projectsPath, readProjects, updateOwnedCheckout } from './project.mjs'
 import { admitReview, classifyResult, reviewEnding } from './review-admission.mjs'
 import { listReviewCandidates, reviewCandidate } from './review-work.mjs'
+import { readSettings as readProjectSettings } from './settings.mjs'
 
 const USAGE_REFUSALS = ['over-usage', 'usage-unknown']
 // The longest delay `setTimeout` takes; a longer one would fire at once.
@@ -53,6 +64,29 @@ export async function waitMs(ms) {
   }
 }
 
+// What discovery says of a pull request that unattended landing may consider (ST-83/AC-3): open
+// and not a draft, on a supported base, as `listReviewCandidates` already tells. A head with a
+// verdict is one, as landing follows review. A refusal that the pilot and the runway would repeat
+// is left out to save their calls; they keep the final say.
+const LANDING_STATUSES = ['eligible', 'already-reviewed']
+
+/**
+ * The landing candidates in `listed` (what `listReviewCandidates` returned): `[{ repo, number,
+ * headSha }]`, one for each repository, pull request number and head SHA, in number order. This is
+ * what ST-84 takes to consider for landing.
+ */
+export function landingCandidates(listed) {
+  const seen = new Set()
+  const found = []
+  for (const { status, repo, number, expectedHeadSha: headSha } of listed) {
+    const identity = JSON.stringify([repo, number, headSha])
+    if (!LANDING_STATUSES.includes(status) || seen.has(identity)) continue
+    seen.add(identity)
+    found.push({ repo, number, headSha })
+  }
+  return found.sort((a, b) => a.number - b.number)
+}
+
 /** Which of `repos` has the next turn after `position`, in order by `owner/name`, or undefined. */
 function nextTurn(repos, position) {
   const ordered = [...repos].sort()
@@ -70,21 +104,54 @@ const defaultContexts = (repo) => ({ ctx: createContext({ repo }), inspectCtx: c
 /**
  * Runs scans and turns for `coordinator` (from `runCoordinator`) until its admission closes, and
  * resolves then. It does not reject: anything it cannot carry on from goes to `coordinator.fail`.
- * `contexts` (the GitHub contexts for a repository), `listCandidates`, `updateCheckout`, `admission`
- * (`admitReview`), `review`, `reviewOptions`, `now` and `wait` are injectable for tests.
+ * `landing` is absent to discover no landing candidates, or `{ intervalMinutes, onCandidates }`:
+ * the optional landing scan interval, and the function given each scan's candidates, which does
+ * nothing by default. `contexts` (the GitHub contexts for a repository), `listCandidates`,
+ * `updateCheckout`, `readSettings` (of a project's owned checkout), `admission` (`admitReview`),
+ * `review`, `reviewOptions`, `now` and `wait` are injectable for tests.
  */
 export async function scheduleReviews({
-  homedir, coordinator, intervalMinutes,
+  homedir, coordinator, intervalMinutes, landing,
   contexts = defaultContexts, listCandidates = listReviewCandidates, updateCheckout = updateOwnedCheckout,
-  admission = admitReview, review = reviewCandidate, reviewOptions,
+  readSettings = readProjectSettings, admission = admitReview, review = reviewCandidate, reviewOptions,
   now = () => new Date(), wait = waitMs,
 }) {
   const { report, admitting } = coordinator
   const queues = new Map()
   const problems = new Map()
+  const landingProblems = new Map()
   let position = null
+  const separateLanding = landing?.intervalMinutes !== undefined
 
-  const reportProblems = () => report({ projectProblems: [...problems].map(([repo, reason]) => ({ repo, reason })) })
+  const reportProblems = () => report({
+    projectProblems: [...problems, ...landingProblems].map(([repo, reason]) => ({ repo, reason })),
+  })
+
+  /**
+   * Whether the current `main` of `repo` authorizes landing candidates (ST-83/AC-4): only `land`
+   * exactly `true` does. A checkout that cannot be brought to `main`, or settings that cannot be
+   * read or are not valid, authorize nothing, and are reported.
+   */
+  const landAllowed = async (repo) => {
+    const repoDir = ownedCheckoutPath(homedir, repo)
+    try {
+      await updateCheckout(repoDir)
+      const settings = await readSettings(repoDir)
+      landingProblems.delete(repo)
+      return settings.land === true
+    } catch (error) {
+      landingProblems.set(repo, withoutCredentials(`no landing candidates: ${error.message}`))
+      return false
+    }
+  }
+
+  /** Records `found` as the latest landing scan's candidates and hands them on. */
+  const deliver = async (found) => {
+    if (!admitting()) return
+    const candidates = [...found].sort((a, b) => (a.repo < b.repo ? -1 : a.repo > b.repo ? 1 : a.number - b.number))
+    report({ landingCandidates: candidates })
+    await (landing.onCandidates ?? (() => {}))(candidates)
+  }
 
   /** The activated repositories, or null when the records cannot be read, which `status` gives. */
   const activated = async () => {
@@ -98,36 +165,54 @@ export async function scheduleReviews({
     }
   }
 
-  const scan = async () => {
-    report({ nextScanAt: null, usage: null })
-    queues.clear()
-    const repos = await activated()
-    if (repos === null) return
-    for (const repo of [...repos].sort()) {
-      if (!admitting()) return
-      let listed
-      try {
-        listed = await listCandidates(contexts(repo))
-        problems.delete(repo)
-      } catch (error) {
-        problems.set(repo, withoutCredentials(`discovery failed: ${error.message}`))
-        continue
+  /**
+   * One scan of the activated projects. A `review` scan rebuilds the queues of heads to review. A
+   * `landing` scan (ST-83) lists the pull requests that unattended landing may consider, for the
+   * projects whose current `main` settings have `land` exactly `true`, and delivers them. A scan
+   * can be both, and then lists each project once.
+   */
+  const scan = async ({ review, landing: landingScan }) => {
+    report({ nextScanAt: null, ...(separateLanding && { nextLandingScanAt: null }), ...(review && { usage: null }) })
+    if (review) queues.clear()
+    const found = []
+    try {
+      const repos = await activated()
+      if (repos === null) return
+      for (const repo of [...repos].sort()) {
+        if (!admitting()) return
+        const landable = landingScan && await landAllowed(repo)
+        let listed
+        try {
+          listed = review || landable ? await listCandidates(contexts(repo)) : []
+          if (review) problems.delete(repo)
+          else if (landable) landingProblems.delete(repo)
+        } catch (error) {
+          if (review) problems.set(repo, withoutCredentials(`discovery failed: ${error.message}`))
+          else landingProblems.set(repo, withoutCredentials(`landing discovery failed: ${error.message}`))
+          continue
+        }
+        if (landable) found.push(...landingCandidates(listed))
+        if (!review) continue
+        // Discovery can list a head twice, and a second entry would be an immediate retry. A throw
+        // here, from a record of reviews that cannot be read, ends the coordinator.
+        const seen = new Set()
+        const eligible = listed.filter(({ status, repo: from, number, expectedHeadSha: headSha }) => {
+          const identity = JSON.stringify([from, number, headSha])
+          if (status !== 'eligible' || seen.has(identity)) return false
+          seen.add(identity)
+          return reviewEnding({ homedir, repo: from, number, headSha }) !== 'model-consuming-failure'
+        })
+        if (eligible.length > 0) queues.set(repo, eligible)
       }
-      // Discovery can list a head twice, and a second entry would be an immediate retry. A throw
-      // here, from a record of reviews that cannot be read, ends the coordinator.
-      const seen = new Set()
-      const eligible = listed.filter(({ status, repo: from, number, expectedHeadSha: headSha }) => {
-        const identity = JSON.stringify([from, number, headSha])
-        if (status !== 'eligible' || seen.has(identity)) return false
-        seen.add(identity)
-        return reviewEnding({ homedir, repo: from, number, headSha }) !== 'model-consuming-failure'
-      })
-      if (eligible.length > 0) queues.set(repo, eligible)
+      for (const map of [problems, landingProblems]) {
+        for (const repo of map.keys()) {
+          if (!repos.includes(repo)) map.delete(repo)
+        }
+      }
+      reportProblems()
+    } finally {
+      if (landingScan) await deliver(found)
     }
-    for (const repo of problems.keys()) {
-      if (!repos.includes(repo)) problems.delete(repo)
-    }
-    reportProblems()
   }
 
   /** Reports how the review of `candidate` ended, and whether turns may carry on after it. */
@@ -203,15 +288,33 @@ export async function scheduleReviews({
     }
   }
 
+  // When each kind of scan is next due, in milliseconds since the epoch. Landing shares the review
+  // scan unless it has an interval of its own.
+  let reviewDue = -Infinity
+  let landingDue = -Infinity
+  const asDate = (ms) => {
+    const date = new Date(ms)
+    return Number.isNaN(date.getTime()) ? null : date.toISOString()
+  }
+
   try {
     while (admitting()) {
-      await scan()
-      await turns()
-      if (!admitting()) return
-      const ms = intervalMinutes * 60_000
-      const due = new Date(now().getTime() + ms)
-      report({ nextScanAt: Number.isNaN(due.getTime()) ? null : due.toISOString() })
-      await Promise.race([wait(ms), coordinator.done])
+      const at = now().getTime()
+      // A time the clock cannot give counts as past every due time, as the largest interval's does.
+      const review = !(at < reviewDue)
+      const landingScan = landing !== undefined && (separateLanding ? !(at < landingDue) : review)
+      if (review || landingScan) {
+        await scan({ review, landing: landingScan })
+        if (landingScan && separateLanding) landingDue = now().getTime() + landing.intervalMinutes * 60_000
+        if (review) await turns()
+        if (!admitting()) return
+        if (review) reviewDue = now().getTime() + intervalMinutes * 60_000
+      }
+      const next = separateLanding ? Math.min(reviewDue, landingDue) : reviewDue
+      // A scan that came due while the turns ran is run now, after them, never beside them.
+      if (next <= now().getTime()) continue
+      report({ nextScanAt: asDate(next), ...(separateLanding && { nextLandingScanAt: asDate(landingDue) }) })
+      await Promise.race([wait(next - now().getTime()), coordinator.done])
     }
   } catch (error) {
     coordinator.fail(error)

@@ -9,21 +9,25 @@
  *                                        doing
  *   steward coordinator stop             ask it to admit no more work, and to exit once idle
  *
- * The coordinator is a detached process, `coordinator.mjs run <home> <minutes>`, which `start`
- * launches; `run` is not for people. Its record is `~/.steward/state/coordinator.json`: its process
- * id, its start time, its state, `running` or `stopping`, and the fields `status` shows, which
- * `coordinator-scheduler.mjs` names, and no credentials. Writing the record is how it acknowledges
- * that it is running: `start` reports `started` only once the record names the process it launched.
+ * The coordinator is a detached process, `coordinator.mjs run <home> <minutes> [<landing-minutes>]`,
+ * which `start` launches; `run` is not for people. Its record is
+ * `~/.steward/state/coordinator.json`: its process id, its start time, its state, `running` or
+ * `stopping`, and the fields `status` shows, which `coordinator-scheduler.mjs` names, and no
+ * credentials. Writing the record is how it acknowledges that it is running: `start` reports
+ * `started` only once the record names the process it launched.
  * `stop` reaches it through a stop request, the file `~/.steward/state/coordinator.stop`, which the
  * coordinator looks for every `pollMs`. On seeing it the coordinator admits no more work and
  * removes the request; with no admitted work running it removes its record and exits, and otherwise
  * it writes `stopping` into its record and exits once that work has finished. Either change is the
  * acknowledgment `stop` waits for. While it runs, the coordinator schedules automatic reviews of
- * the activated projects (`coordinator-scheduler.mjs`).
+ * the activated projects (`coordinator-scheduler.mjs`), and discovers the pull requests that
+ * unattended landing may consider (ST-83), which nothing lands yet.
  *
- * `start` reads the scan interval, `coordinator.scanIntervalMinutes`, through `readUserConfig`, and
- * refuses, changing nothing, when that throws. It hands the interval to the process it launches, so
- * a change takes effect at the next `start`.
+ * `start` reads the scan interval, `coordinator.scanIntervalMinutes`, and the optional landing scan
+ * interval, `coordinator.landingScanIntervalMinutes`, through `readUserConfig`, and refuses,
+ * changing nothing, when that throws. It hands the intervals to the process it launches, so a
+ * change takes effect at the next `start`. Without the landing interval, landing discovery shares
+ * the review scan.
  *
  * A `start` that finds no coordinator running first moves each `running` entry in the record of its
  * reviews to `ended` with `interrupted` (`interruptRunning`, `review-admission.mjs`), and says so.
@@ -228,8 +232,9 @@ async function start({ homedir, env, spawnFn, pollMs, waitMs, out, err }) {
     return 1
   }
   let intervalMinutes
+  let landingMinutes
   try {
-    intervalMinutes = (await readUserConfig({ env, homedir })).coordinator.scanIntervalMinutes
+    ;({ scanIntervalMinutes: intervalMinutes, landingScanIntervalMinutes: landingMinutes } = (await readUserConfig({ env, homedir })).coordinator)
   } catch (error) {
     err(`The coordinator did not start: it could not read its scan interval from the user config. ${error.message}`)
     err('Nothing was started.')
@@ -252,7 +257,7 @@ async function start({ homedir, env, spawnFn, pollMs, waitMs, out, err }) {
   }
   rmSync(stopRequestPath(homedir), { force: true })
 
-  const child = spawnFn(process.execPath, [MODULE_PATH, 'run', homedir, String(intervalMinutes)], { detached: true, stdio: 'ignore', windowsHide: true })
+  const child = spawnFn(process.execPath, [MODULE_PATH, 'run', homedir, String(intervalMinutes), ...(landingMinutes === undefined ? [] : [String(landingMinutes)])], { detached: true, stdio: 'ignore', windowsHide: true })
   let exited = false
   child.on('exit', () => { exited = true })
   child.on('error', () => { exited = true })
@@ -270,17 +275,24 @@ async function start({ homedir, env, spawnFn, pollMs, waitMs, out, err }) {
   out(`started: this OS user's coordinator is running in the background, as process ${acknowledged.pid}, started ${acknowledged.startedAt}.`)
   out(`Its record is ${file}. It keeps running after this terminal closes.`)
   out(`It reviews the activated projects' eligible pull requests, one at a time, and scans for new ones every ${intervalMinutes} minutes.`)
+  out(`It also lists, every ${landingMinutes ?? intervalMinutes} minutes${landingMinutes === undefined ? ', on the same scan' : ''}, the pull requests of projects whose settings have land true that unattended landing may consider. It lands none yet.`)
   out('To see it: steward coordinator status. To stop it: steward coordinator stop')
   return 0
 }
 
 /** The lines `status` adds to its first, for the fields in `result`. */
-function statusLines({ intervalMinutes, nextScanAt, active, lastOutcome, usage, recordsProblem, projectProblems, failedHeads: failed, reviewsProblem }) {
+function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, nextLandingScanAt, landingCandidates, active, lastOutcome, usage, recordsProblem, projectProblems, failedHeads: failed, reviewsProblem }) {
   const pull = ({ repo, number, headSha }) => `${repo} pull request #${number}, head ${headSha}`
   const lines = []
   if (intervalMinutes !== undefined) lines.push(`Scan interval: ${intervalMinutes} minutes.`)
+  if (landingScanIntervalMinutes !== undefined) lines.push(`Landing scan interval: ${landingScanIntervalMinutes} minutes.`)
   if (nextScanAt) lines.push(`Next scan: ${nextScanAt}.`)
+  if (nextLandingScanAt) lines.push(`Next landing scan: ${nextLandingScanAt}.`)
   if (active) lines.push(`Reviewing: ${pull(active)}.`)
+  if (landingCandidates?.length > 0) {
+    lines.push('Landing candidates found by the latest landing scan (nothing lands from them yet):')
+    for (const candidate of landingCandidates) lines.push(`  ${pull(candidate)}`)
+  }
   if (lastOutcome) {
     const { status: ended, counted, reason, at } = lastOutcome
     lines.push(`Last outcome: ${pull(lastOutcome)}: ${ended}${counted ? ` (${counted})` : ''}, at ${at}${reason ? `: ${reason}` : ''}.`)
@@ -343,10 +355,11 @@ async function stop({ homedir, pollMs, waitMs, out, err }) {
 }
 
 /** The detached coordinator process itself: schedules reviews until stopped, then exits. */
-async function run(homedir, intervalMinutes) {
+async function run(homedir, intervalMinutes, landingMinutes) {
   try {
-    const coordinator = runCoordinator({ homedir, fields: { intervalMinutes } })
-    scheduleReviews({ homedir, coordinator, intervalMinutes })
+    const landingFields = landingMinutes === undefined ? {} : { landingScanIntervalMinutes: landingMinutes }
+    const coordinator = runCoordinator({ homedir, fields: { intervalMinutes, ...landingFields } })
+    scheduleReviews({ homedir, coordinator, intervalMinutes, landing: { intervalMinutes: landingMinutes } })
     const failure = await coordinator.done
     return failure ? 1 : 0
   } catch {
@@ -368,7 +381,7 @@ export async function main(argv, { homedir = osHomedir(), env = process.env, spa
     if (command === 'status' && rest.length === 0) return status(false, ctx)
     if (command === 'status' && rest.length === 1 && rest[0] === '--json') return status(true, ctx)
     if (command === 'stop' && rest.length === 0) return await stop(ctx)
-    if (command === 'run' && rest.length === 2) return await run(rest[0], Number(rest[1]))
+    if (command === 'run' && (rest.length === 2 || rest.length === 3)) return await run(rest[0], Number(rest[1]), rest.length === 3 ? Number(rest[2]) : undefined)
   } catch (error) {
     err(error.message)
     return 1

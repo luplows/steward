@@ -197,6 +197,39 @@ describe('ST-63: per-user configuration boundaries', () => {
     })
   })
 
+  it.each([1, 5, 10_080, Math.floor(Number.MAX_SAFE_INTEGER / 60_000)])(
+    'ST-83/AC-1: accepts a landingScanIntervalMinutes of %s alongside scanIntervalMinutes', async (landingScanIntervalMinutes) => {
+      await withTempHome(async (home) => {
+        const coordinator = { scanIntervalMinutes: 15, landingScanIntervalMinutes }
+        writeHomeFile(home, JSON.stringify(fixtureUserConfig({ coordinator })))
+        expect((await readUserConfig({ env: {}, homedir: home })).coordinator).toEqual(coordinator)
+      })
+    },
+  )
+
+  it('ST-83/AC-1: an absent landingScanIntervalMinutes stays absent, so landing shares the review scan', async () => {
+    await withTempHome(async (home) => {
+      writeHomeFile(home, JSON.stringify(fixtureUserConfig({ coordinator: { scanIntervalMinutes: 7 } })))
+      const { coordinator } = await readUserConfig({ env: {}, homedir: home })
+      expect(coordinator).toEqual({ scanIntervalMinutes: 7 })
+      expect(Object.hasOwn(coordinator, 'landingScanIntervalMinutes')).toBe(false)
+    })
+  })
+
+  it.each([0, -1, 1.5, true, false, '5', null, [], {}, Number.MAX_SAFE_INTEGER,
+    Math.floor(Number.MAX_SAFE_INTEGER / 60_000) + 1, Number.MAX_SAFE_INTEGER + 1])(
+    'ST-83/AC-1: rejects an invalid or unsafe landingScanIntervalMinutes %j with file and key', async (landingScanIntervalMinutes) => {
+      await expectRejected(fixtureUserConfig({ coordinator: { scanIntervalMinutes: 15, landingScanIntervalMinutes } }),
+        "'coordinator.landingScanIntervalMinutes'")
+    },
+  )
+
+  it('ST-83/AC-1: landingScanIntervalMinutes needs scanIntervalMinutes beside it, and is no top-level key', async () => {
+    await expectRejected(fixtureUserConfig({ coordinator: { landingScanIntervalMinutes: 5 } }),
+      "missing required key 'coordinator.scanIntervalMinutes'")
+    await expectRejected({ ...fixtureUserConfig(), landingScanIntervalMinutes: 5 }, "unrecognised key 'landingScanIntervalMinutes'")
+  })
+
   it.each(['missing', 'invalid JSON', 'missing roles', 'missing usageLimits'])(
     'ST-63/AC-4: manual reviewer, coder and retry fail closed for %s config before any work', async (failure) => {
       await withTempHome(async (home) => {

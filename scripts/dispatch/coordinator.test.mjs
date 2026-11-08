@@ -630,6 +630,50 @@ describe('ST-61/AC-5: the interval', () => {
     })
   }
 
+  it('ST-83/AC-1: an invalid landingScanIntervalMinutes makes start refuse, starting nothing', async () => {
+    const home = freshHome()
+    configure(home, fixtureUserConfig({ coordinator: { scanIntervalMinutes: 15, landingScanIntervalMinutes: 0 } }))
+    const spawnFn = vi.fn()
+    const result = await run(['start'], home, { spawnFn })
+    expect(result.code).toBe(1)
+    expect(result.err).toContain("'coordinator.landingScanIntervalMinutes' must be a positive integer")
+    expect(result.err).toContain('Nothing was started.')
+    expect(spawnFn).not.toHaveBeenCalled()
+  })
+
+  it.each([undefined, 5])('ST-83/AC-1, ST-83/AC-2: start hands a landing interval of %s to the process it launches', async (landing) => {
+    const home = freshHome()
+    configure(home, fixtureUserConfig({ coordinator: { scanIntervalMinutes: 15, ...(landing && { landingScanIntervalMinutes: landing }) } }))
+    const argv = []
+    let coordinator
+    // A stand-in for the detached process: it keeps a process id alive and writes the record for it.
+    const spawnFn = (command, args) => {
+      argv.push(args.slice(1))
+      const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { stdio: 'ignore' })
+      started.push(child.pid)
+      coordinator = runCoordinator({ homedir: home, pid: child.pid, pollMs: 10, fields: { intervalMinutes: 15 } })
+      return child
+    }
+    const result = await run(['start'], home, { spawnFn })
+    coordinator.fail(new Error('the test is over'))
+    await coordinator.done
+    expect(result.code).toBe(0)
+    expect(argv).toEqual([landing ? ['run', home, '15', '5'] : ['run', home, '15']])
+    expect(result.out).toContain(landing ? 'every 5 minutes, the pull requests' : 'every 15 minutes, on the same scan, the pull requests')
+  })
+
+  it('ST-83/AC-1: the process takes the landing interval as its third argument, and status shows it', async () => {
+    const home = freshHome()
+    const running = main(['run', home, '15', '5'], { homedir: home, env: {}, out: () => {}, err: () => {} })
+    await until(() => existsSync(coordinatorPath(home)))
+    const record = readRecord(coordinatorPath(home))
+    expect(record).toMatchObject({ intervalMinutes: 15, landingScanIntervalMinutes: 5 })
+    const text = (await run(['status'], home)).out
+    expect(text).toContain('Landing scan interval: 5 minutes.')
+    writeFileSync(stopRequestPath(home), 'stop\n')
+    expect(await running).toBe(0)
+  })
+
   it('no user config at all: start refuses, naming the file', async () => {
     const home = freshHome()
     rmSync(userConfigPath({ env: {}, homedir: home }))
