@@ -23,7 +23,8 @@ As a member of the crew using steward in an existing project, I want a mostly au
 - [ ] **AC-3** — The pin the command writes is the tag, or the SHA in lower case. The pull request's title and body say which: a release, or a commit, with the version its `package.json` gives at that commit. So a commit is described as a candidate of that version, or as a development commit when that version is `0.0.0`. They never say a commit is a release.
 - [ ] **AC-4** — Identify the installed version from managed workflow references on `main`. The managed workflows are `review-gate.yml` and `land-approved.yml`, and `inspection.yml` when present (`GATE_WORKFLOWS` and `INSPECTION_WORKFLOW`, `scripts/dispatch/init.mjs`).
       - All of them must carry the same pin, and it must resolve in `luplows/steward` to a tag or a commit. Missing, inconsistent or unresolvable references cause refusal naming the findings.
-      - When the installed pin and the target resolve to the same commit, the upgrade is a reported no-op: no clone, branch or pull request.
+      - When the installed pin is the pin AC-3 would write, the upgrade is a reported no-op: no clone, branch or pull request. It is also a no-op, reported as already on that release, when a tag is installed and `--ref` gives the tag's own commit.
+      - When a SHA is installed and `--to` names a tag on that same commit, as when a candidate is the commit later tagged, the upgrade proposes only the change of pin, from the SHA to the tag.
       - When GitHub's comparison of the installed commit with the target's reports the target `behind`, it is refused as a downgrade. `ahead` and `diverged` targets are upgraded; a release branch diverges from `main`.
 - [ ] **AC-5** — Compare each installed managed workflow with the template of the same name in `templates/workflows/` of `luplows/steward` at the installed pin, read from GitHub. Only the pin may differ, through ST-79's comparison. A customized file, or one with no template at the installed pin, causes refusal naming each file and explaining manual reconciliation, without silently replacing or attempting a general merge.
 - [ ] **AC-6** — Propose the managed workflows from `templates/workflows/` at the target pin, read from GitHub and filled with the target pin as `init` fills them (`fillPin`, `scripts/dispatch/init.mjs`), preserving which optional workflows were installed. A managed workflow with no template at the target is refused, naming it. Tests inspect resulting workflow contents and references. Do not change unrelated project files.
@@ -39,7 +40,8 @@ As a member of the crew using steward in an existing project, I want a mostly au
       - a no-op, including a tag installed and its own commit given as `--ref`;
       - each way AC-2 refuses;
       - a downgrade;
-      - an upgrade from each of v0.1.0's pins (`v0.1.0`, `0b1d8b3ae9fd295506fa0af39b7e19bab207e430` and `935fb5b81398420acd5e7476d2b94bec94bbad02`) to a commit, and from a commit to a tag;
+      - an upgrade from each of v0.1.0's pins (`v0.1.0`, `0b1d8b3ae9fd295506fa0af39b7e19bab207e430` and `935fb5b81398420acd5e7476d2b94bec94bbad02`) to a commit, and from a commit to a tag on a later commit;
+      - a candidate SHA moved to the tag later made on that same commit, changing only the pin;
       - inconsistent and unresolvable pins, customized workflows, and a template missing at either pin;
       - invalid proposed rules;
       - a failed preparation.

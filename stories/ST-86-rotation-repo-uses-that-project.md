@@ -39,6 +39,8 @@ rotation per project at a time.
       the path and the reason, before any review.
 - [ ] **AC-3** — In that case, every project-side step of the rotation uses that checkout and
       nothing of the invoking one:
+      - the checks that the checkout has no branch checked out and nothing uncommitted are made
+        on it, and the invoking checkout, which may have a branch checked out, is not checked;
       - the settings, including `land`, `landWhen`, `unitLinks` and `rulesFile`, are read from
         it;
       - the review's fetch, its `rev-parse` of the head and base, its unit and rules reading and

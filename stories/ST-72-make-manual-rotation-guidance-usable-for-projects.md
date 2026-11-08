@@ -3,7 +3,7 @@ id: ST-72
 title: Make manual rotation guidance usable in installed projects
 tier: later
 kind: product
-depends_on: [ST-25]
+depends_on: [ST-25, ST-86]
 model: null
 blocked: null
 ---
@@ -16,8 +16,10 @@ Steward's source repository and distinguish a blocked PR from a passing one.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — A rotation from a checkout with a branch checked out still refuses before
-      dispatch. Its message names the need for a detached worktree and directs the user to
+- [ ] **AC-1** — A rotation that works against the invoking checkout, which is every rotation
+      but one ST-86 sends to a manual checkout for another repository, still refuses before
+      dispatch when that checkout has a branch checked out. A rotation ST-86 sends to a manual
+      checkout does not check the invoking checkout at all. The refusal's message names the need for a detached worktree and directs the user to
       prepare one with Git and run `steward rotation` from it, rather than referring to
       `node scripts/dispatch/loop.mjs --init [path]` or another source-only path.
 - [ ] **AC-2** — `README.md` gives a complete manual rotation procedure for an installed
@@ -37,14 +39,17 @@ Steward's source repository and distinguish a blocked PR from a passing one.
 
 - Adding a command that automatically creates, deletes or repairs a rotation worktree.
 - Changing the detached-checkout requirement, automatic review scheduling or landing rules.
+  ST-86's manual checkout, which steward keeps detached itself, is the one case where the
+  requirement does not apply to the invoking checkout.
 - Reworking the separate coder loop; its shared refusal may become clearer, but its workflow
   is otherwise unchanged.
 - Changing the meaning of `review-blocked` or allowing extra review rounds.
 
 ## Constraints
 
-- Manual rotation retains the existing refusal to run from a branch checkout; this is a
-  guidance and reporting change, not new worktree lifecycle automation.
+- Manual rotation retains the existing refusal to run from a branch checkout, for every
+  rotation that works against the invoking checkout; this is a guidance and reporting change,
+  not new worktree lifecycle automation.
 
 ## Context
 
