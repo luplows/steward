@@ -4,11 +4,13 @@
  * line can reach `manual-checkout.mjs` without a cycle (`init.mjs` imports `inspect.mjs`).
  */
 
-const ORIGIN_RE = /^(?:https?:\/\/(?:[^@/]+@)?|ssh:\/\/(?:[^@/]+@)?|git@)github\.com(?::\d+(?=\/))?[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/
+const ORIGIN_RE = /^(?:https?:\/\/(?:[^@/]+@)?|ssh:\/\/(?:[^@/]+@)?|git@)github\.com(?::\d+(?=\/))?[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/i
 
 /**
- * `owner/name` from an `https` or an `ssh` URL of a GitHub repository, with or without an explicit
- * port (`https://github.com:443/o/n.git`, `ssh://git@github.com:22/o/n.git`), or `null`.
+ * `owner/name` (as written) from the URL of a GitHub repository, or `null` for anything else. The
+ * scheme, the host and the `.git` suffix are read without regard to case. The forms are `https` or
+ * `http` (with or without user info and a port), `ssh://` (with or without user info and a port),
+ * and the scp-like `git@github.com:owner/name`, each with or without `.git` and a trailing slash.
  */
 export function repoFromRemoteUrl(url) {
   const match = ORIGIN_RE.exec(String(url).trim())

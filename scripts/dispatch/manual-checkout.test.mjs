@@ -161,3 +161,63 @@ describe('ST-86/AC-1: an origin with an explicit port still names its repository
     }
   })
 })
+
+describe('ST-86/AC-1: every way Git writes a github.com remote names its repository', () => {
+  const hosts = ['github.com', 'GitHub.com', 'GITHUB.COM']
+  const forms = []
+  for (const host of hosts) {
+    for (const scheme of ['https', 'HTTPS', 'http', 'ssh', 'SSH']) {
+      const user = scheme.toLowerCase() === 'ssh' ? ['git@', 'user@', ''] : ['', 'x-token@', 'user:secret@']
+      const port = ['', ':443', ':22', ':8443']
+      for (const u of user) for (const p of port) forms.push(`${scheme}://${u}${host}${p}/Luplows/Playground`)
+    }
+    forms.push(`git@${host}:Luplows/Playground`, `GIT@${host}:Luplows/Playground`)
+  }
+  const withEnds = forms.flatMap((form) => [form, `${form}.git`, `${form}/`, `${form}.git/`, `${form}.GIT`])
+
+  it('ST-86/AC-1: each form, with or without .git and a trailing slash, gives owner/name as written', () => {
+    expect(withEnds.length).toBeGreaterThan(300)
+    for (const form of withEnds) expect([form, repoFromRemoteUrl(form)]).toEqual([form, 'Luplows/Playground'])
+  })
+
+  it('ST-86/AC-1: anything that is not github.com gives null', () => {
+    for (const other of [
+      'https://gitlab.com/o/n.git', 'https://github.com.evil.example/o/n.git', 'https://notgithub.com/o/n', 'git@gitlab.com:o/n.git',
+      'https://github.com/o', 'https://github.com/o/n/extra', '/some/local/path', '../relative', 'file:///o/n', '',
+    ]) expect([other, repoFromRemoteUrl(other)]).toEqual([other, null])
+  })
+
+  it('ST-86/AC-1, AC-2: a mixed-case host is the invoking checkout, and an existing manual checkout with it is accepted', async () => {
+    for (const form of ['https://GitHub.com/luplows/playground.git', 'HTTPS://GITHUB.COM:443/Luplows/Playground/', 'GIT@GitHub.com:LUPLOWS/playground']) {
+      const own = world({ origins: { [CWD]: form } })
+      expect(await resolve(own, REPO)).toBe(CWD)
+      expect(own.calls).toEqual([{ kind: 'git', dir: CWD, args: ['remote', 'get-url', 'origin'] }])
+      const manual = world({ origins: { [CWD]: url('luplows/steward'), [MANUAL]: form }, present: [MANUAL] })
+      expect(await resolve(manual, REPO)).toBe(MANUAL)
+    }
+  })
+})
+
+describe('ST-86/AC-2: --repo must be exactly owner/name, and stays under manual-checkouts', () => {
+  const owned = ownedCheckoutPath(HOME, REPO)
+
+  it('ST-86/AC-2: a value that is not two plain segments is refused before any command runs', async () => {
+    const bad = [
+      '..\\checkouts\\luplows/playground', '../x/y', 'a/..', '../..', './x', 'x/.', 'a', 'a/b/c', '/a/b', 'a/b/', 'a\\b/c', 'a/b\\c',
+      'a b/c', '', 'a/', '/b', 'C:/x/y',
+    ]
+    for (const value of bad) {
+      const w = world({ origins: { [owned]: url(REPO), [CWD]: url(REPO) }, present: [owned] })
+      const error = await resolve(w, value).catch((e) => e)
+      expect([value, error instanceof Error, w.calls]).toEqual([value, true, []])
+      expect(error.message).toContain('owner/name')
+    }
+  })
+
+  it('ST-86/AC-2: ordinary names, dots and underscores included, are accepted', async () => {
+    for (const value of ['a/b', 'My-Org/my_repo.js', 'o/.github', 'o/a..b']) {
+      const w = world({ origins: { [CWD]: url(value) } })
+      expect(await resolve(w, value)).toBe(CWD)
+    }
+  })
+})

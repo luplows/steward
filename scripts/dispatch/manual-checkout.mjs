@@ -22,13 +22,21 @@ import { homedir as osHomedir } from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { CHECKOUT_MAIN, FETCH_MAIN, repoFromRemoteUrl } from './checkout-main.mjs'
-import { REPO_RE } from './settings.mjs'
 import { stateDir } from './user-config.mjs'
 
 const execFileAsync = promisify(execFile)
 
+const manualCheckoutsRoot = (homedir) => path.join(stateDir({ homedir }), 'manual-checkouts')
+
 /** Where the manual checkout of `repo` (`owner/name`) is, under `homedir`. */
-export const manualCheckoutPath = (homedir, repo) => path.join(stateDir({ homedir }), 'manual-checkouts', ...repo.split('/'))
+export const manualCheckoutPath = (homedir, repo) => path.join(manualCheckoutsRoot(homedir), ...repo.split('/'))
+
+// `owner/name`: exactly two segments of the characters GitHub allows, neither `.` nor `..`.
+const SEGMENT = /^[A-Za-z0-9_.-]+$/
+const isOwnerName = (repo) => {
+  const parts = typeof repo === 'string' ? repo.split('/') : []
+  return parts.length === 2 && parts.every((part) => SEGMENT.test(part) && part !== '.' && part !== '..')
+}
 
 async function run(file, args, cwd) {
   try {
@@ -67,10 +75,14 @@ async function originRepo(git, dir) {
 export async function resolveCheckout({ repo, cwd, homedir = osHomedir(), deps = {} }) {
   if (repo === undefined) return cwd
   const d = { ...defaultDeps, ...deps }
+  if (!isOwnerName(repo)) throw new Error(`--repo must be owner/name, got: ${repo}`)
   if ((await originRepo(d.git, cwd)) === repo.toLowerCase()) return cwd
 
-  if (!REPO_RE.test(repo)) throw new Error(`--repo must be owner/name, got: ${repo}`)
   const dir = manualCheckoutPath(homedir, repo)
+  const inside = path.relative(manualCheckoutsRoot(homedir), dir)
+  if (inside === '' || inside.startsWith('..') || path.isAbsolute(inside)) {
+    throw new Error(`--repo ${repo} would put the manual checkout at ${dir}, outside ${manualCheckoutsRoot(homedir)}`)
+  }
   if (!d.isCheckout(dir)) {
     try {
       await d.makeDirectory(path.dirname(dir))
