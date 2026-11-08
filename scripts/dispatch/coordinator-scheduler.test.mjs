@@ -23,7 +23,9 @@ import { runRunway } from '../land/runway.mjs'
 // AC-9: reaching any of these from scheduled work fails the test that did. The fixer has no module
 // yet: it is the coder taken up again, which `dispatchCoder` stands for here.
 const { forbidden } = vi.hoisted(() => ({ forbidden: () => { throw new Error('scheduled review work attempted an unrelated operation') } }))
-vi.mock('./land.mjs', () => ({ landPullRequest: vi.fn(forbidden) }))
+// ST-84: only the pilot's call is forbidden here. `createLandContext` stays real, as it sends
+// nothing until a request is made; the tests of landing inject the pilot's call.
+vi.mock('./land.mjs', async (original) => ({ ...await original(), landPullRequest: vi.fn(forbidden) }))
 vi.mock('./coder.mjs', () => ({ dispatchCoder: vi.fn(forbidden) }))
 vi.mock('./rotation.mjs', () => ({ runRotation: vi.fn(forbidden) }))
 vi.mock('../land/runway.mjs', async (original) => ({ ...await original(), runRunway: vi.fn(forbidden) }))
@@ -1258,5 +1260,260 @@ describe('ST-83: landing candidates are discovered on the coordinator cadence', 
     expect(readSettings).not.toHaveBeenCalled()
     expect(recordOf(h)).not.toHaveProperty('landingCandidates')
     expect(recordOf(h)).not.toHaveProperty('landingProblems')
+  })
+})
+
+describe('ST-84: the coordinator requests bounded unattended landing and reports outcomes', () => {
+  const reviewed = (repo, number, headSha = HEAD) => ({ ...eligible(repo, number, headSha), status: 'already-reviewed' })
+  const MERGED = (number) => ({ status: 'merged', pr: number, headSha: HEAD, mode: 'unattended', triggers: 1 })
+  const landOn = (landWhen, ...repos) => Object.fromEntries(repos.map((repo) => [repo, fixtureSettings({ repo, land: true, landWhen })]))
+  const lastLanding = (h) => recordOf(h).lastLanding
+  const landed = (h) => until(() => recordOf(h)?.lastLanding !== undefined)
+
+  /**
+   * A scheduler with landing discovery and landing attempts. `settings` maps a repository to what
+   * reading its current `main` settings gives, `pulls` a `repo#number` to what reading that pull
+   * request gives (open at `HEAD` by default), and `land` stands for the pilot. Tests change
+   * `settings` and `pulls` between the scan and the attempt.
+   */
+  function attempt({ settings = {}, pulls = {}, land = async ({ number }) => MERGED(number), attemptOptions = {}, landing = {}, ...over } = {}) {
+    const home = over.home ?? freshHome()
+    const landFn = vi.fn(land)
+    const readPull = vi.fn(async (repo, number) => {
+      const found = pulls[`${repo}#${number}`] ?? { state: 'open', headSha: HEAD }
+      if (found instanceof Error) throw found
+      return found
+    })
+    const readSettings = vi.fn(async (dir) => {
+      const repo = Object.keys(settings).find((name) => dir === ownedCheckoutPath(home, name))
+      if (settings[repo] instanceof Error) throw settings[repo]
+      return settings[repo] ?? fixtureSettings({ land: false })
+    })
+    const h = schedule({ ...over, home, readSettings, landing: { attempt: { land: landFn, readPull, ...attemptOptions }, ...landing } })
+    return Object.assign(h, { land: landFn, readPull, readSettings })
+  }
+  /** A gate: work that awaits `held` waits for `release()`. */
+  function gate() {
+    let release
+    const held = new Promise((resolve) => { release = resolve })
+    return { held, release }
+  }
+
+  it("ST-84/AC-1, ST-84/AC-2: a due candidate is rechecked, then the pilot is called once, unattended and once, with a context made from the settings' landWhen", async () => {
+    const h = attempt({ repos: [A], settings: landOn(['test'], A), listings: { [A]: [reviewed(A, 7)] } })
+    await landed(h)
+    expect(h.land).toHaveBeenCalledTimes(1)
+    const [args] = h.land.mock.calls[0]
+    expect(args).toMatchObject({ number: 7, mode: 'unattended', once: true })
+    expect(Object.keys(args).sort()).toEqual(['ctx', 'mode', 'number', 'once'])
+    expect(args.ctx).toMatchObject({ repo: A, landing: true, landWhen: ['test'] })
+    // The checkout and settings are read once by the scan and once again for the attempt, and the
+    // pull request just before the call.
+    expect(h.readPull).toHaveBeenCalledWith(A, 7)
+    expect(h.readPull.mock.invocationCallOrder[0]).toBeLessThan(h.land.mock.invocationCallOrder[0])
+    expect(h.readSettings).toHaveBeenCalledTimes(2)
+    expect(h.updateCheckout).toHaveBeenCalledTimes(2)
+    expect(lastLanding(h)).toMatchObject({ repo: A, number: 7, headSha: HEAD, status: 'merged', triggers: 1 })
+    await until(() => recordOf(h).landingActive === null)
+    expect(h.reviewed).toEqual([])
+  })
+
+  const REVOKED = {
+    deactivated: { change: ({ home }) => writeProjects(home, []), reason: 'the project is no longer activated' },
+    'land turned off': { change: ({ settings }) => { settings[A] = fixtureSettings({ repo: A, land: false }) }, reason: "land is not true in the project's current main settings" },
+    'settings unreadable': { change: ({ settings }) => { settings[A] = new Error('steward.config.json: invalid JSON') }, reason: 'settings or checkout: steward.config.json: invalid JSON' },
+    'head changed': { change: ({ pulls }) => { pulls[`${A}#7`] = { state: 'open', headSha: 'b'.repeat(40) } }, reason: `the head is now ${'b'.repeat(40)}` },
+    'pull request closed': { change: ({ pulls }) => { pulls[`${A}#7`] = { state: 'closed', headSha: HEAD } }, reason: 'the pull request is closed' },
+    'pull request unreadable': { change: ({ pulls }) => { pulls[`${A}#7`] = new Error('GitHub said 502') }, reason: 'could not recheck the pull request: GitHub said 502' },
+  }
+  it.each(Object.keys(REVOKED))('ST-84/AC-1, ST-84/AC-7: after the scan, when the case is "%s", nothing is dispatched and the reason is recorded', async (name) => {
+    const { change, reason } = REVOKED[name]
+    const home = freshHome()
+    const settings = landOn('all-checks', A)
+    const pulls = {}
+    const h = attempt({
+      home, repos: [A], settings, pulls, listings: { [A]: [reviewed(A, 7)] },
+      landing: { onCandidates: () => change({ home, settings, pulls }) },
+    })
+    await landed(h)
+    expect(h.land).not.toHaveBeenCalled()
+    expect(lastLanding(h)).toMatchObject({ repo: A, number: 7, headSha: HEAD, status: 'not-attempted', reason })
+  })
+
+  it("ST-84/AC-2, ST-84/AC-3: the pilot's results are reported as it gave them, with its reasons, and a dispatched workflow that has not merged is not reported as a merge", async () => {
+    const results = [
+      { status: 'not-landable', reason: 'checks-pending', waiting: ['test'], triggers: 0 },
+      { status: 'sweep-pending', triggers: 1 },
+      { status: 'checks-failed', failing: ['lint'], triggers: 0 },
+    ]
+    const h = attempt({
+      repos: [A], settings: landOn('all-checks', A),
+      listings: { [A]: [reviewed(A, 1), reviewed(A, 2), reviewed(A, 3)] }, land: async () => results.shift(),
+    })
+    await until(() => lastLanding(h)?.number === 3)
+    expect(h.land).toHaveBeenCalledTimes(3)
+    expect(lastLanding(h)).toMatchObject({ number: 3, status: 'checks-failed', reason: 'failing: lint', triggers: 0 })
+    const text = (await command(['status'], h.home)).out
+    expect(text).toContain(`Last landing: ${A} pull request #3, head ${HEAD}: checks-failed, at `)
+    expect(text).toContain(': failing: lint.')
+    expect(text).not.toContain('not confirmed')
+  })
+
+  it('ST-84/AC-3: the real pilot, given a pull request whose review status is not there yet, returns not-landable at once, having neither slept nor dispatched anything', async () => {
+    const { landPullRequest: pilot, createLandContext } = await vi.importActual('./land.mjs')
+    const requests = []
+    const fetch = async (url, init) => {
+      requests.push(`${init.method} ${url.replace('https://api.github.com/repos/', '')}`)
+      const body = url.endsWith('/status') ? { statuses: [], total_count: 0 } : { head: { sha: HEAD }, state: 'open', draft: false, labels: [], mergeable_state: 'clean' }
+      return { ok: true, status: 200, json: async () => body, text: async () => '' }
+    }
+    const h = attempt({
+      repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 7)] },
+      attemptOptions: {
+        land: (args) => pilot({ ...args, latencyLog: path.join(base, 'latency.jsonl'), sleep: () => { throw new Error('the pilot slept') } }),
+        createLand: (options) => createLandContext({ ...options, fetch, getToken: async () => 'token' }),
+      },
+    })
+    await landed(h)
+    expect(lastLanding(h)).toMatchObject({ number: 7, status: 'not-landable', reason: 'review-pending', triggers: 0 })
+    expect(requests).toEqual([`GET ${A}/pulls/7`, `GET ${A}/commits/${HEAD}/status`])
+  })
+
+  it('ST-84/AC-4: a candidate listed twice is attempted once, no scan starts a second attempt while one runs, and a later scan tries a head whose attempt did not merge again after fresh checks', async () => {
+    const hold = gate()
+    const h = attempt({
+      repos: [A], settings: landOn('all-checks', A), landing: { intervalMinutes: 1 },
+      listings: { [A]: [reviewed(A, 7), reviewed(A, 7)] },
+      land: async () => { await hold.held; return { status: 'not-landable', reason: 'review-pending', triggers: 0 } },
+    })
+    await until(() => h.land.mock.calls.length === 1)
+    h.clock.advance(10 * 60_000)
+    await sleep(100)
+    expect(h.land).toHaveBeenCalledTimes(1)
+    expect(h.listCandidates).toHaveBeenCalledTimes(1)
+    hold.release()
+    await until(() => h.land.mock.calls.length === 2)
+    await idle(h)
+    expect(h.listCandidates).toHaveBeenCalledTimes(2)
+    expect(h.readPull).toHaveBeenCalledTimes(2)
+    expect(h.readSettings).toHaveBeenCalledTimes(4)
+  })
+
+  it('ST-84/AC-5: while an attempt runs status shows landing apart from review, and afterwards the last landing with its repository, number, head, time and reason', async () => {
+    const hold = gate()
+    const h = attempt({
+      repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 7)] },
+      land: async () => { await hold.held; return { status: 'sweep-pending', triggers: 1 } },
+    })
+    await until(() => recordOf(h)?.landingActive)
+    const during = await command(['status'], h.home)
+    expect(during.out).toContain(`Landing: ${A} pull request #7, head ${HEAD}.`)
+    expect(during.out).not.toContain('Reviewing:')
+    const json = JSON.parse((await command(['status', '--json'], h.home)).out)
+    expect(json.landingActive).toEqual({ repo: A, number: 7, headSha: HEAD })
+    expect(json.active ?? null).toBeNull()
+    hold.release()
+    await until(() => recordOf(h).landingActive === null && recordOf(h).lastLanding !== undefined)
+    const after = JSON.parse((await command(['status', '--json'], h.home)).out)
+    expect(after.lastLanding).toMatchObject({ repo: A, number: 7, headSha: HEAD, status: 'sweep-pending', triggers: 1 })
+    expect(Number.isNaN(Date.parse(after.lastLanding.at))).toBe(false)
+    const text = (await command(['status'], h.home)).out
+    expect(text).toContain(`Last landing: ${A} pull request #7, head ${HEAD}: sweep-pending (the landing workflow was dispatched; a merge is not confirmed), at `)
+    expect(text.split(/\r?\n/).filter((line) => line.startsWith('Landing: '))).toEqual([])
+  })
+
+  it('ST-84/AC-5: a merge the pilot saw is reported plainly', async () => {
+    const h = attempt({ repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 2)] } })
+    await landed(h)
+    const text = (await command(['status'], h.home)).out
+    expect(text).toContain(`Last landing: ${A} pull request #2, head ${HEAD}: merged, at `)
+    expect(text).not.toContain('not confirmed')
+  })
+
+  it('ST-84/AC-7: an attempt that throws is reported without credentials and does not stop the next candidate', async () => {
+    const h = attempt({
+      repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 1), reviewed(A, 2)] },
+      land: async ({ number }) => {
+        if (number === 1) throw new Error('POST https://user:secret@api.github.com/x failed')
+        throw new Error('GitHub said 502')
+      },
+    })
+    await until(() => lastLanding(h)?.number === 2)
+    expect(h.land).toHaveBeenCalledTimes(2)
+    expect(lastLanding(h)).toMatchObject({ number: 2, status: 'threw', reason: 'GitHub said 502' })
+    const first = attempt({
+      repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 1)] },
+      land: async () => { throw new Error('POST https://user:secret@api.github.com/x failed') },
+    })
+    await landed(first)
+    expect(lastLanding(first)).toMatchObject({ status: 'threw', reason: 'POST https://api.github.com/x failed' })
+    expect(JSON.stringify(recordOf(first))).not.toContain('secret')
+  })
+
+  it('ST-84/AC-6: a stop during an attempt lets it finish and starts no other; a new coordinator then tries the same head again', async () => {
+    const hold = gate()
+    const home = freshHome()
+    const h = attempt({
+      home, repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 1), reviewed(A, 2)] },
+      land: async ({ number }) => { await hold.held; return MERGED(number) },
+    })
+    await until(() => recordOf(h)?.landingActive)
+    writeFileSync(stopRequestPath(home), 'stop\n')
+    await until(() => recordOf(h)?.state === 'stopping')
+    await sleep(50)
+    expect(h.land).toHaveBeenCalledTimes(1)
+    hold.release()
+    await h.coordinator.done
+    await h.scheduling
+    expect(h.land).toHaveBeenCalledTimes(1)
+    expect(h.readPull).toHaveBeenCalledTimes(1)
+    expect(existsSync(coordinatorPath(home))).toBe(false)
+
+    const again = attempt({ home, repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 1)] } })
+    await landed(again)
+    expect(again.land.mock.calls[0][0]).toMatchObject({ number: 1, mode: 'unattended', once: true })
+  })
+
+  it('ST-84/AC-7: the one-review-at-a-time limit holds: no attempt starts while a review runs, and no review starts while an attempt runs', async () => {
+    const reviewing = gate()
+    const landing = gate()
+    const h = attempt({
+      repos: [A], settings: landOn('all-checks', A), listings: { [A]: [eligible(A, 1), reviewed(A, 2)] },
+      reply: () => reviewing.held.then(() => ({ status: 'recorded', sessions: 1 })),
+      land: async ({ number }) => { await landing.held; return MERGED(number) },
+    })
+    await until(() => h.review.mock.calls.length === 1)
+    await sleep(100)
+    expect(h.land).not.toHaveBeenCalled()
+    reviewing.release()
+    await until(() => h.land.mock.calls.length === 1)
+    expect(recordOf(h).active ?? null).toBeNull()
+    expect(recordOf(h).landingActive).toMatchObject({ number: 1 })
+    landing.release()
+    await until(() => h.land.mock.calls.length === 2)
+    await idle(h)
+    expect(h.review).toHaveBeenCalledTimes(1)
+  })
+
+  it('ST-84/AC-7: records that cannot be read after the scan stop the attempts and are reported', async () => {
+    const home = freshHome()
+    const h = attempt({
+      home, repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 1)] },
+      landing: { onCandidates: () => { seed(projectsPath(home), '{ "projects": [') } },
+    })
+    await idle(h)
+    expect(h.land).not.toHaveBeenCalled()
+    expect(recordOf(h).recordsProblem).toBeTruthy()
+  })
+
+  it('ST-84: without landing attempts, candidates are discovered and nothing is requested', async () => {
+    const h = schedule({
+      repos: [A], listings: { [A]: [reviewed(A, 1)] }, readSettings: async () => fixtureSettings({ land: true }),
+      landing: {},
+    })
+    await idle(h)
+    expect(recordOf(h).landingCandidates).toHaveLength(1)
+    expect(recordOf(h)).not.toHaveProperty('lastLanding')
+    expect(recordOf(h)).not.toHaveProperty('landingActive')
   })
 })

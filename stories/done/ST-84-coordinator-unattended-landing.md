@@ -16,32 +16,32 @@ land without manual rotations or costly new recovery machinery.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — The coordinator consumes due landing candidates from ST-83 through
+- [x] **AC-1** — The coordinator consumes due landing candidates from ST-83 through
       its existing work-admission lifecycle. Immediately before a request, it
       rechecks activation, `land: true` in current project `main` settings, and
       the PR/head identity; an invalid candidate dispatches nothing.
-- [ ] **AC-2** — Each attempt invokes `landPullRequest` with `mode: unattended` and
+- [x] **AC-2** — Each attempt invokes `landPullRequest` with `mode: unattended` and
       `once: true` via `createLandContext` using the project's `landWhen`.
       There is no direct merge or manual-mode dispatch. The pilot and runway
       make the final review, CI, authorization and protection decisions.
-- [ ] **AC-3** — The pilot returns a distinguishable result when a candidate is
+- [x] **AC-3** — The pilot returns a distinguishable result when a candidate is
       not yet landable, and waits only for its bounded gate-lag and sweep-run
       windows after eligibility, not for open-ended checks or processes.
-- [ ] **AC-4** — One running coordinator does not overlap local landing attempts
+- [x] **AC-4** — One running coordinator does not overlap local landing attempts
       for the same PR/head. A later scan may reconsider a PR whose previous
       attempt ended without a merge, after fresh authorization and eligibility
       checks. No durable exactly-once request ledger is introduced.
-- [ ] **AC-5** — `steward coordinator status` and `status --json` distinguish active
+- [x] **AC-5** — `steward coordinator status` and `status --json` distinguish active
       landing from review and report the last landing outcome, repository, PR
       number, head, time and any refusal or failure reason. A successful
       workflow dispatch is not falsely reported as a confirmed merge.
-- [ ] **AC-6** — Graceful stop admits no more landing work and lets admitted
+- [x] **AC-6** — Graceful stop admits no more landing work and lets admitted
       bounded attempts finish. A restarted coordinator uses normal discovery
       and may reconsider a still-eligible PR; the runway is authoritative.
-- [ ] **AC-7** — Tests cover the success path, denied or revoked permission,
+- [x] **AC-7** — Tests cover the success path, denied or revoked permission,
       deactivation, changed head, duplicate scan, pending sweep, errors, status,
       graceful stop and preservation of the one-review-at-a-time limit.
-- [ ] **AC-8** — Document this behavior and the limitation that due scans can
+- [x] **AC-8** — Document this behavior and the limitation that due scans can
       be delayed by active execution until ST-85. Resolve the
       `**Planned (ST-84)**` design marker.
 

@@ -25,7 +25,8 @@ Where a file defines the thing, the entry names it, and the file is the authorit
   `steward coordinator start`, `status` and `stop`, and known by its record,
   `~/.steward/state/coordinator.json` (`scripts/dispatch/coordinator.mjs`). It reviews one head at
   a time, in fair turns between the projects (`scripts/dispatch/coordinator-scheduler.mjs`), and
-  discovers the pull requests that unattended landing may consider, but never lands.
+  discovers the pull requests that unattended landing may consider, and asks the pilot to land them one
+  at a time, but merges nothing itself.
 - **activation** — one OS user's permission for unattended local review of an installed project,
   given by `steward project activate` and taken away by `steward project deactivate`, and kept as
   a record in `~/.steward/state/projects.json` (`scripts/dispatch/project.mjs`). Installation
