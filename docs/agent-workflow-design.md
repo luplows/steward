@@ -2710,12 +2710,15 @@ shortened where it is long, so that it can be found there with its date.
   the command and output showing what changed. Both include a measurement example and a
   documentation-only example. Other project-specific template instructions stay as they are.
   Not chosen: updating only the installed example, or making every Verification numerical.
-- **Planned (ST-72)** **Manual rotation keeps its detached-worktree requirement, with usable
-  installed-package guidance** (crew, 2026-11-04). Its branch-checkout refusal points to
-  preparing a detached worktree with Git, and the README documents the steps for a project
-  that uses Steward from the package. When rotation skips an already-reviewed PR, it prints
-  the governing verdict on the current head. Not chosen: creating worktrees automatically,
-  or splitting the small related guidance and reporting changes into separate stories.
+- **Manual rotation keeps its detached-worktree requirement, with usable installed-package
+  guidance** (crew, 2026-11-04). Its branch-checkout refusal, made on the checkout the rotation
+  works in (a rotation for another repository works in its manual checkout, which steward keeps
+  detached, so the invoking checkout is not checked), says that a detached worktree is needed
+  and points to preparing one with Git and running `steward rotation` from it, and the README
+  documents the steps for a project that uses Steward from the package. When rotation skips an
+  already-reviewed PR, its line names the verdict governing the current head. Not chosen:
+  creating worktrees automatically, or splitting the small related guidance and reporting
+  changes into separate stories.
 - **Planned (ST-73)** **Release version and provisional notes are committed first**
   (crew, 2026-11-04; applies after v0.1.0). The crew fixes the version before cutting a
   release branch. After the branch is protected, the release review reads back its actual

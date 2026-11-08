@@ -197,6 +197,39 @@ project's own CI checks are the crew's to add. Where GitHub offers none, as on a
 on GitHub Free, or the account cannot set it, it says so plainly, says that nothing on GitHub then
 enforces the gate, and exits 1.
 
+### Running a rotation by hand
+
+`steward rotation` (the installed form of `node scripts/dispatch/cli.mjs rotation`, above) reviews
+what needs it, lands what has passed where the project's `land` is `true`, and inspects, once. It
+works in a checkout of the project that is **detached and has nothing uncommitted**. It refuses to
+run from a checkout with a branch checked out, before it fetches or does anything else, and stops,
+doing nothing more, when there are uncommitted changes. Preparing that checkout is the crew's:
+steward does not create, repair or delete it. Prepare it with Git, from the project's own checkout,
+`<path>` being a folder that does not exist yet, beside the checkout for instance:
+
+```sh
+git fetch origin main
+git worktree add --detach <path> origin/main
+cd <path>
+npx --yes --package=github:luplows/steward#v<version> steward rotation
+```
+
+Run the last line, from `<path>`, for each rotation. The rotation itself fetches `origin` and
+brings `<path>` to `origin`'s `main`, detached, before it reads the project's settings, so the
+worktree can be kept and reused, and `git worktree remove <path>` removes it when it is no longer
+wanted. `--max-reviews N` caps the reviews a rotation starts.
+
+A rotation for another repository, `steward rotation --repo owner/name` naming one that is not the
+`origin` of the checkout it is run from, does not work in that checkout. It works in a checkout of
+that repository that steward keeps under `~/.steward/state/manual-checkouts/`, detached by steward
+itself, so the checkout it is run from is not checked and may have a branch checked out. Of that
+checkout only `origin` is read.
+
+A rotation prints a line for each open pull request against `main` or a release branch. One it
+skips because a verdict is already at its head says which verdict, as
+`skipped: a verdict is already at its head (pass)`, with `pass-with-observations` or `block` in
+place of `pass` where that is the verdict. No new review is started for it.
+
 ### Upgrading steward in a project
 
 To move a project that has steward installed to another pin of `luplows/steward`, run, from steward

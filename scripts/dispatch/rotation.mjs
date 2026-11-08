@@ -15,15 +15,18 @@
  *      the manual checkout of the repository `--repo` names, cloned if absent and brought to
  *      `origin`'s `main`, detached. A manual checkout that is refused stops the rotation before
  *      anything else.
- *   1. Refuses to run from a checkout with a branch checked out, brings its worktree to
- *      `origin/main`, detached, and stops, doing nothing more, when the worktree has anything
- *      uncommitted. The settings are read after the update. Steps 1 to 4a work in the step 0
- *      checkout, whichever it is, and read nothing else of a project.
+ *   1. Refuses to run from a checkout with a branch checked out (the message says to prepare a
+ *      detached worktree with Git and run `steward rotation` from it, ST-72), brings its
+ *      worktree to `origin/main`, detached, and stops, doing nothing more, when the worktree has
+ *      anything uncommitted. The settings are read after the update. Steps 1 to 4a work in the
+ *      step 0 checkout, whichever it is, and read nothing else of a project.
  *   2. Lists the open pull requests against `main` or a release branch (`isLandingBase`), once.
  *   3. Oldest first (lowest number), reviews each that is not a draft, whose author the gate
  *      honours (`HONOURED_ASSOCIATIONS`), that is not labelled `review-blocked`, and that has no
  *      honoured verdict at its current head, until `--max-reviews` reviews have been started. Each
- *      pull request's line is printed when its review, or its skip, is decided.
+ *      pull request's line is printed when its review, or its skip, is decided. The line of one
+ *      skipped for a verdict already at its head names that verdict (ST-72): `pass`,
+ *      `pass-with-observations` or `block`.
  *   4. When the settings' `land` is true, reads each pull request step 2 listed again (a second
  *      listing, filtered to step 2's numbers; one opened since waits for the next rotation, and one
  *      no longer open is printed as not landed) and, one at a time, has the pilot
@@ -78,7 +81,21 @@ export const DEFAULT_MAX_REVIEWS = 5
 const PASSING = ['pass', 'pass-with-observations']
 // The refusals that hold for every pull request alike: they end the reviewing, not the rotation.
 const ENDS_REVIEWING = ['rules-unreadable', 'choice-unavailable']
+// The verdicts a skip line for an already-reviewed pull request names (ST-72).
+const GOVERNING = ['pass', 'pass-with-observations', 'block']
 const USAGE = 'usage: node scripts/dispatch/rotation.mjs [--max-reviews N] [--repo owner/name]'
+
+/**
+ * The reason on a pull request's skip line. For one that already has a verdict at its head it
+ * names that verdict (`pass`, `pass-with-observations` or `block`), as `reviewHeadRefusal`
+ * returns it in `existing`; every other refusal keeps its own reason.
+ */
+function skipReason(refusal) {
+  const verdict = refusal.existing?.marker?.verdict
+  return refusal.status === 'already-reviewed' && GOVERNING.includes(verdict)
+    ? `${refusal.reason} (${verdict})`
+    : refusal.reason
+}
 
 // ---------------------------------------------------------------- arguments
 
@@ -177,7 +194,7 @@ export async function runRotation({ repoDir, maxReviews = DEFAULT_MAX_REVIEWS, r
 
   // Step 1.
   try {
-    await d.requireOwnWorktree(repoDir)
+    await d.requireOwnWorktree(repoDir, { command: 'steward rotation' })
   } catch (error) {
     stop('branch-checked-out', error.message)
     return finish()
@@ -236,7 +253,7 @@ export async function runRotation({ repoDir, maxReviews = DEFAULT_MAX_REVIEWS, r
     try {
       const refusal = await reviewHeadRefusal({ ctx, pr, deps: d })
       if (refusal) {
-        say(pr.number, `skipped: ${refusal.reason}`)
+        say(pr.number, `skipped: ${skipReason(refusal)}`)
         continue
       }
     } catch (error) {
