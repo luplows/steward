@@ -35,7 +35,7 @@ describe('OQ-131/AC-1: cli.mjs dispatches to the module each command names', () 
     }
   })
 
-  it('runs lint-stories.mjs for `lint` and review-verdicts.mjs for `verdicts`, the other twelve by their own module name', () => {
+  it('runs lint-stories.mjs for `lint` and review-verdicts.mjs for `verdicts`, the other thirteen by their own module name', () => {
     expect(COMMANDS.lint.endsWith(path.join('scripts', 'lint-stories.mjs'))).toBe(true)
     expect(COMMANDS.verdicts.endsWith(path.join('scripts', 'report', 'review-verdicts.mjs'))).toBe(true)
     for (const name of ['loop', 'story', 'coder', 'review', 'land', 'rotation', 'queue', 'inspect', 'init', 'upgrade', 'protect', 'project', 'coordinator']) {

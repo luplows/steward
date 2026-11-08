@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { fillPin, GATE_WORKFLOWS, INSPECTION_WORKFLOW } from './init.mjs'
-import { describePin, main, MIGRATIONS, parseFlags, planConfig, pullTitle, STEWARD_REPO } from './upgrade.mjs'
+import { describePin, failureReport, main, MIGRATIONS, parseFlags, planConfig, pullTitle, STEWARD_REPO } from './upgrade.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const REPO = 'acme/widgets'
@@ -531,6 +531,19 @@ describe('ST-69/AC-7: the project\'s own configuration', () => {
     expect(r.opened.body).toMatch(/`land` is true\); the upgrade did not change it/)
   })
 
+  it('ST-69/AC-7: a rulesFile with a . segment is read without it and kept as written', async () => {
+    const config = settings({ rulesFile: './REVIEW.md' })
+    const w = world({ config })
+    const r = await runUpgrade(['--to', 'v0.2.0'], w)
+    expect(r.code).toBe(0)
+    expect(onBranch(w, r.opened.head, 'steward.config.json')).toBe(config.trimEnd())
+    expect(r.opened.body).toContain('`./REVIEW.md` are left as they are')
+    expect(w.requests.some((q) => q.rest === '/contents/REVIEW.md')).toBe(true)
+    const bad = await runUpgrade(['--to', 'v0.2.0'], world({ config, rules: ['# R', '', '## S', '', 'no item', ''].join('\n') }))
+    expect(bad.code).toBe(2)
+    expect(bad.err).toContain('./REVIEW.md: ')
+  })
+
   it('ST-69/AC-7: no migration is registered yet, so a real upgrade proposes no project-owned change', () => {
     expect(MIGRATIONS).toEqual([])
   })
@@ -647,6 +660,7 @@ describe('ST-69/AC-9: what the pull request names', () => {
     const r = await runUpgrade(['--to', 'v0.2.0'], w)
     expect(r.code).toBe(2)
     expect(r.err).toMatch(/several pull request templates/)
+    expect(r.err).toMatch(/upgrade's copy of the project is kept at /)
     const ok = await runUpgrade(['--to', 'v0.2.0', '--pr-template', '.github/PULL_REQUEST_TEMPLATE/b.md'], world({ files }))
     expect(ok.code).toBe(0)
     expect(ok.opened.body.endsWith('B\n')).toBe(true)
@@ -682,7 +696,10 @@ describe('ST-69/AC-10: a failed preparation says what is left', () => {
     expect(r.err).toMatch(/upgrade stopped: opening the draft pull request failed. GitHub said: 422 Validation Failed/)
     expect(r.err).toContain(`upgrade's copy of the project, at ${r.clone}`)
     expect(r.err).toContain('the branch steward/upgrade-v0.2.0 on GitHub')
-    expect(r.err).toContain('no pull request: none was opened')
+    expect(r.err).toContain('perhaps a pull request: opening it failed, and whether GitHub created it is not known')
+    expect(r.err).not.toContain('none was opened')
+    expect(r.err).toContain('git ls-remote --heads origin steward/upgrade-v0.2.0')
+    expect(r.err).toContain('the open pull requests from steward/upgrade-v0.2.0')
     expect(r.err).toContain('git push origin --delete steward/upgrade-v0.2.0')
     expect(r.err).toContain('Nothing was rolled back or removed.')
     expect(git(w.bare, 'rev-parse', '--verify', 'refs/heads/steward/upgrade-v0.2.0')).toMatch(/^[0-9a-f]{40}$/)
@@ -712,8 +729,9 @@ describe('ST-69/AC-10: a failed preparation says what is left', () => {
     const r = await runUpgrade(['--to', 'v0.2.0'], w)
     expect(r.code).toBe(1)
     expect(r.err).toMatch(/upgrade stopped: pushing the branch steward\/upgrade-v0.2.0 to GitHub failed/)
-    expect(r.err).toContain('the branch steward/upgrade-v0.2.0 in that copy only: nothing was pushed')
-    expect(r.err).toContain('fix what Git reported, and run upgrade again')
+    expect(r.err).toContain('in that copy, and perhaps on GitHub: the push failed, and whether it changed GitHub is not known')
+    expect(r.err).not.toContain('nothing was pushed')
+    expect(r.err).toContain('git ls-remote --heads origin steward/upgrade-v0.2.0')
     expect(writes(w)).toEqual([])
   })
 
@@ -723,6 +741,26 @@ describe('ST-69/AC-10: a failed preparation says what is left', () => {
     const r = await runUpgrade(['--to', 'v0.2.0'], failing)
     expect(r.code).toBe(2)
     expect(r.err).toMatch(/did not let your credential read acme\/widgets \(401 Bad credentials\)/)
+  })
+})
+
+describe('ST-69/AC-10: the report asserts a remote outcome only when the attempt was never made', () => {
+  it('ST-69/AC-10: before the push, nothing was pushed and no pull request was opened', () => {
+    const lines = failureReport(new Error('x'), { clone: '/c', branch: 'b', pushAttempted: false, pushed: false, pullAttempted: false })
+    expect(lines).toContain('  the branch b in that copy only: nothing was pushed')
+    expect(lines).toContain('  no pull request: none was opened')
+  })
+
+  it('ST-69/AC-10: after a push attempt that failed, and before any pull request attempt, the push is uncertain and the pull request was never made', () => {
+    const lines = failureReport(new Error('x'), { clone: '/c', branch: 'b', pushAttempted: true, pushed: false, pullAttempted: false })
+    expect(lines.join(" ")).toMatch(/perhaps on GitHub/)
+    expect(lines).toContain('  no pull request: none was opened')
+  })
+
+  it('ST-69/AC-10: after the pull request attempt failed, the push is known and the pull request is uncertain', () => {
+    const lines = failureReport(new Error('x'), { clone: '/c', branch: 'b', pushAttempted: true, pushed: true, pullAttempted: true })
+    expect(lines).toContain('  the branch b on GitHub')
+    expect(lines.join(" ")).toMatch(/perhaps a pull request/)
   })
 })
 

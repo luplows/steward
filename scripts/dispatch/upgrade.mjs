@@ -24,7 +24,9 @@
  * and the closing message gives its path. It rolls nothing back.
  *
  * Exit code: 0 when it finished, a no-op included; 1 when a step failed after the clone, with a
- * report of what is left, or GitHub could not be read; 2 when it refused, before any clone.
+ * report of what is left, or GitHub could not be read; 2 when it refused: before any clone, except
+ * the choice of the project's pull request template (--pr-template, or several templates), which
+ * needs the clone's files, so that refusal leaves the clone, kept and named.
  *
  * Usage:
  *   steward upgrade (--to vX.Y.Z | --ref <40-hex commit>) [--branch <name>] [--pr-template <path>]
@@ -227,7 +229,7 @@ export function pullBody({ installed, target, sameCommit, changed, edits, decisi
 const keptLine = (clone) => `upgrade's copy of the project is kept at ${clone}: remove that folder when you are done with it.`
 
 /** What `main` prints for a failure after the clone: which step, what was said, what is left, what next. */
-function failureReport(error, progress) {
+export function failureReport(error, progress) {
   const lines =
     error instanceof StepFailure
       ? [`upgrade stopped: ${error.step} failed. ${error.who} said: ${error.message}`]
@@ -236,13 +238,21 @@ function failureReport(error, progress) {
   lines.push('What exists now:')
   lines.push(`  upgrade's copy of the project, at ${progress.clone}`)
   if (progress.branch !== null) {
-    lines.push(progress.pushed ? `  the branch ${progress.branch} on GitHub` : `  the branch ${progress.branch} in that copy only: nothing was pushed`)
-    lines.push('  no pull request: none was opened')
+    if (progress.pushed) lines.push(`  the branch ${progress.branch} on GitHub`)
+    else if (progress.pushAttempted) {
+      lines.push(`  the branch ${progress.branch} in that copy, and perhaps on GitHub: the push failed, and whether it changed GitHub is not known`)
+    } else lines.push(`  the branch ${progress.branch} in that copy only: nothing was pushed`)
+    if (progress.pullAttempted) {
+      lines.push('  perhaps a pull request: opening it failed, and whether GitHub created it is not known')
+    } else lines.push('  no pull request: none was opened')
   }
   lines.push('Nothing was rolled back or removed.')
-  if (progress.pushed) {
+  if (progress.pushAttempted) {
     lines.push(
-      `What to do next: open the pull request from ${progress.branch} on GitHub by hand, or delete that branch on GitHub ` +
+      `What to check: the branch on GitHub (git ls-remote --heads origin ${progress.branch}) and the open pull requests from ${progress.branch}.`,
+    )
+    lines.push(
+      `What to do next: if the branch is there and no pull request is, open the pull request from ${progress.branch} on GitHub by hand, or delete that branch on GitHub ` +
         `(git push origin --delete ${progress.branch}) and run upgrade again.`,
     )
   } else {
@@ -271,7 +281,7 @@ export async function main(
     err = console.error,
   } = {},
 ) {
-  const progress = { clone: null, branch: null, pushed: false }
+  const progress = { clone: null, branch: null, pushAttempted: false, pushed: false, pullAttempted: false }
   try {
     return await run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, out }, progress)
   } catch (error) {
@@ -492,8 +502,9 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
   const rulesFile = plan.config.rulesFile
   let rulesText = null
   if (isRulesFilePath(rulesFile)) {
-    rulesPath = rulesFile
-    rulesText = await readFileAt(project, rulesFile, 'main')
+    // Read at the path without its `.` segments (`./REVIEW.md`); the configured value stays as written.
+    rulesPath = rulesFile.split('/').filter((s) => s !== '.').join('/')
+    rulesText = await readFileAt(project, rulesPath, 'main')
     if (rulesText === null) problems.push(`${rulesFile}: the review rules file is missing on main`)
     else {
       const rules = validateRules(rulesFile, rulesText)
@@ -572,6 +583,7 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
     git(clone, ['commit', '--quiet', '-m', title, '-m', `Changed by steward upgrade:\n${changed.map((rel) => `- ${rel}`).join('\n')}`])
     return git(clone, ['rev-parse', 'HEAD'])
   })
+  progress.pushAttempted = true
   await step(`pushing the branch ${branch} to GitHub`, 'Git', () =>
     git(clone, ['push', '--quiet', 'origin', `refs/heads/${branch}:refs/heads/${branch}`]),
   )
@@ -594,6 +606,7 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
     rulesFile,
     template: templateText,
   })
+  progress.pullAttempted = true
   const pull = await step('opening the draft pull request', 'GitHub', async () => {
     const response = await ctx.send(buildCreateDraftPull(repo, { branch, title, body }))
     if (!ok(response)) throw new Error(githubSaid(response))

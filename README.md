@@ -211,7 +211,9 @@ Give exactly one of the two: `--to` names a tag of `luplows/steward` of the form
 there). Run it from steward installed at the target pin, because it validates the proposed result
 with the steward it is running (`readSettings` and the reviewer's checklist parser).
 
-It reads the project's `main` and steward from GitHub, and clones nothing until it has decided.
+It reads the project's `main` and steward from GitHub, and clones nothing until it has decided (choosing
+the project's pull request template, with `--pr-template`, needs the clone's files: that refusal, if any,
+leaves the clone, which it names).
 It reads the pin that the project's managed workflows (`review-gate.yml`, `land-approved.yml`, and
 `inspection.yml` when there is one) carry. It refuses, naming each finding, when a managed
 workflow is missing, when they do not all carry the same pin, when that pin is not a tag or a
@@ -234,8 +236,9 @@ reviewed the pull request and merged it as the project normally merges, check th
 `github:luplows/steward#` in `.github/workflows/` on `main` names the target pin. A coordinator
 running for the project is stopped and started again by hand, from steward installed at the target
 pin, when the crew wants that machine on it. If a step fails after the clone, its message says
-what exists (the clone, any branch on GitHub, no pull request) and what to do next; it rolls
-nothing back.
+what exists (the clone, the branch) and what to do next. A push or a pull request that was tried and
+failed is reported as uncertain, with the commands to check it (`git ls-remote`, the open pull
+requests from the branch); it rolls nothing back.
 
 ### When the checklist does not parse
 
