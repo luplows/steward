@@ -14,7 +14,7 @@ As a crew member with approved units across activated projects, I want Steward t
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — A read-only selection operation considers pending ST-89 handoffs across activated projects in original approval order (not by repository, story ID, Issue label or tier) and returns one eligible handoff and its approved version. It never admits execution, claims a branch or starts a model.
+- [ ] **AC-1** — A selection operation considers pending ST-89 handoffs across activated projects in original approval order (not by repository, story ID, Issue label or tier) and returns one eligible handoff and its approved version. Selection never admits execution, claims a branch or starts a model; it may persist a content-change hold under AC-3 using ST-66's state-file write pattern.
 
 - [ ] **AC-2** — Eligibility rechecks activation, source accessibility and exact approved content against the current `origin/main` file or current Issue title/body. A new unrelated commit on `main` that leaves the unit unchanged does not invalidate approval. A withdrawn, completed, held or admitted handoff is not eligible.
 

@@ -24,11 +24,11 @@ As a crew member, I want Steward to publish a completed coder branch as a correc
 
 - [ ] **AC-5** — Make one post-execution comparison against the current authoritative file or Issue immediately before PR creation. When it equals the approved snapshot, honor the coder's normal ready/draft choice. When changed or unreadable, still publish the pushed work as a draft and report a handoff discrepancy requiring crew action. Do not monitor changes throughout coding or guarantee detection of races after that comparison.
 
-- [ ] **AC-6** — The `Coder:` provenance names the actual model choices/tools used in the completed execution, using a format the reviewer can interpret for independent model selection; ATC does not trust an arbitrary coder-written `Coder:` line.
+- [ ] **AC-6** — ATC writes `Coder: model=<actual-model-id>` using the model identifier recorded by ST-91, not merely its configurable choice name. The reviewer treats `model=` tokens as literal model identifiers when excluding same-model reviewers, even if `roles.coder.available` changed since coding, and continues to interpret existing choice-name `Coder:` lines as before. Record the actual tool and choice separately as provenance. Refuse publication with the pushed work preserved if the model identifier contains a comma, newline or other character that prevents an unambiguous `Coder:` line; never trust a coder-written `Coder:` line.
 
 - [ ] **AC-7** — Invalid coder PR output, a moved remote head and GitHub publication errors report a recoverable failure with handoff ID, branch and head SHA, preserving the pushed work without automatic re-execution.
 
-- [ ] **AC-8** — Tests cover file/Issue Unit links, moved files, conflicting closing keywords, snapshot changes, unreadable units, draft/ready publication, actual coder provenance, malformed output and publication failures. No real model or GitHub mutation runs.
+- [ ] **AC-8** — Tests cover file/Issue Unit links, moved files, conflicting closing keywords, snapshot changes, unreadable units, draft/ready publication, literal actual-model provenance despite changed choice mappings, legacy choice-name `Coder:` lines, ambiguous model IDs, malformed output and publication failures. No real model or GitHub mutation runs.
 
 - [ ] **AC-9** — Document publication and draft discrepancies and remove ST-92 from the 0.3 design marker when implemented.
 

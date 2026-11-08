@@ -14,7 +14,7 @@ As a crew member, I want one explicitly approved file or Issue implemented by St
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — A reusable execution operation accepts an ST-89 handoff ID and approved version rather than selecting from `stories/`. It rechecks activation, approval state and current unit content immediately before the first branch or model side effect. A held, withdrawn, changed or previously admitted handoff starts no model session.
+- [ ] **AC-1** — A reusable execution operation accepts an ST-89 handoff ID and approved version rather than selecting from `stories/`. It rechecks activation, approved revision and current unit content immediately before the first branch claim or model side effect. When invoked with an active coordinator admission from ST-93, it accepts only the matching admission ID, handoff ID and approved version; a matching active admission is not a duplicate. A held, withdrawn, changed, completed, stopped, stale or differently admitted handoff starts no model session. Tests distinguish matching from mismatched admissions.
 
 - [ ] **AC-2** — A file or Issue coder receives the approved text, original source identity and repository in its prompt. The prompt works without `stories/stories.json`, story frontmatter, a `blocked:` field, `stories/done/`, or a mandatory `AGENTS.md`/`REVIEW.md` file; it reads applicable project instructions when present. Injected unit content uses the existing untrusted-block rendering boundary.
 
