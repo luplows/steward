@@ -284,7 +284,7 @@ async function start({ homedir, env, spawnFn, pollMs, waitMs, out, err }) {
 
 /** The lines `status` adds to its first, for the fields in `result`. */
 function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, nextLandingScanAt, landingCandidates, active, landingActive, lastLanding, lastOutcome, usage, recordsProblem, projectProblems, landingProblems, failedHeads: failed, reviewsProblem }) {
-  const pull = ({ repo, number, headSha }) => `${repo} pull request #${number}, head ${headSha}`
+  const pull = ({ repo, number, headSha }) => `${repo} pull request #${number}, head ${headSha ?? 'unknown'}`
   const lines = []
   if (intervalMinutes !== undefined) lines.push(`Scan interval: ${intervalMinutes} minutes.`)
   if (landingScanIntervalMinutes !== undefined) lines.push(`Landing scan interval: ${landingScanIntervalMinutes} minutes.`)
@@ -298,7 +298,8 @@ function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, 
   }
   if (lastLanding) {
     const { status: ended, triggers, reason, at, discoveredHeadSha } = lastLanding
-    // Only `merged` says the pilot saw the merge; a dispatch that ended otherwise confirms none.
+    // Only `merged` says the pilot saw the merge. A result carrying a positive `triggers` count sent
+    // a dispatch; `threw` carries none, and does not say whether one was sent.
     const sent = ended !== 'merged' && triggers > 0 ? ' (the landing workflow was dispatched; a merge is not confirmed)' : ''
     lines.push(`Last landing: ${pull(lastLanding)}: ${ended}${sent}${discoveredHeadSha ? `; discovered at head ${discoveredHeadSha}` : ''}, at ${at}${reason ? `: ${reason}` : ''}.`)
   }

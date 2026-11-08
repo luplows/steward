@@ -169,13 +169,16 @@ statuses). The coordinator merges nothing, dispatches nothing itself, and has no
 Its record, and so `steward coordinator status`, shows the attempt under way apart from a review,
 and the last attempt's repository, pull request, head, time, status and reason. The pilot reads the
 head itself, so the head recorded is the one it reports, with the head the scan found beside it when
-they differ. Only `merged` is a merge the pilot saw; any other status is not a confirmed merge, even
-when the sweep was dispatched. A stop admits no more attempts and lets the admitted one finish. The
-coordinator keeps nothing of an attempt beyond that record, so a later scan, or a restarted
-coordinator, may try a still-eligible head again, after the same checks; there is no durable
-exactly-once ledger. Its own attempts never overlap, because it runs one piece of admitted work at a
-time; manual commands are not coordinated. The runway's checks remain authoritative. Installation or
-activation never authorizes landing by itself.
+they differ, and unknown when it reports none (it found the pull request already merged or closed).
+Only `merged` is a merge the pilot saw; any other status is not a confirmed merge, and a result
+carrying a positive `triggers` count is shown as dispatched. An error from the pilot after a
+dispatch is reported as `threw`, which does not say whether a landing request was sent. A stop
+admits no more attempts and lets the admitted one finish. The coordinator keeps nothing of an
+attempt beyond that record, so a later scan, or a restarted coordinator, may try a still-eligible
+head again, after the same checks; there is no durable exactly-once ledger. Its own attempts never
+overlap, because it runs one piece of admitted work at a time; manual commands are not coordinated.
+The runway's checks remain authoritative. Installation or activation never authorizes landing by
+itself.
 
 **Planned (ST-85)** (crew, 2026-11-07) In 0.4, separate due discovery from
 admitted review, coding, fixing and landing work, so a long session cannot delay

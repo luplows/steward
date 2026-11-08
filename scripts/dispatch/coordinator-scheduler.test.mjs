@@ -1376,6 +1376,25 @@ describe('ST-84: the coordinator requests bounded unattended landing and reports
     expect((await command(['status'], h.home)).out).toContain(`Last landing: ${A} pull request #7, head ${other}: merged; discovered at head ${HEAD}, at `)
   })
 
+  it('ST-84/AC-5: a pilot that reports no head, as when it found the pull request already merged, leaves the head unknown, never the discovered one', async () => {
+    const h = attempt({
+      repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 7)] },
+      land: async ({ number }) => ({ ...MERGED(number), headSha: null }),
+    })
+    await landed(h)
+    expect(lastLanding(h)).toMatchObject({ headSha: null, discoveredHeadSha: HEAD, status: 'merged' })
+    expect(JSON.parse((await command(['status', '--json'], h.home)).out).lastLanding).toMatchObject({ headSha: null, discoveredHeadSha: HEAD })
+    expect((await command(['status'], h.home)).out).toContain(`Last landing: ${A} pull request #7, head unknown: merged; discovered at head ${HEAD}, at `)
+  })
+
+  it('ST-84/AC-5: a pilot error is reported as threw, which does not say that a workflow was dispatched', async () => {
+    const h = attempt({ repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 7)] }, land: async () => { throw new Error('GET failed') } })
+    await landed(h)
+    const text = (await command(['status'], h.home)).out
+    expect(text).toContain(`Last landing: ${A} pull request #7, head ${HEAD}: threw, at `)
+    expect(text).not.toContain('dispatched')
+  })
+
   it('ST-84/AC-5: a pilot that reports the head the scan found adds no discovered head', async () => {
     const h = attempt({ repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 7)] } })
     await landed(h)
@@ -1385,9 +1404,9 @@ describe('ST-84: the coordinator requests bounded unattended landing and reports
 
   it("ST-84/AC-2, ST-84/AC-3: the pilot's results are reported as it gave them, with its reasons, and a dispatched workflow that has not merged is not reported as a merge", async () => {
     const results = [
-      { status: 'not-landable', reason: 'checks-pending', waiting: ['test'], triggers: 0 },
-      { status: 'sweep-pending', triggers: 1 },
-      { status: 'checks-failed', failing: ['lint'], triggers: 0 },
+      { status: 'not-landable', reason: 'checks-pending', waiting: ['test'], triggers: 0, headSha: HEAD },
+      { status: 'sweep-pending', triggers: 1, headSha: HEAD },
+      { status: 'checks-failed', failing: ['lint'], triggers: 0, headSha: HEAD },
     ]
     const h = attempt({
       repos: [A], settings: landOn('all-checks', A),
@@ -1446,7 +1465,7 @@ describe('ST-84: the coordinator requests bounded unattended landing and reports
     const hold = gate()
     const h = attempt({
       repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 7)] },
-      land: async () => { await hold.held; return { status: 'sweep-pending', triggers: 1 } },
+      land: async () => { await hold.held; return { status: 'sweep-pending', triggers: 1, headSha: HEAD } },
     })
     await until(() => recordOf(h)?.landingActive)
     const during = await command(['status'], h.home)

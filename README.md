@@ -387,15 +387,17 @@ review under way, with its project, pull request and full head, the landing atte
 apart from a review), the effective intervals, the next scan when known, the landing candidates last
 found, the last outcome, the last landing attempt's project, pull request, head, time, status and
 reason, and the usage and failure reasons above. Only a last landing of `merged` is a merge the
-pilot saw; `sweep-pending` and any other status are not a confirmed merge, even when the landing
-workflow was dispatched. The pilot reads the head itself, so if it reports another head than the
-scan found, that head is the one shown, with the head the scan found beside it. It also lists, from
-`reviews.json`, the heads not reviewed again automatically, or says that file cannot be read. A
-write of these fields that fails is not fatal: the coordinator carries on, and what it writes next
-replaces them, so `status` can be behind until then. The record's only other writes are at the start
-and on a stop. On Windows a write can be refused while another process is reading the file, so a
-`start` that is watching for the record can occasionally cost the first scan's note of the next
-scan.
+pilot saw; `sweep-pending` and any other status are not a confirmed merge, and one whose result
+carries a positive `triggers` count says that the landing workflow was dispatched. An error from the
+pilot after a dispatch is reported as `threw`, which does not say whether a landing request was
+sent. The pilot reads the head itself, so the head shown is the one it reports, with the head the
+scan found beside it when they differ; when it reports none, because it found the pull request
+already merged or closed, the head is shown as unknown. It also lists, from `reviews.json`, the
+heads not reviewed again automatically, or says that file cannot be read. A write of these fields
+that fails is not fatal: the coordinator carries on, and what it writes next replaces them, so
+`status` can be behind until then. The record's only other writes are at the start and on a stop. On
+Windows a write can be refused while another process is reading the file, so a `start` that is
+watching for the record can occasionally cost the first scan's note of the next scan.
 
 `stop` leaves a stop request, `~/.steward/state/coordinator.stop`, which the coordinator looks for
 a few times a second. On seeing it, the coordinator admits no more work, and that is the

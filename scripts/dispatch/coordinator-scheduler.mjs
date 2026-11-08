@@ -47,9 +47,11 @@
  *   landingActive    { repo, number, headSha } of the landing attempt under way, or null; only
  *                    with `landing.attempt`
  *   lastLanding      { repo, number, headSha, discoveredHeadSha?, status, triggers?, reason?, at } of
- *                    the latest landing attempt. `headSha` is the head the pilot reports when it
- *                    gives one, and `discoveredHeadSha` the scan's, only when they differ. It has
- *                    the pilot's `status` and the `triggers` it sent, or `threw`, or
+ *                    the latest landing attempt. With a result from the pilot, `headSha` is the head
+ *                    it reports, or null when it reports none, and `discoveredHeadSha` is the scan's,
+ *                    only when they differ; for `threw` and `not-attempted`, `headSha` is the scan's.
+ *                    It has the pilot's `status` and the `triggers` it sent, or `threw` (the pilot
+ *                    raised an error, which does not say whether a landing request was sent), or
  *                    `not-attempted` when a recheck refused the candidate, and nothing was sent.
  *                    Only with `landing.attempt`
  *   usage            { status, reason } of a usage refusal, until the next scan, or null
@@ -408,7 +410,9 @@ export async function scheduleReviews({
       const { result } = outcome
       const reason = landingReason(result)
       // The pilot reads the head itself, so the head it reports is the one its outcome belongs to.
-      const pilotHead = typeof result.headSha === 'string' && result.headSha !== '' ? result.headSha : headSha
+      // It reports none when its first read found the pull request merged or closed, and then the
+      // head is unknown (null), never the scan's.
+      const pilotHead = typeof result.headSha === 'string' && result.headSha !== '' ? result.headSha : null
       lastLanding({
         ...(pilotHead !== headSha && { headSha: pilotHead, discoveredHeadSha: headSha }),
         status: result.status, triggers: result.triggers, ...(reason && { reason: withoutCredentials(reason) }),
