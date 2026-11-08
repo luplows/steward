@@ -16,30 +16,30 @@ accurately while the final notes still record the crew's acceptance decision.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `docs/release-review.md` states that the crew chooses a fixed version before
+- [x] **AC-1** — `docs/release-review.md` states that the crew chooses a fixed version before
       the branch is cut; after cutting and protecting the branch, the release review reads
       protection back and confirms the intended required checks and administrator enforcement.
       Unexpected requirements are corrected before the first release PR proceeds.
-- [ ] **AC-2** — `docs/release-review.md` requires the first reviewed PR into a new release
+- [x] **AC-2** — `docs/release-review.md` requires the first reviewed PR into a new release
       branch to set `package.json` and `package-lock.json` to the preselected version and
       create `releases/vX.Y.Z.md`. That file records the known version, batch boundaries and
       candidate capabilities and uses literal `Pending release review` placeholders for
       unresolved verdicts, deferrals, project upgrade actions and other required release-note
       entries. This first PR changes no runtime code; `main` keeps its development version.
-- [ ] **AC-3** — The procedure runs the scratch installation walkthrough after the first PR
+- [x] **AC-3** — The procedure runs the scratch installation walkthrough after the first PR
       lands, pinning its current release-branch commit. After each fix or revert into that
       branch, the procedure reruns the walkthrough from the new last commit as before.
-- [ ] **AC-4** — The last PR into the release branch updates only the same
+- [x] **AC-4** — The last PR into the release branch updates only the same
       `releases/vX.Y.Z.md` file: it replaces all `Pending release review` placeholders with
       actual capability verdicts, follow-ups, deferrals, upgrade actions and other required
       evidence, or an explicit "None" where appropriate. It makes no version or runtime
       changes. It is made ready and landed only after crew acceptance, before tagging.
-- [ ] **AC-5** — `docs/release-review.md` keeps the crew's explicit authorization for the
+- [x] **AC-5** — `docs/release-review.md` keeps the crew's explicit authorization for the
       immutable tag and the rule that no tag or already-tagged release branch moves. It says
       the early-version process starts with the release after v0.1.0, which was reviewed and
       tagged under the earlier procedure on 2026-11-05. The selected version is not routinely revised
       during stabilization: an exceptional proposed change stops for a separate crew decision.
-- [ ] **AC-6** — Remove the `**Planned (ST-73)**` marker from the corresponding decision in
+- [x] **AC-6** — Remove the `**Planned (ST-73)**` marker from the corresponding decision in
       `docs/agent-workflow-design.md` when the revised release procedure is implemented.
 
 ## Out of scope

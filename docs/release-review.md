@@ -41,12 +41,17 @@ A release is cut from `main`, or, as a patch release, from the newest release's 
   release replaces it.
 - **Propose the version.** Steward's versions are semantic versions, `0.x.y` for now: a new minor
   version when anything a project uses has changed (a setting, a command, the example checklist or
-  the workflow files), and a new patch version otherwise. The crew decides it.
+  the workflow files), and a new patch version otherwise. The crew decides it, and fixes it before
+  the branch is cut: the version is not revised during stabilization (see "The release notes").
 - **Cut the release branch, on the crew's word**: `release/vX.Y.Z`, from the commit on `main` the
   batch ends at, `git push origin <commit>:refs/heads/release/vX.Y.Z`, or, for a patch release,
   from the tag's commit, `git push origin "vX.Y.Z^{commit}:refs/heads/release/vX.Y.(Z+1)"`.
   Then, also on the crew's word, give it the same branch protection as `main`: `test` and
-  `review/agent` required, with `enforce_admins` on. Report the branch's commit to the crew.
+  `review/agent` required, with `enforce_admins` on. Then read the protection back
+  (`gh api repos/<owner>/<repo>/branches/release/vX.Y.Z/protection`) and confirm that the required
+  checks are the intended ones and that administrator enforcement is on. Correct anything
+  unexpected before the first release pull request proceeds. Report the branch's commit and what
+  the read-back showed to the crew.
 - **Replace a release branch that has no tag, on the crew's word**, when it has fallen so far behind
   `main` that bringing it up to date is more work than cutting it again. It is no release's record
   yet. First check that `git ls-remote --tags origin` lists no tag of its version, and that its last
@@ -68,9 +73,10 @@ A release is cut from `main`, or, as a patch release, from the newest release's 
 - Group the batch by **capability**, as a project using steward meets it, not by pull request or
   story. For each capability: what it does now that it did not before, in plain words, and the
   pull requests that built it.
-- **Run it as a project would**, from the release branch. On a scratch repository the crew provides,
-  new or reset, with one commit on `main` (`init` clones `main`, so it needs one), none of `init`'s
-  files there, no branch left by an earlier `init`, and no branch protection: run
+- **Run it as a project would**, from the release branch, once the first pull request into it has
+  landed ("The release notes"), so that the candidate carries its version. On a scratch repository
+  the crew provides, new or reset, with one commit on `main` (`init` clones `main`, so it needs
+  one), none of `init`'s files there, no branch left by an earlier `init`, and no branch protection: run
   `init --ref <commit>`, where `<commit>` is the release branch's last commit
   (`git rev-parse origin/release/vX.Y.Z` once fetched), so that the workflow files it writes install
   steward at that commit, since the tag does not exist yet (ST-44). Then mark ready and merge by
@@ -82,7 +88,7 @@ A release is cut from `main`, or, as a patch release, from the newest release's 
   release documents. Report each command and its result, `protect`'s included. Run it again at the new last commit whenever a fix or a revert lands into
   the release branch, on a scratch repository in that same state: `init` leaves a file that already
   exists as it is, so it would not repin the last run's workflows (ST-44). The tag's commit differs from the
-  last one walked through only by the notes and the version.
+  last one walked through only by the final notes.
 - **Run the upgrade as a project would.** On a second scratch repository, in the same state, install
   the previous release (`npx --yes --package=github:luplows/steward#<previous tag> steward init`,
   with its draft pull request merged by hand), so that it is installed at the previous release's pin.
@@ -111,22 +117,44 @@ A release is cut from `main`, or, as a patch release, from the newest release's 
 
 ## The release notes
 
-One pull request into the release branch, on a branch `release-notes/vX.Y.Z` with `Unit: none`,
-holds the release notes and the version, and nothing else:
+The release notes, `releases/vX.Y.Z.md`, reach the release branch in two pull requests, both with
+`Unit: none`, opened as a draft. This is the procedure for every release after v0.1.0, which
+was reviewed and tagged on 2026-11-05 under the earlier one, with its version and notes in a single
+last pull request.
 
-- `releases/vX.Y.Z.md`, holding the version; the batch (the commit it starts after and the commit
-  the branch was cut at, or, for a patch release, the tag it was cut from); each capability, its
-  verdict, the pull requests that built it, and any follow-up stories; every cherry-picked fix;
-  every deferred capability, with the pull requests that built it: those deferred from this
-  release, and, for a patch release, those its tag's notes list; and **For projects**:
-  every change a project must act on when it moves to this tag, such as a settings key added,
-  changed or removed, a change to the example checklist, a change to the workflow files `init`
-  writes, or a command added, changed or removed. Write "None" when there is none.
-- `package.json`'s and `package-lock.json`'s `version` set to `X.Y.Z`. `main`'s stays `0.0.0`:
-  `main` is never released directly.
+1. **The first pull request into a new release branch**, on a branch `release-start/vX.Y.Z`,
+   once the protection read-back in "The batch and its branch" is right. It is reviewed and landed
+   through the gate once it is finished, and holds:
+   - `package.json`'s and `package-lock.json`'s `version` set to the version the crew fixed,
+     `X.Y.Z`. `main`'s stays `0.0.0`: `main` is never released directly.
+   - `releases/vX.Y.Z.md`, holding the known version; the batch (the commit it starts after and
+     the commit the branch was cut at, or, for a patch release, the tag it was cut from); and the
+     candidate capabilities. Every entry not yet known is the literal `Pending release review`:
+     each capability's verdict, every deferral, **For projects** (below) and any other entry the
+     final notes need.
+   - No runtime code. The walkthrough then starts, at this pull request's commit.
 
-Open it as a draft, and mark it ready only when the crew accepts the whole batch. The controller
-reviews and lands it, last of the pull requests into the release branch.
+   The notes make no claim that a pending capability was accepted, and the version and these notes
+   are not evidence that the acceptance is complete.
+2. **The last pull request into the release branch**, on a branch `release-notes/vX.Y.Z`, changes
+   only `releases/vX.Y.Z.md`. It replaces every `Pending release review` with the actual entry,
+   or an explicit "None" where there is nothing to record, so that the file holds:
+   - each capability, its verdict, the pull requests that built it, and any follow-up stories;
+   - every cherry-picked fix;
+   - every deferred capability, with the pull requests that built it: those deferred from this
+     release, and, for a patch release, those its tag's notes list;
+   - **For projects**: every change a project must act on when it moves to this tag, such as a
+     settings key added, changed or removed, a change to the example checklist, a change to the
+     workflow files `init` writes, or a command added, changed or removed. Write "None" when there
+     is none.
+
+   It makes no change to the version or to runtime code. Mark it ready only when the crew accepts
+   the whole batch. The controller reviews and lands it, last of the pull requests into the release
+   branch.
+
+The version is not revised during stabilization. A proposal to change it is exceptional: stop, and
+leave it to a separate decision of the crew. Neither re-cutting the branch nor renegotiating the
+version is part of this procedure.
 
 ## The tag
 
