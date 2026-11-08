@@ -64,8 +64,8 @@ node scripts/dispatch/cli.mjs rotation
   the rotation does not check, update or read your own worktree, apart from its `origin`. A checkout
   there that cannot be cloned or brought to `main`, or whose `origin` is another repository,
   stops the rotation with `checkout-refused`, naming its path. A `--repo` that is not
-  `owner/name` stops it the same way. A `--repo` naming the repository of your worktree's `origin` works in your
-  worktree, as without the flag.
+  `owner/name` stops it the same way. A `--repo` naming the repository of your worktree's `origin`
+  works in your worktree, as without the flag.
 - The command takes no pull request numbers, and a request names none. It considers each open pull
   request against `main` or a release branch (`release/vX.Y.Z`; `docs/release-review.md`). When
   order matters, the crew holds pull requests back as drafts or with `review-blocked`.
