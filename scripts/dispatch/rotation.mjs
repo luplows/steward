@@ -341,8 +341,8 @@ export async function runRotation({ repoDir, maxReviews = DEFAULT_MAX_REVIEWS, r
 /**
  * Runs one rotation for the command line (ST-86): chooses the checkout with `resolveCheckout`
  * (`manual-checkout.mjs`) from `cwd`, the invoking checkout, and `repo`, then runs
- * `runRotation` in it. A manual checkout that is refused stops the rotation with
- * `checkout-refused`, printing the stop line and nothing else. `deps` is `runRotation`'s, and
+ * `runRotation` in it. A `repo` that is not `owner/name`, or a manual checkout that is refused,
+ * stops the rotation with `checkout-refused`, printing the stop line and nothing else. `deps` is `runRotation`'s, and
  * also `resolveCheckout({ repo, cwd, homedir, deps })` and `manualCheckout`, the `deps` it is given
  * (`manual-checkout.mjs`'s: `git`, `cloneRepo`, `isCheckout`, `makeDirectory`); `homedir` is where
  * `~` is.

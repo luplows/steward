@@ -67,8 +67,10 @@ async function originRepo(git, dir) {
  * Resolves the checkout a command given `repo` works in. `cwd` is the invoking checkout; `repo` is
  * the `--repo` value, or `undefined`. Resolves `cwd` when `repo` is not given or is the repository
  * of `cwd`'s `origin` (compared without regard to case, as GitHub does); otherwise resolves the
- * manual checkout of `repo`, cloned and brought to `origin`'s `main` as the header says. Throws an
- * error naming the path and the reason when that checkout is refused. `deps` is replaceable by a
+ * manual checkout of `repo`, cloned and brought to `origin`'s `main` as the header says. Throws,
+ * before anything is read, when `repo` is not `owner/name` (two plain segments, neither `.` nor
+ * `..`), and throws an error naming the path and the reason when that checkout is refused. `deps`
+ * is replaceable by a
  * test: `git(cwd, args)` (resolving stdout), `cloneRepo(repo, dir)`, `isCheckout(dir)` and
  * `makeDirectory(dir)`.
  */
