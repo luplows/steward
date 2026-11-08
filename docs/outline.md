@@ -135,14 +135,24 @@ planning practices (ST-48). Review and every landing still use the existing gate
 landing is not required for 0.1.0.** ST-54 precedes ST-55 so review-only installation retains an
 explicit manual landing path without changing its standing authorization.
 
-### 0.1.5 — Optional unattended landing
+### 0.2.0 — Unattended landing and versioned upgrades
 
-An optional checkpoint for project-authorized automatic landing of eligible PRs after all required
-review and CI checks pass. Landing remains opt-in, independently of automatic review and local
-activation. The crew may combine or adjust this checkpoint if implementation evidence justifies
-it; the version is a planning checkpoint, not a release promise.
+Activated projects with `land: true` gain coordinator-managed unattended landing through
+Steward's existing pilot and runway, after required review and CI checks pass. Landing remains
+opt-in and separately authorized by each project's `main` settings; activation alone is not
+landing permission. Landing discovery shares the review scan cadence by default; an optional
+per-OS-user landing interval can separate them (ST-83, ST-84). In 0.2, intervals indicate when
+scans are due, not guaranteed execution while previously admitted work is active. Repeated
+bounded landing attempts are acceptable; the runway remains the final gate. General
+scan/execution concurrency is deferred to 0.4.
 
-### 0.2.0 — Automated coding vertical slice
+A bounded `steward upgrade --to v0.2.0` command proposes a draft pull request for a supported
+v0.1.0 installation, preserving client configuration and authorization and refusing modified
+Steward-managed workflows instead of overwriting them (ST-69, dependent on ST-79). The first
+client projects provide upgrade validation. Shared existing-checklist preflight (ST-78) is
+already implemented. No general migration engine is promised.
+
+### 0.3.0 — Automated coding vertical slice
 
 The crew explicitly hands steward an existing work item. Steward durably records that
 authorization, schedules handed-over work in approval order, runs a bounded coder, and creates a
@@ -151,12 +161,10 @@ schema, priorities or completion convention on clients. Durable authorization is
 execution status remains derived where possible. Resource bounds, duplicate-work prevention and
 recovery after restart belong in this first slice, not in a later hardening release. The legacy
 tier/id queue is not automatically the authorization or scheduling mechanism for this slice.
+One machine and sequential work suffice for this first coding slice; concurrency is not a
+reason to defer its safety obligations. ST-82's own-gate conversion moves to 0.3.
 
-The crew also targets a bounded, reviewable v0.1.0-to-v0.2.0 upgrade path
-(ST-69) and shared existing-checklist preflight (ST-78). This adds no promise
-of arbitrary migration or automatic conflict resolution.
-
-### 0.3.0 — Automated fixing
+### 0.4.0 — Automated fixing and discovery/execution separation
 
 Respond to blocking reviews and qualifying failed checks through bounded correction attempts on
 the existing work, followed by fresh independent review of each changed head. Persist or derive
@@ -164,16 +172,19 @@ retry bounds across restarts, and escalate when progress stops or the bound is r
 setup, cancelled checks and unrelated infrastructure failures must not cause indefinite retries.
 Which failed checks qualify and the retry/recovery contracts require story refinement.
 
-### 0.4.0 — Credential isolation
+Draft ST-85 holds the general coordinator boundary between scheduled discovery and
+long-running execution: work-type-specific capacity, duplicate prevention and restart
+behavior. Its precise concurrency model remains open until evidence from the 0.3 coder.
+
+### 0.5.0 — Credential isolation
 
 Investigate and implement stronger isolation of coding and reviewing agents from machine
 credentials and unrelated files. ST-6 remains the investigation; its findings must lead to
-implementation and validation work. The crew deliberately deferred this from 0.2/0.3 because of
-technical complexity and potential impact on usability. It is not an early-release dependency.
+implementation and validation work. The crew deliberately deferred this from the coding and
+fixing slices because of technical complexity and potential impact on usability.
 Earlier releases must accurately document their security limitations; no credential or filesystem
 isolation may be claimed until implemented and validated. Existing tool restrictions, timeouts,
 usage limits and review safeguards still apply before isolation.
-
 ### Toward 1.0
 
 Automated coding and automated fixing are both essential before 1.0, together with demonstrated
@@ -194,9 +205,9 @@ is retired or silently replaced. Reconcile the remaining overlaps before dispatc
 |---|---|
 | ST-48 | Retains crew-only two-client installation and gate validation. Amended by the crew, 2026-11-02, to cover the installation pull request, activation and automatic review, and to wait on ST-54, ST-56, ST-57 and ST-61; manual evidence alone does not prove all of 0.1.0. |
 | ST-52 | Done: the coordinator's record of its reviews, `~/.steward/state/reviews.json`, applies only to coordinator-dispatched automatic reviews, not manual rotations or reviews. It does not implement counting outcomes and restart (ST-60), exceptional recovery (draft ST-64) or scheduling (ST-61), and no lock surrounds a rotation. |
-| ST-6 | Schedule the owner-run investigation and the implementation it recommends for 0.4. Reconcile earlier coder/scheduler dependencies when those stories are refined; deferring isolation does not mean it already exists. |
+| ST-6 | Schedule the owner-run investigation and the implementation it recommends for 0.5. Reconcile earlier coder/scheduler dependencies when those stories are refined; deferring isolation does not mean it already exists. |
 | ST-11 / ST-12 | Held stories address the old loop's scheduler and retry pause/resume. Reconcile their useful requirements with the new coordinator, resource bounds and restart contracts; do not start the frozen coder loop to satisfy automatic review. |
-| ST-2 | Starvation promotion conflicts with approval-order scheduling of explicit handoffs. Decide its disposition with the crew before refining the coding queue; do not dispatch it as the 0.2 scheduling rule. Steward's current story queue stays tier/id ordered until separately changed. |
+| ST-2 | Starvation promotion conflicts with approval-order scheduling of explicit handoffs. Decide its disposition with the crew before refining the coding queue; do not dispatch it as the 0.3 scheduling rule. Steward's current story queue stays tier/id ordered until separately changed. |
 | ST-53 | Separately refines the pilot's wait behaviour and frozen-loop callers. ST-54 changes authorization, preserves existing wait bounds, and does not consume or resolve ST-53. |
 
 ST-57 (activation), ST-58 (coordinator controls), ST-59 (bounded review-only work)
@@ -215,8 +226,8 @@ tag, so when the crew starts the release review, it closes #86, replaces the bra
 that cut, the crew runs the install through on a scratch repository as a dry run, from a commit on
 `main`. Once it is cut, ST-48 installs in pinpoint and tower-workshop-paths from the new branch's
 commit, and nothing is tagged until ST-48 is done. In steward itself, as the crew decided on
-2026-11-04, `init` runs once at that commit, and converting steward's own gate moves to 0.2. Steward's own
-release-review procedure remains specific to this repository; it is not a generic client feature.
+2026-11-04, `init` runs once at that commit, and converting steward's own gate was then planned for 0.2. The crew moved
+that conversion to 0.3 on 2026-11-07. Steward's own release-review procedure remains specific to this repository; it is not a generic client feature.
 
 ## Defining steward
 
