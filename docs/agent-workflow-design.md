@@ -590,8 +590,11 @@ landing under their present rules, admit one oldest eligible coding handoff,
 wait for bounded coding and PR publication, then reconsider all work. It stores
 the coding admission, with a unique identity, before any side effect. Only the
 matching active admission may be passed into execution. A confirmed pre-claim,
-pre-model refusal returns to pending only after that admission is durably
-cleared; an uncertain outcome never authorizes a second execution. A stopped
+pre-model refusal is resolved only after that admission is durably cleared: a
+retryable one (usage, or a temporary condition such as a failed read) returns
+to pending, and one because the unit's content changed is held for explicit
+reapproval, as at selection. An uncertain outcome never authorizes a second
+execution. A stopped
 or uncertain admitted run is not recoded after restart; surviving evidence and a specific crew action
 are shown in `coordinator status` and `handoff list`, without dedicated
 notifications. No general concurrent scheduler, automatic fixer or exceptional
