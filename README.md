@@ -356,9 +356,9 @@ wake-up is the earlier of the two due times.
 After a scan's review turns, the coordinator takes that scan's landing candidates one at a time.
 Just before each it checks that the project is still activated, that its current `main` still has
 `land: true`, and that the pull request is open at the head the scan found; one that fails a check
-is not sent, and `status` says why. Otherwise it admits one call of the pilot, `landPullRequest`,
-in unattended `once` mode, with the project's `landWhen`. That call waits for no check or process
-of unknown length: a pull request that is not landable yet is returned at once as `not-landable`,
+is not sent, and the last landing in `status` says why. Otherwise it admits one call of the
+pilot, `landPullRequest`, in unattended `once` mode, with the project's `landWhen`. That call waits for
+no check or process of unknown length: a pull request that is not landable yet is returned at once as `not-landable`,
 with its reason, and one that was dispatched is polled for its merge for one sweep run's bound
 only. Attempts never overlap each other or a review, because the coordinator does one piece of
 admitted work at a time, so a scan that falls due during an attempt waits for it (ST-85 is to
