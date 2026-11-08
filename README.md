@@ -163,7 +163,8 @@ there as it is, byte for byte, whatever its `land` says or what `--yes` or `--la
 its closing output says that file governs its own landing authorization. Merging the installation
 pull request starts nothing on any machine. To have steward review a project's pull requests
 without starting each command by hand, activate the project ([below](#activating-a-project)) and
-start the coordinator ([below](#the-coordinator)), which reviews and never lands.
+start the coordinator ([below](#the-coordinator)), which reviews, and lands only where the project's
+`main` has `land: true`.
 
 It never marks its pull request ready or merges it, does not touch the project's `package.json`,
 its CI or its stories, and does nothing about branch protection. Set up this way, a project uses
@@ -301,9 +302,10 @@ None of these commands starts a review or a coordinator.
 
 The coordinator is one long-running process per OS user, across that user's terminals and
 activated projects, that schedules their automatic reviews until it is stopped, and discovers the
-pull requests unattended landing may consider. It reviews and discovers, nothing more: it never
-lands, runs the runway or a rotation, inspects, or starts a coder or a fixer, whatever a project's
-`land` says, and verdicts go through the existing gate.
+pull requests unattended landing may consider, and asks for their landing. It reviews, discovers and
+requests landing, nothing more: it runs no rotation, inspects nothing, and starts no coder or
+fixer. It lands only where a project's `main` has `land: true`, by asking the pilot, which
+the runway then follows; it merges nothing itself. Verdicts go through the existing gate.
 
 ```sh
 steward coordinator start            # start it in the background
@@ -345,11 +347,26 @@ candidate is an open, non-draft pull request on a supported base, whether or not
 reviewed it, and including a current head that already has a verdict. One by an author the gate does
 not honour, or labelled `review-blocked`, is left out, as the pilot would refuse it. It is identified by `{ repo, number, headSha }`,
 once for each repository, number and head however many times discovery lists it, and the latest
-scan's candidates are in the record and shown by `status`. Nothing lands from them yet: a later
-story hands them to the pilot, whose checks and the runway's keep the final say. The intervals make
+scan's candidates are in the record and shown by `status`. They go to the pilot, as follows, and its
+checks and the runway's keep the final say. The intervals make
 scans due; they do not run beside a review. Review turns and scans run one after another, so a
 review that outlasts a due time delays that scan until the turns have finished, and the idle
 wake-up is the earlier of the two due times.
+
+After a scan's review turns, the coordinator takes that scan's landing candidates one at a time.
+Just before each it checks that the project is still activated, that its current `main` still has
+`land: true`, and that the pull request is open at the head the scan found; one that fails a check
+is not sent, and the last landing in `status` says why. It reads activation again once the checkout,
+settings and pull request have been read, and sends nothing if the project was deactivated
+meanwhile. Otherwise it admits one call of the pilot, `landPullRequest`, in unattended `once` mode,
+with the project's `landWhen`. That call waits for no check or process of unknown length: a pull
+request that is not landable yet is returned at once as `not-landable`, with its reason, and one
+that was dispatched is polled for its merge for one sweep run's bound only. Attempts never overlap
+each other or a review, because the coordinator does one piece of admitted work at a time, so a scan
+that falls due during an attempt waits for it (ST-85 is to separate them). The coordinator keeps no
+ledger of attempts: a head whose attempt did not merge is tried again at a later scan, after the
+same checks, and so is a still-eligible one after a restart. The runway checks each request again
+and decides.
 
 - A project's failed GitHub discovery, or a failure to bring its owned checkout to `origin`'s
   `main`, starts no review of it and stops no other project; the next scan tries it again.
@@ -363,17 +380,24 @@ wake-up is the earlier of the two due times.
   count survives a restart. A new head of that pull request is eligible, and a manual review remains
   available.
 
-`status` starts nothing and changes nothing. It reports `running`, `stopping` or `stopped`, with
-the process id and start time when there is a record, and `--json` prints the same as one JSON
-object. For a running coordinator it adds what the coordinator wrote to its record as these changed:
-the review under way, with its project, pull request and full head, the effective intervals, the next
-scan when known, the landing candidates last found, the last outcome, and the usage and failure reasons above. It also lists, from
-`reviews.json`, the heads not reviewed again automatically, or says that file cannot be read. A
-write of these fields that fails is not fatal: the coordinator carries on, and what it writes next
-replaces them, so `status` can be behind until then. The record's only other writes are at the start
-and on a stop. On Windows a write can be refused while another process is reading the file, so a
-`start` that is watching for the record can occasionally cost the first scan's note of the next
-scan.
+`status` starts nothing and changes nothing. It reports `running`, `stopping` or `stopped`, with the
+process id and start time when there is a record, and `--json` prints the same as one JSON object.
+For a running coordinator it adds what the coordinator wrote to its record as these changed: the
+review under way, with its project, pull request and full head, the landing attempt under way (shown
+apart from a review), the effective intervals, the next scan when known, the landing candidates last
+found, the last outcome, the last landing attempt's project, pull request, head, time, status and
+reason, and the usage and failure reasons above. Only a last landing of `merged` is a merge the
+pilot saw; `sweep-pending` and any other status are not a confirmed merge, and one whose result
+carries a positive `triggers` count says that the landing workflow was dispatched. An error from the
+pilot after a dispatch is reported as `threw`, which does not say whether a landing request was
+sent. The pilot reads the head itself, so the head shown is the one it reports, with the head the
+scan found beside it when they differ; when it reports none, because it found the pull request
+already merged or closed, the head is shown as unknown. It also lists, from `reviews.json`, the
+heads not reviewed again automatically, or says that file cannot be read. A write of these fields
+that fails is not fatal: the coordinator carries on, and what it writes next replaces them, so
+`status` can be behind until then. The record's only other writes are at the start and on a stop. On
+Windows a write can be refused while another process is reading the file, so a `start` that is
+watching for the record can occasionally cost the first scan's note of the next scan.
 
 `stop` leaves a stop request, `~/.steward/state/coordinator.stop`, which the coordinator looks for
 a few times a second. On seeing it, the coordinator admits no more work, and that is the
@@ -438,10 +462,10 @@ ready: it is reviewed against [`REVIEW.md`](REVIEW.md), and lands once it passes
 ### Landing: unattended and manual
 
 There are two authorizations. The `land` setting of `steward.config.json` is the project's standing
-permission for unattended landing; `true` is the opt-in. A rotation lands only where it is `true`,
-and the runway reads it from `main` and merges nothing unattended where it is `false`, whatever
-the caller's own settings say. With `land: false` steward still reviews and posts `review/agent`,
-and the crew can land a pull request that has passed with `steward land <pr-number>`: one manual
+permission for unattended landing; `true` is the opt-in. A rotation lands only where it is `true`, and
+so does the coordinator ([above](#the-coordinator)). The runway reads it from `main` and merges
+nothing unattended where it is `false`, whatever the caller's own settings say. With `land: false`
+steward still reviews and posts `review/agent`, and the crew can land a pull request that has passed with `steward land <pr-number>`: one manual
 request, valid with either value of `land`, for that pull request at the head it first reads. It
 changes no setting, label or standing permission, and it goes through the same gate as any landing:
 the runway still requires every condition it requires of an unattended one, and merges with

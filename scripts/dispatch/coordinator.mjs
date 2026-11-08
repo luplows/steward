@@ -20,8 +20,10 @@
  * removes the request; with no admitted work running it removes its record and exits, and otherwise
  * it writes `stopping` into its record and exits once that work has finished. Either change is the
  * acknowledgment `stop` waits for. While it runs, the coordinator schedules automatic reviews of
- * the activated projects (`coordinator-scheduler.mjs`), and discovers the pull requests that
- * unattended landing may consider (ST-83), which nothing lands yet.
+ * the activated projects (`coordinator-scheduler.mjs`), discovers the pull requests that
+ * unattended landing may consider (ST-83), and asks the pilot, `landPullRequest`, to land each one
+ * in unattended `once` mode (ST-84), after rechecking it. The pilot and the runway decide; a stop
+ * lets an attempt already admitted finish.
  *
  * `start` reads the scan interval, `coordinator.scanIntervalMinutes`, and the optional landing scan
  * interval, `coordinator.landingScanIntervalMinutes`, through `readUserConfig`, and refuses,
@@ -275,23 +277,31 @@ async function start({ homedir, env, spawnFn, pollMs, waitMs, out, err }) {
   out(`started: this OS user's coordinator is running in the background, as process ${acknowledged.pid}, started ${acknowledged.startedAt}.`)
   out(`Its record is ${file}. It keeps running after this terminal closes.`)
   out(`It reviews the activated projects' eligible pull requests, one at a time, and scans for new ones every ${intervalMinutes} minutes.`)
-  out(`It also lists, every ${landingMinutes ?? intervalMinutes} minutes${landingMinutes === undefined ? ', on the same scan' : ''}, the pull requests of projects whose settings have land true that unattended landing may consider. It lands none yet.`)
+  out(`It also lists, every ${landingMinutes ?? intervalMinutes} minutes${landingMinutes === undefined ? ', on the same scan' : ''}, the pull requests of projects whose settings have land true that unattended landing may consider, and asks the pilot to land each, one at a time. The pilot and the runway decide whether it lands.`)
   out('To see it: steward coordinator status. To stop it: steward coordinator stop')
   return 0
 }
 
 /** The lines `status` adds to its first, for the fields in `result`. */
-function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, nextLandingScanAt, landingCandidates, active, lastOutcome, usage, recordsProblem, projectProblems, landingProblems, failedHeads: failed, reviewsProblem }) {
-  const pull = ({ repo, number, headSha }) => `${repo} pull request #${number}, head ${headSha}`
+function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, nextLandingScanAt, landingCandidates, active, landingActive, lastLanding, lastOutcome, usage, recordsProblem, projectProblems, landingProblems, failedHeads: failed, reviewsProblem }) {
+  const pull = ({ repo, number, headSha }) => `${repo} pull request #${number}, head ${headSha ?? 'unknown'}`
   const lines = []
   if (intervalMinutes !== undefined) lines.push(`Scan interval: ${intervalMinutes} minutes.`)
   if (landingScanIntervalMinutes !== undefined) lines.push(`Landing scan interval: ${landingScanIntervalMinutes} minutes.`)
   if (nextScanAt) lines.push(`Next scan: ${nextScanAt}.`)
   if (nextLandingScanAt) lines.push(`Next landing scan: ${nextLandingScanAt}.`)
   if (active) lines.push(`Reviewing: ${pull(active)}.`)
+  if (landingActive) lines.push(`Landing: ${pull(landingActive)}.`)
   if (landingCandidates?.length > 0) {
-    lines.push('Landing candidates found by the latest landing scan (nothing lands from them yet):')
+    lines.push('Landing candidates found by the latest landing scan:')
     for (const candidate of landingCandidates) lines.push(`  ${pull(candidate)}`)
+  }
+  if (lastLanding) {
+    const { status: ended, triggers, reason, at, discoveredHeadSha } = lastLanding
+    // Only `merged` says the pilot saw the merge. A result carrying a positive `triggers` count sent
+    // a dispatch; `threw` carries none, and does not say whether one was sent.
+    const sent = ended !== 'merged' && triggers > 0 ? ' (the landing workflow was dispatched; a merge is not confirmed)' : ''
+    lines.push(`Last landing: ${pull(lastLanding)}: ${ended}${sent}${discoveredHeadSha ? `; discovered at head ${discoveredHeadSha}` : ''}, at ${at}${reason ? `: ${reason}` : ''}.`)
   }
   if (lastOutcome) {
     const { status: ended, counted, reason, at } = lastOutcome
@@ -360,7 +370,7 @@ async function run(homedir, intervalMinutes, landingMinutes) {
   try {
     const landingFields = landingMinutes === undefined ? {} : { landingScanIntervalMinutes: landingMinutes }
     const coordinator = runCoordinator({ homedir, fields: { intervalMinutes, ...landingFields } })
-    scheduleReviews({ homedir, coordinator, intervalMinutes, landing: { intervalMinutes: landingMinutes } })
+    scheduleReviews({ homedir, coordinator, intervalMinutes, landing: { intervalMinutes: landingMinutes, attempt: {} } })
     const failure = await coordinator.done
     return failure ? 1 : 0
   } catch {

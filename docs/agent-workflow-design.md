@@ -128,7 +128,8 @@ do not yet exist. The review rotation is started by hand. Explicit activation (`
 `scripts/dispatch/project.mjs`) is built: it records which installed projects the coordinator may
 review, and starts nothing. The local coordinator (`steward coordinator`,
 `scripts/dispatch/coordinator.mjs`) is built, and schedules automatic reviews of those projects
-(`scripts/dispatch/coordinator-scheduler.mjs`); it does not land.
+(`scripts/dispatch/coordinator-scheduler.mjs`); where a project's `main` has `land: true` it
+also asks the pilot to land that project's pull requests, one at a time.
 `migration-plan.md` preserves the earlier migration plan and is not the version roadmap.
 
 `steward init` delivers repository installation files through a draft installation pull
@@ -144,20 +145,40 @@ has not been delivered. Approval-order scheduling in 0.3 applies to explicitly a
 handoffs; it does not silently change steward's current story queue or retire ST-2. The roadmap's
 follow-up table names the existing stories requiring reconciliation before overlapping work runs.
 
-### Planned unattended landing and concurrency
+### Unattended landing and concurrency
 
-**Planned (ST-84)** (crew, 2026-11-07) The coordinator discovers landing
-candidates from explicitly activated projects, independently of whether it reviewed the PR,
-only where `land: true` is set on the project's `main`. Landing discovery shares the
-review `scanIntervalMinutes` by default. An optional per-user
-`landingScanIntervalMinutes` gives landing a separate due interval. The current
-sequential coordinator can delay either scan while admitted work runs; these are
-due intervals, not independent worker clocks. ST-83 provides candidate discovery and
-configuration without dispatching landing. ST-84 admits the pilot's bounded
-`landPullRequest` in unattended `once: true` mode, reports outcomes and prevents
-overlapping local attempts for one PR/head. A later scan may retry still-eligible
-work; no durable exactly-once landing ledger is required. The runway's checks
-remain authoritative. Installation or activation never authorizes landing by itself.
+Built (ST-83, ST-84; crew, 2026-11-07): the coordinator discovers landing candidates from
+explicitly activated projects, independently of whether it reviewed the PR, only where
+`land: true` is set on the project's `main`. Landing discovery shares the review
+`scanIntervalMinutes` by default. An optional per-user `landingScanIntervalMinutes` gives landing
+a separate due interval. The sequential coordinator can delay either scan while admitted work
+runs; these are due intervals, not independent worker clocks, and that limitation stays until
+ST-85.
+
+After a scan's review turns the coordinator takes that scan's landing candidates one at a time. Just
+before each it checks that the project is still activated, that its current `main` has `land`
+exactly `true`, and that the pull request is open at the head the scan found; a candidate failing
+any of these dispatches nothing; activation is read again once the checkout, settings and pull
+request have been read, just before the attempt is admitted. It then admits one call of the pilot,
+`landPullRequest`, with `mode: unattended` and `once: true`, on a context from `createLandContext`
+with the project's `landWhen`. The coordinator gives the call no head it holds a verdict for, so the
+pilot waits only for one sweep run's bound after its own dispatch, and returns at once, with a
+status that says why, for a pull request it cannot dispatch for yet (`not-landable`, and the final
+statuses). The coordinator merges nothing, dispatches nothing itself, and has no manual mode.
+
+Its record, and so `steward coordinator status`, shows the attempt under way apart from a review,
+and the last attempt's repository, pull request, head, time, status and reason. The pilot reads the
+head itself, so the head recorded is the one it reports, with the head the scan found beside it when
+they differ, and unknown when it reports none (it found the pull request already merged or closed).
+Only `merged` is a merge the pilot saw; any other status is not a confirmed merge, and a result
+carrying a positive `triggers` count is shown as dispatched. An error from the pilot after a
+dispatch is reported as `threw`, which does not say whether a landing request was sent. A stop
+admits no more attempts and lets the admitted one finish. The coordinator keeps nothing of an
+attempt beyond that record, so a later scan, or a restarted coordinator, may try a still-eligible
+head again, after the same checks; there is no durable exactly-once ledger. Its own attempts never
+overlap, because it runs one piece of admitted work at a time; manual commands are not coordinated.
+The runway's checks remain authoritative. Installation or activation never authorizes landing by
+itself.
 
 **Planned (ST-85)** (crew, 2026-11-07) In 0.4, separate due discovery from
 admitted review, coding, fixing and landing work, so a long session cannot delay
