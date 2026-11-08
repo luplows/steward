@@ -16,23 +16,23 @@ Steward's source repository and distinguish a blocked PR from a passing one.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — A rotation that works against the invoking checkout, which is every rotation
+- [x] **AC-1** — A rotation that works against the invoking checkout, which is every rotation
       but one ST-86 sends to a manual checkout for another repository, still refuses before
       dispatch when that checkout has a branch checked out. A rotation ST-86 sends to a manual
       checkout does not check the invoking checkout at all. The refusal's message names the need for a detached worktree and directs the user to
       prepare one with Git and run `steward rotation` from it, rather than referring to
       `node scripts/dispatch/loop.mjs --init [path]` or another source-only path.
-- [ ] **AC-2** — `README.md` gives a complete manual rotation procedure for an installed
+- [x] **AC-2** — `README.md` gives a complete manual rotation procedure for an installed
       project, using `git fetch origin main`, `git worktree add --detach <path> origin/main`,
       entering the resulting worktree and invoking the installed package's
       `steward rotation`. It says what checkout state the command requires.
-- [ ] **AC-3** — When rotation skips a PR because it already has an honoured governing
+- [x] **AC-3** — When rotation skips a PR because it already has an honoured governing
       verdict on the current head, the printed skip line names `pass`,
       `pass-with-observations` or `block`, as applicable. It still skips without starting
       another review; other refusal messages retain their meaning.
-- [ ] **AC-4** — Tests exercise the branch-checkout refusal and all three governing-verdict
+- [x] **AC-4** — Tests exercise the branch-checkout refusal and all three governing-verdict
       skip outputs, including the unchanged refusal/skip behavior.
-- [ ] **AC-5** — Remove the `**Planned (ST-72)**` marker from the corresponding decision in
+- [x] **AC-5** — Remove the `**Planned (ST-72)**` marker from the corresponding decision in
       `docs/agent-workflow-design.md` when these usability changes are implemented.
 
 ## Out of scope

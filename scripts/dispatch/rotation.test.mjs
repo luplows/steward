@@ -1,7 +1,11 @@
 // @vitest-environment node
 
-import { describe, expect, it } from 'vitest'
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { requireOwnWorktree } from './loop.mjs'
 import { DEFAULT_MAX_REVIEWS, listLandingPullRequests, parseArgs, rotate, runRotation } from './rotation.mjs'
 import { ownedCheckoutPath } from './project.mjs'
 
@@ -270,7 +274,7 @@ describe('ST-25/AC-4: step 4, landing', () => {
     expect(landsOf(h.calls)).toEqual(['land:1', 'land:2'])
     expect(seen.map((a) => [a.once, a.passedAt, a.ctx.landing])).toEqual([[true, SHA('a'), true], [true, SHA('b'), true]])
     expect(h.lines).toEqual(expect.arrayContaining([
-      '#3 skipped: a verdict is already at its head', '#3 not landed: no passing verdict at its head',
+      '#3 skipped: a verdict is already at its head (block)', '#3 not landed: no passing verdict at its head',
     ]))
     expect(result.exitCode).toBe(0)
   })
@@ -303,7 +307,7 @@ describe('ST-25/AC-4: step 4, landing', () => {
     })
     const result = await h.run()
     expect(landsOf(h.calls)).toEqual(['land:2'])
-    expect(h.lines).toContain('#1 skipped: a verdict is already at its head')
+    expect(h.lines).toContain('#1 skipped: a verdict is already at its head (pass)')
     expect(h.lines).toContain('#1 not landed: no longer open')
     expect(h.calls).toContain('inspection')
     expect(result).toMatchObject({ status: 'finished', exitCode: 0 })
@@ -331,7 +335,7 @@ describe('ST-25/AC-4: step 4, landing', () => {
     expect(landsOf(h.calls)).toEqual([])
     expect(h.calls.filter((c) => c === 'list')).toHaveLength(1)
     expect(h.lines).toEqual(expect.arrayContaining([
-      '#1 skipped: a verdict is already at its head', '#1 not landed: landing is off in the settings',
+      '#1 skipped: a verdict is already at its head (pass)', '#1 not landed: landing is off in the settings',
     ]))
     expect(result.exitCode).toBe(0)
   })
@@ -407,7 +411,7 @@ describe('ST-25/AC-5: step 5, the lines and the exit code', () => {
     expect(perPullRequest).toEqual([
       '#1 skipped: a draft',
       '#2 reviewed: recorded (block)',
-      '#3 skipped: a verdict is already at its head',
+      '#3 skipped: a verdict is already at its head (pass)',
       '#1 not landed: no passing verdict at its head',
       '#2 not landed: no passing verdict at its head',
       '#3 landing: merged',
@@ -710,8 +714,8 @@ describe('ST-51/AC-5: the rotation prints in the order things happen', () => {
     })
     const result = await h.run()
     expect(h.record).toEqual([
-      '#1 skipped: a verdict is already at its head',
-      '#2 skipped: a verdict is already at its head',
+      '#1 skipped: a verdict is already at its head (pass)',
+      '#2 skipped: a verdict is already at its head (pass)',
       'call land:1',
       '#1 landing: merged',
       'call land:2',
@@ -956,5 +960,132 @@ describe("ST-86: a rotation for another repository works in that repository's ma
     expect(result.status).toBe('finished')
     expect(w.seen.every((s) => s.dir === INVOKING)).toBe(true)
     expect(w.touched).toEqual([])
+  })
+})
+
+describe('ST-72/AC-1: the branch-checkout refusal', () => {
+  let root
+  beforeAll(() => {
+    root = mkdtempSync(path.join(tmpdir(), 'st72-rotation-'))
+  })
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  const branchRepo = (name) => {
+    const dir = path.join(root, name)
+    mkdirSync(dir)
+    // `git init` leaves a branch checked out, even before a first commit.
+    execFileSync('git', ['init', '-q'], { cwd: dir })
+    return dir
+  }
+
+  it('ST-72/AC-1: a checkout with a branch is refused before anything else, with the message for a detached worktree and `steward rotation`', async () => {
+    const dir = branchRepo('branch')
+    const h = harness()
+    const lines = []
+    const result = await runRotation({
+      repoDir: dir, deps: { ...h.deps, requireOwnWorktree }, out: (line) => lines.push(line),
+    })
+    expect(result).toMatchObject({ status: 'branch-checked-out', exitCode: 1 })
+    expect(h.calls).toEqual([])
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toContain('rotation stopped (branch-checked-out)')
+    expect(lines[0]).toContain(dir)
+    expect(lines[0]).toContain('detached worktree')
+    expect(lines[0]).toContain('git fetch origin main')
+    expect(lines[0]).toContain('git worktree add --detach <path> origin/main')
+    expect(lines[0]).toContain('`steward rotation`')
+    expect(lines[0]).not.toContain('--init')
+    expect(lines[0]).not.toContain('scripts/dispatch')
+  })
+
+  it('ST-72/AC-1: the rotation gives the check the command to name', async () => {
+    const asked = []
+    const h = harness()
+    await runRotation({
+      repoDir: '/wt',
+      deps: { ...h.deps, requireOwnWorktree: async (dir, options) => { asked.push([dir, options]) } },
+      out: () => {},
+    })
+    expect(asked).toEqual([['/wt', { command: 'steward rotation' }]])
+  })
+
+  it('ST-72/AC-1: the invoking checkout with a branch is refused when the rotation works against it', async () => {
+    const dir = branchRepo('invoking')
+    const h = harness()
+    const lines = []
+    const result = await rotate({
+      cwd: dir, deps: { ...h.deps, requireOwnWorktree, resolveCheckout: async ({ cwd }) => cwd }, out: (line) => lines.push(line),
+    })
+    expect(result.status).toBe('branch-checked-out')
+    expect(lines.at(-1)).toContain('`steward rotation`')
+  })
+
+  it('ST-72/AC-1: the invoking checkout is not checked when the rotation is for another repository', async () => {
+    const dir = branchRepo('invoking-other')
+    const checked = []
+    const h = harness({ lists: [[]] })
+    const result = await rotate({
+      cwd: dir,
+      repo: 'o/other',
+      deps: {
+        ...h.deps,
+        // The manual checkout is detached, as steward keeps it; the invoking one has a branch.
+        resolveCheckout: async () => '/manual',
+        requireOwnWorktree: async (checkedDir, options) => {
+          checked.push(checkedDir)
+          if (checkedDir === dir) return requireOwnWorktree(checkedDir, options)
+        },
+      },
+      out: () => {},
+    })
+    expect(checked).toEqual(['/manual'])
+    expect(result).toMatchObject({ status: 'finished', exitCode: 0 })
+  })
+})
+
+describe('ST-72/AC-3: the skip line of a pull request with a verdict at its head names the verdict', () => {
+  for (const verdict of ['pass', 'pass-with-observations', 'block']) {
+    it(`ST-72/AC-3: a ${verdict} verdict at the head is named, and no review is started`, async () => {
+      const h = harness({
+        lists: [[pr(1)]], comments: { 1: [marker(SHA('a'), verdict)] }, settings: { land: false },
+      })
+      const result = await h.run()
+      expect(reviewsOf(h.calls)).toEqual([])
+      expect(h.lines).toContain(`#1 skipped: a verdict is already at its head (${verdict})`)
+      expect(result).toMatchObject({ status: 'finished', exitCode: 0 })
+    })
+  }
+
+  it('ST-72/AC-3: the verdict named is the latest honoured one at the current head', async () => {
+    const h = harness({
+      lists: [[pr(1)]],
+      comments: {
+        1: [
+          marker(SHA('a'), 'block'),
+          marker(SHA('a'), 'pass', 'CONTRIBUTOR'),
+          marker(SHA('a'), 'pass-with-observations'),
+          marker(SHA('b'), 'block'),
+        ],
+      },
+      settings: { land: false },
+    })
+    await h.run()
+    expect(h.lines).toContain('#1 skipped: a verdict is already at its head (pass-with-observations)')
+  })
+
+  it('ST-72/AC-3: the other skip lines are unchanged', async () => {
+    const h = harness({
+      lists: [[pr(1, { draft: true }), pr(2, { authorAssociation: 'CONTRIBUTOR' }), pr(3)]],
+      labels: { 3: ['review-blocked'] },
+      comments: { 3: [marker(SHA('a'), 'pass')] },
+      settings: { land: false },
+    })
+    await h.run()
+    expect(h.lines.filter((line) => line.includes('skipped'))).toEqual([
+      '#1 skipped: a draft', '#2 skipped: outsider (CONTRIBUTOR)', '#3 skipped: labelled review-blocked',
+    ])
+    expect(reviewsOf(h.calls)).toEqual([])
   })
 })

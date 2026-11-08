@@ -784,6 +784,42 @@ describe('OQ-109/AC-2: the loop refuses to run from a checkout that has a branch
     expect(caught.message).toContain('--init')
   }, LOOP_TEST_TIMEOUT)
 
+  it('ST-72/AC-1: with a command given, the refusal names the need for a detached worktree and how to prepare one with Git, and no source-only path', async () => {
+    const sub = path.join(root, 'branch-command')
+    mkdirSync(sub)
+    const repo = makeRepo(sub)
+
+    let caught
+    try {
+      await requireOwnWorktree(repo.repoDir, { command: 'steward rotation' })
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeDefined()
+    expect(caught.message).toContain(repo.repoDir)
+    expect(caught.message).toContain('detached worktree')
+    expect(caught.message).toContain('git fetch origin main')
+    expect(caught.message).toContain('git worktree add --detach <path> origin/main')
+    expect(caught.message).toContain('`steward rotation`')
+    expect(caught.message).not.toContain('--init')
+    expect(caught.message).not.toContain('scripts/dispatch')
+  }, LOOP_TEST_TIMEOUT)
+
+  it('ST-72/AC-1: the loop, which gives no command, keeps its message', async () => {
+    const sub = path.join(root, 'branch-loop')
+    mkdirSync(sub)
+    const repo = makeRepo(sub)
+    await expect(requireOwnWorktree(repo.repoDir)).rejects.toThrow(/node scripts\/dispatch\/loop\.mjs --init \[path\]/)
+  }, LOOP_TEST_TIMEOUT)
+
+  it('ST-72/AC-1: a detached checkout goes on with a command given', async () => {
+    const sub = path.join(root, 'detached-command')
+    mkdirSync(sub)
+    const repo = makeRepo(sub)
+    git(repo.repoDir, 'checkout', '--detach', 'HEAD')
+    await expect(requireOwnWorktree(repo.repoDir, { command: 'steward rotation' })).resolves.toBeUndefined()
+  }, LOOP_TEST_TIMEOUT)
+
   it('OQ-109/AC-2: a detached checkout goes on', async () => {
     const sub = path.join(root, 'detached')
     mkdirSync(sub)

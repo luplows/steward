@@ -472,13 +472,25 @@ export async function hasCheckedOutBranch(repoDir) {
 }
 
 /**
- * AC-2 (OQ-109): throws, naming `repoDir` and pointing at `--init` (AC-1),
- * when `repoDir` has a branch checked out. Resolves otherwise. `main` calls
- * this before `runLoop`, so a wrong checkout is refused before anything is
- * fetched or dispatched.
+ * AC-2 (OQ-109): throws, naming `repoDir`, when `repoDir` has a branch
+ * checked out. Resolves otherwise. `main` calls this before `runLoop`, so a
+ * wrong checkout is refused before anything is fetched or dispatched.
+ *
+ * The loop's message points at `--init` (AC-1). A caller that is not the loop
+ * passes `command`, the command the user runs, and (ST-72) its message is
+ * instead the need for a detached worktree and how to prepare one with Git,
+ * without `--init`, which only a source checkout has.
  */
-export async function requireOwnWorktree(repoDir) {
+export async function requireOwnWorktree(repoDir, { command } = {}) {
   if (await hasCheckedOutBranch(repoDir)) {
+    if (command !== undefined) {
+      throw new Error(
+        `${repoDir} has a branch checked out, and \`${command}\` needs a detached worktree. ` +
+          'Prepare one with Git: run `git fetch origin main`, then ' +
+          '`git worktree add --detach <path> origin/main`, enter <path>, ' +
+          `and run \`${command}\` from there.`,
+      )
+    }
     throw new Error(
       `${repoDir} has a branch checked out; run the loop from its own worktree instead ` +
         '(node scripts/dispatch/loop.mjs --init [path]).',
