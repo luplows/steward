@@ -560,6 +560,50 @@ The engine's coder runs inside its single loop, with retries on a `block` or red
 
 ---
 
+## Approved coding handoffs and sequential execution
+
+**Planned (ST-89, ST-90, ST-91, ST-92, ST-93)** (crew, 2026-11-08)
+For the 0.3 coding slice, a crew member explicitly approves a repository file
+on `main` or a GitHub Issue with `steward handoff`; installation, activation
+and a unit merely being ready do not authorize coding. The local, per-OS-user
+handoff record retains the exact approved content, original source and revision.
+Approvals from all activated projects are scheduled FIFO among eligible handoffs.
+A changed approved unit before coding is held for explicit reapproval, and
+reapproval retains its original position while preserving the previous snapshot.
+Unrelated movement of `main` does not revoke approval. ST-2's starvation valve
+remains separate from this approval-order queue; it is not silently retired.
+
+A bounded, project-neutral coder implements the approved snapshot without
+requiring Steward's own `stories/` schema, and ATC owns the claim, push and PR.
+The authoritative `Unit:` line names the original file path or Issue, not a
+file's destination on the implementation branch. ATC records the coder's actual
+model as a literal `Coder: model=<id>` token that the reviewer does not remap
+through later choice configuration; older choice-name tokens remain readable.
+The PR cites the historical approved revision as provenance, but the independent reviewer still verifies
+against the current authoritative unit on `main`. Coding is not interrupted
+to track every mid-session source change. A simple post-session mismatch check
+leaves completed work in a draft PR and reports the difference; it does not
+automatically recode the newer unit.
+
+The existing coordinator remains sequential: service currently due review and
+landing under their present rules, admit one oldest eligible coding handoff,
+wait for bounded coding and PR publication, then reconsider all work. It stores
+the coding admission, with a unique identity, before any side effect. Only the
+matching active admission may be passed into execution. A confirmed pre-claim,
+pre-model refusal is resolved only after that admission is durably cleared: a
+retryable one (usage, or a temporary condition such as a failed read) returns
+to pending, and one because the unit's content changed is held for explicit
+reapproval, as at selection. An uncertain outcome never authorizes a second
+execution. A stopped
+or uncertain admitted run is not recoded after restart; surviving evidence and a specific crew action
+are shown in `coordinator status` and `handoff list`, without dedicated
+notifications. No general concurrent scheduler, automatic fixer or exceptional
+process reconciliation is required for this initial slice; ST-85 holds that
+later boundary. Considered but not chosen for 0.3: automatic selection from
+the ready story queue, reapproval moving to the back of FIFO, mandatory
+historical-snapshot review, active change monitoring, automatic restart retries,
+and separate alert infrastructure.
+
 ## The story artifact
 
 ### Format
