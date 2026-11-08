@@ -300,9 +300,10 @@ None of these commands starts a review or a coordinator.
 ### The coordinator
 
 The coordinator is one long-running process per OS user, across that user's terminals and
-activated projects, that schedules their automatic reviews until it is stopped. It only reviews:
-it never lands, runs the runway or a rotation, inspects, or starts a coder or a fixer, whatever a
-project's `land` says, and verdicts go through the existing gate.
+activated projects, that schedules their automatic reviews until it is stopped, and discovers the
+pull requests unattended landing may consider. It reviews and discovers, nothing more: it never
+lands, runs the runway or a rotation, inspects, or starts a coder or a fixer, whatever a project's
+`land` says, and verdicts go through the existing gate.
 
 ```sh
 steward coordinator start            # start it in the background
@@ -313,9 +314,10 @@ steward coordinator stop             # admit no more work; exit once admitted wo
 `start` launches the coordinator detached, so it keeps running after the terminal that started it
 closes, and reports `started` only once the new process has written its record,
 `~/.steward/state/coordinator.json`: its process id, start time and state, what `status` shows
-(below), and no credentials. `start` first reads `coordinator.scanIntervalMinutes` from the user
-config, and refuses, starting nothing and changing nothing, when it cannot read that config. A
-change to the interval takes effect at the next `start`. If the process ends, or writes no record
+(below), and no credentials. `start` first reads `coordinator.scanIntervalMinutes`, and the optional
+`coordinator.landingScanIntervalMinutes`, from the user config, and refuses, starting nothing and
+changing nothing, when it cannot read that config. A change to an interval takes effect at the next
+`start`. If the process ends, or writes no record
 in time, `start` says it did not start and exits 1. When the recorded process is running, `start`
 starts nothing, reports `already-running` with its process id and start time, and exits 1. When the
 record's process is no longer running, `start` says so, replaces the record and starts a new
@@ -333,6 +335,22 @@ already discovered: when no known head is left, the coordinator starts nothing a
 `coordinator.scanIntervalMinutes`. The position in the order is kept in memory, so a restart begins
 a new round. Manual commands neither count towards the one review nor change the position.
 
+The same scan discovers landing candidates (`landingCandidates`, `coordinator-scheduler.mjs`), by
+default, or on a due time of its own when `coordinator.landingScanIntervalMinutes` is set. For each
+activated project it brings the owned checkout to `origin`'s `main` and reads that `main`'s
+`steward.config.json`; only `land` exactly `true` admits the project's candidates. `land: false`
+admits none, silently, as that is the project's choice. Settings that are malformed or unreadable
+admit none too, and `status` gives the reason, as a landing problem that stops no review. A
+candidate is an open, non-draft pull request on a supported base, whether or not this coordinator
+reviewed it, and including a current head that already has a verdict. One by an author the gate does
+not honour, or labelled `review-blocked`, is left out, as the pilot would refuse it. It is identified by `{ repo, number, headSha }`,
+once for each repository, number and head however many times discovery lists it, and the latest
+scan's candidates are in the record and shown by `status`. Nothing lands from them yet: a later
+story hands them to the pilot, whose checks and the runway's keep the final say. The intervals make
+scans due; they do not run beside a review. Review turns and scans run one after another, so a
+review that outlasts a due time delays that scan until the turns have finished, and the idle
+wake-up is the earlier of the two due times.
+
 - A project's failed GitHub discovery, or a failure to bring its owned checkout to `origin`'s
   `main`, starts no review of it and stops no other project; the next scan tries it again.
 - Records that cannot be read prevent every automatic review, and never activate anything; each
@@ -348,8 +366,8 @@ a new round. Manual commands neither count towards the one review nor change the
 `status` starts nothing and changes nothing. It reports `running`, `stopping` or `stopped`, with
 the process id and start time when there is a record, and `--json` prints the same as one JSON
 object. For a running coordinator it adds what the coordinator wrote to its record as these changed:
-the review under way, with its project, pull request and full head, the effective interval, the next
-scan when known, the last outcome, and the usage and failure reasons above. It also lists, from
+the review under way, with its project, pull request and full head, the effective intervals, the next
+scan when known, the landing candidates last found, the last outcome, and the usage and failure reasons above. It also lists, from
 `reviews.json`, the heads not reviewed again automatically, or says that file cannot be read. A
 write of these fields that fails is not fatal: the coordinator carries on, and what it writes next
 replaces them, so `status` can be behind until then. The record's only other writes are at the start

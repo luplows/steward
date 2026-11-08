@@ -20,6 +20,7 @@ const CONFIG_FILENAME = 'config.json'
 const TOP_KEYS = ['usageLimits', 'roles']
 // `tools` holds what a tool other than Claude Code needs; required only when a choice names one.
 const OPTIONAL_TOP_KEYS = ['tools', 'coordinator']
+const COORDINATOR_KEYS = ['scanIntervalMinutes', 'landingScanIntervalMinutes']
 export const USER_ROLES = ['coder', 'reviewer']
 const ROLE_KEYS = ['default', 'available']
 const CHOICE_KEYS = ['tool', 'model', 'effort']
@@ -177,19 +178,33 @@ function validateTools(filePath, value, used, coderTools, fileExists) {
   return value === undefined ? undefined : tools
 }
 
-/** Validates the optional coordinator cadence without starting a timer or writing state. */
+/** Throws unless `minutes` is a positive integer of minutes safely representable in milliseconds. */
+function checkMinutes(filePath, key, minutes) {
+  if (!Number.isSafeInteger(minutes) || minutes < 1 || !Number.isSafeInteger(minutes * 60_000)) {
+    throw new Error(`${filePath}: 'coordinator.${key}' must be a positive integer safely representable in milliseconds, got ${JSON.stringify(minutes)}`)
+  }
+}
+
+/**
+ * Validates the optional coordinator cadence without starting a timer or writing state:
+ * `scanIntervalMinutes`, the review scan (required when the section is present), and the optional
+ * `landingScanIntervalMinutes` (ST-83/AC-1), held to the same bounds. The result has the second
+ * only when the file does: its absence means landing discovery shares the review scan.
+ */
 function validateCoordinator(filePath, value) {
   if (value === undefined) return { scanIntervalMinutes: 15 }
   if (!isObject(value)) {
     throw new Error(`${filePath}: 'coordinator' must be an object with 'scanIntervalMinutes', got ${JSON.stringify(value)}`)
   }
-  checkKeys(filePath, 'coordinator', value, ['scanIntervalMinutes'])
-  const { scanIntervalMinutes } = value
-  if (!Number.isSafeInteger(scanIntervalMinutes) || scanIntervalMinutes < 1 ||
-      !Number.isSafeInteger(scanIntervalMinutes * 60_000)) {
-    throw new Error(`${filePath}: 'coordinator.scanIntervalMinutes' must be a positive integer safely representable in milliseconds, got ${JSON.stringify(scanIntervalMinutes)}`)
+  for (const key of Object.keys(value)) {
+    if (!COORDINATOR_KEYS.includes(key)) throw new Error(`${filePath}: unrecognised key 'coordinator.${key}'`)
   }
-  return { scanIntervalMinutes }
+  if (!('scanIntervalMinutes' in value)) throw new Error(`${filePath}: missing required key 'coordinator.scanIntervalMinutes'`)
+  const { scanIntervalMinutes, landingScanIntervalMinutes } = value
+  checkMinutes(filePath, 'scanIntervalMinutes', scanIntervalMinutes)
+  if (!('landingScanIntervalMinutes' in value)) return { scanIntervalMinutes }
+  checkMinutes(filePath, 'landingScanIntervalMinutes', landingScanIntervalMinutes)
+  return { scanIntervalMinutes, landingScanIntervalMinutes }
 }
 
 /**

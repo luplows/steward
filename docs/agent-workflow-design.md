@@ -146,7 +146,7 @@ follow-up table names the existing stories requiring reconciliation before overl
 
 ### Planned unattended landing and concurrency
 
-**Planned (ST-83, ST-84)** (crew, 2026-11-07) The coordinator discovers landing
+**Planned (ST-84)** (crew, 2026-11-07) The coordinator discovers landing
 candidates from explicitly activated projects, independently of whether it reviewed the PR,
 only where `land: true` is set on the project's `main`. Landing discovery shares the
 review `scanIntervalMinutes` by default. An optional per-user
