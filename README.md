@@ -356,15 +356,17 @@ wake-up is the earlier of the two due times.
 After a scan's review turns, the coordinator takes that scan's landing candidates one at a time.
 Just before each it checks that the project is still activated, that its current `main` still has
 `land: true`, and that the pull request is open at the head the scan found; one that fails a check
-is not sent, and the last landing in `status` says why. Otherwise it admits one call of the
-pilot, `landPullRequest`, in unattended `once` mode, with the project's `landWhen`. That call waits for
-no check or process of unknown length: a pull request that is not landable yet is returned at once as `not-landable`,
-with its reason, and one that was dispatched is polled for its merge for one sweep run's bound
-only. Attempts never overlap each other or a review, because the coordinator does one piece of
-admitted work at a time, so a scan that falls due during an attempt waits for it (ST-85 is to
-separate them). The coordinator keeps no ledger of attempts: a head whose attempt did not merge is
-tried again at a later scan, after the same checks, and so is a still-eligible one after a restart.
-The runway checks each request again and decides.
+is not sent, and the last landing in `status` says why. It reads activation again once the checkout,
+settings and pull request have been read, and sends nothing if the project was deactivated
+meanwhile. Otherwise it admits one call of the pilot, `landPullRequest`, in unattended `once` mode,
+with the project's `landWhen`. That call waits for no check or process of unknown length: a pull
+request that is not landable yet is returned at once as `not-landable`, with its reason, and one
+that was dispatched is polled for its merge for one sweep run's bound only. Attempts never overlap
+each other or a review, because the coordinator does one piece of admitted work at a time, so a scan
+that falls due during an attempt waits for it (ST-85 is to separate them). The coordinator keeps no
+ledger of attempts: a head whose attempt did not merge is tried again at a later scan, after the
+same checks, and so is a still-eligible one after a restart. The runway checks each request again
+and decides.
 
 - A project's failed GitHub discovery, or a failure to bring its owned checkout to `origin`'s
   `main`, starts no review of it and stops no other project; the next scan tries it again.
@@ -378,15 +380,16 @@ The runway checks each request again and decides.
   count survives a restart. A new head of that pull request is eligible, and a manual review remains
   available.
 
-`status` starts nothing and changes nothing. It reports `running`, `stopping` or `stopped`, with
-the process id and start time when there is a record, and `--json` prints the same as one JSON
-object. For a running coordinator it adds what the coordinator wrote to its record as these changed:
-the review under way, with its project, pull request and full head, the landing attempt under way
-(shown apart from a review), the effective intervals, the next scan when known, the landing
-candidates last found, the last outcome, the last landing attempt's project, pull request, head,
-time, status and reason, and the usage and failure reasons above. Only a last landing of `merged` is
-a merge the pilot saw; `sweep-pending` and any other status are not a confirmed merge, even when the
-landing workflow was dispatched. It also lists, from
+`status` starts nothing and changes nothing. It reports `running`, `stopping` or `stopped`, with the
+process id and start time when there is a record, and `--json` prints the same as one JSON object.
+For a running coordinator it adds what the coordinator wrote to its record as these changed: the
+review under way, with its project, pull request and full head, the landing attempt under way (shown
+apart from a review), the effective intervals, the next scan when known, the landing candidates last
+found, the last outcome, the last landing attempt's project, pull request, head, time, status and
+reason, and the usage and failure reasons above. Only a last landing of `merged` is a merge the
+pilot saw; `sweep-pending` and any other status are not a confirmed merge, even when the landing
+workflow was dispatched. The pilot reads the head itself, so if it reports another head than the
+scan found, that head is the one shown, with the head the scan found beside it. It also lists, from
 `reviews.json`, the heads not reviewed again automatically, or says that file cannot be read. A
 write of these fields that fails is not fatal: the coordinator carries on, and what it writes next
 replaces them, so `status` can be behind until then. The record's only other writes are at the start

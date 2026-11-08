@@ -1340,6 +1340,49 @@ describe('ST-84: the coordinator requests bounded unattended landing and reports
     expect(lastLanding(h)).toMatchObject({ repo: A, number: 7, headSha: HEAD, status: 'not-attempted', reason })
   })
 
+  it('ST-84/AC-1: a project deactivated while the checkout and settings are read for the attempt is sent nothing', async () => {
+    const home = freshHome()
+    let calls = 0
+    const h = attempt({
+      home, repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 7)] },
+      updateCheckout: vi.fn(async () => { if (++calls === 2) writeProjects(home, []) }),
+    })
+    await landed(h)
+    expect(h.land).not.toHaveBeenCalled()
+    expect(lastLanding(h)).toMatchObject({ status: 'not-attempted', reason: 'the project is no longer activated' })
+  })
+
+  it('ST-84/AC-1: a project deactivated while the pull request is read for the attempt is sent nothing', async () => {
+    const home = freshHome()
+    const h = attempt({
+      home, repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 7)] },
+      attemptOptions: { readPull: async () => { writeProjects(home, []); return { state: 'open', headSha: HEAD } } },
+    })
+    await landed(h)
+    expect(h.land).not.toHaveBeenCalled()
+    expect(lastLanding(h)).toMatchObject({ status: 'not-attempted', reason: 'the project is no longer activated' })
+  })
+
+  it('ST-84/AC-5: when the pilot reports another head than the scan found, the outcome is attributed to the head the pilot reports, and says where the pull request was discovered', async () => {
+    const other = 'b'.repeat(40)
+    const h = attempt({
+      repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 7)] },
+      land: async ({ number }) => ({ ...MERGED(number), headSha: other }),
+    })
+    await landed(h)
+    expect(lastLanding(h)).toMatchObject({ repo: A, number: 7, headSha: other, discoveredHeadSha: HEAD, status: 'merged' })
+    const json = JSON.parse((await command(['status', '--json'], h.home)).out)
+    expect(json.lastLanding).toMatchObject({ headSha: other, discoveredHeadSha: HEAD })
+    expect((await command(['status'], h.home)).out).toContain(`Last landing: ${A} pull request #7, head ${other}: merged; discovered at head ${HEAD}, at `)
+  })
+
+  it('ST-84/AC-5: a pilot that reports the head the scan found adds no discovered head', async () => {
+    const h = attempt({ repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 7)] } })
+    await landed(h)
+    expect(lastLanding(h)).not.toHaveProperty('discoveredHeadSha')
+    expect(lastLanding(h).headSha).toBe(HEAD)
+  })
+
   it("ST-84/AC-2, ST-84/AC-3: the pilot's results are reported as it gave them, with its reasons, and a dispatched workflow that has not merged is not reported as a merge", async () => {
     const results = [
       { status: 'not-landable', reason: 'checks-pending', waiting: ['test'], triggers: 0 },

@@ -297,10 +297,10 @@ function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, 
     for (const candidate of landingCandidates) lines.push(`  ${pull(candidate)}`)
   }
   if (lastLanding) {
-    const { status: ended, triggers, reason, at } = lastLanding
+    const { status: ended, triggers, reason, at, discoveredHeadSha } = lastLanding
     // Only `merged` says the pilot saw the merge; a dispatch that ended otherwise confirms none.
     const sent = ended !== 'merged' && triggers > 0 ? ' (the landing workflow was dispatched; a merge is not confirmed)' : ''
-    lines.push(`Last landing: ${pull(lastLanding)}: ${ended}${sent}, at ${at}${reason ? `: ${reason}` : ''}.`)
+    lines.push(`Last landing: ${pull(lastLanding)}: ${ended}${sent}${discoveredHeadSha ? `; discovered at head ${discoveredHeadSha}` : ''}, at ${at}${reason ? `: ${reason}` : ''}.`)
   }
   if (lastOutcome) {
     const { status: ended, counted, reason, at } = lastOutcome

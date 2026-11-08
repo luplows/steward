@@ -46,8 +46,10 @@
  *   lastOutcome      { repo, number, headSha, status, counted?, reason?, at } of the latest review
  *   landingActive    { repo, number, headSha } of the landing attempt under way, or null; only
  *                    with `landing.attempt`
- *   lastLanding      { repo, number, headSha, status, triggers?, reason?, at } of the latest landing
- *                    attempt: the pilot's `status` and the `triggers` it sent, or `threw`, or
+ *   lastLanding      { repo, number, headSha, discoveredHeadSha?, status, triggers?, reason?, at } of
+ *                    the latest landing attempt. `headSha` is the head the pilot reports when it
+ *                    gives one, and `discoveredHeadSha` the scan's, only when they differ. It has
+ *                    the pilot's `status` and the `triggers` it sent, or `threw`, or
  *                    `not-attempted` when a recheck refused the candidate, and nothing was sent.
  *                    Only with `landing.attempt`
  *   usage            { status, reason } of a usage refusal, until the next scan, or null
@@ -374,6 +376,18 @@ export async function scheduleReviews({
         continue
       }
 
+      // The settings and the pull request took time to read, as did the checkout: the project may
+      // have been deactivated meanwhile, and a deactivated one is sent nothing.
+      const admittable = await activated()
+      if (admittable === null) {
+        landQueue = []
+        return
+      }
+      if (!admittable.includes(repo)) {
+        refuse('the project is no longer activated')
+        continue
+      }
+
       report({ landingActive: { repo, number, headSha } })
       const outcome = await new Promise((resolve) => {
         const job = async () => {
@@ -393,7 +407,12 @@ export async function scheduleReviews({
       }
       const { result } = outcome
       const reason = landingReason(result)
-      lastLanding({ status: result.status, triggers: result.triggers, ...(reason && { reason: withoutCredentials(reason) }) })
+      // The pilot reads the head itself, so the head it reports is the one its outcome belongs to.
+      const pilotHead = typeof result.headSha === 'string' && result.headSha !== '' ? result.headSha : headSha
+      lastLanding({
+        ...(pilotHead !== headSha && { headSha: pilotHead, discoveredHeadSha: headSha }),
+        status: result.status, triggers: result.triggers, ...(reason && { reason: withoutCredentials(reason) }),
+      })
     }
   }
 

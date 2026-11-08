@@ -155,25 +155,27 @@ a separate due interval. The sequential coordinator can delay either scan while 
 runs; these are due intervals, not independent worker clocks, and that limitation stays until
 ST-85.
 
-After a scan's review turns the coordinator takes that scan's landing candidates one at a time.
-Just before each it checks that the project is still activated, that its current `main` has
-`land` exactly `true`, and that the pull request is open at the head the scan found; a candidate
-failing any of these dispatches nothing. It then admits one call of the pilot, `landPullRequest`,
-with `mode: unattended` and `once: true`, on a context from `createLandContext` with the
-project's `landWhen`. The coordinator gives the call no head it holds a verdict for, so the pilot
-waits only for one sweep run's bound after its own dispatch, and returns at once, with a status
-that says why, for a pull request it cannot dispatch for yet (`not-landable`, and the final
+After a scan's review turns the coordinator takes that scan's landing candidates one at a time. Just
+before each it checks that the project is still activated, that its current `main` has `land`
+exactly `true`, and that the pull request is open at the head the scan found; a candidate failing
+any of these dispatches nothing; activation is read again once the checkout, settings and pull
+request have been read, just before the attempt is admitted. It then admits one call of the pilot,
+`landPullRequest`, with `mode: unattended` and `once: true`, on a context from `createLandContext`
+with the project's `landWhen`. The coordinator gives the call no head it holds a verdict for, so the
+pilot waits only for one sweep run's bound after its own dispatch, and returns at once, with a
+status that says why, for a pull request it cannot dispatch for yet (`not-landable`, and the final
 statuses). The coordinator merges nothing, dispatches nothing itself, and has no manual mode.
 
 Its record, and so `steward coordinator status`, shows the attempt under way apart from a review,
-and the last attempt's repository, pull request, head, time, status and reason. Only `merged` is a
-merge the pilot saw; any other status is not a confirmed merge, even when the sweep was dispatched.
-A stop admits no more attempts and lets the admitted one finish. The coordinator keeps nothing of
-an attempt beyond that record, so a later scan, or a restarted coordinator, may try a
-still-eligible head again, after the same checks; there is no durable exactly-once ledger. Its own
-attempts never overlap, because it runs one piece of admitted work at a time; manual commands are
-not coordinated. The runway's checks remain authoritative. Installation or activation never
-authorizes landing by itself.
+and the last attempt's repository, pull request, head, time, status and reason. The pilot reads the
+head itself, so the head recorded is the one it reports, with the head the scan found beside it when
+they differ. Only `merged` is a merge the pilot saw; any other status is not a confirmed merge, even
+when the sweep was dispatched. A stop admits no more attempts and lets the admitted one finish. The
+coordinator keeps nothing of an attempt beyond that record, so a later scan, or a restarted
+coordinator, may try a still-eligible head again, after the same checks; there is no durable
+exactly-once ledger. Its own attempts never overlap, because it runs one piece of admitted work at a
+time; manual commands are not coordinated. The runway's checks remain authoritative. Installation or
+activation never authorizes landing by itself.
 
 **Planned (ST-85)** (crew, 2026-11-07) In 0.4, separate due discovery from
 admitted review, coding, fixing and landing work, so a long session cannot delay
