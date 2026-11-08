@@ -4,9 +4,12 @@
  * line can reach `manual-checkout.mjs` without a cycle (`init.mjs` imports `inspect.mjs`).
  */
 
-const ORIGIN_RE = /^(?:https?:\/\/(?:[^@/]+@)?|ssh:\/\/(?:[^@/]+@)?|git@)github\.com[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/
+const ORIGIN_RE = /^(?:https?:\/\/(?:[^@/]+@)?|ssh:\/\/(?:[^@/]+@)?|git@)github\.com(?::\d+(?=\/))?[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/
 
-/** `owner/name` from an `https` or an `ssh` URL of a GitHub repository, or `null`. */
+/**
+ * `owner/name` from an `https` or an `ssh` URL of a GitHub repository, with or without an explicit
+ * port (`https://github.com:443/o/n.git`, `ssh://git@github.com:22/o/n.git`), or `null`.
+ */
 export function repoFromRemoteUrl(url) {
   const match = ORIGIN_RE.exec(String(url).trim())
   return match ? `${match[1]}/${match[2]}` : null

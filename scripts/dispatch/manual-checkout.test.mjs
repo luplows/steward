@@ -3,7 +3,7 @@
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { manualCheckoutPath, resolveCheckout } from './manual-checkout.mjs'
-import { CHECKOUT_MAIN, FETCH_MAIN } from './checkout-main.mjs'
+import { CHECKOUT_MAIN, FETCH_MAIN, repoFromRemoteUrl } from './checkout-main.mjs'
 import { ownedCheckoutPath } from './project.mjs'
 
 const HOME = path.resolve('/home/crew')
@@ -133,5 +133,31 @@ describe('ST-86/AC-2: another repository is worked on in its manual checkout', (
     expect(w.calls.filter((c) => c.dir === ownedRoot || c.dir.startsWith(ownedRoot + path.sep))).toEqual([])
     // The owned checkout being present does not stand in for the manual one: it is cloned.
     expect(w.calls.some((c) => c.kind === 'clone' && c.dir === MANUAL)).toBe(true)
+  })
+})
+
+describe('ST-86/AC-1: an origin with an explicit port still names its repository', () => {
+  const forms = ['https://github.com:443/luplows/playground.git', 'ssh://git@github.com:22/luplows/playground.git']
+
+  it('ST-86/AC-1: the parser returns owner/name for https and ssh URLs with a port, and still for those without', () => {
+    for (const form of forms) expect(repoFromRemoteUrl(form)).toBe('luplows/playground')
+    expect(repoFromRemoteUrl('https://github.com/luplows/playground.git')).toBe('luplows/playground')
+    expect(repoFromRemoteUrl('git@github.com:luplows/playground.git')).toBe('luplows/playground')
+    expect(repoFromRemoteUrl('https://example.com:443/luplows/playground.git')).toBe(null)
+  })
+
+  it("ST-86/AC-1: such an origin on the invoking checkout is the invoking checkout's repository, so it is used", async () => {
+    for (const form of forms) {
+      const w = world({ origins: { [CWD]: form } })
+      expect(await resolve(w, REPO)).toBe(CWD)
+      expect(w.calls).toEqual([{ kind: 'git', dir: CWD, args: ['remote', 'get-url', 'origin'] }])
+    }
+  })
+
+  it('ST-86/AC-2: an existing manual checkout with such an origin is accepted, not refused', async () => {
+    for (const form of forms) {
+      const w = world({ origins: { [CWD]: url('luplows/steward'), [MANUAL]: form }, present: [MANUAL] })
+      expect(await resolve(w, REPO)).toBe(MANUAL)
+    }
   })
 })

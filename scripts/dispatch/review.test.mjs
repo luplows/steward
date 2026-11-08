@@ -1912,3 +1912,18 @@ describe("ST-86/AC-4, AC-5: review --repo for another repository works in that r
       .rejects.toThrow(/manual-checkouts.*is refused/)
   })
 })
+
+describe('ST-86/AC-4: review --repo without a value is refused', () => {
+  it('ST-86/AC-4: --repo given with no value is a usage error and reviews nothing', async () => {
+    for (const argv of [['7', '--repo'], ['--repo', '7']]) {
+      const deps = {
+        reviewPullRequest: async () => {
+          throw new Error('must not review')
+        },
+        readSettings: async () => ({ repo: 'o/n' }),
+        createContext: () => ({}),
+      }
+      await expect(reviewMain(argv, { cwd: root, deps, out: () => {} })).rejects.toThrow(/usage/)
+    }
+  })
+})

@@ -1217,3 +1217,17 @@ describe("ST-86/AC-3, AC-4: inspect --repo for another repository reads that rep
     })
   })
 })
+
+describe('ST-86/AC-4: inspect --repo without a value is refused', () => {
+  it('ST-86/AC-4: --repo given with no value exits 2 with the usage, sending nothing', async () => {
+    const errors = []
+    const requests = []
+    const code = await main(['--repo'], {
+      cwd: ROOT, fetch: async (url) => requests.push(url), now: NOW, getToken: async () => 'tok', out: () => {},
+      err: (e) => errors.push(e), resolveCheckout: async () => ROOT,
+    })
+    expect(code).toBe(2)
+    expect(requests).toEqual([])
+    expect(errors.join()).toMatch(/usage/)
+  })
+})

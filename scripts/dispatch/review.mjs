@@ -701,7 +701,7 @@ export async function main(argv, { cwd = process.cwd(), homedir, deps = {}, out 
   const rereview = rereviewAt !== -1
   if (rereview) args.splice(rereviewAt, 1)
   const number = Number(args[0])
-  if (args.length !== 1 || !Number.isInteger(number) || number <= 0 || choice === '' || (choiceAt !== -1 && choice === undefined)) {
+  if (args.length !== 1 || !Number.isInteger(number) || number <= 0 || (repoAt !== -1 && repo === undefined) || choice === '' || (choiceAt !== -1 && choice === undefined)) {
     throw new Error('usage: node scripts/dispatch/review.mjs <pr-number> [--repo owner/name] [--rereview] [--choice <name>]')
   }
   const repoDir = repo === undefined ? cwd : await d.resolveCheckout({ repo, cwd, homedir, deps: d.manualCheckout })
