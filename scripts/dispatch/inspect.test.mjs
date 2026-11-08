@@ -1142,3 +1142,78 @@ describe('ST-51: a fresh commit is left for the next run', () => {
     expect([opened, exitCode]).toEqual([1, 1])
   })
 })
+
+describe("ST-86/AC-3, AC-4: inspect --repo for another repository reads that repository's manual checkout", () => {
+  const OTHER = 'someone/else'
+  const emptyFetch = async (url) => {
+    expect(url.startsWith(`https://api.github.com/repos/${OTHER}/`)).toBe(true)
+    return { ok: true, status: 200, json: async () => [] }
+  }
+
+  async function twoDirs(fn) {
+    const invoking = mkdtempSync(path.join(tmpdir(), 'inspect-invoking-'))
+    const manual = mkdtempSync(path.join(tmpdir(), 'inspect-manual-'))
+    try {
+      // Only the manual checkout has settings: a run that read the invoking checkout's would fail.
+      writeFileSync(path.join(manual, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: OTHER })))
+      return await fn({ invoking, manual })
+    } finally {
+      rmSync(invoking, { recursive: true, force: true })
+      rmSync(manual, { recursive: true, force: true })
+    }
+  }
+
+  it("ST-86/AC-4: the settings are read from the checkout resolveCheckout chooses for --repo, not from the invoking one", async () => {
+    await twoDirs(async ({ invoking, manual }) => {
+      const asked = []
+      const resolveCheckout = async (args) => {
+        asked.push(args)
+        return manual
+      }
+      const code = await main(['--repo', OTHER], {
+        cwd: invoking, fetch: emptyFetch, now: NOW, getToken: async () => 'tok', out: () => {}, err: () => {}, resolveCheckout,
+      })
+      expect(code).toBe(0)
+      expect(asked).toEqual([{ repo: OTHER, cwd: invoking }])
+
+      const errors = []
+      const without = await main(['--repo', OTHER], {
+        cwd: invoking, fetch: emptyFetch, now: NOW, getToken: async () => 'tok', out: () => {}, err: (e) => errors.push(e),
+      })
+      expect(without).toBe(2)
+      expect(errors.join()).toContain(invoking)
+    })
+  })
+
+  it('ST-86/AC-1, AC-4: without --repo the invoking checkout is used and resolveCheckout is not asked', async () => {
+    await twoDirs(async ({ invoking, manual }) => {
+      writeFileSync(path.join(invoking, 'steward.config.json'), JSON.stringify(fixtureSettings()))
+      const resolveCheckout = async () => {
+        throw new Error('must not be asked')
+      }
+      const w = world()
+      const code = await main([], {
+        cwd: invoking, fetch: w.fetch, now: NOW, getToken: async () => 'tok', out: () => {}, err: () => {}, resolveCheckout,
+      })
+      expect(code).toBe(0)
+      expect(manual).not.toBe(invoking)
+    })
+  })
+
+  it('ST-86/AC-2, AC-4: a manual checkout that is refused ends the command with exit 2, naming the reason, and calls GitHub for nothing', async () => {
+    await twoDirs(async ({ invoking }) => {
+      const requests = []
+      const errors = []
+      const code = await main(['--repo', OTHER], {
+        cwd: invoking, fetch: async (url) => requests.push(url), now: NOW, getToken: async () => 'tok', out: () => {},
+        err: (e) => errors.push(e),
+        resolveCheckout: async () => {
+          throw new Error('/home/crew/m is refused: its origin is a/b, not someone/else')
+        },
+      })
+      expect(code).toBe(2)
+      expect(requests).toEqual([])
+      expect(errors).toEqual(['/home/crew/m is refused: its origin is a/b, not someone/else'])
+    })
+  })
+})

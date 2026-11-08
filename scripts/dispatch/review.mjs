@@ -51,6 +51,9 @@
  * `--choice <name>` runs the reviewer on that key of `roles.reviewer.available` for this run
  * (ST-35/AC-1). It is final: it runs whatever the coder's model, and when its tool's usage is over
  * the limit or unreadable the run stops, with no other choice taken.
+ *
+ * `--repo` naming another repository than the invoking checkout's `origin` makes the review work
+ * in that repository's manual checkout (ST-86, `manual-checkout.mjs`), not the invoking one.
  */
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
@@ -71,6 +74,7 @@ import {
   WRITABLE_VERDICTS,
 } from './github.mjs'
 import { renderReviewerPrompt } from './invocation.mjs'
+import { resolveCheckout } from './manual-checkout.mjs'
 import { readUserConfig } from './user-config.mjs'
 import { FULL_HEAD_SHA, HONOURED_ASSOCIATIONS, reviewHeadRefusal, reviewTargetRefusal, verdictAtHead } from './review-eligibility.mjs'
 import { parseFrontmatter } from './queue.mjs'
@@ -679,10 +683,18 @@ async function verdictAt(ctx, number, headSha) {
 
 export const NON_FAILURES = ['recorded', 'no-verdict', 'already-reviewed']
 
-async function main(argv) {
+/**
+ * Runs the command (ST-86). The checkout it works in, `repoDir`, is `cwd`, the invoking checkout,
+ * when `--repo` is not given or names the repository of its `origin`; else the manual checkout
+ * of the repository `--repo` names (`manual-checkout.mjs`). `deps` is replaceable by a test:
+ * `resolveCheckout({ repo, cwd, homedir, deps })`, `manualCheckout` (the `deps` it is given),
+ * `reviewPullRequest`, `createContext` and `readSettings`.
+ */
+export async function main(argv, { cwd = process.cwd(), homedir, deps = {}, out = console.log } = {}) {
+  const d = { resolveCheckout, reviewPullRequest, createContext, readSettings, ...deps }
   const args = [...argv]
   const repoAt = args.indexOf('--repo')
-  const repo = repoAt === -1 ? (await readSettings(process.cwd())).repo : args.splice(repoAt, 2)[1]
+  const repo = repoAt === -1 ? undefined : args.splice(repoAt, 2)[1]
   const choiceAt = args.indexOf('--choice')
   const choice = choiceAt === -1 ? undefined : args.splice(choiceAt, 2)[1]
   const rereviewAt = args.indexOf('--rereview')
@@ -692,8 +704,10 @@ async function main(argv) {
   if (args.length !== 1 || !Number.isInteger(number) || number <= 0 || choice === '' || (choiceAt !== -1 && choice === undefined)) {
     throw new Error('usage: node scripts/dispatch/review.mjs <pr-number> [--repo owner/name] [--rereview] [--choice <name>]')
   }
-  const result = await reviewPullRequest({ number, ctx: createContext({ repo }), rereview, choice })
-  console.log(JSON.stringify(result, null, 2))
+  const repoDir = repo === undefined ? cwd : await d.resolveCheckout({ repo, cwd, homedir, deps: d.manualCheckout })
+  const slug = repo ?? (await d.readSettings(cwd)).repo
+  const result = await d.reviewPullRequest({ number, ctx: d.createContext({ repo: slug }), repoDir, rereview, choice })
+  out(JSON.stringify(result, null, 2))
   if (!NON_FAILURES.includes(result.status)) process.exitCode = 1
 }
 

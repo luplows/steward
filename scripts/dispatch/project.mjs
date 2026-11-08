@@ -34,7 +34,8 @@ import { homedir as osHomedir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { git, gitRoot, repoFromRemoteUrl } from './init.mjs'
+import { CHECKOUT_MAIN, FETCH_MAIN, repoFromRemoteUrl } from './checkout-main.mjs'
+import { git, gitRoot } from './init.mjs'
 import { readRules } from './rules.mjs'
 import { readSettings, REPO_RE } from './settings.mjs'
 import { readStateFile, writeStateFile } from './state-file.mjs'
@@ -43,9 +44,6 @@ import { stateDir } from './user-config.mjs'
 export const GATE_WORKFLOW = '.github/workflows/review-gate.yml'
 const RECORD_KEYS = ['repo', 'checkout', 'ownedCheckout']
 const execFileAsync = promisify(execFile)
-// What brings an owned checkout that has been cloned to origin's main, detached.
-const FETCH_MAIN = ['fetch', '--quiet', 'origin', '+refs/heads/main:refs/remotes/origin/main']
-const CHECKOUT_MAIN = ['checkout', '--quiet', '--detach', 'refs/remotes/origin/main']
 
 const USAGE = [
   'usage: steward project activate <checkout-path>',

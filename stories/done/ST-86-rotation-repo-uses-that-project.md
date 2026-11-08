@@ -23,10 +23,10 @@ rotation per project at a time.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — When `--repo` names the repository of the invoking checkout's `origin`, or is
+- [x] **AC-1** — When `--repo` names the repository of the invoking checkout's `origin`, or is
       not given, `rotation`, `review` and `inspect` behave exactly as today, and every existing
       test of them passes unchanged.
-- [ ] **AC-2** — When `--repo owner/name` names another repository, `rotation` works against a
+- [x] **AC-2** — When `--repo owner/name` names another repository, `rotation` works against a
       checkout of that repository kept for manual commands at
       `~/.steward/state/manual-checkouts/<owner>/<name>`:
       - cloned with `gh repo clone owner/name` when absent, so that `gh`'s sign-in and protocol
@@ -37,7 +37,7 @@ rotation per project at a time.
       command neither reads nor changes that checkout. An existing manual checkout whose
       `origin` is not that repository, or that cannot be brought to `main`, is refused, naming
       the path and the reason, before any review.
-- [ ] **AC-3** — In that case, every project-side step of the rotation uses that checkout and
+- [x] **AC-3** — In that case, every project-side step of the rotation uses that checkout and
       nothing of the invoking one:
       - the checks that the checkout has no branch checked out and nothing uncommitted are made
         on it, and the invoking checkout, which may have a branch checked out, is not checked;
@@ -48,10 +48,10 @@ rotation per project at a time.
       - the check after each review that the files have not changed is made on it;
       - the pilot's context is built from its settings;
       - the inspection runs with it as its working directory.
-- [ ] **AC-4** — `steward review <n> --repo owner/name` and `steward inspect --repo owner/name`
+- [x] **AC-4** — `steward review <n> --repo owner/name` and `steward inspect --repo owner/name`
       follow the same rule as `rotation`: the invoking checkout when it is that repository's,
       else the manual checkout of AC-2.
-- [ ] **AC-5** — Tests, with injected Git and GitHub, show for another repository:
+- [x] **AC-5** — Tests, with injected Git and GitHub, show for another repository:
       - the manual checkout is cloned when absent and reused when present;
       - its settings, not the invoking checkout's, decide landing;
       - the review's Git calls run in it;
@@ -61,7 +61,7 @@ rotation per project at a time.
 
       A test also repeats #24's case: a head branch that exists only in the requested
       repository is reviewed.
-- [ ] **AC-6** — `docs/controller.md`, where it describes `--repo`, says which checkout it
+- [x] **AC-6** — `docs/controller.md`, where it describes `--repo`, says which checkout it
       uses. The `**Planned (ST-86)**` marker in `docs/agent-workflow-design.md` loses `ST-86`.
 
 ## Out of scope

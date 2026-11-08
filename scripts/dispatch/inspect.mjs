@@ -31,7 +31,12 @@
  * Output: one line per commit left for the next run (ST-51), one line per finding, saying whether
  * an issue was opened or one was already there, and a last line with the counts, which count
  * findings only. Exit code: 0 when no issue was opened, 1 when at least one was, 2 when a request
- * fails, the settings do not read or the arguments are wrong (nothing more is opened).
+ * fails, the settings do not read, the manual checkout is refused (below) or the arguments are wrong
+ * (nothing more is opened).
+ *
+ * The settings are read from the invoking checkout, unless `--repo` names another repository than
+ * its `origin`: then from that repository's manual checkout (ST-86, `manual-checkout.mjs`), when the
+ * command is run from the command line.
  *
  * Usage:
  *   node scripts/dispatch/inspect.mjs [--repo owner/name] [--since-days N]
@@ -39,6 +44,7 @@
 import { existsSync, realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { ghAuthToken } from './github.mjs'
+import { resolveCheckout } from './manual-checkout.mjs'
 import { readSettings } from './settings.mjs'
 import { HONOURED_ASSOCIATIONS } from '../land/check-author.mjs'
 import { isLandingBase, isReleaseBranch } from '../land/release-branch.mjs'
@@ -505,14 +511,19 @@ function parseArgs(argv) {
 /**
  * Runs the command and returns its exit code. Everything it reads from outside is injectable:
  * `cwd` (where the settings are), `env`, `fetch`, `getToken`, the clock `now` (ms) and the output.
+ * `resolveCheckout({ repo, cwd })`, when given, chooses where the settings are read when `--repo`
+ * is: the command line passes `manual-checkout.mjs`'s (ST-86), so a `--repo` other than the
+ * invoking checkout's reads the settings of that repository's manual checkout. Without it `cwd`
+ * is always where they are.
  */
 export async function main(
   argv,
-  { cwd = process.cwd(), env = process.env, fetch = globalThis.fetch, getToken, now = Date.now(), out = console.log, err = console.error } = {},
+  { cwd = process.cwd(), env = process.env, fetch = globalThis.fetch, getToken, now = Date.now(), out = console.log, err = console.error, resolveCheckout } = {},
 ) {
   try {
     const args = parseArgs(argv)
-    const settings = await readSettings(cwd)
+    const settingsDir = args.repo !== undefined && resolveCheckout !== undefined ? await resolveCheckout({ repo: args.repo, cwd }) : cwd
+    const settings = await readSettings(settingsDir)
     const repo = args.repo ?? settings.repo
     const ctx = createInspectContext({ repo, fetch, getToken: getToken ?? (() => resolveToken(env)) })
     const { exitCode } = await inspect(
@@ -528,5 +539,5 @@ export async function main(
 }
 
 if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
-  process.exitCode = await main(process.argv.slice(2))
+  process.exitCode = await main(process.argv.slice(2), { resolveCheckout })
 }

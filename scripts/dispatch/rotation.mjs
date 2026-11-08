@@ -10,9 +10,15 @@
  * `landPullRequest` (always with `once: true`, ST-23) and `inspect.mjs`'s `main`. It never pushes,
  * never starts a coder, and starts the runway only through the pilot.
  *
+ *   0. Chooses the checkout every later step works in (ST-86, `manual-checkout.mjs`): the
+ *      invoking checkout when `--repo` is not given or names the repository of its `origin`, else
+ *      the manual checkout of the repository `--repo` names, cloned if absent and brought to
+ *      `origin`'s `main`, detached. A manual checkout that is refused stops the rotation before
+ *      anything else.
  *   1. Refuses to run from a checkout with a branch checked out, brings its worktree to
  *      `origin/main`, detached, and stops, doing nothing more, when the worktree has anything
- *      uncommitted. The settings are read after the update.
+ *      uncommitted. The settings are read after the update. Steps 1 to 4a work in the step 0
+ *      checkout, whichever it is, and read nothing else of a project.
  *   2. Lists the open pull requests against `main` or a release branch (`isLandingBase`), once.
  *   3. Oldest first (lowest number), reviews each that is not a draft, whose author the gate
  *      honours (`HONOURED_ASSOCIATIONS`), that is not labelled `review-blocked`, and that has no
@@ -31,9 +37,10 @@
  *      and, if the rotation stopped, `rotation stopped` and the reason, last. A stop prints the
  *      lines of the steps already finished, then the stop line, and no line for what was not done.
  *
- * It exits non-zero only when the rotation itself could not run or go on: a checkout with a
- * branch (`branch-checked-out`), a worktree that cannot be brought to `origin/main`
- * (`update-failed`) or has anything uncommitted (`dirty`), settings that do not read
+ * It exits non-zero only when the rotation itself could not run or go on: a manual checkout that
+ * is refused (`checkout-refused`), a checkout with a branch (`branch-checked-out`), a worktree
+ * that cannot be brought to `origin/main` (`update-failed`) or has anything uncommitted
+ * (`dirty`), settings that do not read
  * (`settings-unreadable`), a listing that fails (`listing-failed`), a script that throws
  * (`script-error`), a worktree a review changed (`worktree-changed`), or a reviewer that could not
  * review (`cannot-review`, ST-37). It stores nothing.
@@ -48,6 +55,7 @@
  */
 import { execFile } from 'node:child_process'
 import { existsSync, realpathSync } from 'node:fs'
+import { homedir as osHomedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import {
@@ -56,6 +64,7 @@ import {
 import { createInspectContext, main as inspectMain } from './inspect.mjs'
 import { createLandContext, landPullRequest } from './land.mjs'
 import { requireOwnWorktree, updateCheckout } from './loop.mjs'
+import { resolveCheckout } from './manual-checkout.mjs'
 import { reviewPullRequest } from './review.mjs'
 import { reviewAuthorRefusal, reviewHeadRefusal, verdictAtHead } from './review-eligibility.mjs'
 import { listLandingPullRequests } from './review-work.mjs'
@@ -134,11 +143,11 @@ function describeReview(result) {
 // ------------------------------------------------------------------ rotation
 
 /**
- * Runs one rotation and resolves `{ status, exitCode, lines }`: `status` is `finished`, or the
- * reason the rotation stopped (see the header); `lines` is everything it printed, in order, with
- * the stop line last. Everything printed goes through `out`.
+ * Runs one rotation, in the checkout `repoDir`, and resolves `{ status, exitCode, lines }`: `status` is
+ * `finished`, or the reason the rotation stopped (see the header); `lines` is everything it
+ * printed, in order, with the stop line last. Everything printed goes through `out`.
  *
- *   repoDir      the rotation's own worktree
+ *   repoDir      the rotation's own worktree: the checkout every step works in (see `rotate`)
  *   maxReviews   the cap on reviews started
  *   repo         `owner/name`; defaults to the settings' `repo`
  *   deps         replaceable by a test: `requireOwnWorktree`, `updateCheckout`, `readSettings`,
@@ -329,11 +338,32 @@ export async function runRotation({ repoDir, maxReviews = DEFAULT_MAX_REVIEWS, r
   return finish()
 }
 
+/**
+ * Runs one rotation for the command line (ST-86): chooses the checkout with `resolveCheckout`
+ * (`manual-checkout.mjs`) from `cwd`, the invoking checkout, and `repo`, then runs
+ * `runRotation` in it. A manual checkout that is refused stops the rotation with
+ * `checkout-refused`, printing the stop line and nothing else. `deps` is `runRotation`'s, and
+ * also `resolveCheckout({ repo, cwd, homedir, deps })` and `manualCheckout`, the `deps` it is given
+ * (`manual-checkout.mjs`'s: `git`, `cloneRepo`, `isCheckout`, `makeDirectory`); `homedir` is where
+ * `~` is.
+ */
+export async function rotate({ cwd, maxReviews, repo, homedir = osHomedir(), deps = {}, out = console.log }) {
+  let repoDir
+  try {
+    repoDir = await (deps.resolveCheckout ?? resolveCheckout)({ repo, cwd, homedir, deps: deps.manualCheckout })
+  } catch (error) {
+    const line = `rotation stopped (checkout-refused): ${error.message}`
+    out(line)
+    return { status: 'checkout-refused', exitCode: 1, lines: [line] }
+  }
+  return runRotation({ repoDir, maxReviews, repo, deps, out })
+}
+
 // --------------------------------------------------------------------- CLI
 
 async function main(argv) {
   const { maxReviews, repo } = parseArgs(argv)
-  const result = await runRotation({ repoDir: process.cwd(), maxReviews, repo })
+  const result = await rotate({ cwd: process.cwd(), maxReviews, repo })
   process.exitCode = result.exitCode
 }
 
