@@ -62,7 +62,7 @@ import { BREAKER_OVERRIDE_LABEL, REVIEW_BLOCKED_LABEL } from '../land/runway.mjs
 const API = 'https://api.github.com'
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const VERSION_PLACEHOLDER = 'v{{STEWARD_VERSION}}'
-const SHA_RE = /^[0-9a-fA-F]{40}$/
+export const SHA_RE = /^[0-9a-fA-F]{40}$/
 const VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
 const UNIT_LINK_KINDS = ['file', 'issue', 'other']
 /** The branch the installation is committed on, unless `--branch` names another. */
@@ -86,7 +86,7 @@ export const LABELS = [
 // ------------------------------------------------------------------ the questions
 
 /** Thrown for a wrong flag or answer; `main` prints it and exits 2. */
-class Refusal extends Error {}
+export class Refusal extends Error {}
 
 function parseYesNo(text) {
   const t = text.trim().toLowerCase()
@@ -755,7 +755,7 @@ function processTerminal() {
 
 
 /** Thrown for a step that failed; `main` reports it, with what is left, and exits 1. */
-class StepFailure extends Error {
+export class StepFailure extends Error {
   constructor(step, who, message) {
     super(message)
     this.step = step
@@ -764,7 +764,7 @@ class StepFailure extends Error {
 }
 
 /** Runs `fn` as the step `name`; a failure becomes a `StepFailure` carrying what `who` said. */
-async function step(name, who, fn) {
+export async function step(name, who, fn) {
   try {
     return await fn()
   } catch (error) {
@@ -773,8 +773,8 @@ async function step(name, who, fn) {
   }
 }
 
-const ok = (response) => response.status >= 200 && response.status < 300
-const githubSaid = (response) => `${response.status}${response.body?.message ? ` ${response.body.message}` : ''}`
+export const ok = (response) => response.status >= 200 && response.status < 300
+export const githubSaid = (response) => `${response.status}${response.body?.message ? ` ${response.body.message}` : ''}`
 const keptLine = (clone) => `init's copy of the project is kept at ${clone}: remove that folder when you are done with it.`
 
 /** Refuses unless GitHub reads the repository with the credential init uses. */

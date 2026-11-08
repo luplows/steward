@@ -196,6 +196,47 @@ project's own CI checks are the crew's to add. Where GitHub offers none, as on a
 on GitHub Free, or the account cannot set it, it says so plainly, says that nothing on GitHub then
 enforces the gate, and exits 1.
 
+### Upgrading steward in a project
+
+To move a project that has steward installed to another pin of `luplows/steward`, run, from steward
+installed at the pin you are moving to, in the project's checkout:
+
+```
+npx --yes --package=github:luplows/steward#<pin> steward upgrade --to vX.Y.Z
+npx --yes --package=github:luplows/steward#<pin> steward upgrade --ref <full SHA>
+```
+
+Give exactly one of the two: `--to` names a tag of `luplows/steward` of the form `vX.Y.Z`, and
+`--ref` the full SHA of any commit of it, such as a release candidate (a tag is not accepted
+there). Run it from steward installed at the target pin, because it validates the proposed result
+with the steward it is running (`readSettings` and the reviewer's checklist parser).
+
+It reads the project's `main` and steward from GitHub, and clones nothing until it has decided.
+It reads the pin that the project's managed workflows (`review-gate.yml`, `land-approved.yml`, and
+`inspection.yml` when there is one) carry. It refuses, naming each finding, when a managed
+workflow is missing, when they do not all carry the same pin, when that pin is not a tag or a
+commit of `luplows/steward`, when a workflow is not steward's own template at that pin apart from
+the pin (reconcile it by hand, through a pull request of the project), when the target is behind
+the installed commit (a downgrade), when the target has no template for a workflow the project has,
+or when the proposed `steward.config.json` or checklist is not valid. When the project is already
+on the target it says so and does nothing. Otherwise it opens one draft pull request, from a new
+branch (`steward/upgrade-<pin>`, or `--branch`), that replaces each managed workflow with steward's
+template at the target pin, filled in as `init` fills it. It leaves the project's other files as
+they are, `steward.config.json` and the checklist included, unless a release makes an explicit,
+unambiguous change to one, which the pull request's body explains. It never changes `land`:
+unattended landing stays as the project set it.
+
+The pull request's body names the installed and target pins, and whether the target is a release or
+a commit with the version its `package.json` gives, the files changed, the validation, anything
+left for the project to decide, and the steps after merging. The command does not merge, mark ready,
+change protection, activate the project, or start or stop the coordinator. Once the crew has
+reviewed the pull request and merged it as the project normally merges, check that every
+`github:luplows/steward#` in `.github/workflows/` on `main` names the target pin. A coordinator
+running for the project is stopped and started again by hand, from steward installed at the target
+pin, when the crew wants that machine on it. If a step fails after the clone, its message says
+what exists (the clone, any branch on GitHub, no pull request) and what to do next; it rolls
+nothing back.
+
 ### When the checklist does not parse
 
 The reviewer reads the checklist from `main`. While the checklist there does not parse, steward

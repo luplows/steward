@@ -83,6 +83,20 @@ A release is cut from `main`, or, as a patch release, from the newest release's 
   the release branch, on a scratch repository in that same state: `init` leaves a file that already
   exists as it is, so it would not repin the last run's workflows (ST-44). The tag's commit differs from the
   last one walked through only by the notes and the version.
+- **Run the upgrade as a project would.** On a second scratch repository, in the same state, install
+  the previous release (`npx --yes --package=github:luplows/steward#<previous tag> steward init`,
+  with its draft pull request merged by hand), so that it is installed at the previous release's pin.
+  Then, in its checkout, run `steward upgrade --ref <commit>`, `<commit>` being the release branch's
+  last commit, from steward installed at that commit
+  (`npx --yes --package=github:luplows/steward#<commit> steward upgrade --ref <commit>`), since
+  `upgrade` validates the result with the steward it is running. Merge the draft pull request it
+  opens by hand, and check that every `github:luplows/steward#` in `.github/workflows/` on `main`
+  names `<commit>` (`README.md`, "Upgrading steward in a project"). Run it again, with the new last
+  commit, after each fix that lands into the release branch, on the project as the last run left
+  it. After the tag, a project upgraded to a candidate moves to the release with
+  `steward upgrade --to vX.Y.Z`, run from steward installed at the tag; when the candidate is the
+  commit the tag names, that changes only the pin. Report each command and its result. A coordinator
+  running on the scratch project's machine is stopped and started again by hand: `upgrade` does not.
 - Give each capability one verdict: `accepted`, `accepted-with-followup` or `blocks-release`.
 - **A blocker is fixed or deferred.** A fix lands on `main` first, as any `fix` story, written with
   the crew as `planning-session.md` says, and then comes to the release branch as a pull request

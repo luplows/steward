@@ -43,14 +43,17 @@ The document is in three parts:
 
 ## Upgrade and checklist preflight
 
-**Planned (ST-69)** (crew, 2026-11-04) Upgrading a supported v0.1.0 integration
-to v0.2.0 produces a draft project PR updating unmodified Steward-managed thin
+(crew, 2026-11-04) `steward upgrade`, run on a supported v0.1.0 integration for
+v0.2.0, produces a draft project PR updating unmodified Steward-managed thin
 workflows and pins. Modified managed files or inconsistent or unknown pins refuse
 rather than inviting a merge guess. A v0.1.0 pin is `v0.1.0`, the tag's commit, or
 `935fb5b`, which the first clients pin and which differs from the tag only by the
 release notes and the version (crew, 2026-11-05). Steward inspects project-owned configuration
 and rules, proposes only deterministic changes justified by the target release,
-and validates the proposed result. The crew approves and lands the PR. Local
+and validates the proposed result with the running package's `readSettings` and the reviewer's
+checklist parser, so the command is run from steward installed at the target pin; a result that
+does not validate is refused and no PR is opened. A project already on the target is a reported
+no-op. The crew approves and lands the PR. Local
 coordinator stop/restart, activation and authorization remain separate and manual.
 General historical migrations and automatic conflict resolution are not promised.
 (crew, 2026-11-07) Both sides of the comparison are read from `luplows/steward` on GitHub at
