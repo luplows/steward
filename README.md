@@ -338,8 +338,9 @@ a new round. Manual commands neither count towards the one review nor change the
 The same scan discovers landing candidates (`landingCandidates`, `coordinator-scheduler.mjs`), by
 default, or on a due time of its own when `coordinator.landingScanIntervalMinutes` is set. For each
 activated project it brings the owned checkout to `origin`'s `main` and reads that `main`'s
-`steward.config.json`; only `land` exactly `true` admits the project's candidates, and settings
-that are false, malformed or unreadable admit none (the reason is in `status`). A candidate is an
+`steward.config.json`; only `land` exactly `true` admits the project's candidates. `land: false`
+admits none, silently, as that is the project's choice. Settings that are malformed or unreadable
+admit none too, and `status` gives the reason. A candidate is an
 open, non-draft pull request on a supported base, whether or not this coordinator reviewed it, and
 including a current head that already has a verdict. It is identified by `{ repo, number, headSha }`,
 once for each repository, number and head however many times discovery lists it, and the latest
