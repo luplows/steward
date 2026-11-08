@@ -271,7 +271,7 @@ describe('ST-69/AC-3: the pin written, and what the pull request calls it', () =
     const r = await runUpgrade(['--to', 'v0.2.0'], w)
     const gate = onBranch(w, 'steward/upgrade-v0.2.0', '.github/workflows/review-gate.yml')
     expect(gate).toContain('github:luplows/steward#v0.2.0 steward')
-    expect(r.opened.title).toBe('Upgrade steward to release v0.2.0')
+    expect(r.opened.title).toBe('Upgrade steward to release v0.2.0 (package.json version 0.2.0)')
     expect(r.opened.body).toMatch(/- Target: release v0\.2\.0 \(package\.json version 0\.2\.0\)/)
   })
 
@@ -280,7 +280,7 @@ describe('ST-69/AC-3: the pin written, and what the pull request calls it', () =
     const r = await runUpgrade(['--ref', C_CAND.toUpperCase()], w)
     expect(r.code).toBe(0)
     expect(onBranch(w, r.opened.head, '.github/workflows/review-gate.yml')).toContain(`github:luplows/steward#${C_CAND} steward`)
-    expect(r.opened.title).toBe(`Upgrade steward to a candidate of 0.2.0 (commit ${C_CAND.slice(0, 12)})`)
+    expect(r.opened.title).toBe(`Upgrade steward to a candidate of version 0.2.0 (commit ${C_CAND.slice(0, 12)})`)
     expect(r.opened.title).not.toMatch(/release/i)
     expect(r.opened.body).toMatch(new RegExp(`- Target: commit ${C_CAND}, a candidate of version 0\\.2\\.0`))
     expect(r.opened.body.split('\n').filter((l) => l.startsWith('- Target:')).join('')).not.toMatch(/release/i)
@@ -290,14 +290,14 @@ describe('ST-69/AC-3: the pin written, and what the pull request calls it', () =
     const w = world()
     const r = await runUpgrade(['--ref', C_DEV], w)
     expect(r.code).toBe(0)
-    expect(r.opened.title).toBe(`Upgrade steward to a development commit (${C_DEV.slice(0, 12)})`)
+    expect(r.opened.title).toBe(`Upgrade steward to a development commit (${C_DEV.slice(0, 12)}, package.json version 0.0.0)`)
     expect(r.opened.body).toMatch(new RegExp(`- Target: development commit ${C_DEV} \\(package\\.json version 0\\.0\\.0\\)`))
     expect(r.opened.title + r.opened.body.split('\n').filter((l) => l.startsWith('- Target:')).join('')).not.toMatch(/release/i)
   })
 
   it('ST-69/AC-3: describePin and pullTitle say the same without GitHub', () => {
     expect(describePin({ kind: 'commit', pin: C_CAND, version: '0.3.0' })).toBe(`commit ${C_CAND}, a candidate of version 0.3.0`)
-    expect(pullTitle({ kind: 'tag', pin: 'v1.2.3', version: '1.2.3' })).toBe('Upgrade steward to release v1.2.3')
+    expect(pullTitle({ kind: 'tag', pin: 'v1.2.3', version: '1.2.3' })).toBe('Upgrade steward to release v1.2.3 (package.json version 1.2.3)')
   })
 })
 
@@ -457,6 +457,42 @@ describe('ST-69/AC-5: the installed workflows are steward\'s own at the installe
     expect(r.code).toBe(2)
     expect(r.err).toContain('.github/workflows/land-approved.yml: steward has no template of that name at v0.1.0')
     expectUntouched(r, refs)
+  })
+
+  it('ST-69/AC-5: a customized workflow is refused before a no-op: the target is the installed pin', async () => {
+    const files = { '.github/workflows/review-gate.yml': `${fillPin(template('review-gate.yml'), C_CAND)}# ours\n` }
+    const w = world({ pin: C_CAND, files })
+    const refs = heads(w)
+    const r = await runUpgrade(['--ref', C_CAND], w)
+    expect(r.code).toBe(2)
+    expect(r.err).toContain('.github/workflows/review-gate.yml: differs from')
+    expect(r.out).not.toMatch(/nothing to upgrade/)
+    expectUntouched(r, refs)
+  })
+
+  it('ST-69/AC-5: a customized workflow is refused before a no-op: a tag installed, its own commit given as --ref', async () => {
+    const files = { '.github/workflows/land-approved.yml': `${fillPin(template('land-approved.yml'), 'v0.1.0')}# ours\n` }
+    const w = world({ files })
+    const refs = heads(w)
+    const r = await runUpgrade(['--ref', C_0B1D], w)
+    expect(r.code).toBe(2)
+    expect(r.err).toContain('.github/workflows/land-approved.yml: differs from')
+    expectUntouched(r, refs)
+  })
+
+  it('ST-69/AC-5: a workflow with no template at the installed pin is refused before a no-op', async () => {
+    const w = world({ pin: C_CAND, steward: { templates: { [C_CAND]: { 'land-approved.yml': null } } } })
+    const r = await runUpgrade(['--ref', C_CAND], w)
+    expect(r.code).toBe(2)
+    expect(r.err).toContain('land-approved.yml: steward has no template of that name at')
+    expect(r.out).not.toMatch(/nothing to upgrade/)
+  })
+
+  it('ST-69/AC-3: the title and body give the package.json version, a release\'s too, even when it is not the tag\'s', async () => {
+    const w = world({ steward: { versions: { [C_LATER]: '0.2.5' } } })
+    const r = await runUpgrade(['--to', 'v0.2.0'], w)
+    expect(r.opened.title).toBe('Upgrade steward to release v0.2.0 (package.json version 0.2.5)')
+    expect(r.opened.body).toContain('- Target: release v0.2.0 (package.json version 0.2.5)')
   })
 
   it('ST-69/AC-5: the template compared is the one at the installed pin, not the target\'s', async () => {
@@ -781,7 +817,7 @@ describe('ST-69/AC-10: an upgrade from each of v0.1.0\'s pins', () => {
     const w = world({ pin: C_CAND })
     const r = await runUpgrade(['--to', 'v0.2.0'], w)
     expect(r.code).toBe(0)
-    expect(r.opened.title).toBe('Upgrade steward to release v0.2.0')
+    expect(r.opened.title).toBe('Upgrade steward to release v0.2.0 (package.json version 0.2.0)')
     expect(w.requests.some((q) => q.repo === STEWARD_REPO && q.rest === `/compare/${C_CAND}...${C_LATER}`)).toBe(true)
   })
 })

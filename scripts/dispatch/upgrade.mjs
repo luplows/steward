@@ -148,9 +148,11 @@ export function describePin({ kind, pin, version }) {
 
 /** The draft pull request's title. A commit is never called a release. */
 export function pullTitle({ kind, pin, version }) {
-  if (kind === 'tag') return `Upgrade steward to release ${pin}`
+  if (kind === 'tag') return `Upgrade steward to release ${pin} (package.json version ${version})`
   const short = pin.slice(0, 12)
-  return version === '0.0.0' ? `Upgrade steward to a development commit (${short})` : `Upgrade steward to a candidate of ${version} (commit ${short})`
+  return version === '0.0.0'
+    ? `Upgrade steward to a development commit (${short}, package.json version ${version})`
+    : `Upgrade steward to a candidate of version ${version} (commit ${short})`
 }
 
 /**
@@ -421,6 +423,22 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
     )
   }
 
+  // The installed workflows are steward's own at the installed pin, apart from the pin. This comes
+  // before the no-ops: a customized workflow is refused, whatever the target.
+  const customized = []
+  for (const { rel, text } of present.values()) {
+    const template = await readFileAt(steward, `${TEMPLATE_DIR}/${path.posix.basename(rel)}`, installed.commit)
+    if (template === null) customized.push(`${rel}: steward has no template of that name at ${installed.pin}`)
+    else if (!sameWorkflowApartFromPin(text, template)) customized.push(`${rel}: differs from steward's template at ${installed.pin} by more than the pin`)
+  }
+  if (customized.length > 0) {
+    throw new Refusal(
+      `These managed workflows are not steward's own at the pin they carry, so upgrade will not replace them:\n${customized.map((f) => `  ${f}`).join('\n')}\n` +
+        "Reconcile each by hand: bring it back to steward's template at the installed pin, or make the change in it that the target pin's template has, through a pull request of the project, and run upgrade again. " +
+        'upgrade does not merge them. Nothing was cloned, branched or pushed.',
+    )
+  }
+
   // No-ops.
   if (installed.pin === target.pin) {
     out(`${repo} is already on ${describePin(installed)}: nothing to upgrade. upgrade made no clone, branch, commit, push or pull request.`)
@@ -441,21 +459,6 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
     if (!['ahead', 'diverged', 'identical'].includes(status)) {
       throw new Error(`GitHub's comparison of ${installed.commit} with ${target.commit} gave ${JSON.stringify(status)}, not ahead, behind, diverged or identical`)
     }
-  }
-
-  // The installed workflows are steward's own at the installed pin, apart from the pin.
-  const customized = []
-  for (const { rel, text } of present.values()) {
-    const template = await readFileAt(steward, `${TEMPLATE_DIR}/${path.posix.basename(rel)}`, installed.commit)
-    if (template === null) customized.push(`${rel}: steward has no template of that name at ${installed.pin}`)
-    else if (!sameWorkflowApartFromPin(text, template)) customized.push(`${rel}: differs from steward's template at ${installed.pin} by more than the pin`)
-  }
-  if (customized.length > 0) {
-    throw new Refusal(
-      `These managed workflows are not steward's own at the pin they carry, so upgrade will not replace them:\n${customized.map((f) => `  ${f}`).join('\n')}\n` +
-        "Reconcile each by hand: bring it back to steward's template at the installed pin, or make the change in it that the target pin's template has, through a pull request of the project, and run upgrade again. " +
-        'upgrade does not merge them. Nothing was cloned, branched or pushed.',
-    )
   }
 
   // The proposal: the templates at the target pin.
