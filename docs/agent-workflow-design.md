@@ -248,7 +248,7 @@ crew's own sessions.
                                main
                                  │
   ┌──────────────────────────────▼─────────────────────────────┐
-  │  RELEASE REVIEW (the crew, periodic; not yet run)          │
+  │  RELEASE REVIEW (the crew, periodic)                       │
   │  a walkthrough of what has landed; fix stories; a tag      │
   └────────────────────────────────────────────────────────────┘
 ```
@@ -1182,11 +1182,11 @@ Everything above prevents bad changes landing. This covers one landing anyway.
 
 ## The release review
 
-Runs when the crew asks, and its instructions are [`release-review.md`](release-review.md). Not yet
-run, and no steward story plans it: OQ-46, tower-workshop-paths' walkthrough story, stayed there
-(Part 3, "Decided so far"). It is the only thing standing between the crew and a silently degrading
-mental model of their own app — every other guard is a *regression* detector that passes when a
-change is self-consistent.
+Runs when the crew asks, and its instructions are [`release-review.md`](release-review.md). Run for
+v0.1.0, tagged at `0b1d8b3` on 2026-11-05. No steward story plans it: OQ-46,
+tower-workshop-paths' walkthrough story, stayed there (Part 3, "Decided so far"). It is the only
+thing standing between the crew and a silently degrading mental model of their own app — every
+other guard is a *regression* detector that passes when a change is self-consistent.
 
 ### Input assembly (mechanical)
 
