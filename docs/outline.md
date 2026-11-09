@@ -156,9 +156,13 @@ already implemented. No general migration engine is promised.
 
 The crew explicitly hands steward an existing work item. Steward durably records that
 authorization, schedules handed-over work in approval order, runs a bounded coder, and creates a
-linked PR. File-based units and GitHub Issues are supported without imposing steward's own story
-schema, priorities or completion convention on clients. Durable authorization is a crew decision;
-execution status remains derived where possible. Resource bounds, duplicate-work prevention and
+linked PR. File-based units and GitHub Issues are supported without imposing Steward's story
+schema or priority convention on clients. Each approved unit is a complete, independently
+reviewable deliverable; larger work is split into separately approved units, not partially
+delivered. For Issue-based handoffs, generated PRs have matching `Unit: #n` and `Closes #n`
+references (ST-92), and a successful runway merge into `main` explicitly closes only that
+linked Issue (ST-76). File-based projects retain their native completion conventions.
+Durable authorization is a crew decision; execution status remains derived where possible. Resource bounds, duplicate-work prevention and
 recovery after restart belong in this first slice, not in a later hardening release. The legacy
 tier/id queue is not automatically the authorization or scheduling mechanism for this slice.
 One machine and sequential work suffice for this first coding slice; concurrency is not a

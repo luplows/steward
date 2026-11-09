@@ -512,6 +512,16 @@ it:
 - Circuit breaker at five `review-blocked` PRs, with exemptions for `breaker-override` and
   workflow-only diffs so a tripped breaker is not a trap.
 
+**Planned (ST-76)** (crew, 2026-11-09): After the runway merges a pull request into `main`,
+Steward explicitly closes a same-repository GitHub Issue through the API only when the PR has
+one authoritative `Unit: #n` and a matching `Closes #n` reference, and Issue links are enabled.
+A bare unit reference, mismatched or ambiguous closing references, a failed merge, or a release-
+branch merge does not close an Issue. The existing workflow `github.token` gains `issues: write`
+for that bounded post-merge action; no other credential or merge identity is introduced. A failed
+Issue update leaves the successful merge intact and reports a manual closure action. Manual and
+unattended runway landings share the behavior. Considered but not chosen: always closing the unit
+without a closing reference, using another merge token, or broad post-crash reconciliation.
+
 `review-blocked` is applied automatically when a pull request reaches the round bound, by
 `review-gate.yml`, with the bound derived from the PR's own `block` verdicts rather than
 remembered (OQ-80). Removing the label by hand means "I have seen the cost, proceed", so after a
@@ -576,7 +586,12 @@ remains separate from this approval-order queue; it is not silently retired.
 A bounded, project-neutral coder implements the approved snapshot without
 requiring Steward's own `stories/` schema, and ATC owns the claim, push and PR.
 The authoritative `Unit:` line names the original file path or Issue, not a
-file's destination on the implementation branch. ATC records the coder's actual
+file's destination on the implementation branch. For Issue handoffs, ATC's generated PR
+also carries exactly one matching `Closes #n` reference. File handoffs carry no automatic
+issue-closing reference. Each approved unit is a complete, independently reviewable
+unit of work; the crew splits larger work before handoff instead of authorizing partial
+implementation. Multi-unit feature tracking and grouped handoffs are deferred without a
+release assignment. ATC records the coder's actual
 model as a literal `Coder: model=<id>` token that the reviewer does not remap
 through later choice configuration; older choice-name tokens remain readable.
 The PR cites the historical approved revision as provenance, but the independent reviewer still verifies
