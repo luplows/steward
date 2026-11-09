@@ -2859,7 +2859,7 @@ shortened where it is long, so that it can be found there with its date.
   in a tag, with its instructions in `release-review.md`: the crew starts it when it wants a
   release, not on a schedule or a count of merged pull requests. It cuts the release on a branch of
   its own, `release/vX.Y.Z`, from `main` at the batch's end, on the crew's word, and gives it
-  `main`'s branch protection (since 2026-11-08 through one rule for the pattern `release/*`, below).
+  `main`'s branch protection (since 2026-11-08 through one rule for the pattern `release/*`: see "One branch protection rule covers every release branch").
   The branch changes only through pull requests into it, reviewed and
   landed through the gate: the release notes, `releases/vX.Y.Z.md`, with the version in
   `package.json`; a fix, which lands on `main` first and is cherry-picked; and the revert of a
