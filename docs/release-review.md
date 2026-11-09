@@ -46,18 +46,19 @@ A release is cut from `main`, or, as a patch release, from the newest release's 
 - **Cut the release branch, on the crew's word**: `release/vX.Y.Z`, from the commit on `main` the
   batch ends at, `git push origin <commit>:refs/heads/release/vX.Y.Z`, or, for a patch release,
   from the tag's commit, `git push origin "vX.Y.Z^{commit}:refs/heads/release/vX.Y.(Z+1)"`.
-  Then, also on the crew's word, give it the same branch protection as `main`: `test` and
-  `review/agent` required, with `enforce_admins` on. Then read the protection back
+  It is protected as it is pushed: the repository's branch protection rule for the pattern
+  `release/*` has `main`'s settings, `test` and `review/agent` required, with `enforce_admins` on,
+  and covers every release branch. Then read the protection back
   (`gh api repos/<owner>/<repo>/branches/release/vX.Y.Z/protection`) and confirm that the required
   checks are the intended ones and that administrator enforcement is on. Correct anything
-  unexpected before the first release pull request proceeds. Report the branch's commit and what
-  the read-back showed to the crew.
+  unexpected, on the crew's word, before the first release pull request proceeds. Report the
+  branch's commit and what the read-back showed to the crew.
 - **Replace a release branch that has no tag, on the crew's word**, when it has fallen so far behind
   `main` that bringing it up to date is more work than cutting it again. It is no release's record
   yet. First check that `git ls-remote --tags origin` lists no tag of its version, and that its last
-  commit is on `main` (`git merge-base --is-ancestor`). Close the pull requests into it, remove its
-  protection, delete it, and cut it again as above, then protect it again. With no other release
-  branch, its batch is all of `main`.
+  commit is on `main` (`git merge-base --is-ancestor`). Close the pull requests into it. The
+  `release/*` rule forbids deleting it, so allow deletions on that rule, delete the branch, forbid
+  them again, and cut it again as above. With no other release branch, its batch is all of `main`.
 - From then on the release branch changes only through pull requests into it, reviewed and landed
   through the gate like any other. Nothing is pushed to it directly.
 - **No pull request into a release branch changes anything under `stories/`.** Stories are written
