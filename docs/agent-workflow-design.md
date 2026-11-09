@@ -1257,7 +1257,8 @@ since its tag does not exist yet, and each repeat of the walkthrough needs a rep
 none of `init`'s files, since `init` leaves a file that is already there. Between `init` and the test pull
 request, the pull request `init` leaves is merged by hand, since nothing can review it, and
 `steward protect` is run from steward at the same commit, so that the test pull request is
-reviewed and landed with protection set.
+reviewed and landed with protection set. A scratch repository, reset, which may be the same one,
+then has the previous release installed and upgraded to the same commit.
 
 ### Output
 
@@ -2775,6 +2776,14 @@ shortened where it is long, so that it can be found there with its date.
   precedes the immutable tag. No routine mid-review version changes are expected. Not chosen:
   changing the active v0.1.0 procedure, leaving the version until the last PR, or publishing
   a version before acceptance.
+- **Every walkthrough run starts on a reset scratch repository** (crew, 2026-11-08, before the
+  0.2.0 release review). ST-69 added an upgrade run on a second scratch repository, which kept the
+  state each run left. Now each run, the install at the candidate and then the upgrade from the
+  previous release, starts on a scratch repository reset, so the crew may provide the same one for
+  both. Every round upgrades from the previous release rather than from the last candidate, which
+  is the upgrade a project makes, and the check of `steward upgrade --to vX.Y.Z` after the tag runs
+  on the repository the last upgrade ran on, as it left it. Not chosen: requiring a second scratch
+  repository, which the crew would have to provide and reset as well.
 - **Planned (ST-74)** **New installation files follow default Prettier formatting**
   (crew, 2026-11-04, after ST-48 client validation). A fresh installation's generated
   files pass the pinned default formatter check, without changing their JSON or workflow

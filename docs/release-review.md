@@ -73,11 +73,16 @@ A release is cut from `main`, or, as a patch release, from the newest release's 
 - Group the batch by **capability**, as a project using steward meets it, not by pull request or
   story. For each capability: what it does now that it did not before, in plain words, and the
   pull requests that built it.
+- **Scratch repositories.** The crew provides them, new or reset, and may provide the same one for
+  every run below, the install and the upgrade. Each run starts on a scratch repository reset:
+  `main` force-pushed to one commit (`init` clones `main`, so it needs one), with none of `init`'s
+  files; every other branch deleted, so that none is left by an earlier `init`; every open pull
+  request closed; no branch protection; and, on this machine, the project deactivated
+  (`steward project deactivate <owner/name>`). Each round, the first and every repeat, runs the
+  install and then the upgrade, at the same `<commit>`.
 - **Run it as a project would**, from the release branch, once the first pull request into it has
-  landed ("The release notes"), so that the candidate carries its version. On a scratch repository
-  the crew provides, new or reset, with one commit on `main` (`init` clones `main`, so it needs
-  one), none of `init`'s files there, no branch left by an earlier `init`, and no branch protection: run
-  `init --ref <commit>`, where `<commit>` is the release branch's last commit
+  landed ("The release notes"), so that the candidate carries its version. On a scratch
+  repository, reset, run `init --ref <commit>`, where `<commit>` is the release branch's last commit
   (`git rev-parse origin/release/vX.Y.Z` once fetched), so that the workflow files it writes install
   steward at that commit, since the tag does not exist yet (ST-44). Then mark ready and merge by
   hand the draft pull request `init` opens, as nothing has reviewed it (the gate cannot review the
@@ -86,10 +91,10 @@ A release is cut from `main`, or, as a patch release, from the newest release's 
   (`npx --yes --package=github:luplows/steward#<commit> steward protect`). Then open a test pull
   request there, and have it reviewed and landed, with protection set, with the commands the
   release documents. Report each command and its result, `protect`'s included. Run it again at the new last commit whenever a fix or a revert lands into
-  the release branch, on a scratch repository in that same state: `init` leaves a file that already
+  the release branch, on a scratch repository reset again: `init` leaves a file that already
   exists as it is, so it would not repin the last run's workflows (ST-44). The tag's commit differs from the
   last one walked through only by the final notes.
-- **Run the upgrade as a project would.** On a second scratch repository, in the same state, install
+- **Run the upgrade as a project would.** On a scratch repository, reset, install
   the previous release (`npx --yes --package=github:luplows/steward#<previous tag> steward init`,
   with its draft pull request merged by hand), so that it is installed at the previous release's pin.
   Then, in its checkout, run `steward upgrade --ref <commit>`, `<commit>` being the release branch's
@@ -98,8 +103,9 @@ A release is cut from `main`, or, as a patch release, from the newest release's 
   `upgrade` validates the result with the steward it is running. Merge the draft pull request it
   opens by hand, and check that every `github:luplows/steward#` in `.github/workflows/` on `main`
   names `<commit>` (`README.md`, "Upgrading steward in a project"). Run it again, with the new last
-  commit, after each fix that lands into the release branch, on the project as the last run left
-  it. After the tag, a project upgraded to a candidate moves to the release with
+  commit, after each fix that lands into the release branch, each time from the previous release
+  on a reset repository, since that is the upgrade projects make. After the tag, the scratch
+  repository the last upgrade ran on, as that upgrade left it, moves to the release with
   `steward upgrade --to vX.Y.Z`, run from steward installed at the tag; when the candidate is the
   commit the tag names, that changes only the pin. Report each command and its result. A coordinator
   running on the scratch project's machine is stopped and started again by hand: `upgrade` does not.
