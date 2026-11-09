@@ -2784,6 +2784,15 @@ shortened where it is long, so that it can be found there with its date.
   is the upgrade a project makes, and the check of `steward upgrade --to vX.Y.Z` after the tag runs
   on the repository the last upgrade ran on, as it left it. Not chosen: requiring a second scratch
   repository, which the crew would have to provide and reset as well.
+- **One branch protection rule covers every release branch** (crew, 2026-11-08, before the 0.2.0
+  release review). Steward's repository has a classic branch protection rule for the pattern
+  `release/*`, with `main`'s settings, so a release branch is protected as it is pushed and the
+  release review only reads the protection back. `*` does not match `/`, so the rule does not cover
+  the `release-start/*` and `release-notes/*` branches pull requests come from. It forbids deleting
+  a release branch, which a tagged one never is; replacing an untagged one allows deletions on the
+  rule for that step. `release/v0.1.0` keeps the rule of its own it was given before. Not chosen:
+  protecting each release branch by hand when it is cut, which left a window before protection was
+  set.
 - **Planned (ST-74)** **New installation files follow default Prettier formatting**
   (crew, 2026-11-04, after ST-48 client validation). A fresh installation's generated
   files pass the pinned default formatter check, without changing their JSON or workflow
@@ -2850,7 +2859,8 @@ shortened where it is long, so that it can be found there with its date.
   in a tag, with its instructions in `release-review.md`: the crew starts it when it wants a
   release, not on a schedule or a count of merged pull requests. It cuts the release on a branch of
   its own, `release/vX.Y.Z`, from `main` at the batch's end, on the crew's word, and gives it
-  `main`'s branch protection. The branch changes only through pull requests into it, reviewed and
+  `main`'s branch protection (since 2026-11-08 through one rule for the pattern `release/*`: see "One branch protection rule covers every release branch").
+  The branch changes only through pull requests into it, reviewed and
   landed through the gate: the release notes, `releases/vX.Y.Z.md`, with the version in
   `package.json`; a fix, which lands on `main` first and is cherry-picked; and the revert of a
   capability the crew defers from the release, which stays on `main`. Once the crew accepts the

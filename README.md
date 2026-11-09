@@ -93,7 +93,8 @@ What the review side reads:
 - **Four workflows** in `.github/workflows/`: `ci.yml` runs lint and the tests, `review-gate.yml`
   turns a posted verdict into the `review/agent` status, `land-approved.yml`, the runway, does the
   merge, and `inspection.yml` runs `inspect` once a day (a project keeps it or drops it). Here,
-  `main` is protected and requires `test` and `review/agent`. `review-gate.yml` and
+  `main` is protected and requires `test` and `review/agent`, and so is every release branch,
+  `release/*`. `review-gate.yml` and
   `land-approved.yml` hold only their triggers, permissions and environment, the set-up of Node,
   and run steward's commands (`mark-pending`, `apply-verdict`, `apply-review-blocked`, `runway` and
   `delete-merged-heads`) from this checkout. The package carries the same two files in thin form,
