@@ -19,9 +19,14 @@
  * coder, and none writes to GitHub: an Issue is only read.
  *
  * A handoff's status is one of `pending`, `held`, `admitted`, `completed` and `withdrawn`. This
- * module sets `pending` (by `add` and `reapprove`) and `withdrawn`, and refuses what it must for
- * the other three; the later stories that select, admit and complete a handoff set `held`,
- * `admitted` and `completed`.
+ * module sets `pending` (by `add` and `reapprove`), `withdrawn`, and `held` (by `selectHandoff`,
+ * ST-90, when a unit's content differs from what was approved), and refuses what it must for the
+ * other two; the later stories that admit and complete a handoff set `admitted` and `completed`.
+ *
+ * `selectHandoff` is the operation the coordinator (ST-93) calls to choose the next unit to code:
+ * the oldest pending handoff that is eligible now. It admits nothing, claims no branch and starts
+ * no model, because selection alone is not a reservation; it reads, and writes only a hold. `list`
+ * runs the same checks to report, and writes nothing.
  *
  * The threat model is one member of the crew running one command at a time: no other process and
  * no other writer of the file.
@@ -45,6 +50,9 @@ import { stateDir } from './user-config.mjs'
 export const STATUSES = ['pending', 'held', 'admitted', 'completed', 'withdrawn']
 /** The statuses in which a handoff may still be selected: `add` and `reapprove` work on these. */
 const OPEN_STATUSES = ['pending', 'held']
+/** The statuses whose record may carry a `hold`: why selection held it. `withdraw` keeps it. */
+const HOLD_STATUSES = ['held', 'withdrawn']
+const HOLD_KEYS = ['reason', 'heldAt']
 const RECORD_KEYS = ['id', 'order', 'repo', 'source', 'status', 'version', 'approvedAt', 'text', 'provenance', 'history']
 const HISTORY_KEYS = ['version', 'approvedAt', 'text', 'provenance']
 const COMMIT_RE = /^[0-9a-f]{40}$/
@@ -59,7 +67,7 @@ const USAGE = [
   '       steward handoff withdraw <id>',
   '',
   'add         approves a file on the activated project\'s main, or one of its Issues, for coding',
-  'list        the approvals, oldest first',
+  'list        the approvals, oldest first, and which are held or not eligible now (it changes nothing)',
   'show        one approval: its complete approved text, version and source',
   'reapprove   reads the source again and approves its new text, keeping the ID and the place in order',
   'withdraw    stops a pending or held approval being selected; its history is kept',
@@ -107,7 +115,8 @@ function provenanceProblem(kind, source, provenance, text) {
  * Throws, naming the file and what is wrong, on anything else, so that a file steward cannot
  * trust is never read as an approval. Validated: the exact keys; the ID, which is `H-` and the
  * approval order; that the orders rise strictly through the file and stay below `nextOrder`; the
- * status; the source and each version's provenance; and that the versions run 1 to the current one.
+ * status; the `hold`, which a record has only once selection has held it (ST-90) and only while it
+ * is held or withdrawn; the source and each version's provenance; and that the versions run 1 to the current one.
  */
 export function readHandoffs(file) {
   const bad = (what) => new Error(`${file} is malformed: ${what}. Fix or remove it; until then no handoff is approved, and no handoff command changes it.`)
@@ -126,7 +135,10 @@ export function readHandoffs(file) {
   const open = new Set()
   data.handoffs.forEach((record, i) => {
     const at = `record ${i + 1}`
-    if (!sameKeys(record, RECORD_KEYS)) throw bad(`${at} must have exactly ${RECORD_KEYS.join(', ')}`)
+    const hasHold = isObject(record) && 'hold' in record
+    if (!sameKeys(record, hasHold ? [...RECORD_KEYS, 'hold'] : RECORD_KEYS)) {
+      throw bad(`${at} must have exactly ${RECORD_KEYS.join(', ')}, and \`hold\` only once selection has held it`)
+    }
     const idMatch = typeof record.id === 'string' ? ID_RE.exec(record.id) : null
     if (!Number.isSafeInteger(record.order) || record.order < 1 || idMatch === null || Number(idMatch[1]) !== record.order) {
       throw bad(`${at}'s id must be H- and its approval order`)
@@ -136,6 +148,12 @@ export function readHandoffs(file) {
     previous = record.order
     if (typeof record.repo !== 'string' || !REPO_RE.test(record.repo)) throw bad(`${at}'s repo is not owner/name`)
     if (!STATUSES.includes(record.status)) throw bad(`${at}'s status must be one of ${STATUSES.join(', ')}`)
+    if (hasHold) {
+      if (!HOLD_STATUSES.includes(record.status)) throw bad(`${at} is ${record.status} and cannot have a hold, which only a held or withdrawn handoff keeps`)
+      if (!sameKeys(record.hold, HOLD_KEYS) || typeof record.hold.reason !== 'string' || record.hold.reason === '' || !isTimestamp(record.hold.heldAt)) {
+        throw bad(`${at}'s hold must be ${HOLD_KEYS.join(' and ')}: a reason, and the time it was held`)
+      }
+    }
     const { source } = record
     if (sameKeys(source, ['kind', 'path']) && source.kind === 'file') {
       if (!isSafeRelativePath(source.path)) throw bad(`${at}'s file path is not a safe relative path`)
@@ -181,7 +199,7 @@ const isSource = (record, repo, source) => sourceKey(record) === sourceKey({ rep
 async function readSource(repo, source, { homedir, createContext: makeContext }) {
   const projects = await readProjects(projectsPath(homedir))
   if (!projects.some((p) => p.repo === repo)) {
-    return { ok: false, reason: `${repo} is not activated: run \`steward project activate <checkout-path>\` for it first. Nothing was recorded.` }
+    return { ok: false, reason: `${repo} is not activated: run \`steward project activate <checkout-path>\` for it first.` }
   }
   const owned = ownedCheckoutPath(homedir, repo)
   try {
@@ -263,7 +281,7 @@ async function add(args, ctx) {
   }
   const read = await readSource(repo, source, ctx)
   if (!read.ok) {
-    err(`Not approved: ${read.reason}`)
+    err(`Not approved: ${read.reason}. Nothing was recorded.`)
     return 1
   }
   if (existing !== undefined) {
@@ -294,7 +312,86 @@ async function add(args, ctx) {
   return 0
 }
 
-async function list({ homedir, out }) {
+/**
+ * Whether the pending handoff `h` could be selected now, by reading its source as it stands:
+ * `{ eligible: true }`; `{ eligible: false, changed: true, reason }` when the source was read and
+ * its text is not the approved text (selection holds it); or `{ eligible: false, changed: false,
+ * reason }` when the source could not be read (the project is not activated, the owned checkout or
+ * the source cannot be read, GitHub failed), which changes nothing and is read again next time.
+ * Rejects when the projects file is malformed, so that nothing is selected.
+ */
+async function assess(h, ctx) {
+  const read = await readSource(h.repo, h.source, ctx)
+  if (!read.ok) return { eligible: false, changed: false, reason: read.reason }
+  if (read.text === h.text) return { eligible: true }
+  const now = h.source.kind === 'file' ? `main ${read.provenance.commit.slice(0, 12)}` : `fingerprint ${read.provenance.fingerprint.slice(0, 12)}`
+  return {
+    eligible: false,
+    changed: true,
+    reason: `${describeSource(h.source)} of ${h.repo} no longer has the text approved as version ${h.version} (now read at ${now})`,
+  }
+}
+
+const reapproveHint = (h) => `Run \`steward handoff reapprove ${h.id}\` to approve its present text, or \`steward handoff withdraw ${h.id}\`.`
+const retryHint = 'It stays approved and is read again at the next selection.'
+const heldReason = (h) => `${h.hold?.reason ?? 'its unit changed after it was approved'}. ${reapproveHint(h)}`
+
+/** A handoff passed over, as `selectHandoff` and `list` report it. */
+const passedOver = (h, state, reason) => ({ id: h.id, repo: h.repo, source: h.source, order: h.order, state, reason })
+
+/**
+ * Selects the next handoff to code (ST-90): the oldest `pending` one, in the order approved across
+ * every project, whose activation, source and exact approved text all hold now. `homedir`, `now`
+ * and `createContext` are as for `main`. Resolves
+ *
+ *   { result: 'selected', handoff, version, skipped }   the first eligible record, and its approved
+ *       version `{ version, approvedAt, text, provenance }`
+ *   { result: 'no-eligible-handoffs', skipped }         when none qualifies. Each pending handoff
+ *       is read once and the call returns, so a caller decides when to ask again.
+ *
+ * `skipped` lists, in order, each handoff passed over before the one selected (all of them when none
+ * was): `{ id, repo, source, order, state: 'held' | 'unavailable', reason }`. A withdrawn, admitted
+ * or completed handoff is not eligible and not listed. Handoffs after the one selected are not read.
+ *
+ * A source that was read and differs from the approved text makes its handoff `held`, with the
+ * reason, written before the next is considered. A held handoff is skipped without reading its
+ * source and stays held, whatever the source says later, until `reapprove`. A source that could not
+ * be read leaves its handoff pending and writes nothing. Selection reserves nothing: the execution
+ * boundary (ST-91) rechecks before its first side effect.
+ *
+ * Rejects, selecting nothing, when the handoffs file or the projects file is malformed or cannot be
+ * read, or a hold cannot be written.
+ */
+export async function selectHandoff({ homedir = osHomedir(), now = () => new Date(), createContext: makeContext = createContext } = {}) {
+  const ctx = { homedir, now, createContext: makeContext }
+  const file = handoffsPath(homedir)
+  let { handoffs, nextOrder } = readHandoffs(file)
+  const skipped = []
+  for (const h of [...handoffs]) {
+    if (h.status === 'held') {
+      skipped.push(passedOver(h, 'held', heldReason(h)))
+      continue
+    }
+    if (h.status !== 'pending') continue
+    const verdict = await assess(h, ctx)
+    if (verdict.eligible) {
+      const { version, approvedAt, text, provenance } = h
+      return { result: 'selected', handoff: h, version: { version, approvedAt, text, provenance }, skipped }
+    }
+    if (!verdict.changed) {
+      skipped.push(passedOver(h, 'unavailable', `${verdict.reason}. ${retryHint}`))
+      continue
+    }
+    const held = { ...h, status: 'held', hold: { reason: verdict.reason, heldAt: now().toISOString() } }
+    handoffs = handoffs.map((x) => (x === h ? held : x))
+    writeStateFile(file, { handoffs, nextOrder })
+    skipped.push(passedOver(held, 'held', heldReason(held)))
+  }
+  return { result: 'no-eligible-handoffs', skipped }
+}
+
+async function list(ctx) {
+  const { homedir, out } = ctx
   const file = handoffsPath(homedir)
   const { handoffs } = readHandoffs(file)
   if (handoffs.length === 0) {
@@ -303,6 +400,25 @@ async function list({ homedir, out }) {
   }
   out(`Approved handoffs, oldest first (${file}):`)
   for (const h of handoffs) out(line(h))
+  // Report only. A pending handoff is read as selection reads it, but nothing is written: a changed
+  // unit becomes held at the next selection, not here, and an unreadable source is never held.
+  const attention = []
+  for (const h of handoffs) {
+    if (h.status === 'held') {
+      attention.push(passedOver(h, 'held', heldReason(h)))
+    } else if (h.status === 'pending') {
+      const verdict = await assess(h, ctx)
+      if (verdict.eligible) continue
+      attention.push(verdict.changed
+        ? passedOver(h, 'changed', `${verdict.reason}; the next selection will hold it. ${reapproveHint(h)}`)
+        : passedOver(h, 'unavailable', `${verdict.reason}. ${retryHint}`))
+    }
+  }
+  if (attention.length > 0) {
+    out('Not eligible now:')
+    const labels = { held: 'held', changed: 'changed', unavailable: 'temporarily ineligible' }
+    for (const e of attention) out(`  ${e.id}  ${e.repo}  ${describeSource(e.source)}  position ${e.order}  ${labels[e.state]}: ${e.reason}`)
+  }
   return 0
 }
 
@@ -341,15 +457,16 @@ async function reapprove(id, ctx) {
   }
   const read = await readSource(h.repo, h.source, ctx)
   if (!read.ok) {
-    err(`Not reapproved: ${read.reason}`)
+    err(`Not reapproved: ${read.reason}. Nothing was changed.`)
     return 1
   }
   if (h.status === 'pending' && h.text === read.text) {
     out(`${id}: ${describeSource(h.source)} of ${h.repo} still has the approved text (version ${h.version}). Nothing was changed.`)
     return 0
   }
+  const { hold: _released, ...kept } = h
   const next = {
-    ...h,
+    ...kept,
     status: 'pending',
     version: h.version + 1,
     approvedAt: ctx.now().toISOString(),

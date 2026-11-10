@@ -2,13 +2,13 @@
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
 import { fixtureSettings } from './settings-fixture.mjs'
-import { handoffsPath, isSafeRelativePath, main as handoff } from './handoff.mjs'
+import { handoffsPath, isSafeRelativePath, main as handoff, selectHandoff } from './handoff.mjs'
 import { main as project, projectsPath } from './project.mjs'
 
 const DISPATCH = path.dirname(fileURLToPath(import.meta.url))
@@ -337,7 +337,7 @@ describe('ST-89/AC-2: what an approval stores', () => {
 })
 
 describe('ST-89/AC-3: list and show read the records', () => {
-  it('ST-89/AC-3: list and show give the complete text, version and source, start nothing and call no GitHub', async () => {
+  it('ST-89/AC-3: list and show give the complete text, version and source, start nothing and write nothing; show calls no GitHub', async () => {
     const home = await homeWith([[REPO, { files: { 'a.md': 'first line\nsecond line\n' } }]])
     setIssue(REPO, 5, issueJson(5, 'Issue title', 'Issue body'))
     await run(['add', '--repo', REPO, '--file', 'a.md'], home)
@@ -347,10 +347,17 @@ describe('ST-89/AC-3: list and show read the records', () => {
     const contexts = vi.fn(stubContext)
     const before = bytes(home)
 
+    // ST-90: list now reads each pending source, as selection does, so it reads the Issue; it
+    // sends GitHub nothing but reads.
     const list = await run(['list'], home, { createContext: contexts })
     expect(list.code).toBe(0)
     expect(list.out).toContain(`H-1  pending  v1  ${REPO}  file a.md`)
     expect(list.out).toContain(`H-2  pending  v1  ${REPO}  Issue #5`)
+    expect(list.out).not.toContain('Not eligible now')
+    expect(requests.length).toBeGreaterThan(0)
+    expect(requests.every((r) => r.method === 'GET')).toBe(true)
+    requests.length = 0
+    contexts.mockClear()
     const showFile = await run(['show', 'H-1'], home, { createContext: contexts })
     expect(showFile.code).toBe(0)
     expect(showFile.out).toContain('first line\nsecond line\n')
@@ -374,6 +381,9 @@ describe('ST-89/AC-3: list and show read the records', () => {
     await run(['add', '--repo', REPO, '--issue', '5'], home)
     commitOnMain(REPO, { 'a.md': 'changed after approval\n' })
     await run(['reapprove', 'H-1'], home)
+    // The child's `list` reads every pending source and is given no GitHub stand-in, so the Issue
+    // is withdrawn: only the file is read, from the local origin.
+    await run(['withdraw', 'H-2'], home)
     const sha = records(home).handoffs[0].provenance.commit
     const before = bytes(home)
     // The child reads only: it is given the temporary home and no other way to find the real one.
@@ -384,7 +394,7 @@ describe('ST-89/AC-3: list and show read the records', () => {
     const listed = child('list')
     expect(listed).toContain(handoffsPath(home))
     expect(listed).toContain(`H-1  pending  v2  ${REPO}  file a.md`)
-    expect(listed).toContain(`H-2  pending  v1  ${REPO}  Issue #5`)
+    expect(listed).toContain(`H-2  withdrawn  v1  ${REPO}  Issue #5`)
     const shownFile = child('show', 'H-1')
     expect(shownFile).toContain('changed after approval\n')
     expect(shownFile).toContain('version:   2')
@@ -637,6 +647,10 @@ describe('ST-89/AC-6: a failed write, and records that cannot be trusted', () =>
     'an Issue fingerprint that does not match its text': (home) => edit(home, (d) => { d.handoffs[1].provenance.fingerprint = 'abc' }),
     'an Issue text that does not match its title and body': (home) => edit(home, (d) => { d.handoffs[1].text = 'other' }),
     'a time that is not a date': (home) => edit(home, (d) => { d.handoffs[0].approvedAt = 'yesterday' }),
+    'a hold on a pending handoff': (home) => edit(home, (d) => { d.handoffs[0].hold = { reason: 'x', heldAt: d.handoffs[0].approvedAt } }),
+    'a hold with no reason': (home) => edit(home, (d) => { d.handoffs[0].status = 'held'; d.handoffs[0].hold = { reason: '', heldAt: d.handoffs[0].approvedAt } }),
+    'a hold with an extra key': (home) => edit(home, (d) => { d.handoffs[0].status = 'held'; d.handoffs[0].hold = { reason: 'x', heldAt: d.handoffs[0].approvedAt, by: 'me' } }),
+    'a hold whose time is not a date': (home) => edit(home, (d) => { d.handoffs[0].status = 'held'; d.handoffs[0].hold = { reason: 'x', heldAt: 'soon' } }),
     'two open approvals of one source': (home) => edit(home, (d) => {
       d.handoffs.push({ ...structuredClone(d.handoffs[0]), id: 'H-3', order: 3 })
       d.nextOrder = 4
@@ -674,5 +688,337 @@ describe('ST-89/AC-6: a failed write, and records that cannot be trusted', () =>
     setStatus(home, 'H-1', 'held')
     expect((await run(['list'], home)).code).toBe(0)
     expect((await run(['show', 'H-1'], home)).out).toContain('earlier versions: v1')
+  })
+})
+
+// ST-90: selecting the next eligible handoff. A selection is `selectHandoff` on a temporary home; its
+// `createContext` is the same GitHub stand-in, so no test reaches GitHub, and none starts a model.
+describe('ST-90: selection of eligible handoffs', () => {
+  const select = (home, extra = {}) => selectHandoff({
+    homedir: home,
+    now: () => new Date(Date.UTC(2026, 10, 11, 9, 0, ++clock % 60)),
+    createContext: stubContext,
+    ...extra,
+  })
+  const ids = (result) => result.skipped.map((s) => `${s.id}:${s.state}`)
+  const approve = async (home, ...args) => expect((await run(['add', '--repo', ...args], home)).code).toBe(0)
+  const refs = (repo) => git(BARES.get(urlOf(repo)), 'for-each-ref', '--format=%(refname)')
+  const quiet = { out: () => {}, err: () => {} }
+
+  const twoProjects = () => homeWith([
+    [REPO, { files: { 'a.md': 'alpha\n', 'c.md': 'charlie\n' } }],
+    [OTHER, { files: { 'b.md': 'bravo\n' } }],
+  ])
+
+  it('ST-90/AC-1: the oldest approval is selected across projects, not by repository, file name or Issue', async () => {
+    const home = await twoProjects()
+    setIssue(OTHER, 2, issueJson(2, 'Issue first', 'body'))
+    await approve(home, OTHER, '--issue', '2')
+    await approve(home, OTHER, '--file', 'b.md')
+    await approve(home, REPO, '--file', 'a.md')
+    const before = bytes(home)
+    const result = await select(home)
+    expect(result.result).toBe('selected')
+    expect(result.handoff).toMatchObject({ id: 'H-1', repo: OTHER })
+    expect(result.version).toEqual({ version: 1, approvedAt: result.handoff.approvedAt, text: 'Issue first\n\nbody', provenance: result.handoff.provenance })
+    expect(result.skipped).toEqual([])
+    expect(bytes(home)).toBe(before)
+  })
+
+  it('ST-90/AC-1: selection admits nothing, creates no branch and sends GitHub only reads', async () => {
+    const home = await twoProjects()
+    setIssue(REPO, 3, issueJson(3, 'T', 'B'))
+    await approve(home, REPO, '--issue', '3')
+    await approve(home, REPO, '--file', 'a.md')
+    const branches = [refs(REPO), refs(OTHER)]
+    const before = bytes(home)
+    requests.length = 0
+    await select(home)
+    expect(requests.length).toBeGreaterThan(0)
+    expect(requests.every((r) => r.method === 'GET')).toBe(true)
+    expect([refs(REPO), refs(OTHER)]).toEqual(branches)
+    expect(bytes(home)).toBe(before)
+    expect(records(home).handoffs.map((h) => h.status)).toEqual(['pending', 'pending'])
+  })
+
+  it('ST-90/AC-2: unrelated commits on main leave the approval valid, for a file and for an Issue', async () => {
+    const home = await twoProjects()
+    setIssue(REPO, 3, issueJson(3, 'T', 'B'))
+    await approve(home, REPO, '--file', 'a.md')
+    await approve(home, REPO, '--issue', '3')
+    commitOnMain(REPO, { 'unrelated.md': 'new\n' })
+    commitOnMain(REPO, { 'c.md': 'charlie changed\n' })
+    const before = bytes(home)
+    const first = await select(home)
+    expect(first.handoff.id).toBe('H-1')
+    expect(first.handoff.provenance.commit).not.toBe(mainSha(REPO))
+    expect(bytes(home)).toBe(before)
+    await run(['withdraw', 'H-1'], home)
+    expect((await select(home)).handoff.id).toBe('H-2')
+    expect(records(home).handoffs.map((h) => h.status)).toEqual(['withdrawn', 'pending'])
+  })
+
+  it.each(['withdrawn', 'completed', 'admitted'])('ST-90/AC-2: a %s handoff is not eligible, is not listed as skipped, and the next one is selected', async (status) => {
+    const home = await twoProjects()
+    await approve(home, REPO, '--file', 'a.md')
+    await approve(home, OTHER, '--file', 'b.md')
+    setStatus(home, 'H-1', status)
+    const result = await select(home)
+    expect(result.handoff.id).toBe('H-2')
+    expect(result.skipped).toEqual([])
+    setStatus(home, 'H-2', status)
+    expect(await select(home)).toEqual({ result: 'no-eligible-handoffs', skipped: [] })
+  })
+
+  it('ST-90/AC-2: a held handoff is not eligible even though its source still has the approved text', async () => {
+    const home = await twoProjects()
+    await approve(home, REPO, '--file', 'a.md')
+    await approve(home, OTHER, '--file', 'b.md')
+    setStatus(home, 'H-1', 'held')
+    const result = await select(home)
+    expect(result.handoff.id).toBe('H-2')
+    expect(ids(result)).toEqual(['H-1:held'])
+    expect(result.skipped[0].reason).toContain('steward handoff reapprove H-1')
+  })
+
+  it('ST-90/AC-3: a file that changed is held with its reason, the next handoff is selected, and the record says why', async () => {
+    const home = await twoProjects()
+    await approve(home, REPO, '--file', 'a.md')
+    await approve(home, OTHER, '--file', 'b.md')
+    commitOnMain(REPO, { 'a.md': 'alpha changed\n' })
+    const result = await select(home)
+    expect(result.handoff.id).toBe('H-2')
+    expect(ids(result)).toEqual(['H-1:held'])
+    const [first, second] = records(home).handoffs
+    expect(first).toMatchObject({ status: 'held', version: 1, text: 'alpha\n' })
+    expect(first.hold.reason).toContain(`file a.md of ${REPO} no longer has the text approved as version 1`)
+    expect(first.hold.reason).toContain(mainSha(REPO).slice(0, 12))
+    expect(Date.parse(first.hold.heldAt)).not.toBeNaN()
+    expect(second.status).toBe('pending')
+    expect(second).not.toHaveProperty('hold')
+  })
+
+  it('ST-90/AC-3: an Issue whose body or title changed is held', async () => {
+    const home = await twoProjects()
+    setIssue(REPO, 3, issueJson(3, 'Title', 'Body'))
+    setIssue(REPO, 4, issueJson(4, 'Title 4', 'Body 4'))
+    await approve(home, REPO, '--issue', '3')
+    await approve(home, REPO, '--issue', '4')
+    setIssue(REPO, 3, issueJson(3, 'Title', 'Body, edited'))
+    setIssue(REPO, 4, issueJson(4, 'Title 4 edited', 'Body 4'))
+    const result = await select(home)
+    expect(result.result).toBe('no-eligible-handoffs')
+    expect(ids(result)).toEqual(['H-1:held', 'H-2:held'])
+    expect(records(home).handoffs.map((h) => h.status)).toEqual(['held', 'held'])
+    expect(records(home).handoffs[0].hold.reason).toContain(`Issue #3 of ${REPO} no longer has the text approved as version 1`)
+  })
+
+  it('ST-90/AC-3: a hold survives a new process, is not released when the source matches again, and only reapprove releases it', async () => {
+    const home = await twoProjects()
+    await approve(home, REPO, '--file', 'a.md')
+    await approve(home, OTHER, '--file', 'b.md')
+    commitOnMain(REPO, { 'a.md': 'alpha changed\n' })
+    await select(home)
+    // The source goes back to the approved text.
+    commitOnMain(REPO, { 'a.md': 'alpha\n' })
+    const held = bytes(home)
+    // A new node process, given only the home, reads the hold from the file and skips H-1.
+    const script = "const [url, home] = process.argv.slice(1); const m = await import(url); const r = await m.selectHandoff({ homedir: home }); console.log(JSON.stringify({ result: r.result, id: r.handoff?.id, skipped: r.skipped.map((s) => s.id + ':' + s.state) }))"
+    const env = { ...process.env, HOME: home, USERPROFILE: home }
+    delete env.STEWARD_CONFIG
+    const child = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', script, pathToFileURL(path.join(DISPATCH, 'handoff.mjs')).href, home], { env, encoding: 'utf8' }))
+    expect(child).toEqual({ result: 'selected', id: 'H-2', skipped: ['H-1:held'] })
+    expect(bytes(home)).toBe(held)
+    expect(ids(await select(home))).toEqual(['H-1:held'])
+    expect(records(home).handoffs[0].status).toBe('held')
+    expect((await run(['reapprove', 'H-1'], home)).code).toBe(0)
+    expect(records(home).handoffs[0]).toMatchObject({ status: 'pending', version: 2, text: 'alpha\n' })
+    expect(records(home).handoffs[0]).not.toHaveProperty('hold')
+    expect((await select(home)).handoff.id).toBe('H-1')
+  })
+
+  it('ST-90/AC-3: reapproval keeps the original position and the earlier snapshot', async () => {
+    const home = await twoProjects()
+    await approve(home, REPO, '--file', 'a.md')
+    await approve(home, OTHER, '--file', 'b.md')
+    await approve(home, REPO, '--file', 'c.md')
+    commitOnMain(REPO, { 'a.md': 'alpha changed\n' })
+    expect((await select(home)).handoff.id).toBe('H-2')
+    expect((await run(['reapprove', 'H-1'], home)).code).toBe(0)
+    const after = await select(home)
+    expect(after.handoff).toMatchObject({ id: 'H-1', order: 1 })
+    expect(after.version.text).toBe('alpha changed\n')
+    expect(after.handoff.history).toMatchObject([{ version: 1, text: 'alpha\n' }])
+  })
+
+  it('ST-90/AC-4: a deactivated project is skipped and reported, then selected again once reactivated, with no reapproval', async () => {
+    const home = await twoProjects()
+    await approve(home, REPO, '--file', 'a.md')
+    await approve(home, OTHER, '--file', 'b.md')
+    const checkout = JSON.parse(readFileSync(projectsPath(home), 'utf8')).projects.find((p) => p.repo === REPO).checkout
+    const before = bytes(home)
+    expect(await project(['deactivate', REPO], { cwd: base, homedir: home, ...quiet })).toBe(0)
+    const away = await select(home)
+    expect(away.handoff.id).toBe('H-2')
+    expect(ids(away)).toEqual(['H-1:unavailable'])
+    expect(away.skipped[0].reason).toContain('not activated')
+    expect(bytes(home)).toBe(before)
+    expect(await project(['activate', checkout], { cwd: base, homedir: home, cloneUrl: (url) => BARES.get(url), ...quiet })).toBe(0)
+    expect((await select(home)).handoff.id).toBe('H-1')
+    expect(bytes(home)).toBe(before)
+  })
+
+  it('ST-90/AC-4: a failed read of the owned checkout or of GitHub is temporary: reported, nothing held, selected when it works again', async () => {
+    const home = await twoProjects()
+    setIssue(OTHER, 6, issueJson(6, 'T', 'B'))
+    await approve(home, REPO, '--file', 'a.md')
+    await approve(home, OTHER, '--issue', '6')
+    await approve(home, OTHER, '--file', 'b.md')
+    const before = bytes(home)
+    const bare = BARES.get(urlOf(REPO))
+    const moved = `${bare}-away`
+    renameSync(bare, moved)
+    issues.delete(`${OTHER}#6`)
+    try {
+      const down = await select(home)
+      expect(down.handoff.id).toBe('H-3')
+      expect(ids(down)).toEqual(['H-1:unavailable', 'H-2:unavailable'])
+      expect(down.skipped[0].reason).toContain('could not be brought to origin')
+      expect(down.skipped[1].reason).toContain('Issue #6 cannot be read')
+      expect(down.skipped.every((s) => s.reason.includes('read again at the next selection'))).toBe(true)
+      expect(bytes(home)).toBe(before)
+    } finally {
+      renameSync(moved, bare)
+    }
+    setIssue(OTHER, 6, issueJson(6, 'T', 'B'))
+    expect((await select(home)).handoff.id).toBe('H-1')
+    expect(bytes(home)).toBe(before)
+  })
+
+  it('ST-90/AC-4: an Issue that is now a pull request, and a file now missing from main, are skipped and not held', async () => {
+    const home = await twoProjects()
+    setIssue(REPO, 9, issueJson(9, 'T', 'B'))
+    await approve(home, REPO, '--issue', '9')
+    await approve(home, REPO, '--file', 'a.md')
+    setIssue(REPO, 9, issueJson(9, 'T', 'B', { pr: true }))
+    commitOnMain(REPO, { 'a.md': null })
+    const before = bytes(home)
+    const result = await select(home)
+    expect(result.result).toBe('no-eligible-handoffs')
+    expect(ids(result)).toEqual(['H-1:unavailable', 'H-2:unavailable'])
+    expect(bytes(home)).toBe(before)
+  })
+
+  it('ST-90/AC-4: handoff or project records that cannot be trusted select nothing, hold nothing, and are not changed', async () => {
+    const home = await twoProjects()
+    await approve(home, REPO, '--file', 'a.md')
+    await approve(home, OTHER, '--file', 'b.md')
+    commitOnMain(REPO, { 'a.md': 'alpha changed\n' })
+    const good = bytes(home)
+    writeFileSync(handoffsPath(home), '{ "handoffs": [')
+    await expect(select(home)).rejects.toThrow('handoffs.json is malformed')
+    expect(bytes(home)).toBe('{ "handoffs": [')
+    writeFileSync(handoffsPath(home), good)
+    edit(home, (d) => { d.handoffs[1].hold = { reason: 'x', heldAt: new Date().toISOString() } })
+    const withStrayHold = bytes(home)
+    await expect(select(home)).rejects.toThrow('cannot have a hold')
+    expect(bytes(home)).toBe(withStrayHold)
+    writeFileSync(handoffsPath(home), good)
+    const projectsGood = readFileSync(projectsPath(home), 'utf8')
+    writeFileSync(projectsPath(home), '{ "projects": 3 }')
+    await expect(select(home)).rejects.toThrow('projects.json is malformed')
+    expect(bytes(home)).toBe(good)
+    writeFileSync(projectsPath(home), projectsGood)
+    expect((await select(home)).handoff.id).toBe('H-2')
+    const unreadable = fresh('home')
+    mkdirSync(handoffsPath(unreadable), { recursive: true })
+    await expect(select(unreadable)).rejects.toThrow()
+  })
+
+  it('ST-90/AC-5: ineligible handoffs are skipped in order, later ones are considered, and none eligible gives a distinct result', async () => {
+    const home = await twoProjects()
+    setIssue(REPO, 3, issueJson(3, 'T', 'B'))
+    await approve(home, REPO, '--issue', '3')
+    await approve(home, REPO, '--file', 'a.md')
+    await approve(home, OTHER, '--file', 'b.md')
+    commitOnMain(OTHER, { 'b.md': 'bravo changed\n' })
+    issues.delete(`${REPO}#3`)
+    const result = await select(home)
+    expect(result.handoff.id).toBe('H-2')
+    expect(ids(result)).toEqual(['H-1:unavailable'])
+    commitOnMain(REPO, { 'a.md': 'alpha changed\n' })
+    const none = await select(home)
+    expect(none.result).toBe('no-eligible-handoffs')
+    expect(none).not.toHaveProperty('handoff')
+    expect(ids(none)).toEqual(['H-1:unavailable', 'H-2:held', 'H-3:held'])
+    const after = bytes(home)
+    await select(home)
+    expect(bytes(home)).toBe(after)
+    expect(records(home).nextOrder).toBe(4)
+  })
+
+  it('ST-90/AC-5: with no handoff at all the result is no-eligible-handoffs and no file is created', async () => {
+    const home = await homeWith()
+    expect(await select(home)).toEqual({ result: 'no-eligible-handoffs', skipped: [] })
+    expect(existsSync(handoffsPath(home))).toBe(false)
+  })
+
+  it('ST-90/AC-6: list reports held, changed and temporarily ineligible entries with repository, source, position and reason, and writes nothing', async () => {
+    const home = await twoProjects()
+    setIssue(REPO, 3, issueJson(3, 'T', 'B'))
+    await approve(home, REPO, '--file', 'a.md')
+    await approve(home, OTHER, '--file', 'b.md')
+    await approve(home, REPO, '--issue', '3')
+    await approve(home, REPO, '--file', 'c.md')
+    commitOnMain(REPO, { 'a.md': 'alpha changed\n' })
+    await select(home)
+    commitOnMain(OTHER, { 'b.md': 'bravo changed\n' })
+    issues.delete(`${REPO}#3`)
+    const before = bytes(home)
+    const listed = await run(['list'], home)
+    expect(listed.code).toBe(0)
+    expect(bytes(home)).toBe(before)
+    const lines = listed.out.split('\n')
+    expect(lines.filter((l) => l.startsWith('H-'))).toHaveLength(4)
+    const held = lines.find((l) => l.startsWith('  H-1'))
+    expect(held).toContain(`${REPO}  file a.md  position 1  held: file a.md of ${REPO} no longer has the text approved as version 1`)
+    expect(held).toContain('steward handoff reapprove H-1')
+    const changed = lines.find((l) => l.startsWith('  H-2'))
+    expect(changed).toContain(`${OTHER}  file b.md  position 2  changed:`)
+    expect(changed).toContain('the next selection will hold it')
+    const gone = lines.find((l) => l.startsWith('  H-3'))
+    expect(gone).toContain(`${REPO}  Issue #3  position 3  temporarily ineligible: Issue #3 cannot be read`)
+    expect(gone).toContain('read again at the next selection')
+    expect(lines.some((l) => l.startsWith('  H-4'))).toBe(false)
+    expect(records(home).handoffs.map((h) => h.status)).toEqual(['held', 'pending', 'pending', 'pending'])
+  })
+
+  it('ST-90/AC-6: list does not hold a changed unit, a selection does, and a transient failure is never held', async () => {
+    const home = await twoProjects()
+    await approve(home, REPO, '--file', 'a.md')
+    commitOnMain(REPO, { 'a.md': 'alpha changed\n' })
+    await run(['list'], home)
+    expect(records(home).handoffs[0].status).toBe('pending')
+    await select(home)
+    expect(records(home).handoffs[0].status).toBe('held')
+    const lone = await twoProjects()
+    await approve(lone, OTHER, '--file', 'b.md')
+    expect(await project(['deactivate', OTHER], { cwd: base, homedir: lone, ...quiet })).toBe(0)
+    expect((await run(['list'], lone)).out).toContain(`temporarily ineligible: ${OTHER} is not activated`)
+    await select(lone)
+    expect(records(lone).handoffs[0].status).toBe('pending')
+  })
+
+  it('ST-90/AC-6: a held record written by selection is accepted by every command, and withdraw keeps its hold', async () => {
+    const home = await twoProjects()
+    await approve(home, REPO, '--file', 'a.md')
+    commitOnMain(REPO, { 'a.md': 'alpha changed\n' })
+    await select(home)
+    expect((await run(['show', 'H-1'], home)).code).toBe(0)
+    expect((await run(['add', '--repo', REPO, '--file', 'a.md'], home)).err).toContain('reapprove H-1')
+    expect((await run(['withdraw', 'H-1'], home)).code).toBe(0)
+    expect(records(home).handoffs[0]).toMatchObject({ status: 'withdrawn', hold: { reason: expect.stringContaining('no longer has the text') } })
+    expect((await run(['list'], home)).code).toBe(0)
+    expect(await select(home)).toEqual({ result: 'no-eligible-handoffs', skipped: [] })
   })
 })
