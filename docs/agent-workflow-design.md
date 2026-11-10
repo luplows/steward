@@ -84,9 +84,18 @@ separate report artifact or a general post-edit verification service.
 Upgrade refusals identify affected paths and pins, the failed condition, what remains
 and the safe next action. A workflow whose YAML does not parse is told apart from
 well-formed YAML whose difference is outside ST-96's supported transformations, without
-claiming broad YAML semantic equivalence. Missing evidence cannot be reported as success; no automatic repair
-or review bypass is introduced.
+claiming broad YAML semantic equivalence. Missing evidence cannot be reported as success; no
+automatic repair or review bypass is introduced.
 Considered and deferred: automatic project repairs and a machine-readable verification protocol.
+
+**Planned (ST-94)** (crew, 2026-11-09, after the v0.2.0 release review): The installation PR
+`init` opens and the upgrade PR `upgrade` opens, and each command's success output, say that the
+PR's head branch may remain after a manual merge, name that branch (a custom one included), and
+explain how the crew can delete it after confirming the PR merged. They note that a later runway
+run may also delete it (`scripts/land/delete-merged-heads.mjs`, which deletes only a head still
+at the merged commit), and never tell the crew to delete a branch belonging to an open PR or one
+that has moved. Guidance only: neither command deletes a branch, and the runway's cleanup is
+unchanged. Considered and not chosen: a new deletion mechanism in `init` or `upgrade`.
 
 (crew, 2026-11-07) Both sides of the comparison are read from `luplows/steward` on GitHub at
 their pins: an installed workflow is compared with the template at the pin it carries, and the

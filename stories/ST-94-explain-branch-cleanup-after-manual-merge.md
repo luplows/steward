@@ -27,6 +27,8 @@ leftover branches do not surprise me or prevent later installations and upgrades
 - [ ] **AC-4** — Guidance notes that a later runway run may also clean up previously merged
       heads, and never instructs the crew to delete a branch belonging to an open PR or one
       that has moved to other work.
+- [ ] **AC-5** — Resolve `**Planned (ST-94)**` in `docs/agent-workflow-design.md` when
+      implemented.
 
 ## Out of scope
 
