@@ -684,12 +684,13 @@ as steward's own CI conventions, used by its own story loop only. Considered and
 settings key for a project's policy, with ATC checking the coder's output; a fixed neutral
 `steward` identity; an identity in the user config.
 
-**Planned (ST-100)** (crew, 2026-11-10): Steward's own repository adopts pinpoint's rule: no AI
-attribution anywhere, no `Co-Authored-By:` trailer in a commit and no "Generated with" line in a
-pull request, issue or comment, apart from ATC's `Coder:` provenance line. `AGENTS.md` states it,
-`REVIEW.md` reviews against it, a CI check on a pull request's commits and body enforces it, and a
-committed setting stops Claude Code sessions adding their own. History already on `main` is not
-rewritten. Considered and not chosen: banning the `Coder:` line as well, and keeping attribution.
+(crew, 2026-11-10) Steward's own repository adopts pinpoint's rule: no AI attribution anywhere, no
+`Co-Authored-By:` trailer in a commit and no "Generated with" line in a pull request, issue or
+comment, apart from ATC's `Coder:` provenance line. `AGENTS.md` states it ("Every pull request").
+History already on `main` is not rewritten. Considered and not chosen: banning the `Coder:` line as
+well, and keeping attribution. **Planned (ST-100):** `REVIEW.md` reviews against the rule, a CI
+check on a pull request's commits and body enforces it, and a committed setting stops Claude Code
+sessions adding their own.
 
 ## The story artifact
 

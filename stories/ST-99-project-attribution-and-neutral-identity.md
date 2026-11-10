@@ -63,7 +63,7 @@ adds AI attribution the project forbids.
 
 ## Out of scope
 
-- Steward's own attribution policy for its own repository, and any check that enforces it (ST-100).
+- Reviewing against and checking steward's own rule, which `AGENTS.md` states (ST-100).
 - A settings key for a project's attribution policy, or ATC checking what the coder wrote: the
   coder follows the project's own instructions (crew, 2026-11-10).
 - Removing or changing the `Coder:` line, which ST-92 writes into handoff pull requests.

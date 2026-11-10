@@ -1,6 +1,6 @@
 ---
 id: ST-100
-title: Give steward's own repository a no-AI-attribution policy, and check it
+title: Review against and check steward's no-AI-attribution rule
 tier: normal
 kind: workflow
 depends_on: [ST-99]
@@ -10,18 +10,15 @@ blocked: null
 
 ## Intent
 
-As the crew of steward's own repository, I want a written attribution policy that every session
-and contributor follows, the same as pinpoint's, with a check that enforces it, so that steward's
-history and pull requests carry no AI attribution and a contributor knows the rule before writing a
-commit.
+As the crew of steward's own repository, I want its no-AI-attribution rule, already in `AGENTS.md`,
+reviewed against and enforced by a check, so that steward's history and pull requests carry no AI
+attribution and a contributor learns of a slip before it lands.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `AGENTS.md`, under "Every pull request", states the policy: no AI attribution
-      anywhere in this repository, meaning no `Co-Authored-By:` trailer in any commit message and no
-      "Generated with" line in any pull request, issue or comment. It says that ATC's machine-read
-      `Coder:` line is provenance the review reads, not attribution, and is allowed. It points at the
-      check in AC-3 rather than restating how the check works.
+- [ ] **AC-1** — The rule in `AGENTS.md`'s "Every pull request" ("No AI attribution anywhere")
+      keeps its meaning and gains a pointer to the check in AC-3, without restating how the check
+      works.
 - [ ] **AC-2** — `REVIEW.md`'s "Every pull request" section gains a numbered item that blocks a pull
       request whose body, or any commit message in its range, carries a `Co-Authored-By:` trailer or
       a "Generated with" line. The `Coder:` line is not a finding.
@@ -59,8 +56,9 @@ carries a `Co-Authored-By:` trailer and its body has no "Generated with" line.
 
 ## Context
 
-- Today `AGENTS.md`, `REVIEW.md` and `docs/settings.md` say nothing about attribution, and most of
-  steward's commit messages carry `Co-Authored-By:` trailers.
+- `AGENTS.md` states the rule since the pull request that added this story (crew, 2026-11-10).
+  `REVIEW.md` and `docs/settings.md` say nothing about attribution, nothing checks it, and most of
+  steward's earlier commit messages carry `Co-Authored-By:` trailers.
 - Pinpoint's `AGENTS.md`: "No AI attribution anywhere: no `Co-Authored-By` trailers in commits, and
   no "Generated with …" lines in PRs or issues."
 - `ci.yml` runs `scripts/dispatch/story-containment.mjs` on a pull request, with the branch name
