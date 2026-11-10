@@ -332,6 +332,44 @@ visibly, and counts as permission for no project.
 activation, and is never cleaned up automatically: remove it by hand if you no longer want it.
 None of these commands starts a review or a coordinator.
 
+### Approving a coding handoff
+
+Coding is never chosen from a project's backlog. A member of the crew approves one unit at a time,
+a file on an activated project's `main` or one of its GitHub Issues, as that OS user:
+
+```sh
+steward handoff add --repo <owner/name> --file <relative-path>   # approve a file on main
+steward handoff add --repo <owner/name> --issue <number>         # approve an Issue
+steward handoff list                                              # the approvals, oldest first
+steward handoff show <id>                                         # one approval, with its text
+steward handoff reapprove <id>                                    # read the source again
+steward handoff withdraw <id>                                     # stop it being selected
+```
+
+`add` brings the project's owned checkout to `origin`'s `main` and refuses, recording nothing,
+when the project is not activated, when its `unitLinks` on `main` lacks `file` (or `issue`),
+when the path is not one repository-relative path (no `..`, `.` or empty part, no backslash, control character or drive letter), when
+the file is not on `main`, or when the Issue cannot be read or is a pull request. A file need not
+follow the story schema. Steward reads an Issue and writes nothing to GitHub.
+
+Each approval is kept in `~/.steward/state/handoffs.json`, not in the project, `config.json` or
+`projects.json`, with a stable ID (`H-1`, `H-2`, ...) that is also its place in one order across
+every project, the exact approved text, the repository and source, and where the text was read:
+for a file the full commit of `main`, for an Issue its number, title, body and a fingerprint of
+its text. `list` and `show` only read it; none of these commands starts a model or a coder.
+
+`add` again for a source already approved and not yet taken reports the existing handoff when
+the text is the same, and refuses, pointing to `reapprove`, when it differs. `reapprove` reads the
+source again. When a pending handoff's text is unchanged it changes nothing. Otherwise it appends
+the version approved so far to the handoff's history and makes the new text the current, pending
+version, keeping the ID and the place in order. `withdraw` stops a pending or held handoff being
+selected and keeps its history. A handoff that is admitted or completed is neither reapproved nor
+withdrawn, and a source whose handoff is admitted or completed is not added again; a withdrawn
+one can be, as a new handoff. Selection, admission and coding do not exist yet, so every handoff
+today is pending or withdrawn. A records file that is not valid refuses every command, and is
+never read as an approval. The write goes to a temporary file renamed over the old one, so a write
+that fails leaves the file as it was.
+
 ### The coordinator
 
 The coordinator is one long-running process per OS user, across that user's terminals and
