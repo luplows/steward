@@ -76,16 +76,16 @@ const DISPATCH_DIR = path.dirname(fileURLToPath(import.meta.url))
 const ENGINE_ROOT = path.resolve(DISPATCH_DIR, '..', '..')
 const CODER_PROMPT = path.join(ENGINE_ROOT, '.claude', 'prompts', 'coder.md')
 
-const REMOTE = 'origin'
-const BASE = 'main'
+export const REMOTE = 'origin'
+export const BASE = 'main'
 // The identity of the dispatcher's own commits: the claim commit, and a Codex session's work.
-const DISPATCH_IDENTITY = ['-c', 'user.name=tw-dispatch', '-c', 'user.email=dispatch@tower-workshop-paths.invalid']
+export const DISPATCH_IDENTITY = ['-c', 'user.name=tw-dispatch', '-c', 'user.email=dispatch@tower-workshop-paths.invalid']
 // ST-15/AC-6: git's hooks off for one command. The null device is a folder with no hooks in it.
 const NULL_DEVICE = process.platform === 'win32' ? 'NUL' : '/dev/null'
 const HOOKS_OFF = ['-c', `core.hooksPath=${NULL_DEVICE}`]
 const PROMPTS_DIR = '.claude/prompts/'
 
-async function git(cwd, args) {
+export async function git(cwd, args) {
   const { stdout } = await execFileAsync('git', ['-c', 'core.quotepath=off', ...args], {
     cwd,
     maxBuffer: 64 * 1024 * 1024,
@@ -94,7 +94,7 @@ async function git(cwd, args) {
 }
 
 /** Like `git`, but a non-zero exit is `null` rather than a throw. */
-async function gitOrNull(cwd, args) {
+export async function gitOrNull(cwd, args) {
   try {
     return await git(cwd, args)
   } catch {
@@ -213,7 +213,7 @@ export async function claimAgeMs(repoDir, branch, now = Date.now()) {
   return now - Number(lines[lines.length - 1]) * 1000
 }
 
-const MACHINE_LABEL_RE = /^[A-Za-z0-9._-]{1,32}$/
+export const MACHINE_LABEL_RE = /^[A-Za-z0-9._-]{1,32}$/
 
 /**
  * The machine's label for a claim commit (AC-8): never the hostname, since
@@ -343,7 +343,7 @@ export async function commitSessionWork({ cwd, storyId, title }) {
 }
 
 /** The title of a parsed PR block, else `null`. */
-const titleOf = (block) => (block?.status === 'parsed' ? block.title : null)
+export const titleOf = (block) => (block?.status === 'parsed' ? block.title : null)
 
 /**
  * Starts one coder session and resolves `spawnSession`'s result shape. A choice whose tool is
@@ -352,7 +352,7 @@ const titleOf = (block) => (block?.status === 'parsed' ? block.title : null)
  * `windowsSandbox`, the choice's model and effort, `timeoutMs` and `stallMs` from `sessionOptions`
  * when given, and the prompt `buildInvocation` renders, which on a retry includes `retrySection`.
  */
-function startCoderSession({ choice, machine, sessionOptions, codexSession, scratch, ...invocation }) {
+export function startCoderSession({ choice, machine, sessionOptions, codexSession, scratch, ...invocation }) {
   if (choice.tool !== 'codex') {
     return spawnSession({ ...sessionOptions, ...invocation, role: 'coder', model: choice.model, effort: choice.effort })
   }
@@ -367,7 +367,7 @@ function startCoderSession({ choice, machine, sessionOptions, codexSession, scra
 }
 
 /** The parts of a session's JSON envelope the dispatcher keeps in its result. */
-function sessionSummary(classification, output) {
+export function sessionSummary(classification, output) {
   return {
     outcome: classification.outcome,
     report: typeof output?.result === 'string' ? output.result : null,
@@ -381,13 +381,44 @@ function sessionSummary(classification, output) {
 }
 
 /** Removes the worktree, then the local branch when doing so loses nothing. */
-async function cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded }) {
+export async function cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded }) {
   if (worktreeAdded) await git(repoDir, ['worktree', 'remove', '--force', tree]).catch(() => {})
   const tip = (await gitOrNull(repoDir, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]))?.trim()
   if (!tip) return
   const pushed = await remoteTip(repoDir, branch).catch(() => null)
   // Unpushed commits are the only copy of the coder's work; keep them.
   if (tip === baseSha || tip === pushed) await git(repoDir, ['branch', '-D', branch]).catch(() => {})
+}
+
+/**
+ * The claim (ST-91 shares it with the story coder): makes the worktree `tree` on the new branch
+ * `branch` from `mainSha`, makes the empty claim commit `Claim <unitId> on <label> at <time>` in
+ * it, and pushes it with `claimPushArgs`, which can only create the branch on the remote. It
+ * records in `state` (`{ worktreeAdded, baseSha }`) what a cleanup needs, as it goes, so that a
+ * step that throws still leaves the worktree known. Resolves `null` when the claim is on the
+ * remote, and `baseSha` is the claim commit; else `{ status, reason }`: `branch-exists` (the
+ * remote has the branch, which a race can cause) or `claim-failed`.
+ */
+export async function claimBranch(state, { repoDir, tree, branch, mainSha, unitId, label }) {
+  // `--no-track`: a branch made from `origin/main` otherwise tracks it, and a
+  // bare `git push` on it would aim at `main` (AC-2).
+  await git(repoDir, ['worktree', 'add', '--no-track', '-b', branch, tree, mainSha])
+  state.worktreeAdded = true
+  // `-c user.name`/`-c user.email`: the claim commit is the dispatcher's own action, not an
+  // authored change, so it must not depend on whichever git identity happens to be configured on
+  // the machine running it (CI's runners have none at all).
+  await git(tree, [
+    ...DISPATCH_IDENTITY,
+    'commit', '--allow-empty', '-m', `Claim ${unitId} on ${label} at ${new Date().toISOString()}`,
+  ])
+  state.baseSha = (await git(tree, ['rev-parse', 'HEAD'])).trim()
+  try {
+    await git(tree, claimPushArgs(branch))
+  } catch (error) {
+    if (await remoteTip(repoDir, branch)) return { status: 'branch-exists', reason: `${branch} already exists on ${REMOTE}` }
+    return { status: 'claim-failed', reason: String(error.stderr ?? '').trim() || error.message }
+  }
+  return null
 }
 
 /**
@@ -516,40 +547,17 @@ export async function dispatchCoder({
 
   const scratch = await mkdtemp(path.join(tmpdir(), 'tw-coder-'))
   const tree = path.join(scratch, 'tree')
-  let worktreeAdded = false
-  // Reassigned to the claim commit's sha once it is made (AC-3): from then on
-  // it is the base `pushBranch` and `cleanUp` measure "committed beyond" from,
-  // not `origin/main`.
-  let baseSha = mainSha
+  // `baseSha` becomes the claim commit's sha once it is made (AC-3): from then on it is the base
+  // `pushBranch` and `cleanUp` measure "committed beyond" from, not `origin/main`.
+  const claim = { worktreeAdded: false, baseSha: mainSha }
   try {
-    // `--no-track`: a branch made from `origin/main` otherwise tracks it, and a
-    // bare `git push` on it would aim at `main` (AC-2).
-    await git(repoDir, ['worktree', 'add', '--no-track', '-b', branch, tree, mainSha])
-    worktreeAdded = true
-
     // AC-1: the claim commit and its push, before the install or the coder
     // session spend anything. A failed push means either a race (someone else's
     // claim beat us to `origin`) or a genuine push failure (AC-2); either way
     // nothing below this is installed or spawned, and `cleanUp` below removes
     // the local branch and worktree since their tip is still this claim.
-    // `-c user.name`/`-c user.email`: the claim commit is the dispatcher's own
-    // action, not an authored change, so it must not depend on whichever git
-    // identity happens to be configured on the machine running it (CI's
-    // runners have none at all).
-    await git(tree, [
-      ...DISPATCH_IDENTITY,
-      'commit', '--allow-empty', '-m', `Claim ${chosen.id} on ${label} at ${new Date().toISOString()}`,
-    ])
-    baseSha = (await git(tree, ['rev-parse', 'HEAD'])).trim()
-    try {
-      await git(tree, claimPushArgs(branch))
-    } catch (error) {
-      if (await remoteTip(repoDir, branch)) {
-        return { status: 'branch-exists', storyId: chosen.id, branch, reason: `${branch} already exists on ${REMOTE}` }
-      }
-      const reason = String(error.stderr ?? '').trim() || error.message
-      return { status: 'claim-failed', storyId: chosen.id, branch, reason }
-    }
+    const refused = await claimBranch(claim, { repoDir, tree, branch, mainSha, unitId: chosen.id, label })
+    if (refused) return { status: refused.status, storyId: chosen.id, branch, reason: refused.reason }
 
     const text = readFileSync(path.join(tree, storyPath), 'utf8')
     const { data } = parseFrontmatter(text, storyPath)
@@ -587,7 +595,7 @@ export async function dispatchCoder({
     // ST-15/AC-5: a Codex session cannot commit, so the dispatcher commits what it left.
     const viaCodex = choice.tool === 'codex'
     if (viaCodex) await commitSessionWork({ cwd: tree, storyId: chosen.id, title: titleOf(classification.prText) })
-    const push = await pushBranch({ cwd: tree, branch, baseSha, hooksOff: viaCodex })
+    const push = await pushBranch({ cwd: tree, branch, baseSha: claim.baseSha, hooksOff: viaCodex })
     if (push.status !== 'pushed') {
       const { status, ...rest } = push
       return { status, ...context, ...rest }
@@ -635,7 +643,7 @@ export async function dispatchCoder({
     if (promptChange) result.promptChange = promptChange
     return result
   } finally {
-    await cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded })
+    await cleanUp({ repoDir, tree, branch, baseSha: claim.baseSha, worktreeAdded: claim.worktreeAdded })
     await rm(scratch, { recursive: true, force: true })
   }
 }
@@ -692,7 +700,7 @@ async function storyChoiceAt({ repoDir, ref, filename, storyId, machine, named }
  * tried, and its refusal carries no `skipped`. Resolves `{ choice, ran }`, `ran` being what the
  * call's results carry (`choice`, and `skipped` when ATC moved), or `{ refusal }`.
  */
-async function pickCoderChoice({ machine, first, named, usage, codexUsage, cwd, storyId }) {
+export async function pickCoderChoice({ machine, first, named, usage, codexUsage, cwd, storyId, extra = { storyId } }) {
   const { available } = machine.roles.coder
   const candidates = named !== undefined
     ? [first.choice]
@@ -704,7 +712,7 @@ async function pickCoderChoice({ machine, first, named, usage, codexUsage, cwd, 
     codex: ({ cwd: dir }) => codexUsage({ executable: machine.tools?.codex?.executable, cwd: dir }),
   }
   const picked = await firstWithUsage({
-    candidates, readers, cwd, limits: machine.usageLimits.coder, extra: { storyId },
+    candidates, readers, cwd, limits: machine.usageLimits.coder, extra,
   })
   if (picked.refusal) {
     const { skipped: _tried, ...refusal } = picked.refusal

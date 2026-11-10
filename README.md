@@ -367,10 +367,10 @@ the version approved so far to the handoff's history and makes the new text the 
 version, keeping the ID and the place in order. `withdraw` stops a pending or held handoff being
 selected and keeps its history. A handoff that is admitted or completed is neither reapproved nor
 withdrawn, and a source whose handoff is admitted or completed is not added again; a withdrawn
-one can be, as a new handoff. Admission and coding do not exist yet, so a handoff today is pending,
-held or withdrawn. A records file that is not valid refuses every command, and is
-never read as an approval. The write goes to a temporary file renamed over the old one, so a write
-that fails leaves the file as it was.
+one can be, as a new handoff. Admission does not exist yet, so a handoff today is pending, held or
+withdrawn; the operation that codes one exists (below), and nothing calls it yet. A records file
+that is not valid refuses every command, and is never read as an approval. The write goes to a
+temporary file renamed over the old one, so a write that fails leaves the file as it was.
 
 Which handoff is coded next is chosen by selection, an operation the coordinator will call
 (`selectHandoff` in `scripts/dispatch/handoff.mjs`; there is no command for it). It takes the
@@ -380,7 +380,7 @@ activated, its source can be read, and the source still has exactly the approved
 that text on `origin`'s `main`, for an Issue its title and body. New commits on `main` that leave
 the unit's text unchanged do not matter. A withdrawn, held, admitted or completed handoff is never
 eligible. Selection starts no coder, claims no branch and reserves nothing; the step that starts
-coding must check again.
+coding checks again (below).
 
 - If the source was read and its text differs from the approved text, selection **holds** the
   handoff, recording why in its record. A hold stays until `steward handoff reapprove <id>`, even if
@@ -401,6 +401,64 @@ what to do. It only reports: a pending handoff whose unit has changed is shown a
 selection holds it when it reaches that handoff and its content still differs, not when it is
 listed. An Issue's title and body, and a file's text, are compared exactly, trailing whitespace
 included.
+
+### Executing an approved handoff
+
+`executeHandoff` in `scripts/dispatch/handoff-coder.mjs` codes one approved handoff with the bounded
+coder, to a branch pushed to the project's remote. There is no command for it: the coordinator will
+call it (ST-93), and nothing does yet. It is project-neutral. It needs no `stories/` folder, story
+frontmatter, `blocked:` field or `AGENTS.md`/`REVIEW.md` in the project; its prompt
+(`.claude/prompts/coder-handoff.md`) gives the coder the approved text exactly, where it came from
+and the repository, and tells it to read the project's checklist (its `rulesFile` setting) and
+whichever of `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md` and `README.md` it has. The story
+coder, which takes steward's own `stories/`, is unchanged.
+
+It is given a handoff's ID and the approved version, and starts no model session unless the handoff
+passes a check: its version is the current one, its status is `pending` (or, when the coordinator
+passes its admission, `admitted` and the admission's ID, handoff and version match and the admission
+is still active), and its project is activated with its source readable and its text exactly the
+approved text. It checks at the start and again just before the branch is claimed, after the usage
+check, unless an earlier step has already refused. When a check finds the source as approved, it
+then asks whether the admission is still active and, with nothing awaited after that, reads the
+projects and the records again and decides from them, so a handoff withdrawn, a project
+deactivated or an admission stopped during the source read or the admission query is refused. A
+change to the source after the source read is not seen before the claim. It writes no handoff
+record, so a refusal changes nothing in the records; the coordinator decides what to record. A
+refusal is a `status` of the
+result:
+
+- `unit-changed`: the source was read and its text differs from the approved version. This is the
+  one the coordinator answers with a hold, as selection does. It is not retryable.
+- `source-unavailable` (the source cannot be read now, or `main` or the remote's branches cannot
+  be read), `over-usage` and `usage-unknown` (also when the usage reader fails): the same handoff
+  may be executed again later. The result says `retryable: true`; no other refusal does.
+- `handoff-unknown`, `version-not-current`, `not-executable` (held, withdrawn, completed, or admitted
+  with no admission passed), `admission-mismatch`, `admission-inactive` (also when it cannot be asked), `records-unreadable`,
+  `choice-unavailable` (also when the user config cannot be read), `bad-machine-label` and
+  `branch-exists`.
+
+Then it works as the story coder does. The branch is `handoff/<id>-<source>`, named from the
+handoff's ID and its source (the file's path in lower-case letters and digits, or
+`issue-<number>`), so it is the same for every execution of one handoff. An existing local or
+remote branch is refused. ATC makes the claim commit on it and pushes it, creating the branch on
+the remote and never replacing one, before the project's `setup` (read from the revision the
+worktree is made from) runs or the coder starts. It never pushes to `main` and opens no pull
+request. The coder is the user config's default coder choice (or the one its caller names), with
+the same usage limits, time limits, allowed tools and credential-free environment as for a story,
+and a Codex choice is committed by ATC. It does not read a unit's own choice of model.
+
+When the coder finishes, the result has `status: "pushed"` with the repository, handoff ID and
+version, the branch, the pushed `headSha`, the session's outcome, the choice that ran (its name,
+tool and model) and `proposedPr`, the title, body and draft flag the coder wrote. Opening the pull
+request is ST-92's. A run that stops short has its own `status`: `claim-failed`, `install-failed`,
+`session-failed`, `nothing-committed`, `uncommitted-changes`, `prompt-change-refused`,
+`commit-failed`, `push-failed` or `pr-block-invalid` (the branch is pushed, with no description).
+A step that throws once the claim begins (the claim, the setup, starting the session, ATC's commit
+or push) is the result of that step's kind, not a throw. A call starts at most one session, and no
+failure starts another. After any failure that started the session, `pr-block-invalid` included,
+the result's `retained` names the worktree (and its branch) when the worktree holds uncommitted
+changes or untracked files, and the branch when it holds commits that are not on the remote; both
+are left in place. The claim commit stays on the remote after any failure that follows it.
 
 ### The coordinator
 
