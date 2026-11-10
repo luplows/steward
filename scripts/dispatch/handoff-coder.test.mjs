@@ -381,6 +381,27 @@ describe('ST-91/AC-1: the operation rechecks before any side effect', () => {
     expect(remoteBranch(world, handoffBranch(records(world).handoffs[0]))).toBeNull()
   })
 
+  it('ST-91/AC-1: a project deactivated, or a handoff withdrawn, while the admission is being asked is refused before the claim', async () => {
+    for (const [what, act, status] of [
+      ['deactivated', (world) => project(['deactivate', REPO], { cwd: base, homedir: world.home, out: () => {}, err: () => {} }), 'source-unavailable'],
+      ['withdrawn', (world, id) => setStatus(world, id, 'withdrawn'), 'not-executable'],
+    ]) {
+      const world = await makeWorld()
+      const id = await approveFile(world)
+      setStatus(world, id, 'admitted')
+      let asks = 0
+      const admissionIsActive = async () => {
+        if (++asks === 4) await act(world, id)
+        return true
+      }
+      const { result, fake, installs } = await exec(world, id, finish, { options: { admission: { id: 'A-1', handoffId: id, version: 1 }, admissionIsActive } })
+      expect(result.status, what).toBe(status)
+      noModel(fake)
+      expect(installs).toEqual([])
+      expect(remoteBranch(world, handoffBranch(records(world).handoffs[0]))).toBeNull()
+    }
+  })
+
   it('ST-91/AC-1: an admission stopped while the final source read is in flight is refused before the claim', async () => {
     const world = await makeWorld()
     const id = await approveIssue(world, 22, 'Title', 'Body.')

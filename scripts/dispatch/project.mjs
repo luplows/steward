@@ -89,6 +89,11 @@ const isDirectory = (dir) => {
  * a malformed file is never read as permission for any project.
  */
 export async function readProjects(file) {
+  return readProjectsSync(file)
+}
+
+/** `readProjects` without the promise, for a caller that must decide with nothing awaited between its read and its use. */
+export function readProjectsSync(file) {
   const bad = (what) => new Error(`${file} is malformed: ${what}. Fix or remove it; until then no project counts as activated.`)
   let data
   try {

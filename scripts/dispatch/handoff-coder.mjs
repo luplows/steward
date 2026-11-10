@@ -13,11 +13,12 @@
  *
  * It checks the handoff at the start, and again immediately before the branch is claimed, because
  * the usage check between them takes time; a refusal at the start returns without the second. Each
- * check reads the source and then, once it is read, decides again from the records, the project's
- * activation and the admission (which are read together), with nothing awaited between that last
- * read and the claim, so a change made while the source was being read is seen. The unit's text is
- * the one thing read before that last step: it is compared when the source read returns. A check
- * passes only when
+ * check reads the source and then, once it is read, awaits the admission's activity and, with
+ * nothing awaited after that, reads the projects and the records again and decides the project's
+ * activation, the version, the status and the admission match from those reads, so a change made
+ * while the source or the admission was being read is seen. The unit's text is the one thing that
+ * cannot be read again without another await: it is compared when the source read returns, and a
+ * change to the source after that is not seen before the claim. A check passes only when
  *
  *   - the handoff exists and its current version is the one asked for;
  *   - without an `admission`, its status is `pending`; with one, its status is `admitted` and the
@@ -82,7 +83,7 @@ import { readCodexUsage, spawnCodexCoder } from './codex.mjs'
 import { createContext } from './github.mjs'
 import { assess, describeSource, handoffsPath, readHandoffs } from './handoff.mjs'
 import { installDependencies } from './install.mjs'
-import { ownedCheckoutPath, projectsPath, readProjects } from './project.mjs'
+import { ownedCheckoutPath, projectsPath, readProjectsSync } from './project.mjs'
 import { readSettings } from './settings.mjs'
 import { coderChoice, readUserConfig } from './user-config.mjs'
 import { readUsage } from './usage.mjs'
@@ -160,46 +161,45 @@ function fromRecords(base, { admission, ctx }) {
 }
 
 /**
- * Whether the handoff is authorized now (AC-1): the records say so (`fromRecords`), then the two
- * facts that need an await are read together -- the project is still activated, and the admission
- * is still the active one -- and then the records are read and decided from once more, with no
- * await between that last read and the return. So every condition is decided after the last await.
+ * Whether the handoff is authorized now (AC-1). Everything asynchronous is awaited first (the
+ * admission's activity); then, with no await after that, `projects.json` and `handoffs.json` are
+ * read and the project's activation, the version, the status and the admission match are decided
+ * from those fresh reads. So no condition read from a file is older than the last await.
  */
 async function authorize(base, args) {
   const { admission, admissionIsActive, ctx } = args
   const refuse = (status, reason, extra = {}) => ({ refusal: result(base, status, { reason, ...extra }) })
   const early = fromRecords(base, args)
   if (early.refusal) return early
-  const h = early.handoff
-  const isActive = async () => {
+  let active = true
+  if (admission !== undefined) {
     try {
-      return (await admissionIsActive(admission.id)) === true
+      active = (await admissionIsActive(admission.id)) === true
     } catch {
-      return false
+      active = false
     }
   }
-  let read
+  // No await from here to the return.
+  let projects
   try {
-    read = await Promise.all([
-      readProjects(projectsPath(ctx.homedir)),
-      admission === undefined ? true : isActive(),
-    ])
+    projects = readProjectsSync(projectsPath(ctx.homedir))
   } catch (error) {
     return refuse('records-unreadable', error.message)
   }
-  const [projects, active] = read
-  if (!projects.some((p) => p.repo === h.repo)) {
-    return refuse('source-unavailable', `${h.repo} is not activated`, { retryable: true })
+  const last = fromRecords(base, args)
+  if (last.refusal) return last
+  if (!projects.some((p) => p.repo === last.handoff.repo)) {
+    return refuse('source-unavailable', `${last.handoff.repo} is not activated`, { retryable: true })
   }
-  if (!active) return refuse('admission-inactive', `the admission ${admission.id} is not the active admission of ${h.id}`)
-  return fromRecords(base, args)
+  if (!active) return refuse('admission-inactive', `the admission ${admission.id} is not the active admission of ${last.handoff.id}`)
+  return last
 }
 
 /**
  * Whether the handoff `base.handoffId` can be executed now, per the module's header. Resolves
  * `{ handoff }`, or `{ refusal }` (a result). Reads the records file and the unit's source afresh
- * each time it is called, and the records and the admission once more after the source is read,
- * since that read can take a while.
+ * each time it is called, and decides authorization again after the source is read, since that
+ * read can take a while.
  */
 async function check(base, args) {
   const refuse = (status, reason, extra = {}) => ({ refusal: result(base, status, { reason, ...extra }) })
