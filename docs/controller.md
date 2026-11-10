@@ -24,8 +24,9 @@ enough, are in [`agent-workflow-design.md`](agent-workflow-design.md), "The cont
 
 ## Manual work and automatic coordination
 
-- The 0.1 coordinator can be started, inspected and stopped
-  (`steward coordinator start`, `status`, `stop`), and schedules automatic reviews only;
+- The coordinator can be started, inspected and stopped
+  (`steward coordinator start`, `status`, `stop`), and schedules automatic reviews, unattended
+  landing where a project enables it, and the coding of handoffs the crew approved;
   explicit controller commands such as `rotation`, `review.mjs --rereview` and
   manual `land` remain direct, and never ask the coordinator, whether it is
   running, stopping or stopped. This does not change whose request authorizes

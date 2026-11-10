@@ -1,0 +1,662 @@
+// @vitest-environment node
+
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { codeNextHandoff, admissionIsActive, interruptAdmissions } from './handoff-coding.mjs'
+import { handoffBranch } from './handoff-coder.mjs'
+import { handoffRecord, readRaw, writeHandoffs } from './handoff-fixture.mjs'
+import { handoffsPath, main as handoff, readHandoffs, selectHandoff } from './handoff.mjs'
+import { main as project } from './project.mjs'
+import { fixtureSettings } from './settings-fixture.mjs'
+
+const REPO = 'acme/widgets'
+const OTHER = 'acme/gadgets'
+
+// Each activation clones a real repository.
+vi.setConfig({ testTimeout: 60_000 })
+
+// Every test runs in a temporary home and in temporary repositories whose `origin` is a local bare
+// repository, with stand-ins for GitHub, for the coding run and for publication: the real
+// `~/.steward/` is never read or written, no model starts, and nothing reaches GitHub. Git reads a
+// global config of the tests' own.
+let base
+const GIT_ENV = ['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM']
+const savedEnv = {}
+beforeAll(() => {
+  base = mkdtempSync(path.join(tmpdir(), 'steward-coding-'))
+  for (const name of GIT_ENV) savedEnv[name] = process.env[name]
+  const globalConfig = path.join(base, 'gitconfig')
+  writeFileSync(globalConfig, '[user]\n\tname = Crew\n\temail = crew@example.com\n[commit]\n\tgpgsign = false\n[init]\n\tdefaultBranch = main\n')
+  process.env.GIT_CONFIG_GLOBAL = globalConfig
+  process.env.GIT_CONFIG_NOSYSTEM = '1'
+})
+afterAll(() => {
+  for (const name of GIT_ENV) {
+    if (savedEnv[name] === undefined) delete process.env[name]
+    else process.env[name] = savedEnv[name]
+  }
+  rmSync(base, { recursive: true, force: true })
+})
+
+let counter = 0
+const fresh = (name) => {
+  const dir = path.join(base, `${name}-${++counter}`)
+  mkdirSync(dir, { recursive: true })
+  return dir
+}
+const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
+const put = (dir, files) => {
+  for (const [rel, text] of Object.entries(files)) {
+    mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true })
+    writeFileSync(path.join(dir, rel), text)
+  }
+}
+
+const BARES = new Map()
+const urlOf = (repo) => `https://github.com/${repo}.git`
+
+function makeRepo(repo, files = {}) {
+  const dir = fresh('repo')
+  git(dir, 'init', '-q', '-b', 'main')
+  git(dir, 'remote', 'add', 'origin', urlOf(repo))
+  put(dir, {
+    'steward.config.json': `${JSON.stringify(fixtureSettings({ repo, unitLinks: ['file', 'issue'] }), null, 2)}\n`,
+    'REVIEW.md': '# Checklist\n\n## Every pull request\n\n1. The diff matches its description.\n',
+    '.github/workflows/review-gate.yml': 'name: review-gate\n',
+    ...files,
+  })
+  git(dir, 'add', '-A')
+  git(dir, 'commit', '-q', '-m', 'start')
+  const bare = fresh('origin')
+  git(bare, 'init', '-q', '--bare', '-b', 'main')
+  git(dir, 'push', '-q', bare, 'main')
+  BARES.set(urlOf(repo), bare)
+  return dir
+}
+
+function commitOnMain(repo, files) {
+  const scratch = fresh('scratch')
+  git(scratch, 'clone', '-q', BARES.get(urlOf(repo)), '.')
+  put(scratch, files)
+  git(scratch, 'add', '-A')
+  git(scratch, 'commit', '-q', '-m', 'more')
+  git(scratch, 'push', '-q', 'origin', 'main')
+}
+
+/** A home with each project activated, and one file approved in each, in this order. */
+async function homeWith(approvals) {
+  const home = fresh('home')
+  const repos = [...new Set(approvals.map(([repo]) => repo))]
+  for (const repo of repos) {
+    const files = Object.fromEntries(approvals.filter(([r]) => r === repo).map(([, file, text]) => [file, text]))
+    const dir = makeRepo(repo, files)
+    const code = await project(['activate', dir], { cwd: base, homedir: home, cloneUrl: (url) => BARES.get(url), out: () => {}, err: () => {} })
+    expect(code).toBe(0)
+  }
+  for (const [repo, file] of approvals) expect((await run(['add', '--repo', repo, '--file', file], home)).code).toBe(0)
+  return home
+}
+
+const stubContext = ({ repo }) => ({ repo, async send() { throw new Error('a stand-in context was sent a request') } })
+let tick = 0
+const now = () => new Date(Date.UTC(2026, 10, 10, 12, 0, ++tick))
+async function run(args, home) {
+  const out = []
+  const err = []
+  const code = await handoff(args, { homedir: home, now, createContext: stubContext, out: (l) => out.push(l), err: (l) => err.push(l) })
+  return { code, out: out.join('\n'), err: err.join('\n') }
+}
+
+const HEAD = 'd'.repeat(40)
+const records = (home) => readRaw(home)
+const recordOf = (home, id) => records(home).find((h) => h.id === id)
+const bytes = (home) => readFileSync(handoffsPath(home), 'utf8')
+const pushedFor = (home, args, extra = {}) => ({
+  status: 'pushed', repo: recordOf(home, args.handoffId).repo, handoffId: args.handoffId, version: args.version,
+  branch: handoffBranch(recordOf(home, args.handoffId)), headSha: HEAD, pushed: true,
+  proposedPr: { title: 'Do it', body: 'Done.', draft: false }, choice: { tool: 'claude', name: 'opus', model: 'claude-opus-4' }, ...extra,
+})
+const published = (number = 12) => ({ status: 'published', pr: { number, url: `https://github.com/acme/widgets/pull/${number}`, headSha: HEAD }, draft: false })
+const refusal = (home, args, status, extra = {}) => ({ status, repo: recordOf(home, args.handoffId).repo, handoffId: args.handoffId, version: args.version, reason: `${status} stand-in`, ...extra })
+
+/**
+ * One coding turn for `home` with stand-ins: `execute` plays the coding run (by default it pushes),
+ * `publish` plays publication (by default it opens pull request 12). `admitted` counts the work
+ * the turn ran through `admit`.
+ */
+function turn(home, { execute, publish, admit, ...over } = {}) {
+  const calls = { admitted: 0, ids: [] }
+  const exec = vi.fn(execute ?? (async (args) => pushedFor(home, args)))
+  const pub = vi.fn(publish ?? (async () => published()))
+  const go = (over2 = {}) => codeNextHandoff({
+    homedir: home, now, createContext: stubContext, newId: () => `adm-${++counter}`, execute: exec, publish: pub,
+    admit: admit ?? ((job) => { calls.admitted += 1; Promise.resolve().then(job); return true }),
+    ...over, ...over2,
+  })
+  return Object.assign(go, { exec, pub, calls })
+}
+
+const APPROVALS = [[OTHER, 'b.md', 'bravo\n'], [REPO, 'a.md', 'alpha\n'], [REPO, 'c.md', 'charlie\n']]
+
+/** Blocks the next write of `handoffs.json`, as a full disk would: its temporary file cannot be made. */
+const blockWrites = (home) => mkdirSync(`${handoffsPath(home)}.tmp`)
+const unblockWrites = (home) => rmSync(`${handoffsPath(home)}.tmp`, { recursive: true, force: true })
+
+describe('ST-93/AC-1: the oldest eligible handoff is admitted, one at a time, and awaited', () => {
+  it('ST-93/AC-1: handoffs are coded in approval order across repositories, each turn waiting for its coding and its pull request', async () => {
+    const home = await homeWith(APPROVALS)
+    let open = 0
+    let overlapped = false
+    const order = []
+    const t = turn(home, {
+      execute: async (args) => {
+        open += 1
+        overlapped ||= open > 1
+        order.push(args.handoffId)
+        await new Promise((resolve) => setTimeout(resolve, 20))
+        open -= 1
+        return pushedFor(home, args)
+      },
+      publish: async () => { overlapped ||= open > 0; return published() },
+    })
+    expect(order).toEqual([])
+    expect((await t()).status).toBe('completed')
+    expect(recordOf(home, 'H-1')).toMatchObject({ repo: OTHER, status: 'completed' })
+    expect(records(home).map((h) => h.status)).toEqual(['completed', 'pending', 'pending'])
+    expect((await t()).status).toBe('completed')
+    expect((await t()).status).toBe('completed')
+    expect((await t()).status).toBe('none')
+    expect(order).toEqual(['H-1', 'H-2', 'H-3'])
+    expect(overlapped).toBe(false)
+    expect(t.calls.admitted).toBe(3)
+    expect(t.pub).toHaveBeenCalledTimes(3)
+  })
+
+  it('ST-93/AC-1: nothing eligible gives none, writes nothing, and runs no coding and no publication', async () => {
+    const home = await homeWith(APPROVALS)
+    await run(['withdraw', 'H-1'], home)
+    await run(['withdraw', 'H-2'], home)
+    await run(['withdraw', 'H-3'], home)
+    const before = bytes(home)
+    const t = turn(home)
+    expect(await t()).toMatchObject({ status: 'none', skipped: [] })
+    expect(bytes(home)).toBe(before)
+    expect(t.exec).not.toHaveBeenCalled()
+    expect(t.calls.admitted).toBe(0)
+  })
+
+  it('ST-93/AC-1: once admission is closed nothing is written and nothing is coded', async () => {
+    const home = await homeWith(APPROVALS)
+    const before = bytes(home)
+    const t = turn(home, { admit: () => false })
+    expect(await t()).toEqual({ status: 'admission-closed' })
+    expect(bytes(home)).toBe(before)
+    expect(t.exec).not.toHaveBeenCalled()
+  })
+
+  it('ST-93/AC-1: records that cannot be read give select-failed, with nothing coded', async () => {
+    const home = await homeWith(APPROVALS)
+    writeFileSync(handoffsPath(home), '{ not json')
+    const t = turn(home)
+    expect(await t()).toMatchObject({ status: 'select-failed', reason: expect.stringContaining('is malformed') })
+    expect(t.exec).not.toHaveBeenCalled()
+  })
+})
+
+describe('ST-93/AC-2: the admission is durable, unique and matched before anything starts', () => {
+  it('ST-93/AC-2: the admission is in the record when the coding run starts, and that run is given its identity, which the record confirms and a different one does not', async () => {
+    const home = await homeWith(APPROVALS)
+    const seen = []
+    const t = turn(home, {
+      execute: async (args) => {
+        const record = recordOf(home, 'H-1')
+        seen.push({ record, args, active: await args.admissionIsActive(args.admission.id), other: await args.admissionIsActive('adm-other') })
+        return pushedFor(home, args)
+      },
+    })
+    await t()
+    const [{ record, args, active, other }] = seen
+    expect(record.status).toBe('admitted')
+    expect(record.admission).toEqual({
+      id: args.admission.id, handoffId: 'H-1', version: 1, repo: OTHER, branch: 'handoff/H-1-b-md', admittedAt: expect.any(String),
+    })
+    expect(args).toMatchObject({ handoffId: 'H-1', version: 1, homedir: home })
+    expect(args.admission).toEqual({ id: record.admission.id, handoffId: 'H-1', version: 1 })
+    expect(active).toBe(true)
+    expect(other).toBe(false)
+    // Once the run has ended, the admission is not active any more.
+    expect(admissionIsActive(home, args.admission.id)).toBe(false)
+    expect(recordOf(home, 'H-1')).not.toHaveProperty('admission')
+  })
+
+  it('ST-93/AC-2: each admission has an ID of its own', async () => {
+    const home = await homeWith(APPROVALS)
+    const ids = []
+    const t = turn(home, { execute: async (args) => { ids.push(args.admission.id); return pushedFor(home, args) }, newId: undefined })
+    await t()
+    await t()
+    expect(ids).toHaveLength(2)
+    expect(new Set(ids).size).toBe(2)
+    expect(ids.every((id) => /^adm-[0-9a-f-]{36}$/.test(id))).toBe(true)
+  })
+
+  it('ST-93/AC-2: a failed admission write starts no coding run, leaves the record pending and blocks coding with an actionable reason', async () => {
+    const home = await homeWith(APPROVALS)
+    const before = bytes(home)
+    blockWrites(home)
+    const t = turn(home)
+    const result = await t()
+    unblockWrites(home)
+    expect(result.status).toBe('blocked')
+    expect(result.reason).toContain('no branch was claimed and no model was started')
+    expect(result.reason).toContain(handoffsPath(home))
+    expect(result.reason).toContain('restarted')
+    expect(t.exec).not.toHaveBeenCalled()
+    expect(t.pub).not.toHaveBeenCalled()
+    expect(bytes(home)).toBe(before)
+  })
+
+  it('ST-93/AC-2: a handoff the records show as admitted, with no coding of this process running, blocks the turn before it selects anything', async () => {
+    const home = await homeWith(APPROVALS)
+    const record = recordOf(home, 'H-1')
+    writeHandoffs(home, records(home).map((h) => (h.id !== 'H-1' ? h : {
+      ...record, status: 'admitted', admission: { id: 'adm-old', handoffId: 'H-1', version: 1, repo: OTHER, branch: 'handoff/H-1-b-md', admittedAt: '2026-11-10T10:00:00.000Z' },
+    })))
+    const select = vi.fn(selectHandoff)
+    const t = turn(home, { select })
+    expect(await t()).toMatchObject({ status: 'blocked', handoffId: 'H-1', reason: expect.stringContaining('restarted') })
+    expect(select).not.toHaveBeenCalled()
+    expect(t.exec).not.toHaveBeenCalled()
+  })
+
+  it('ST-93/AC-2: a handoff whose approval changed between selection and admission is not admitted, and the newer version is what a later turn codes', async () => {
+    const home = await homeWith(APPROVALS)
+    const select = async (args) => {
+      const selected = await selectHandoff(args)
+      commitOnMain(OTHER, { 'b.md': 'bravo, changed\n' })
+      expect((await run(['reapprove', 'H-1'], home)).code).toBe(0)
+      return selected
+    }
+    const t = turn(home)
+    const result = await t({ select })
+    expect(result).toMatchObject({ status: 'not-admitted', handoffId: 'H-1', reason: expect.stringContaining('selected at version 1 and is now pending at version 2') })
+    expect(t.exec).not.toHaveBeenCalled()
+    expect(recordOf(home, 'H-1')).toMatchObject({ status: 'pending', version: 2 })
+    expect(recordOf(home, 'H-1')).not.toHaveProperty('admission')
+    await t()
+    expect(t.exec).toHaveBeenCalledWith(expect.objectContaining({ handoffId: 'H-1', version: 2 }))
+  })
+
+  it('ST-93/AC-2: a handoff withdrawn between selection and admission is not admitted', async () => {
+    const home = await homeWith(APPROVALS)
+    const select = async (args) => {
+      const selected = await selectHandoff(args)
+      expect((await run(['withdraw', 'H-1'], home)).code).toBe(0)
+      return selected
+    }
+    const t = turn(home)
+    expect(await t({ select })).toMatchObject({ status: 'not-admitted', reason: expect.stringContaining('now withdrawn') })
+    expect(t.exec).not.toHaveBeenCalled()
+  })
+})
+
+describe('ST-93/AC-3: a pushed branch is published once, and the ending is recorded', () => {
+  it('ST-93/AC-3: a published pull request completes the handoff with its pull request and head, and neither a later turn nor a restart codes it again', async () => {
+    const home = await homeWith(APPROVALS)
+    const t = turn(home)
+    const result = await t()
+    expect(result).toMatchObject({ status: 'completed', handoffId: 'H-1', branch: 'handoff/H-1-b-md', pr: { number: 12 } })
+    expect(t.pub).toHaveBeenCalledTimes(1)
+    expect(t.pub.mock.calls[0][0]).toMatchObject({ pushed: { status: 'pushed', handoffId: 'H-1', headSha: HEAD }, homedir: home })
+    expect(recordOf(home, 'H-1')).toMatchObject({
+      status: 'completed',
+      completion: { admissionId: t.exec.mock.calls[0][0].admission.id, branch: 'handoff/H-1-b-md', headSha: HEAD, pr: { number: 12, url: 'https://github.com/acme/widgets/pull/12' }, draft: false },
+    })
+    expect(recordOf(home, 'H-1')).not.toHaveProperty('admission')
+    const before = bytes(home)
+    expect(interruptAdmissions({ homedir: home })).toEqual([])
+    expect(bytes(home)).toBe(before)
+    await t()
+    await t()
+    await t()
+    expect(t.exec.mock.calls.map(([args]) => args.handoffId)).toEqual(['H-1', 'H-2', 'H-3'])
+  })
+
+  const STOPS = {
+    'publication refused': {
+      publish: async () => ({ status: 'head-moved', recoverable: true, reason: 'the branch moved' }),
+      stop: { outcome: 'head-moved' },
+      reason: 'the branch was pushed, but its pull request was not opened (head-moved): the branch moved',
+    },
+    'publication threw': {
+      publish: async () => { throw new Error('GitHub went away') },
+      stop: { outcome: 'publish-failed' },
+      reason: 'GitHub went away',
+    },
+    'publication reported success with no pull request': {
+      publish: async () => ({ status: 'published', pr: null }),
+      stop: { outcome: 'no-pull-request' },
+      reason: 'publication reported success with no pull request',
+    },
+  }
+  it.each(Object.keys(STOPS))('ST-93/AC-3: when %s, the handoff is stopped with the branch and head it pushed, and is not coded or published again', async (name) => {
+    const { publish, stop, reason } = STOPS[name]
+    const home = await homeWith(APPROVALS)
+    const t = turn(home, { publish })
+    const result = await t()
+    expect(result).toMatchObject({ status: 'stopped', handoffId: 'H-1', branch: 'handoff/H-1-b-md', pr: null })
+    expect(result.reason).toContain(reason)
+    expect(recordOf(home, 'H-1')).toMatchObject({
+      status: 'stopped', stop: { admissionId: expect.any(String), at: expect.any(String), branch: 'handoff/H-1-b-md', headSha: HEAD, pr: null, retained: null, ...stop },
+    })
+    expect(recordOf(home, 'H-1').stop.reason).toContain(reason)
+    expect(recordOf(home, 'H-1')).not.toHaveProperty('admission')
+    await t()
+    await t()
+    expect(t.exec.mock.calls.map(([args]) => args.handoffId)).toEqual(['H-1', 'H-2', 'H-3'])
+    expect(t.pub).toHaveBeenCalledTimes(3)
+  })
+
+  const FAILED = {
+    'the session failed': (home, args) => refusal(home, args, 'session-failed', { branch: 'handoff/H-1-b-md', outcome: 'timed-out', reason: 'the session ran out of time', retained: { repoDir: '/owned/acme/gadgets', worktree: '/tmp/steward-handoff-x/tree', branch: 'handoff/H-1-b-md' } }),
+    'nothing was committed': (home, args) => refusal(home, args, 'nothing-committed', { branch: 'handoff/H-1-b-md' }),
+    'the branch was pushed with no description': (home, args) => refusal(home, args, 'pr-block-invalid', { branch: 'handoff/H-1-b-md', headSha: HEAD, retained: { repoDir: '/owned/acme/gadgets', branch: 'handoff/H-1-b-md' } }),
+    'the claim failed': (home, args) => refusal(home, args, 'claim-failed', { branch: 'handoff/H-1-b-md' }),
+  }
+  it.each(Object.keys(FAILED))('ST-93/AC-3: when %s, the handoff is stopped with what is known, nothing is published and nothing is retried', async (name) => {
+    const home = await homeWith(APPROVALS)
+    const t = turn(home, { execute: async (args) => (args.handoffId === 'H-1' ? FAILED[name](home, args) : pushedFor(home, args)) })
+    const result = await t()
+    const known = FAILED[name](home, { handoffId: 'H-1', version: 1 })
+    expect(result).toMatchObject({ status: 'stopped', outcome: known.status })
+    const { stop } = recordOf(home, 'H-1')
+    expect(recordOf(home, 'H-1').status).toBe('stopped')
+    expect(stop).toMatchObject({ outcome: known.status, branch: 'handoff/H-1-b-md', headSha: known.headSha ?? null, retained: known.retained ?? null, pr: null })
+    expect(stop.reason).toContain(known.status)
+    expect(t.pub).not.toHaveBeenCalled()
+    await t()
+    expect(t.exec.mock.calls.map(([args]) => args.handoffId)).toEqual(['H-1', 'H-2'])
+  })
+
+  it('ST-93/AC-3: what a failed run reports that the record cannot hold is left out, so the file stays readable', async () => {
+    const home = await homeWith(APPROVALS)
+    const t = turn(home, {
+      execute: async (args) => refusal(home, args, 'push-failed', { branch: '', headSha: 'not-a-sha', retained: { worktree: '/tmp/x' }, reason: undefined }),
+    })
+    expect(await t()).toMatchObject({ status: 'stopped', handoffId: 'H-1', branch: 'handoff/H-1-b-md', retained: null })
+    expect(readHandoffs(handoffsPath(home)).handoffs[0]).toMatchObject({
+      status: 'stopped', stop: { outcome: 'push-failed', branch: 'handoff/H-1-b-md', headSha: null, retained: null, reason: 'push-failed' },
+    })
+  })
+
+  it('ST-93/AC-3: a coding run that throws, with the work it kept, stops the handoff with that work named', async () => {
+    const home = await homeWith(APPROVALS)
+    const kept = { repoDir: '/owned/acme/gadgets', worktree: '/tmp/steward-handoff-x/tree', branch: 'handoff/H-1-b-md' }
+    const t = turn(home, { execute: async () => { throw Object.assign(new Error('clean-up failed'), { retained: kept }) } })
+    expect(await t()).toMatchObject({ status: 'stopped', outcome: 'threw', retained: kept })
+    expect(recordOf(home, 'H-1').stop).toMatchObject({ outcome: 'threw', retained: kept, branch: 'handoff/H-1-b-md', headSha: null, pr: null })
+    expect(recordOf(home, 'H-1').stop.reason).toContain('clean-up failed')
+  })
+
+  it('ST-93/AC-3: a record of the ending that cannot be written blocks coding and leaves the handoff admitted', async () => {
+    const home = await homeWith(APPROVALS)
+    const t = turn(home, { publish: async () => { blockWrites(home); return published() } })
+    const result = await t()
+    unblockWrites(home)
+    expect(result.status).toBe('blocked')
+    expect(result.reason).toContain('ended as completed')
+    expect(result.reason).toContain('pull request #12')
+    expect(result.reason).toContain('marked interrupted when the coordinator is restarted')
+    expect(recordOf(home, 'H-1').status).toBe('admitted')
+    // The next turn does not select another handoff behind it.
+    const select = vi.fn(selectHandoff)
+    expect((await t({ select })).status).toBe('blocked')
+    expect(select).not.toHaveBeenCalled()
+    expect(t.exec).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('ST-93/AC-4: an admission left by the previous coordinator is interrupted, not run again', () => {
+  it('ST-93/AC-4: a handoff admitted when the coordinator ended becomes interrupted, with what is known, and nothing else is touched or started', async () => {
+    const home = await homeWith(APPROVALS)
+    // A turn whose coding run never returns, as when the coordinator is killed during it.
+    const hung = turn(home, { execute: () => new Promise(() => {}) })
+    void hung()
+    await vi.waitFor(() => expect(recordOf(home, 'H-1').status).toBe('admitted'), { timeout: 30_000 })
+    const admitted = recordOf(home, 'H-1')
+    const tree = () => readdirSync(home, { recursive: true }).filter((f) => !f.includes('handoffs.json')).sort()
+    const before = tree()
+
+    const moved = interruptAdmissions({ homedir: home, now })
+    expect(moved).toEqual([admitted])
+    const { admission, ...kept } = admitted
+    expect(recordOf(home, 'H-1')).toEqual({
+      ...kept,
+      status: 'interrupted',
+      stop: {
+        admissionId: admission.id, at: expect.any(String), outcome: 'interrupted', reason: expect.stringContaining('ended before it recorded how the coding ended'),
+        branch: 'handoff/H-1-b-md', headSha: null, pr: null, retained: null,
+      },
+    })
+    expect(readHandoffs(handoffsPath(home)).handoffs[0].status).toBe('interrupted')
+    expect(recordOf(home, 'H-2').status).toBe('pending')
+    expect(tree()).toEqual(before)
+
+    // The next coordinator codes the next handoff and never the interrupted one.
+    const t = turn(home)
+    await t()
+    await t()
+    await t()
+    expect(t.exec.mock.calls.map(([args]) => args.handoffId)).toEqual(['H-2', 'H-3'])
+    expect(recordOf(home, 'H-1').status).toBe('interrupted')
+    expect(interruptAdmissions({ homedir: home, now })).toEqual([])
+  })
+
+  it('ST-93/AC-4: with nothing admitted, interrupting writes nothing, and a file that cannot be read throws', async () => {
+    const home = await homeWith(APPROVALS)
+    const before = bytes(home)
+    expect(interruptAdmissions({ homedir: home })).toEqual([])
+    expect(bytes(home)).toBe(before)
+    const empty = fresh('home')
+    expect(interruptAdmissions({ homedir: empty })).toEqual([])
+    writeFileSync(handoffsPath(home), '{ not json')
+    expect(() => interruptAdmissions({ homedir: home })).toThrow('is malformed')
+  })
+
+  it('ST-93/AC-4: an admission whose update cannot be written leaves the file as it was', async () => {
+    const home = await homeWith(APPROVALS)
+    const hung = turn(home, { execute: () => new Promise(() => {}) })
+    void hung()
+    await vi.waitFor(() => expect(recordOf(home, 'H-1').status).toBe('admitted'), { timeout: 30_000 })
+    const before = bytes(home)
+    blockWrites(home)
+    expect(() => interruptAdmissions({ homedir: home })).toThrow()
+    unblockWrites(home)
+    expect(bytes(home)).toBe(before)
+  })
+})
+
+describe('ST-93/AC-5: a refusal before any claim or model is resolved after the admission is cleared', () => {
+  it.each(['over-usage', 'usage-unknown', 'source-unavailable'])('ST-93/AC-5: a retryable %s refusal returns the handoff to pending, and a later turn codes it', async (status) => {
+    const home = await homeWith(APPROVALS)
+    const original = recordOf(home, 'H-1')
+    let atResolution
+    const t = turn(home, { execute: async (args) => (args.handoffId === 'H-1' && !atResolution ? refusal(home, args, status, { retryable: true }) : pushedFor(home, args)) })
+    const result = await t()
+    atResolution = recordOf(home, 'H-1')
+    expect(result).toMatchObject({ status: 'retry-later', handoffId: 'H-1', reason: expect.stringContaining(status) })
+    // Cleared by the time the turn resolved: back to exactly what was approved.
+    expect(atResolution).toEqual(original)
+    expect(admissionIsActive(home, t.exec.mock.calls[0][0].admission.id)).toBe(false)
+    expect(t.pub).not.toHaveBeenCalled()
+    // A later turn reconsiders it, as the oldest.
+    expect((await t()).status).toBe('completed')
+    expect(t.exec.mock.calls.map(([args]) => args.handoffId)).toEqual(['H-1', 'H-1'])
+  })
+
+  it('ST-93/AC-5: a changed-content refusal holds the handoff with its reason, and the source matching the approval again does not release it', async () => {
+    const home = await homeWith(APPROVALS)
+    const reason = 'file b.md of acme/gadgets no longer has the text approved as version 1 (read at main abc123def456)'
+    let refused = false
+    const t = turn(home, {
+      execute: async (args) => {
+        if (args.handoffId !== 'H-1' || refused) return pushedFor(home, args)
+        refused = true
+        return refusal(home, args, 'unit-changed', { reason, retryable: false })
+      },
+    })
+    const result = await t()
+    expect(result).toMatchObject({ status: 'held', handoffId: 'H-1', reason })
+    expect(recordOf(home, 'H-1')).toMatchObject({ status: 'held', version: 1, hold: { reason, heldAt: expect.any(String) } })
+    expect(recordOf(home, 'H-1')).not.toHaveProperty('admission')
+    // The source changes and then returns to the approved text.
+    commitOnMain(OTHER, { 'b.md': 'changed\n' })
+    commitOnMain(OTHER, { 'b.md': 'bravo\n' })
+    const next = await t()
+    expect(next).toMatchObject({ status: 'completed', handoffId: 'H-2' })
+    expect(recordOf(home, 'H-1').status).toBe('held')
+    await t()
+    expect(await t()).toMatchObject({ status: 'none', skipped: [expect.objectContaining({ id: 'H-1', state: 'held' })] })
+    expect(t.exec.mock.calls.map(([args]) => args.handoffId)).toEqual(['H-1', 'H-2', 'H-3'])
+    // Only the crew's reapproval releases it.
+    expect((await run(['reapprove', 'H-1'], home)).code).toBe(0)
+    expect(recordOf(home, 'H-1')).toMatchObject({ status: 'pending', version: 2 })
+    expect(recordOf(home, 'H-1')).not.toHaveProperty('hold')
+    expect(await t()).toMatchObject({ status: 'completed', handoffId: 'H-1' })
+  })
+
+  it('ST-93/AC-5: a refusal that is not retryable stops the handoff for the crew instead of retrying it', async () => {
+    const home = await homeWith(APPROVALS)
+    const t = turn(home, { execute: async (args) => (args.handoffId === 'H-1' ? refusal(home, args, 'no-git-identity', { missing: ['user.name'] }) : pushedFor(home, args)) })
+    expect(await t()).toMatchObject({ status: 'stopped', handoffId: 'H-1', outcome: 'no-git-identity' })
+    expect(recordOf(home, 'H-1')).toMatchObject({ status: 'stopped', stop: { outcome: 'no-git-identity', branch: 'handoff/H-1-b-md' } })
+    await t()
+    expect(t.exec.mock.calls.map(([args]) => args.handoffId)).toEqual(['H-1', 'H-2'])
+  })
+
+  it.each([['over-usage', 'retry-later'], ['unit-changed', 'held']])('ST-93/AC-5: when clearing the admission after a %s refusal fails, coding is blocked, the unresolved record is named, and nothing is dispatched again', async (status, ending) => {
+    const home = await homeWith(APPROVALS)
+    const t = turn(home, { execute: async (args) => { blockWrites(home); return refusal(home, args, status, { retryable: status === 'over-usage' }) } })
+    const result = await t()
+    unblockWrites(home)
+    expect(result.status).toBe('blocked')
+    expect(result.handoffId).toBe('H-1')
+    expect(result.reason).toContain(`ended as ${ending}`)
+    expect(result.reason).toContain('stays admitted')
+    expect(recordOf(home, 'H-1').status).toBe('admitted')
+    const select = vi.fn(selectHandoff)
+    expect((await t({ select })).status).toBe('blocked')
+    expect(select).not.toHaveBeenCalled()
+    expect(t.exec).toHaveBeenCalledTimes(1)
+    // The next start finds it admitted, and interrupts it.
+    expect(interruptAdmissions({ homedir: home, now })).toHaveLength(1)
+    expect(recordOf(home, 'H-1').status).toBe('interrupted')
+  })
+})
+
+describe('ST-93/AC-6: stopped work stays inspectable from the records alone', () => {
+  const stoppedRecord = (extra = {}) => handoffRecord({
+    order: 1, repo: REPO, status: 'stopped',
+    stop: {
+      admissionId: 'adm-1', at: '2026-11-10T13:00:00.000Z', outcome: 'session-failed', reason: 'session-failed (the session timed-out): ran out of time',
+      branch: 'handoff/H-1-docs-unit-1-md', headSha: HEAD, pr: null, retained: { repoDir: '/owned/acme/widgets', worktree: '/tmp/steward-handoff-x/tree', branch: 'handoff/H-1-docs-unit-1-md' },
+    },
+    ...extra,
+  })
+
+  it('ST-93/AC-6: handoff list shows each coded handoff with its reason, branch, pull request, kept work and next action, and needs no coordinator', async () => {
+    const home = fresh('home')
+    writeHandoffs(home, [
+      stoppedRecord(),
+      handoffRecord({
+        order: 2, repo: OTHER, status: 'completed',
+        completion: { admissionId: 'adm-2', at: '2026-11-10T14:00:00.000Z', branch: 'handoff/H-2-docs-unit-2-md', headSha: HEAD, pr: { number: 31, url: 'https://github.com/acme/gadgets/pull/31' }, draft: true },
+      }),
+      handoffRecord({
+        order: 3, repo: REPO, status: 'interrupted',
+        stop: { admissionId: 'adm-3', at: '2026-11-10T15:00:00.000Z', outcome: 'interrupted', reason: 'the coordinator ended', branch: 'handoff/H-3-docs-unit-3-md', headSha: null, pr: null, retained: null },
+      }),
+      handoffRecord({
+        order: 4, repo: REPO, status: 'admitted',
+        admission: { id: 'adm-4', handoffId: 'H-4', version: 1, repo: REPO, branch: 'handoff/H-4-docs-unit-4-md', admittedAt: '2026-11-10T16:00:00.000Z' },
+      }),
+    ])
+    const result = await run(['list'], home)
+    expect(result.code).toBe(0)
+    const text = result.out
+    expect(text).toContain('H-1  stopped  v1  acme/widgets  file docs/unit-1.md')
+    expect(text).toContain('reason: session-failed (the session timed-out): ran out of time (2026-11-10T13:00:00.000Z)')
+    expect(text).toContain('branch: handoff/H-1-docs-unit-1-md')
+    expect(text).toContain(`head: ${HEAD}`)
+    expect(text).toContain('work kept: worktree /tmp/steward-handoff-x/tree (branch handoff/H-1-docs-unit-1-md) in /owned/acme/widgets')
+    expect(text).toContain('next: Inspect handoff/H-1-docs-unit-1-md on acme/widgets, and whether a pull request was opened from it, and the work kept at worktree')
+    expect(text).toContain('refuses its source while it is stopped')
+    expect(text).toContain('H-2  completed  v1  acme/gadgets  file docs/unit-2.md')
+    expect(text).toContain('result: its pull request is open as a draft (2026-11-10T14:00:00.000Z)')
+    expect(text).toContain('pull request: #31 https://github.com/acme/gadgets/pull/31')
+    expect(text).toContain('H-3  interrupted  v1  acme/widgets')
+    expect(text).toContain('git worktree list')
+    expect(text).toContain('H-4  admitted  v1  acme/widgets')
+    expect(text).toContain('reason: coding under admission adm-4 (2026-11-10T16:00:00.000Z)')
+    expect(text).toContain('steward coordinator start')
+    const shown = await run(['show', 'H-1'], home)
+    expect(shown.out).toContain('reason: session-failed')
+    expect(shown.out).toContain('next: Inspect')
+  })
+
+  it('ST-93/AC-6: add, reapprove and withdraw refuse a stopped or interrupted handoff, as they do an admitted one', async () => {
+    const home = fresh('home')
+    writeHandoffs(home, [stoppedRecord(), stoppedRecord({ order: 2, status: 'interrupted', file: 'docs/unit-2.md' })])
+    const before = bytes(home)
+    for (const id of ['H-1', 'H-2']) {
+      expect((await run(['reapprove', id], home)).code).toBe(1)
+      expect((await run(['withdraw', id], home)).code).toBe(1)
+    }
+    const add = await run(['add', '--repo', REPO, '--file', 'docs/unit-1.md'], home)
+    expect(add.code).toBe(1)
+    expect(add.err).toContain('is already stopped as H-1')
+    expect(bytes(home)).toBe(before)
+  })
+})
+
+describe('ST-93: the records of coding are validated', () => {
+  const read = (home, handoffs) => { writeHandoffs(home, handoffs); return readHandoffs(handoffsPath(home)) }
+  const admission = (over = {}) => ({ id: 'adm-1', handoffId: 'H-1', version: 1, repo: REPO, branch: 'handoff/H-1-x', admittedAt: '2026-11-10T10:00:00.000Z', ...over })
+  const stop = (over = {}) => ({ admissionId: null, at: '2026-11-10T10:00:00.000Z', outcome: 'interrupted', reason: 'why', branch: null, headSha: null, pr: null, retained: null, ...over })
+
+  it('ST-93: an admitted or completed handoff written before ST-93 has no admission or completion, and is still valid', () => {
+    const home = fresh('home')
+    expect(read(home, [handoffRecord({ status: 'admitted' }), handoffRecord({ order: 2, status: 'completed' })]).handoffs).toHaveLength(2)
+  })
+
+  it.each([
+    ['an admission naming another handoff', { status: 'admitted', admission: admission({ handoffId: 'H-9' }) }, 'must name this handoff'],
+    ['an admission naming another version', { status: 'admitted', admission: admission({ version: 2 }) }, 'must name this handoff'],
+    ['an admission on a pending handoff', { admission: admission() }, 'cannot have `admission`'],
+    ['a stopped handoff with no stop', { status: 'stopped' }, 'must say why and what is known'],
+    ['a stop on a pending handoff', { stop: stop() }, 'cannot have `stop`'],
+    ['a stop with an unknown key', { status: 'stopped', stop: { ...stop(), extra: 1 } }, 'stop must be'],
+    ['a stop with a pull request that is no pull request', { status: 'stopped', stop: stop({ pr: { number: 0, url: 'u' } }) }, 'stop must be'],
+    ['a stop with a head that is no SHA', { status: 'interrupted', stop: stop({ headSha: 'abc' }) }, 'stop must be'],
+    ['a stop whose kept work names no folder', { status: 'stopped', stop: stop({ retained: { branch: 'b' } }) }, 'stop must be'],
+    ['a completion on a stopped handoff', { status: 'stopped', stop: stop(), completion: {} }, 'cannot have `completion`'],
+    ['a completion with no pull request', { status: 'completed', completion: { admissionId: null, at: '2026-11-10T10:00:00.000Z', branch: 'b', headSha: HEAD, pr: null, draft: false } }, 'completion must be'],
+  ])('ST-93: %s is refused', (_name, extra, message) => {
+    const home = fresh('home')
+    expect(() => read(home, [handoffRecord(extra)])).toThrow(message)
+  })
+
+  it('ST-93: a stopped or interrupted handoff is valid with a stop, and a completed one with a completion', () => {
+    const home = fresh('home')
+    const records = read(home, [
+      handoffRecord({ status: 'stopped', stop: stop({ pr: { number: 3, url: 'u' }, retained: { repoDir: '/r', branch: 'b' } }) }),
+      handoffRecord({ order: 2, status: 'interrupted', stop: stop() }),
+      handoffRecord({ order: 3, status: 'completed', completion: { admissionId: 'adm-3', at: '2026-11-10T10:00:00.000Z', branch: 'b', headSha: HEAD, pr: { number: 3, url: 'u' }, draft: true } }),
+      handoffRecord({ order: 4, status: 'admitted', admission: admission({ handoffId: 'H-4' }) }),
+    ]).handoffs
+    expect(records.map((h) => h.status)).toEqual(['stopped', 'interrupted', 'completed', 'admitted'])
+  })
+})

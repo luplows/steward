@@ -18,15 +18,21 @@
  * order they were approved, which `reapprove` keeps. None of these commands starts a model or a
  * coder, and none writes to GitHub: an Issue is only read.
  *
- * A handoff's status is one of `pending`, `held`, `admitted`, `completed` and `withdrawn`. This
- * module sets `pending` (by `add` and `reapprove`), `withdrawn`, and `held` (by `selectHandoff`,
- * ST-90, when a unit's content differs from what was approved), and refuses what it must for the
- * other two; the later stories that admit and complete a handoff set `admitted` and `completed`.
+ * A handoff's status is one of `pending`, `held`, `admitted`, `completed`, `withdrawn`, `stopped`
+ * and `interrupted`. This module sets `pending` (by `add` and `reapprove`), `withdrawn`, and `held`
+ * (by `selectHandoff`, ST-90, when a unit's content differs from what was approved), and refuses
+ * what it must for the rest. The coordinator (`handoff-coding.mjs`, ST-93) sets `admitted` when it
+ * admits a handoff to be coded, `completed` once the pull request is open, `stopped` when coding
+ * or publication did not finish and `interrupted` when the coordinator ended during it; it can
+ * also return a handoff to `pending` or `held`. `stopped` and `interrupted` handoffs are not coded
+ * again automatically, and no command here releases one: `add` refuses their source, and
+ * `reapprove` and `withdraw` refuse them as they refuse `admitted` and `completed` ones.
  *
  * `selectHandoff` is the operation the coordinator (ST-93) calls to choose the next unit to code:
  * the oldest pending handoff that is eligible now. It admits nothing, claims no branch and starts
  * no model, because selection alone is not a reservation; it reads, and writes only a hold. `list`
- * runs the same checks to report, and writes no record.
+ * runs the same checks to report, and writes no record. For a handoff the coordinator has taken,
+ * `list` and `show` also say what it knows of the result and what the crew does next.
  *
  * The threat model is one member of the crew running one command at a time: no other process and
  * no other writer of the file.
@@ -47,12 +53,22 @@ import { readStateFile, writeStateFile } from './state-file.mjs'
 import { issueText, readUnit } from './unit.mjs'
 import { stateDir } from './user-config.mjs'
 
-export const STATUSES = ['pending', 'held', 'admitted', 'completed', 'withdrawn']
+export const STATUSES = ['pending', 'held', 'admitted', 'completed', 'withdrawn', 'stopped', 'interrupted']
 /** The statuses in which a handoff may still be selected: `add` and `reapprove` work on these. */
 const OPEN_STATUSES = ['pending', 'held']
 /** The statuses whose record may carry a `hold`: why selection held it. `withdraw` keeps it. */
 const HOLD_STATUSES = ['held', 'withdrawn']
 const HOLD_KEYS = ['reason', 'heldAt']
+/**
+ * What the coordinator records of coding (ST-93), each only on the statuses that name it: the
+ * `admission` of an `admitted` handoff, the `completion` of a `completed` one, and the `stop` of a
+ * `stopped` or `interrupted` one, which must have it. A record written before ST-93 may be
+ * `admitted` or `completed` without them.
+ */
+const ADMISSION_KEYS = ['id', 'handoffId', 'version', 'repo', 'branch', 'admittedAt']
+const COMPLETION_KEYS = ['admissionId', 'at', 'branch', 'headSha', 'pr', 'draft']
+const STOP_KEYS = ['admissionId', 'at', 'outcome', 'reason', 'branch', 'headSha', 'pr', 'retained']
+const EXTRA_STATUSES = { hold: HOLD_STATUSES, admission: ['admitted'], completion: ['completed'], stop: ['stopped', 'interrupted'] }
 const RECORD_KEYS = ['id', 'order', 'repo', 'source', 'status', 'version', 'approvedAt', 'text', 'provenance', 'history']
 const HISTORY_KEYS = ['version', 'approvedAt', 'text', 'provenance']
 const COMMIT_RE = /^[0-9a-f]{40}$/
@@ -110,13 +126,50 @@ function provenanceProblem(kind, source, provenance, text) {
   return null
 }
 
+const isSha = (value) => typeof value === 'string' && COMMIT_RE.test(value)
+const isText = (value) => typeof value === 'string' && value !== ''
+const isPr = (pr) => sameKeys(pr, ['number', 'url']) && Number.isSafeInteger(pr.number) && pr.number > 0 && isText(pr.url)
+
+/** Why `record.admission` is not the admission of `record` (ST-93), or null. */
+function admissionProblem({ id, repo, version, admission }) {
+  if (!sameKeys(admission, ADMISSION_KEYS) || ![admission.id, admission.branch].every(isText) || !isTimestamp(admission.admittedAt)) {
+    return `must be ${ADMISSION_KEYS.join(', ')}: an ID, the handoff, its version and repository, the branch and the time`
+  }
+  if (admission.handoffId !== id || admission.version !== version || admission.repo !== repo) return 'must name this handoff, its version and its repository'
+  return null
+}
+
+/** Why `record.completion` is not what the coordinator writes for an open pull request, or null. */
+function completionProblem({ completion }) {
+  if (!sameKeys(completion, COMPLETION_KEYS) || !(completion.admissionId === null || isText(completion.admissionId))
+    || !isTimestamp(completion.at) || !isText(completion.branch) || !isSha(completion.headSha) || !isPr(completion.pr) || typeof completion.draft !== 'boolean') {
+    return `must be ${COMPLETION_KEYS.join(', ')}: the admission, when, the branch and head, the pull request and whether it is a draft`
+  }
+  return null
+}
+
+/** Why `record.stop` is not what the coordinator writes when it stops a handoff, or null. */
+function stopProblem({ stop }) {
+  const retained = stop?.retained
+  const retainedOk = retained === null || (isObject(retained) && isText(retained.repoDir)
+    && Object.keys(retained).every((key) => ['repoDir', 'branch', 'worktree'].includes(key) && isText(retained[key])))
+  if (!sameKeys(stop, STOP_KEYS) || !(stop.admissionId === null || isText(stop.admissionId)) || !isTimestamp(stop.at)
+    || !isText(stop.outcome) || !isText(stop.reason) || !(stop.branch === null || isText(stop.branch))
+    || !(stop.headSha === null || isSha(stop.headSha)) || !(stop.pr === null || isPr(stop.pr)) || !retainedOk) {
+    return `must be ${STOP_KEYS.join(', ')}: the admission, when, the outcome and why, and the branch, head, pull request and kept work known`
+  }
+  return null
+}
+
 /**
  * The records in `file`: `{ handoffs, nextOrder }`, an empty list and 1 when there is no file.
- * Throws, naming the file and what is wrong, on anything else, so that a file steward cannot
- * trust is never read as an approval. Validated: the exact keys; the ID, which is `H-` and the
- * approval order; that the orders rise strictly through the file and stay below `nextOrder`; the
- * status; the `hold`, which a record has only once selection has held it (ST-90) and only while it
- * is held or withdrawn; the source and each version's provenance; and that the versions run 1 to the current one.
+ * Throws, naming the file and what is wrong, on anything else, so that a file steward cannot trust
+ * is never read as an approval. Validated: the exact keys; the ID, which is `H-` and the approval
+ * order; that the orders rise strictly through the file and stay below `nextOrder`; the status; the
+ * `hold`, which a record has only once selection has held it (ST-90) and only while it is held or
+ * withdrawn; the `admission`, `completion` and `stop` of ST-93, each only on the statuses that name
+ * it, with `stop` required on a `stopped` or `interrupted` handoff; the source and each version's
+ * provenance; and that the versions run 1 to the current one.
  */
 export function readHandoffs(file) {
   const bad = (what) => new Error(`${file} is malformed: ${what}. Fix or remove it; until then no handoff is approved, and no handoff command changes it.`)
@@ -135,9 +188,9 @@ export function readHandoffs(file) {
   const open = new Set()
   data.handoffs.forEach((record, i) => {
     const at = `record ${i + 1}`
-    const hasHold = isObject(record) && 'hold' in record
-    if (!sameKeys(record, hasHold ? [...RECORD_KEYS, 'hold'] : RECORD_KEYS)) {
-      throw bad(`${at} must have exactly ${RECORD_KEYS.join(', ')}, and \`hold\` only once selection has held it`)
+    const extras = isObject(record) ? Object.keys(EXTRA_STATUSES).filter((key) => key in record) : []
+    if (!sameKeys(record, [...RECORD_KEYS, ...extras])) {
+      throw bad(`${at} must have exactly ${RECORD_KEYS.join(', ')}, and \`hold\`, \`admission\`, \`completion\` or \`stop\` only as steward wrote them`)
     }
     const idMatch = typeof record.id === 'string' ? ID_RE.exec(record.id) : null
     if (!Number.isSafeInteger(record.order) || record.order < 1 || idMatch === null || Number(idMatch[1]) !== record.order) {
@@ -148,11 +201,23 @@ export function readHandoffs(file) {
     previous = record.order
     if (typeof record.repo !== 'string' || !REPO_RE.test(record.repo)) throw bad(`${at}'s repo is not owner/name`)
     if (!STATUSES.includes(record.status)) throw bad(`${at}'s status must be one of ${STATUSES.join(', ')}`)
-    if (hasHold) {
+    if (extras.includes('hold')) {
       if (!HOLD_STATUSES.includes(record.status)) throw bad(`${at} is ${record.status} and cannot have a hold, which only a held or withdrawn handoff keeps`)
       if (!sameKeys(record.hold, HOLD_KEYS) || typeof record.hold.reason !== 'string' || record.hold.reason === '' || !isTimestamp(record.hold.heldAt)) {
         throw bad(`${at}'s hold must be ${HOLD_KEYS.join(' and ')}: a reason, and the time it was held`)
       }
+    }
+    const coding = [['admission', admissionProblem], ['completion', completionProblem], ['stop', stopProblem]]
+    for (const [key, problem] of coding) {
+      if (!extras.includes(key)) continue
+      if (!EXTRA_STATUSES[key].includes(record.status)) {
+        throw bad(`${at} is ${record.status} and cannot have \`${key}\`, which only a ${EXTRA_STATUSES[key].join(' or ')} handoff has`)
+      }
+      const why = problem(record)
+      if (why !== null) throw bad(`${at}'s ${key} ${why}`)
+    }
+    if (['stopped', 'interrupted'].includes(record.status) && !extras.includes('stop')) {
+      throw bad(`${at} is ${record.status} and must say why and what is known, in \`stop\``)
     }
     const { source } = record
     if (sameKeys(source, ['kind', 'path']) && source.kind === 'file') {
@@ -241,6 +306,81 @@ const unknown = (id, handoffs) => {
 }
 
 const line = (h) => `${h.id}  ${h.status}  v${h.version}  ${h.repo}  ${describeSource(h.source)}`
+
+const STATES = { pending: 'queued', admitted: 'running', completed: 'completed', stopped: 'stopped', interrupted: 'stopped', held: 'held' }
+
+/**
+ * Where the coding of `h` stands for the crew (ST-93, AC-6): `queued` (pending), `running`
+ * (admitted),
+ * `completed`, `stopped` (stopped or interrupted) or `held`, and null for a withdrawn handoff.
+ */
+export const codingState = (h) => STATES[h.status] ?? null
+
+/** Where the work a stop kept is, in words: a worktree, or a branch, in the owned checkout. */
+const keptWhere = (retained) => (retained === null ? null
+  : `${retained.worktree === undefined ? `branch ${retained.branch}` : `worktree ${retained.worktree}${retained.branch === undefined ? '' : ` (branch ${retained.branch})`}`} in ${retained.repoDir}`)
+
+/** What the crew does next about a stopped or interrupted `h`: inspect what its record knows. */
+function stoppedAction(h) {
+  const { branch, pr, retained } = h.stop
+  const kept = keptWhere(retained)
+  const leftover = h.status === 'interrupted' ? "; a worktree the run left is listed by `git worktree list` in the project's owned checkout" : ''
+  return `Inspect ${branch === null ? `${h.repo}'s branches` : `${branch} on ${h.repo}`}, ${pr === null ? 'and whether a pull request was opened from it' : `pull request #${pr.number}`}`
+    + `${kept === null ? '' : `, and the work kept at ${kept}`}${leftover}. It is not coded again automatically, and \`steward handoff add\` refuses its source while it is ${h.status}.`
+}
+
+/**
+ * What the crew is told of the handoff `h` (ST-93, AC-6), shown by `list` and `show` and, as JSON,
+ * by `steward coordinator status`: `{ id, repo, unit, version, status, state, reason, at, branch,
+ * headSha, pr, kept, nextAction }`, each of the last seven null when the record does not know it.
+ */
+export function codingReport(h) {
+  const none = { reason: null, at: null, branch: null, headSha: null, pr: null, kept: null, nextAction: null }
+  const base = { id: h.id, repo: h.repo, unit: describeSource(h.source), version: h.version, status: h.status, state: codingState(h) }
+  if (h.status === 'held') {
+    return { ...base, ...none, reason: h.hold?.reason ?? 'its unit changed after it was approved', at: h.hold?.heldAt ?? null, nextAction: reapproveHint(h) }
+  }
+  if (h.status === 'admitted') {
+    const { admission } = h
+    return {
+      ...base, ...none, reason: admission === undefined ? 'admitted for coding' : `coding under admission ${admission.id}`,
+      at: admission?.admittedAt ?? null, branch: admission?.branch ?? null,
+      nextAction: 'None while the coordinator runs. If none is running, `steward coordinator start` marks it interrupted; it is not coded again automatically.',
+    }
+  }
+  if (h.status === 'completed') {
+    const { completion } = h
+    return {
+      ...base, ...none, reason: completion === undefined ? 'completed' : `its pull request is open${completion.draft ? ' as a draft' : ''}`,
+      at: completion?.at ?? null, branch: completion?.branch ?? null, headSha: completion?.headSha ?? null, pr: completion?.pr ?? null,
+      nextAction: completion === undefined ? null : `Pull request #${completion.pr.number} is open; it is reviewed and landed as any other.`,
+    }
+  }
+  if (h.status === 'stopped' || h.status === 'interrupted') {
+    const { stop } = h
+    return {
+      ...base, reason: stop.reason, at: stop.at, branch: stop.branch, headSha: stop.headSha, pr: stop.pr,
+      kept: stop.retained, nextAction: stoppedAction(h),
+    }
+  }
+  return { ...base, ...none }
+}
+
+/** The lines saying what a `codingReport` knows, as `list`, `show` and `status` give them. */
+export function reportLines(r) {
+  const kept = keptWhere(r.kept)
+  return [
+    ...(r.reason === null ? [] : [`${r.state === 'completed' ? 'result' : 'reason'}: ${r.reason}${r.at === null ? '' : ` (${r.at})`}`]),
+    ...(r.branch === null ? [] : [`branch: ${r.branch}`]),
+    ...(r.pr === null ? [] : [`pull request: #${r.pr.number} ${r.pr.url}`]),
+    ...(r.headSha === null ? [] : [`head: ${r.headSha}`]),
+    ...(kept === null ? [] : [`work kept: ${kept}`]),
+    ...(r.nextAction === null ? [] : [`next: ${r.nextAction}`]),
+  ]
+}
+
+/** The lines `list` and `show` give under a handoff the coordinator has taken. */
+const codingLines = (h) => (['admitted', 'completed', 'stopped', 'interrupted'].includes(h.status) ? reportLines(codingReport(h)) : [])
 
 function parseAdd(args) {
   const values = {}
@@ -411,7 +551,10 @@ async function list(ctx) {
     return 0
   }
   out(`Approved handoffs, oldest first (${file}):`)
-  for (const h of handoffs) out(line(h))
+  for (const h of handoffs) {
+    out(line(h))
+    for (const detail of codingLines(h)) out(`    ${detail}`)
+  }
   // Report only. A pending handoff is read as selection reads it, but no handoff record is written: a changed
   // unit is held by a selection that reaches it, not here, and an unreadable source is never held.
   const attention = []
@@ -447,6 +590,7 @@ async function show(id, { homedir, out, err }) {
   out(`  version:   ${h.version} (approved ${h.approvedAt})`)
   out(`  read at:   ${h.source.kind === 'file' ? `main ${h.provenance.commit}` : `Issue #${h.provenance.number}, title ${JSON.stringify(h.provenance.title)}, fingerprint ${h.provenance.fingerprint}`}`)
   out(`  earlier versions: ${h.history.length === 0 ? 'none' : h.history.map((e) => `v${e.version} (${e.approvedAt})`).join(', ')}`)
+  for (const detail of codingLines(h)) out(`  ${detail}`)
   out('  approved text:')
   out('--- begin approved text ---')
   out(h.text)

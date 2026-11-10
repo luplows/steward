@@ -30,6 +30,17 @@
  * of an attempt beyond the fields below, so a later scan, or a restarted coordinator, may try the
  * same head again.
  *
+ * When `coding` is given (ST-93), each pass ends with one coding turn (unless coding is blocked, as
+ * below), `coding.turn` (`codeNextHandoff`, `handoff-coding.mjs`), after the due scans, review
+ * turns and landing attempts of that pass: it admits the oldest eligible approved handoff and waits
+ * for its bounded coding and publication, so at most one coder runs at a time, and that wait delays
+ * any scan that comes due meanwhile, which runs once the turn is over. A turn that took a handoff
+ * to an ending (`completed`, `stopped` or `held`) is followed at once by a new pass, which runs a
+ * scan if one is due and then another coding turn; any other turn is followed by the wait for the
+ * next scan, so a handoff returned to pending, or a failed selection, is looked at again only at a
+ * later scan. A turn that cannot write its record (`blocked`) ends all coding until the coordinator
+ * is restarted, and reviews and landing carry on.
+ *
  * The threat model is one member of the crew, one coordinator, one automatic review or landing
  * attempt at a time, on one machine. The bounds on usage are these turns, the reviewer's own checks
  * and the pilot's bounded waits. A person sees what
@@ -54,6 +65,15 @@
  *                    raised an error, which does not say whether a landing request was sent), or
  *                    `not-attempted` when a recheck refused the candidate, and nothing was sent.
  *                    Only with `landing.attempt`
+ *   codingActive     { repo, handoffId, branch, admissionId, admittedAt } of the handoff being
+ *                    coded, or null; only with `coding`. While one is, `nextScanAt` is null
+ *   lastCoding       { repo, handoffId, status, reason?, branch?, pr?, at } of the latest coding
+ *                    turn that took a handoff, `status` being what `codeNextHandoff` resolved
+ *                    (`completed`, `stopped`, `held`, `retry-later`, `not-admitted` or `blocked`);
+ *                    only with `coding`
+ *   codingProblem    why no handoff is coded: `blocked`'s reason, which lasts until a restart, or a
+ *                    selection's failure, which lasts until a later turn selects; or null. Only
+ *                    with `coding`
  *   usage            { status, reason } of a usage refusal, until the next scan, or null
  *   recordsProblem   why the records could not be read, or null
  *   projectProblems  [{ repo, reason }]: discovery or checkout failures that stop the project's
@@ -136,9 +156,11 @@ const defaultContexts = (repo) => ({ ctx: createContext({ repo }), inspectCtx: c
  * with `getPullRequestState`), which requests it. `contexts` (the GitHub contexts for a
  * repository), `listCandidates`, `updateCheckout`, `readSettings` (of a project's owned checkout),
  * `admission` (`admitReview`), `review`, `reviewOptions`, `now` and `wait` are injectable for tests.
+ * `coding` is absent to code nothing, or `{ turn }`, `turn({ admit, report })` being a coding turn
+ * that resolves what `codeNextHandoff` resolves.
  */
 export async function scheduleReviews({
-  homedir, coordinator, intervalMinutes, landing,
+  homedir, coordinator, intervalMinutes, landing, coding,
   contexts = defaultContexts, listCandidates = listReviewCandidates, updateCheckout = updateOwnedCheckout,
   readSettings = readProjectSettings, admission = admitReview, review = reviewCandidate, reviewOptions,
   now = () => new Date(), wait = waitMs,
@@ -420,6 +442,42 @@ export async function scheduleReviews({
     }
   }
 
+  // Once a turn could not write its record, no more coding is admitted until a restart (ST-93).
+  let codingBlocked = false
+
+  /**
+   * One coding turn (ST-93): reports how it went, and resolves whether it carried a handoff to an
+   * ending (`completed`, `stopped` or `held`), after which another turn may follow at once. Any
+   * other ending waits for the next scan. A throw from the turn blocks coding, and no more.
+   */
+  const codeTurn = async () => {
+    const turnReport = (fields) => report(fields.codingActive ? { ...fields, nextScanAt: null, ...(separateLanding && { nextLandingScanAt: null }) } : fields)
+    let outcome
+    try {
+      outcome = await coding.turn({ admit: coordinator.admit, report: turnReport })
+    } catch (error) {
+      outcome = { status: 'blocked', reason: `the coding turn failed: ${error.message}` }
+    }
+    const { status, handoffId, repo, reason, branch, pr } = outcome
+    if (status === 'admission-closed') return false
+    if (status === 'none') {
+      report({ codingProblem: null })
+      return false
+    }
+    if (status === 'select-failed') {
+      report({ codingProblem: withoutCredentials(`no handoff is coded until a later scan: ${reason}`) })
+      return false
+    }
+    const lastCoding = { ...(repo && { repo, handoffId }), status, ...(reason && { reason: withoutCredentials(reason) }), ...(branch && { branch }), ...(pr && { pr }), at: now().toISOString() }
+    if (status === 'blocked') {
+      codingBlocked = true
+      report({ lastCoding, codingProblem: withoutCredentials(`no handoff is coded until the coordinator is restarted: ${reason}`) })
+      return false
+    }
+    report({ lastCoding, codingProblem: null })
+    return ['completed', 'stopped', 'held'].includes(status)
+  }
+
   // When each kind of scan is next due, in milliseconds since the epoch. Landing shares the review
   // scan unless it has an interval of its own.
   let reviewDue = -Infinity
@@ -442,6 +500,13 @@ export async function scheduleReviews({
         if (landing?.attempt !== undefined) await landTurns()
         if (!admitting()) return
         if (review) reviewDue = now().getTime() + intervalMinutes * 60_000
+      }
+      // The one coding turn of this pass, after what was due: the oldest eligible handoff, coded
+      // and published before anything else is looked at.
+      if (coding !== undefined && !codingBlocked) {
+        const carried = await codeTurn()
+        if (!admitting()) return
+        if (carried) continue
       }
       const next = separateLanding ? Math.min(reviewDue, landingDue) : reviewDue
       // A scan that came due while the turns ran is run now, after them, never beside them.

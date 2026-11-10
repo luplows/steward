@@ -14,8 +14,11 @@ from 0.1 through 1.0. Those targets are distinct from the implemented behaviour 
 - **The review side works.** Steward's scripts (ATC) start a reviewer for a pull request, post its
   verdict, and land the pull request once it passes. Steward's own pull requests land this way.
   For now a member of the crew starts each run by hand, with one command for the whole review side.
-- **The coding side is designed but not built.** Until it is, pull requests are written by people,
-  or in their own agent sessions.
+- **The coding side is built only for approved handoffs.** A member of the crew approves one file or
+  Issue at a time (`steward handoff`, below), and the coordinator codes the approved handoffs one at
+  a time and opens a pull request for each branch it pushes. The coordinator picks no unit from a
+  project's backlog and fixes no pull request: other pull requests are written by people, or in
+  their own agent sessions.
 - **Another project can use the review side.** Run `steward init` in the project's checkout (see
   "Setting up another project", below). It asks what it needs, creates the labels, and opens a
   draft pull request adding the files the gate needs, for the crew to review and merge. Nothing of
@@ -360,27 +363,29 @@ its text. `show` only reads that file. `list` reads it and also reads each pendi
 source, as selection does (below), and writes no record. None of these commands starts a model or a
 coder.
 
-`add` again for a source already approved and not yet taken reports the existing handoff when
-the text is the same, and refuses, pointing to `reapprove`, when it differs. `reapprove` reads the
+`add` again for a source already approved and not yet taken reports the existing handoff when the
+text is the same, and refuses, pointing to `reapprove`, when it differs. `reapprove` reads the
 source again. When a pending handoff's text is unchanged it changes nothing. Otherwise it appends
 the version approved so far to the handoff's history and makes the new text the current, pending
 version, keeping the ID and the place in order. `withdraw` stops a pending or held handoff being
 selected and keeps its history. A handoff that is admitted or completed is neither reapproved nor
-withdrawn, and a source whose handoff is admitted or completed is not added again; a withdrawn
-one can be, as a new handoff. Admission does not exist yet, so a handoff today is pending, held or
-withdrawn; the operation that codes one exists (below), and nothing calls it yet. A records file
-that is not valid refuses every command, and is never read as an approval. The write goes to a
-temporary file renamed over the old one, so a write that fails leaves the file as it was.
+withdrawn, and a source whose handoff is admitted or completed is not added again; a withdrawn one
+can be, as a new handoff. The coordinator moves a handoff on from `pending`: it is `admitted` while
+it is being coded, then `completed`, or `stopped` or `interrupted` (see "The coordinator", below);
+no command releases a stopped or interrupted one, and `add`, `reapprove` and `withdraw` refuse it as
+they refuse an admitted one. A records file that is not valid refuses every command, and is never
+read as an approval. The write goes to a temporary file renamed over the old one, so a write that
+fails leaves the file as it was.
 
-Which handoff is coded next is chosen by selection, an operation the coordinator will call
-(`selectHandoff` in `scripts/dispatch/handoff.mjs`; there is no command for it). It takes the
-oldest pending handoff, in the order approved across every project, that is eligible now, and
-skips the others, which keep their places. A pending handoff is eligible when its project is still
-activated, its source can be read, and the source still has exactly the approved text: for a file
-that text on `origin`'s `main`, for an Issue its title and body. New commits on `main` that leave
-the unit's text unchanged do not matter. A withdrawn, held, admitted or completed handoff is never
-eligible. Selection starts no coder, claims no branch and reserves nothing; the step that starts
-coding checks again (below).
+Which handoff is coded next is chosen by selection, an operation the coordinator calls
+(`selectHandoff` in `scripts/dispatch/handoff.mjs`; there is no command for it). It takes the oldest
+pending handoff, in the order approved across every project, that is eligible now, and skips the
+others, which keep their places. A pending handoff is eligible when its project is still activated,
+its source can be read, and the source still has exactly the approved text: for a file that text on
+`origin`'s `main`, for an Issue its title and body. New commits on `main` that leave the unit's text
+unchanged do not matter. A withdrawn, held, admitted, completed, stopped or interrupted handoff is
+never eligible. Selection starts no coder, claims no branch and reserves nothing; the step that
+starts coding checks again (below).
 
 - If the source was read and its text differs from the approved text, selection **holds** the
   handoff, recording why in its record. A hold stays until `steward handoff reapprove <id>`, even if
@@ -400,17 +405,19 @@ coding checks again (below).
 what to do. It only reports: a pending handoff whose unit has changed is shown as `changed`. A
 selection holds it when it reaches that handoff and its content still differs, not when it is
 listed. An Issue's title and body, and a file's text, are compared exactly, trailing whitespace
-included.
+included. For a handoff the coordinator has taken (admitted, completed, stopped or interrupted),
+`list` and `show` add what the record knows: why, when, the branch, the pull request, the head and
+the work kept, and what the crew does next.
 
 ### Executing an approved handoff
 
 `executeHandoff` in `scripts/dispatch/handoff-coder.mjs` codes one approved handoff with the bounded
-coder, to a branch pushed to the project's remote. There is no command for it: the coordinator will
-call it (ST-93), and nothing does yet. It is project-neutral. It needs no `stories/` folder, story
-frontmatter, `blocked:` field or `AGENTS.md`/`REVIEW.md` in the project; its prompt
-(`.claude/prompts/coder-handoff.md`) gives the coder the approved text exactly, where it came from
-and the repository, and tells it to read the project's checklist (its `rulesFile` setting) and
-whichever of `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md` and `README.md` it has. The story
+coder, to a branch pushed to the project's remote. There is no command for it: the coordinator calls
+it, once for each admission ("The coordinator", below). It is project-neutral. It needs no
+`stories/` folder, story frontmatter, `blocked:` field or `AGENTS.md`/`REVIEW.md` in the project;
+its prompt (`.claude/prompts/coder-handoff.md`) gives the coder the approved text exactly, where it
+came from and the repository, and tells it to read the project's checklist (its `rulesFile` setting)
+and whichever of `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md` and `README.md` it has. The story
 coder, which takes steward's own `stories/`, is unchanged.
 
 It is given a handoff's ID and the approved version, and starts no model session unless the handoff
@@ -463,9 +470,9 @@ are left in place. The claim commit stays on the remote after any failure that f
 ### Publishing a handoff's pull request
 
 `publishHandoff` in `scripts/dispatch/handoff-publish.mjs` opens the pull request for the `pushed`
-result of `executeHandoff`. There is no command for it: the coordinator will call it (ST-93), and
-nothing does yet. It runs no model, claims and pushes nothing and writes no handoff record. It
-trusts only the branch and head SHA that were pushed, and resolves a result, never a throw.
+result of `executeHandoff`. There is no command for it: the coordinator calls it, once for each
+`pushed` result. It runs no model, claims and pushes nothing and writes no handoff record. It trusts
+only the branch and head SHA that were pushed, and resolves a result, never a throw.
 
 It opens a pull request into `main` only when the handoff record names that project, version and
 branch, the remote branch's tip is still the pushed head SHA, the model the session ran can be
@@ -510,12 +517,13 @@ true or false), `coder-link-conflict`, `head-moved` (with the tip found, or `nul
 
 ### The coordinator
 
-The coordinator is one long-running process per OS user, across that user's terminals and
-activated projects, that schedules their automatic reviews until it is stopped, and discovers the
-pull requests unattended landing may consider, and asks for their landing. It reviews, discovers and
-requests landing, nothing more: it runs no rotation, inspects nothing, and starts no coder or
-fixer. It lands only where a project's `main` has `land: true`, by asking the pilot, which
-the runway then follows; it merges nothing itself. Verdicts go through the existing gate.
+The coordinator is one long-running process per OS user, across that user's terminals and activated
+projects, that schedules their automatic reviews until it is stopped, and discovers the pull
+requests unattended landing may consider, and asks for their landing, and codes the handoffs the
+crew has approved. It reviews, discovers, requests landing and codes approved handoffs, nothing
+more: it runs no rotation, inspects nothing, and starts no fixer or story coder. It lands only where
+a project's `main` has `land: true`, by asking the pilot, which the runway then follows; it merges
+nothing itself. Verdicts go through the existing gate.
 
 ```sh
 steward coordinator start            # start it in the background
@@ -578,6 +586,51 @@ ledger of attempts: a head whose attempt did not merge is tried again at a later
 same checks, and so is a still-eligible one after a restart. The runway checks each request again
 and decides.
 
+Each pass ends with one coding turn (`codeNextHandoff`,
+[`scripts/dispatch/handoff-coding.mjs`](scripts/dispatch/handoff-coding.mjs)), unless coding is
+blocked (below), after the scans, review turns and landing attempts that were due. It selects the
+oldest eligible approved handoff (above) and, in one write to `handoffs.json` and before any branch
+is claimed, setup run or model started, makes it `admitted` and gives it an admission: a unique ID,
+the handoff, the approved version, the repository, the branch it will be coded on and the time. The
+record is read again first, so a handoff reapproved or withdrawn since it was selected is not
+admitted. The turn calls `executeHandoff` with that admission, which it confirms against the same
+file each time it checks, and, for a branch that was pushed, `publishHandoff`, once; it waits for
+both before anything else is looked at. So the coordinator runs at most one coder at a time, and **a
+coding session, which can last as long as a coder session does, delays any scan, review or landing
+attempt that falls due meanwhile** until the turn has ended. A graceful stop waits for the turn too.
+After a turn that ended a handoff as `completed`, `stopped` or `held`, the next pass starts at once,
+with a scan if one is due and then another coding turn; after any other turn the coordinator waits
+for the next scan, so a handoff returned to pending is never tried again in a loop. How a turn ends
+is written to the handoff's record, with the admission cleared, in one write:
+
+- **A pull request was opened:** `completed`, with the pull request, branch and head. A later scan
+  or a restart does not code it again.
+- **A refusal before any claim or model, that may pass later** (`over-usage`, `usage-unknown`, or
+  `source-unavailable`, which covers a deactivated project, a failed GitHub read and a source,
+  checkout or remote that cannot be reached): the admission is cleared and the handoff is `pending`
+  again, to be reconsidered at the next scan.
+- **`unit-changed`, the source no longer has the approved text:** the admission is cleared and the
+  handoff is `held` with the reason, as selection holds it. The source later matching the approval
+  again does not release it; `steward handoff reapprove` does.
+- **Anything else:** another refusal, a failure after the claim, the session or the push, an error
+  thrown by the run, or a pushed branch whose pull request was not opened. The handoff is `stopped`,
+  with the reason and what is known: the branch, the head, the pull request, and the worktree or
+  branch `executeHandoff` kept. Nothing is retried, and the coordinator never codes it again.
+- **A write that fails:** if the admission cannot be written, nothing was started and the handoff
+  stays `pending`; if the admission cannot be cleared, or the ending written, the handoff stays
+  `admitted`, with the reason in the message. In either case the coordinator admits no more coding
+  until it is restarted, `status` says why, and reviews and landing carry on. A selection that fails
+  (an unreadable file, for instance) is not this: it is reported, and the next scan selects again.
+
+A coordinator that ends during coding leaves its handoff `admitted`. The next `start`, with the
+reviews' interruption below, moves each `admitted` handoff to `interrupted`, with the branch the
+admission named, and says which. That handoff is not coded again automatically. `start` does not
+resume it, run a model, look for or stop a surviving worker, claim its branch again or remove a
+worktree it left: the crew inspects the branch on the remote, any pull request from it, and `git
+worktree list` in the project's owned checkout. A `start` that cannot read or update `handoffs.json`
+names the file and starts nothing. A turn that finds a handoff `admitted` with nothing in the
+running coordinator coding it admits nothing.
+
 - A project's failed GitHub discovery, or a failure to bring its owned checkout to `origin`'s
   `main`, starts no review of it and stops no other project; the next scan tries it again.
 - Records that cannot be read prevent every automatic review, and never activate anything; each
@@ -603,20 +656,32 @@ pilot after a dispatch is reported as `threw`, which does not say whether a land
 sent. The pilot reads the head itself, so the head shown is the one it reports, with the head the
 scan found beside it when they differ; when it reports none, because it found the pull request
 already merged or closed, the head is shown as unknown. It also lists, from `reviews.json`, the
-heads not reviewed again automatically, or says that file cannot be read. A write of these fields
-that fails is not fatal: the coordinator carries on, and what it writes next replaces them, so
-`status` can be behind until then. The record's only other writes are at the start and on a stop. On
-Windows a write can be refused while another process is reading the file, so a `start` that is
-watching for the record can occasionally cost the first scan's note of the next scan.
+heads not reviewed again automatically, or says that file cannot be read.
 
-`stop` leaves a stop request, `~/.steward/state/coordinator.stop`, which the coordinator looks for
-a few times a second. On seeing it, the coordinator admits no more work, and that is the
+`status` also lists the coding work, from `handoffs.json`, whether or not a coordinator is running,
+so stopped work stays inspectable after it has exited. Each handoff is under `queued` (pending),
+`running` (admitted), `completed`, `stopped` (stopped or interrupted) or `held`, with its
+repository, ID, unit, version and, when the record knows them, why, when, the branch, the pull
+request, the head, the work kept, and the next thing the crew does; withdrawn handoffs are not
+listed. In `--json` this is `coding`, each handoff as `steward handoff list` reports it. A running
+coordinator adds the handoff being coded, which shows no next scan until it ends, the last coding
+turn's outcome, and why coding has stopped, or a selection failed. `status` and `steward handoff
+list` are how the crew learns of stopped work: there is no other alert. A write of these fields that
+fails is not fatal: the coordinator carries on, and what it writes next replaces them, so `status`
+can be behind until then. The record's only other writes are at the start and on a stop. On Windows
+a write can be refused while another process is reading the file, so a `start` that is watching for
+the record can occasionally cost the first scan's note of the next scan.
+
+`stop` leaves a stop request, `~/.steward/state/coordinator.stop`, which the coordinator looks for a
+few times a second. On seeing it, the coordinator admits no more work, and that is the
 acknowledgement `stop` waits for. With no admitted work running, the coordinator removes its record
 and exits, and `stop` reports `stopped`. Otherwise `stop` returns at once, reporting `stopping`,
 without waiting for that work; the coordinator removes its record and exits once the work has
-finished, and `status` then reports `stopped`. Running `stop` again, or when nothing is running, is
-harmless. A graceful stop terminates nothing, and is not the shared emergency stop (E-stop) planned
-before 1.0, which will terminate running work and block new commands.
+finished, and `status` then reports `stopped`. Once the stop is acknowledged no coding turn is
+admitted: a handoff already admitted is finished and recorded, and the others stay pending for the
+next `start`. Running `stop` again, or when nothing is running, is harmless. A graceful stop
+terminates nothing, and is not the shared emergency stop (E-stop) planned before 1.0, which will
+terminate running work and block new commands.
 
 Manual commands, `review`, `rotation` and `land` among them, never ask the coordinator, and run the
 same whether it is running, stopping or stopped. A project deactivated during a review is not
