@@ -8,7 +8,7 @@ import path from 'node:path'
 import { coderLineNames, coderModelToken } from './choices.mjs'
 import { handoffBranch } from './handoff-coder.mjs'
 import { composeHandoffBody, neutralizeClosing, publishHandoff, PUBLISH_FAILURES } from './handoff-publish.mjs'
-import { handoffsPath, main as handoff } from './handoff.mjs'
+import { assess, handoffsPath, main as handoff } from './handoff.mjs'
 import { main as project } from './project.mjs'
 import { chooseReviewer, coderModelsRan, reviewerCandidates } from './review.mjs'
 import { fixtureSettings, fixtureUserConfig } from './settings-fixture.mjs'
@@ -204,45 +204,55 @@ describe('publishHandoff', () => {
     const world = await makeWorld()
     const record = await approve(world, ['--file', PLAN])
     const head = pushBranch(world, record, {}, { move: [PLAN, 'docs/done-plan.md'] })
-    const body = `Unit: docs/done-plan.md\n\n${CODER_BODY}`
+    const body = CODER_BODY + '\n\nThe plan was moved to docs/done-plan.md.'
     const result = await publish(world, pushedOf(record, head, { proposedPr: { title: 'T', body, draft: false } }))
     expect(result.status).toBe('published')
     const sent = sentBody(world).body
     expect(findUnitLink(sent, ['file'])).toEqual({ kind: 'link', type: 'file', target: PLAN })
-    expect(sent).not.toContain('done-plan')
+    expect(sent.startsWith('Unit: ' + PLAN + '\n')).toBe(true)
   })
 
-  it('ST-92/AC-2, AC-3, AC-8: an Issue handoff gets one Unit: #n and one matching Closes #n, whatever the coder wrote', async () => {
+  it('ST-92/AC-2, AC-3, AC-8: an Issue handoff gets one Unit: #n and one matching Closes #n, and the coder body is kept as written', async () => {
     const { world, record, pushed } = await issueCase()
-    const coder = [
-      'Unit: #9', 'unit: #8', '  Unit: docs/other.md', '', 'Closes #9', 'fixes #7', 'Resolved: #8', 'Fixes acme/gadgets#3',
-      'Closes https://github.com/acme/widgets/issues/5', 'closes GH-4', 'Prefix-closes #5 is still changed', '',
-      CODER_BODY, 'Never closes the loop.',
-    ].join('\n')
+    const coder = [CODER_BODY, '', 'Never closes the loop. The unit: tests, as in "unit: #9", is prose.'].join('\n')
     const result = await publish(world, { ...pushed, proposedPr: { title: 'T', body: coder, draft: false } })
     expect(result.status).toBe('published')
     const sent = sentBody(world).body
     expect(findUnitLink(sent, ['file', 'issue'])).toEqual({ kind: 'link', type: 'issue', target: 7 })
     expect(sent.startsWith('Unit: #7\nCloses #7\n')).toBe(true)
-    expect([...sent.matchAll(/(?<!\w)(?:close[sd]?|fix(?:es|ed)?|resolve[sd]?)\b[ \t:]+(?:\S*#\d+|GH-\d+|https?:\/\/\S+)/gi)].map((m) => m[0])).toEqual(['Closes #7'])
-    expect(sent).toContain('Refs #9')
-    expect(sent).toContain('Refs acme/gadgets#3')
-    expect(sent).toContain('Prefix-Refs #5 is still changed')
-    expect(sent).toContain('Never closes the loop.')
-    expect(sent).toContain('npm test -- 12 passing in 3.1s')
-    expect(sent).not.toMatch(/^ *unit: (#[89]|docs)/im)
+    expect(sent).toContain(coder)
+    expect(sent.match(/^Closes #\d+$/gm)).toEqual(['Closes #7'])
     // AC-4: the number and the approved fingerprint, and no second link.
-    expect(sent).toContain(`Issue #7, approved with the title and body fingerprint (sha256) ${record.provenance.fingerprint}`)
-    // Without the issue kind in unitLinks the reviewer would not read a closing reference at all;
-    // the one ATC writes is still the only one.
+    expect(sent).toContain('Issue #7, approved with the title and body fingerprint (sha256) ' + record.provenance.fingerprint)
     expect(findUnitLink(sent, ['issue'])).toEqual({ kind: 'link', type: 'issue', target: 7 })
   })
 
-  it('ST-92/AC-3: a Unit: line in the coder body is dropped even when the body is only that', async () => {
+  it('ST-92/AC-3, AC-7, AC-8: a coder body with a Unit: line or a closing reference to an Issue is refused, and nothing is rewritten', async () => {
+    for (const makeCase of [fileCase, issueCase]) {
+      const { world, record, head, pushed } = await makeCase()
+      for (const [line, found] of [
+        ['Unit: #9', 'Unit: #9'], ['  Unit: docs/other.md', 'Unit: docs/other.md'], ['Unit: none', 'Unit: none'],
+        ['Closes #9', 'Closes #9'], ['fixes #7', 'fixes #7'], ['Resolved: #8', 'Resolved: #8'], ['Fixes acme/gadgets#3', 'Fixes acme/gadgets#3'],
+        ['Closes https://github.com/acme/widgets/issues/5', 'Closes https://github.com/acme/widgets/issues/5'], ['closes GH-4', 'closes GH-4'],
+        ['Prefix-closes #5', 'Prefix-closes #5'], ["I ran git log --grep='Fixes #9' and it found nothing.", "I ran git log --grep='Fixes #9' and it found nothing."],
+      ]) {
+        const body = CODER_BODY + '\n\n' + line + '\n\nMore.'
+        const result = await publish(world, { ...pushed, proposedPr: { title: 'T', body, draft: false } })
+        expect(result).toMatchObject({ status: 'coder-link-conflict', recoverable: true, handoffId: record.id, branch: pushed.branch, headSha: head })
+        expect(result.conflicts).toEqual([found.trim()])
+        expect(result.reason).toContain(JSON.stringify(found.trim()))
+      }
+      expect(world.requests.filter((r) => r.method === 'POST')).toHaveLength(0)
+      expect(git(world.bare, 'rev-parse', 'refs/heads/' + pushed.branch)).toBe(head)
+    }
+  })
+
+  it('ST-92/AC-3: only the closing keyword before an issue reference conflicts, not other words', async () => {
     const { world, pushed } = await fileCase()
-    const result = await publish(world, { ...pushed, proposedPr: { title: 'T', body: 'Unit: none\nDone.', draft: false } })
+    const body = CODER_BODY + '\n\nIt closes the loop, fixes 3 bugs, and resolves to #4 only by number (see #9). Unitary: no.'
+    const result = await publish(world, { ...pushed, proposedPr: { title: 'T', body, draft: false } })
     expect(result.status).toBe('published')
-    expect(findUnitLink(sentBody(world).body, ['file'])).toEqual({ kind: 'link', type: 'file', target: PLAN })
+    expect(sentBody(world).body).toContain('It closes the loop, fixes 3 bugs, and resolves to #4 only by number (see #9). Unitary: no.')
   })
 
   it('ST-92/AC-3: attribution the coder wrote is kept, and none is added', async () => {
@@ -318,6 +328,18 @@ describe('publishHandoff', () => {
     const { world, record, head, pushed } = await issueCase()
     commitOnMain(world, { 'steward.config.json': `${JSON.stringify(fixtureSettings({ repo: REPO, unitLinks: ['file'] }), null, 2)}\n` })
     const result = await publish(world, pushed)
+    expect(result).toMatchObject({ status: 'unit-link-refused', recoverable: true, handoffId: record.id, branch: pushed.branch, headSha: head })
+    expect(result.reason).toContain('no longer include "issue"')
+    expect(prRequests(world)).toHaveLength(0)
+  })
+
+  it('ST-92/AC-2, AC-8: unitLinks changed after the earlier read and before the comparison refuses publication, never a draft', async () => {
+    const { world, record, head, pushed } = await issueCase()
+    const changing = async (h, ctx) => {
+      commitOnMain(world, { 'steward.config.json': JSON.stringify(fixtureSettings({ repo: REPO, unitLinks: ['file'] }), null, 2) + '\n' })
+      return assess(h, ctx)
+    }
+    const result = await publish(world, pushed, { assess: changing })
     expect(result).toMatchObject({ status: 'unit-link-refused', recoverable: true, handoffId: record.id, branch: pushed.branch, headSha: head })
     expect(result.reason).toContain('no longer include "issue"')
     expect(prRequests(world)).toHaveLength(0)
