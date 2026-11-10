@@ -613,6 +613,12 @@ For everyone:
   implements, or `none`), and its three sections: what changed, how you verified it (the commands
   you ran and their real results), and whether this README needed updating.
 - **Agent sessions** working here follow [`AGENTS.md`](AGENTS.md).
+- **No AI attribution in this repository**: no `Co-Authored-By:` trailer in a commit message and no
+  "Generated with" line in a pull request body, issue or comment. CI fails a pull request whose
+  commits or body carry one (`scripts/dispatch/attribution-check.mjs`), and `.claude/settings.json`
+  turns off the attribution Claude Code adds by default. This is steward's own policy. A project
+  that uses steward keeps its own: the coder follows that project's instructions, and the pull
+  requests ATC opens there carry the `Coder:` provenance line.
 
 ### From the crew
 

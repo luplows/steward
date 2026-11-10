@@ -46,3 +46,12 @@ jobs:
           ${{ github.event.pull_request.base.sha }}
           ${{ github.event.pull_request.head.sha }}
           "$HEAD_REF"
+      - name: Check for AI attribution (ST-100)
+        if: github.event_name == 'pull_request'
+        # The pull request body is attacker-chosen text: pass it through env, not
+        # into the shell (D-14). The commit messages are read by the script itself.
+        env:
+          STEWARD_PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/dispatch/attribution-check.mjs "$BASE_SHA" "$HEAD_SHA"

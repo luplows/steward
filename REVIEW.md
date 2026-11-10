@@ -43,6 +43,10 @@ A section that restates the PR title in other words is also unfilled.
 5. A pull request into a release branch (`release/vX.Y.Z`) changes nothing
    under `stories/`: stories are written and moved on `main`
    (`docs/release-review.md`).
+6. No AI attribution (`AGENTS.md`, "Every pull request"): neither the body nor any
+   commit message in the pull request's range carries a `Co-Authored-By:`
+   trailer or a "Generated with" line. The `Coder:` line is provenance, and is
+   not a finding.
 
 ## Changes to code
 
