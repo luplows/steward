@@ -420,10 +420,11 @@ is still active), and its project is activated with its source readable and its 
 approved text. It checks at the start and again just before the branch is claimed, after the usage
 check, unless an earlier step has already refused. When a check finds the source as approved, it
 then asks whether the admission is still active and, with nothing awaited after that, reads the
-projects and the records again and decides from them, so a handoff withdrawn, a project deactivated
-or an admission stopped during the source read or the admission query is refused. A change to the
-source after the source read is not seen before the claim. It writes no handoff record, so a refusal changes nothing in
-the records; the coordinator decides what to record. A refusal is a `status` of the
+projects and the records again and decides from them, so a handoff withdrawn, a project
+deactivated or an admission stopped during the source read or the admission query is refused. A
+change to the source after the source read is not seen before the claim. It writes no handoff
+record, so a refusal changes nothing in the records; the coordinator decides what to record. A
+refusal is a `status` of the
 result:
 
 - `unit-changed`: the source was read and its text differs from the approved version. This is the
