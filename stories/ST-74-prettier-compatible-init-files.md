@@ -11,53 +11,66 @@ blocked: null
 ## Intent
 
 As a crew member installing Steward in a project that checks formatting, I want new
-installation files to follow default Prettier formatting, so that adopting Steward does not
-immediately fail an ordinary formatting check.
+installation files to follow default Prettier formatting, so that adoption does not fail
+ordinary formatting checks or force needless corrections to managed files.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — Every file that `steward init` adds to a fresh project's installation PR
-      passes `prettier --check` with a pinned Prettier version and default options. This
-      includes `steward.config.json`, all installed workflows (with and without optional
-      inspection), the checklist and the PR template. Existing project files remain untouched.
-- [ ] **AC-2** — Automated tests use actual files written by `init`, not just template
-      source files. They check the added files using the pinned formatter, exercise
-      installation with optional inspection enabled and disabled, and fail if formatting
-      drifts. These tests do not require a live GitHub repository.
-- [ ] **AC-3** — Formatting does not change the parsed settings, workflow triggers,
-      permissions, actions, version pins or other functional behavior. Tests cover the
-      resulting JSON values and the workflow behavior-sensitive contents.
-- [ ] **AC-4** — `README.md` and the generated installation PR body each explain that a
-      project may have different formatter settings. Both provide a one-line
-      `npx prettier --write` example for files added by the installer, to run in a
-      checkout of the installation PR's branch before merging, rather than formatting
-      the whole project or the caller's original checkout.
-- [ ] **AC-5** — Remove the `**Planned (ST-74)**` marker from
-      `docs/agent-workflow-design.md` when the change is implemented.
+- [ ] **AC-1** — Every file that `steward init` adds in a fresh project passes
+      `prettier --check` with one exact pinned Prettier version and default options,
+      independently of any consuming project's formatting configuration. This includes
+      `steward.config.json`, each installed workflow (with optional inspection enabled
+      and disabled), the installed checklist and the PR template. Files already owned by
+      the project are not reformatted.
+- [ ] **AC-2** — Automated tests apply the pinned formatter to the actual files
+      produced by `init` (after pin substitution), not just the raw templates.
+      They cover the optional workflow, both installation paths, and regression when a
+      generated artifact drifts from the formatter. The check runs offline and does not
+      require Prettier or a configuration file in the client's repository.
+- [ ] **AC-3** — Compare the generated artifacts' parsed JSON, workflow triggers,
+      permissions, command values and pin references before and after template formatting
+      to establish that formatting changes no behavior. The installed artifacts retain
+      their expected content and have no unrelated additions.
+- [ ] **AC-4** — `README.md` and the generated installation PR explain that a project
+      with custom formatting settings may format *only newly installed files* on its
+      installation branch before merging, with an example scoped command. Do not claim
+      this is required for all projects or promise that a later upgrade will accept
+      those formatting changes. ST-96 separately owns support for proven formatting-only
+      differences; until it lands, the existing strict comparison applies.
+- [ ] **AC-5** — Keep the pinned formatter version explicit and reproducible in
+      Steward's package/lockfile and tests. Do not add a formatter invocation to
+      `steward init` or require a client to install one. Do not introduce a
+      repository-wide source-formatting requirement as part of this story.
+- [ ] **AC-6** — Resolve `**Planned (ST-74)**` in
+      `docs/agent-workflow-design.md` when implemented.
 
 ## Out of scope
 
-- Guaranteeing that default formatting satisfies every project's custom Prettier options.
-- Automatically running or installing a formatter in the target project.
-- Rewriting pre-existing or customized files; their upgrade path belongs to ST-69.
-- Changing the installer's choice of which files to add or its approval workflow.
+- Matching every consuming project's custom Prettier options.
+- Automatically running a formatter inside the project or modifying existing files.
+- Relaxing the workflow-upgrade comparison, which is ST-96.
+- Formatting all Steward JavaScript, documentation and historical artifacts, or
+  turning a repository-wide format check on.
 
 ## Constraints
 
-- The test's formatter version must be pinned and run with default options independently
-  of any consuming project's settings.
-- No formatter is required for using Steward at runtime.
+The formatting check uses an exact pinned Prettier version with default options,
+regardless of a project's configuration. Client projects do not acquire a
+formatter dependency merely by installing Steward.
 
 ## Context
 
-- Reported during ST-48 client validation on 2026-11-04: a project's Prettier check rejected
-  the generated JSON config and two YAML workflow files. The failing check was observed by
-  the crew, not executed by this planning session.
-- `scripts/dispatch/init.mjs` uses `JSON.stringify(value, null, 2)` for JSON and copies
-  `templates/workflows/` with the release pin substituted.
-- `scripts/dispatch/init.test.mjs` tests the generated files, but not formatter compliance.
-- This focused first-install work is separate from ST-65's optional install polish and
-  ST-69's upgrade of existing installations.
+- ST-48 client validation, 2026-11-04: generated JSON and YAML did not satisfy a
+  project's default formatting check.
+- The v0.2.0 upgrade walkthrough found that formatting the installed workflows,
+  as earlier documentation advised, then made `upgrade` refuse those files as modified.
+  ST-96 owns the necessary backward-compatible upgrade comparison.
+- `scripts/dispatch/init.mjs` writes JSON and copies templates with the pin
+  filled; `templates/workflows/` and `scripts/dispatch/init.test.mjs` are relevant.
+- ST-65 retains optional installation-PR template improvements; ST-97 addresses
+  *upgrade* PR template population instead.
+- Crew decision, 2026-11-09: adopt pinned default Prettier for generated Steward
+  artifacts incrementally. Consider repository-wide formatting later, separately.
 
 ## Open questions
 

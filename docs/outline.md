@@ -156,13 +156,28 @@ already implemented. No general migration engine is promised.
 
 The crew explicitly hands steward an existing work item. Steward durably records that
 authorization, schedules handed-over work in approval order, runs a bounded coder, and creates a
-linked PR. File-based units and GitHub Issues are supported without imposing steward's own story
-schema, priorities or completion convention on clients. Durable authorization is a crew decision;
-execution status remains derived where possible. Resource bounds, duplicate-work prevention and
+linked PR. File-based units and GitHub Issues are supported without imposing Steward's story
+schema or priority convention on clients. Each approved unit is a complete, independently
+reviewable deliverable; larger work is split into separately approved units, not partially
+delivered. For Issue-based handoffs, generated PRs have matching `Unit: #n` and `Closes #n`
+references (ST-92), and a successful runway merge into `main` explicitly closes only that
+linked Issue (ST-76). File-based projects retain their native completion conventions.
+Durable authorization is a crew decision; execution status remains derived where possible. Resource bounds, duplicate-work prevention and
 recovery after restart belong in this first slice, not in a later hardening release. The legacy
 tier/id queue is not automatically the authorization or scheduling mechanism for this slice.
 One machine and sequential work suffice for this first coding slice; concurrency is not a
 reason to defer its safety obligations. ST-82's own-gate conversion moves to 0.3.
+ST-95 also gives a newly passing coordinator review the existing bounded gate-lag wait before
+unattended landing, avoiding an otherwise unnecessary next scan. It does not change unattended
+landing authorization or make parallel execution part of 0.3.
+
+The v0.2.0 rollout also justifies bounded upgrade improvements in 0.3: generated installation
+files follow pinned default Prettier formatting (ST-74), format-only managed-workflow differences
+no longer prevent upgrades while substantive customization still refuses (ST-96), generated
+upgrade PRs provide reviewable validation evidence and crew actions (ST-97), and upgrade refusals
+explain the mismatch and safe recovery (ST-98). These stories are separate from, and do not block,
+the first coding handoff slice. Repository-wide formatting, reviewer revalidation and automated
+upgrade repairs are not 0.3 commitments.
 
 ### 0.4.0 — Automated fixing and discovery/execution separation
 

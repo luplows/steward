@@ -1,6 +1,6 @@
 ---
 id: ST-76
-title: Choose how Steward handles linked issues after runway landing
+title: Close explicitly linked GitHub Issues after runway landing
 tier: normal
 kind: product
 depends_on: [ST-54]
@@ -10,79 +10,92 @@ blocked: null
 
 ## Intent
 
-As a crew member using GitHub closing references, I want an explicit policy for issues linked to
-a pull request landed by Steward, so that the crew knows whether those issues close and who is
-responsible for closing them.
+As a crew member using GitHub Issues as units, I want the runway to close the explicitly linked
+issue when its complete implementation lands, so that unattended landing does not leave routine
+issue cleanup to the crew.
 
 ## Acceptance criteria
 
-Provisional only. The controlled test settled the cause, but the crew has not yet chosen a
-remedy. Refine these criteria after choosing an approach in Open questions.
-
-- [ ] **AC-1** — Placeholder: define the observable issue-closing outcome for a runway
-      landing with a valid closing reference, following the crew's selected remedy.
-      Distinguish a successful landing from a refused or failed landing.
-- [ ] **AC-2** — Placeholder: make the required crew actions, behavior and any permissions
-      clear in project-facing guidance. If the choice is manual closure, consider extending
-      ST-75 rather than implementing duplicate documentation.
-- [ ] **AC-3** — Placeholder: verify the chosen remedy in an authorized public scratch
-      repository and add tests appropriate to its scope. If the runway explicitly closes
-      issues, demonstrate that it works and does not close issues outside the authorized
-      merged PR's closing references.
-- [ ] **AC-4** — Placeholder: record the chosen product decision in
-      `docs/agent-workflow-design.md` under its planned/implemented decision convention.
-      Do not claim that any untested remedy already works.
+- [ ] **AC-1** — After the runway successfully merges a PR into `main`, it examines that PR's
+      body for one authoritative `Unit: #<n>` in the same repository and an explicit
+      `Closes #<n>` referring to that same Issue. With `issue` enabled in the project's
+      `unitLinks`, it explicitly closes that Issue through the GitHub API. The same behavior
+      applies to manual and unattended runway landings. An already-closed Issue is a successful
+      no-op, not an error.
+- [ ] **AC-2** — A PR with no explicit Issue-closing reference results in no Issue
+      closure and no closure-related warning, even when its `Unit:` is missing,
+      file-based, unreadable or ambiguous. A bare `Unit: #<n>` does not close an Issue.
+      Only when an explicit closing reference is present but does not qualify
+      (missing, file-based, unreadable or ambiguous unit, additional conflicting
+      closing references, or a reference to another Issue) does the runway report
+      an actionable reason while closing no Issue.
+- [ ] **AC-3** — Refused, skipped and failed merges close no Issue. A runway merge into a release
+      branch closes no Issue. Issue closure happens only after the merge has succeeded, and is
+      not an additional gate on which PRs may merge.
+- [ ] **AC-4** — Both Steward's own `.github/workflows/land-approved.yml` and the installed
+      `templates/workflows/land-approved.yml` grant `issues: write` to the existing
+      GitHub Actions `github.token` for the bounded post-merge Issue update. No new token,
+      GitHub App, secret or merge identity is introduced.
+- [ ] **AC-5** — When the post-merge Issue read or update fails, the landing is still reported
+      as merged. The workflow emits a visible warning identifying the PR and Issue and explaining
+      that the crew must close it manually; a closure failure does not retry or undo the merge.
+      Repeated cleanup of an Issue already closed is harmless.
+- [ ] **AC-6** — Tests using injected GitHub and merge stand-ins cover a successful default-branch
+      landing (manual and unattended), already-closed Issue, missing or mismatched closing
+      reference, extra conflicting reference, file or missing unit (with and without
+      a closing reference), disabled Issue links,
+      release-branch landing, failed or refused merge, and failed Issue API read/update. Tests
+      verify that only the matching same-repository Issue can be updated and that both workflow
+      variants grant the required permission, without making real GitHub mutations.
+- [ ] **AC-7** — Validate explicit post-merge closure on an authorized public scratch repository,
+      recording the PR, Issue, workflow run and observed final Issue state. Also record the result
+      of a landing with no `Closes #<n>`; do not claim the API remedy works solely from the
+      existing controlled merge-token comparison.
+- [ ] **AC-8** — Explain the `Unit: #<n>` plus `Closes #<n>` requirement, main-only behavior
+      and manual recovery from API failure in project-facing guidance. Remove the
+      `**Planned (ST-76)**` marker from `docs/agent-workflow-design.md` when implemented.
 
 ## Out of scope
 
-- Reinvestigating whether a closing keyword, squash message or `issues: write` alone
-  explains the observed failure: the controlled comparison has settled that question.
-- Automatically closing any issue merely because its number appears in a `Unit:` line.
-- Choosing new credentials, broader permissions or an issue-write implementation before
-  the crew selects a remedy and its security boundary.
-- Changing the in-progress v0.1.0 release or consulting private client evidence.
+- Closing an Issue from `Unit:` alone, from arbitrary Issue mentions, or from multiple units.
+- Closing Issues in other repositories, auto-closing parent features, or supporting partial
+  completion of a unit. A unit must be independently complete; split larger work before handoff.
+- Changing GitHub's native behavior for manually merged PRs, or replacing the runway's merge token.
+- Automatic post-crash reconciliation or retries of a merge that already succeeded.
+- Adversarial edits of PR descriptions between review and merge; this covers normal crew-authored,
+  review-gated PRs.
+- Reinvestigating whether a squash message or `issues: write` alone triggers GitHub's native
+  automatic closure; the public controlled comparison already distinguishes those behaviors.
 
 ## Constraints
 
-- The public `luplows/playground` experiment is the evidence for this draft; no private
-  client details belong in the story or its implementation's public documentation.
-- A future automated closure must be bound to a successfully landed PR and to its
-  authorized closing references. Credential and API permissions require a separate
-  explicit crew decision before implementation.
+The bounded case is one crew-reviewed PR implementing one Issue in the same repository, landed
+by Steward's existing runway. The reviewed unit stays the source of truth; issue-closing
+references express completion, not additional work authorization. Post-merge Issue updates use
+only the workflow's `github.token`.
 
 ## Context
 
-- Controlled public scratch comparison on 2026-11-04, using Steward `935fb5b`:
-  - [playground PR #20](https://github.com/luplows/playground/pull/20) was merged
-    through the runway with `github.token` and no `issues: write`; the linked
-    [issue #3](https://github.com/luplows/playground/issues/3) remained open.
-  - [playground PR #21](https://github.com/luplows/playground/pull/21) was merged
-    through the runway with `issues: write` added; the linked
-    [issue #5](https://github.com/luplows/playground/issues/5) remained open.
-  - [playground PR #22](https://github.com/luplows/playground/pull/22) was
-    merged manually by the crew; [issue #7](https://github.com/luplows/playground/issues/7)
-    closed. Its merge had no closing keyword in the squash message either.
-- All three PR bodies contain `Closes #n`. The crew confirmed GitHub listed the
-  issues in `closingIssuesReferences`; the commits lack closing keywords.
-  These controls identify the `github.token` merge identity as the relevant
-  difference, not missing `issues: write` or the squash message.
-- `templates/workflows/land-approved.yml` passes `github.token` as `GH_TOKEN`;
-  `scripts/land/runway.mjs` uses `gh pr merge --squash --match-head-commit`.
-  No explicit issue-closing call follows the merge.
-- ST-75 covers documentation of the same token's limitation for post-landing CI.
-  It could also carry manual issue-closing guidance if the crew chooses that option.
-- Direct issue closure by the runway has not been tried. A different merge token would
-  introduce a separate credential and authorization decision.
+- Public controlled experiment on 2026-11-04 with Steward `935fb5b`: playground PR
+  [#20](https://github.com/luplows/playground/pull/20) merged through the runway without
+  `issues: write` and left issue [#3](https://github.com/luplows/playground/issues/3)
+  open. PR [#21](https://github.com/luplows/playground/pull/21) merged with that permission
+  and still left issue [#5](https://github.com/luplows/playground/issues/5) open.
+  PR [#22](https://github.com/luplows/playground/pull/22) merged by the crew and closed
+  issue [#7](https://github.com/luplows/playground/issues/7). All PR bodies used
+  `Closes #n`; GitHub identified the closing references. Direct API closure remains untested.
+- The v0.2.0 walkthrough at Steward `8d06431` observed playground issue #32 still open
+  after unattended landing of PR #33 (reported 2026-11-09).
+- `scripts/land/runway.mjs` merges with `gh pr merge --squash --match-head-commit` and
+  currently performs no Issue update. `scripts/dispatch/unit.mjs` identifies the unit in
+  a PR body; `templates/workflows/land-approved.yml` supplies `github.token`.
+- ST-92 owns generation of `Unit: #n` and `Closes #n` for approved Issue handoffs.
+  ST-75 separately explains why `push` workflows do not run after a runway landing.
+- Crew decisions, 2026-11-09: use explicit Issue closure after a successful merge; close only
+  the linked Issue when a matching `Closes #n` is present; favor ordinary expected conditions
+  over a new authorization system. Target v0.3.0 without making this a dependency of coding
+  and PR publication.
 
 ## Open questions
 
-- Which remedy does the crew choose?
-  - **Document and close by hand:** explain that runway landing leaves linked issues
-    open and give the crew a manual procedure; consider incorporating it into ST-75.
-  - **Runway closes linked issues itself:** after a successful merge, explicitly close
-    the issues in the PR's closing references. This has not been tested and needs
-    a bounded experiment, authorization policy and permission review.
-  - **Use another merge token:** allow GitHub's ordinary automatic closure, but decide
-    the credential source, storage, permissions, scope and rotation before coding.
-- Once the remedy is chosen, should ST-76 implement it or be retired in favor of a
-  focused story or a revised ST-75? Refine the ACs accordingly before dispatch.
+*(none)*

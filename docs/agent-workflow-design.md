@@ -56,6 +56,47 @@ does not validate is refused and no PR is opened. A project already on the targe
 no-op. The crew approves and lands the PR. Local
 coordinator stop/restart, activation and authorization remain separate and manual.
 General historical migrations and automatic conflict resolution are not promised.
+
+**Planned (ST-96)** (crew, 2026-11-09; refined after PR #151 review, 2026-11-10):
+Installed managed workflows still match when only the pin or line endings differ. A
+runtime comparison written in Steward's own code recognizes only a bounded, documented
+set of presentation-only YAML transformations, preserving scalar values, keys, ordered
+comments, block-scalar content, GitHub expressions, commands and permissions. A difference
+it cannot prove formatting-only refuses, whether from `init` recognition or `upgrade`
+preflight; an accepted upgrade still proposes the target-pin template. Prettier is one
+exact pinned **development dependency only**, used in Steward's own CI to format current
+workflow templates and those at each release tag, and verify the comparison against their outputs.
+Neither client command imports or runs Prettier or reads a project's formatter settings.
+Every client gate, runway and inspection invocation installs Steward using
+`npx --package=github:luplows/steward#...`; a runtime Prettier dependency would impose
+installation cost on all those unrelated runs. Considered and not chosen: runtime
+Prettier, parsed-YAML equivalence that ignores comments or ordering, and unconditional
+whitespace normalization.
+
+**Planned (ST-97)** (crew, 2026-11-09): The upgrade command fills the existing reviewable PR
+sections with what it actually generated and verified, tied to the base and generated head SHA.
+It clearly distinguishes `Verified`, `Crew action required` and `Not checked`, without
+inventing a unit, project CI results or future edits. Custom project templates and requirements
+remain crew decisions. It opens a draft, not a preapproved PR. Considered and deferred: a
+separate report artifact or a general post-edit verification service.
+
+**Planned (ST-98)** (crew, 2026-11-09; refined after PR #151 review, 2026-11-10):
+Upgrade refusals identify affected paths and pins, the failed condition, what remains
+and the safe next action. A workflow whose YAML does not parse is told apart from
+well-formed YAML whose difference is outside ST-96's supported transformations, without
+claiming broad YAML semantic equivalence. Missing evidence cannot be reported as success; no
+automatic repair or review bypass is introduced.
+Considered and deferred: automatic project repairs and a machine-readable verification protocol.
+
+**Planned (ST-94)** (crew, 2026-11-09, after the v0.2.0 release review): The installation PR
+`init` opens and the upgrade PR `upgrade` opens, and each command's success output, say that the
+PR's head branch may remain after a manual merge, name that branch (a custom one included), and
+explain how the crew can delete it after confirming the PR merged. They note that a later runway
+run may also delete it (`scripts/land/delete-merged-heads.mjs`, which deletes only a head still
+at the merged commit), and never tell the crew to delete a branch belonging to an open PR or one
+that has moved. Guidance only: neither command deletes a branch, and the runway's cleanup is
+unchanged. Considered and not chosen: a new deletion mechanism in `init` or `upgrade`.
+
 (crew, 2026-11-07) Both sides of the comparison are read from `luplows/steward` on GitHub at
 their pins: an installed workflow is compared with the template at the pin it carries, and the
 proposed one is the template at the target pin. So nothing extra is shipped, the installed pin
@@ -165,6 +206,17 @@ with the project's `landWhen`. The coordinator gives the call no head it holds a
 pilot waits only for one sweep run's bound after its own dispatch, and returns at once, with a
 status that says why, for a pull request it cannot dispatch for yet (`not-landable`, and the final
 statuses). The coordinator merges nothing, dispatches nothing itself, and has no manual mode.
+
+**Planned (ST-95)** (crew, 2026-11-09): When this coordinator has just recorded a
+`pass` or `pass-with-observations` verdict on a PR/head, and a subsequent landing attempt in
+the same scheduling cycle targets that exact repository, PR and head, it supplies `passedAt` to
+the existing pilot. The pilot then uses ST-51's short bounded wait for `review/agent` to catch
+up, instead of deferring an otherwise landable PR to the next scan. No unrelated or older review
+receives that wait, and changed heads cannot inherit it. This is not an authorization head pin:
+unattended runway dispatches still use the project's standing `land: true`, with the runway
+rechecking the actual head and all checks. Other pending checks do not gain a new wait.
+Considered but not chosen: a second coordinator polling path, continuous event-driven scans,
+and head-pinned unattended authorization.
 
 Its record, and so `steward coordinator status`, shows the attempt under way apart from a review,
 and the last attempt's repository, pull request, head, time, status and reason. The pilot reads the
@@ -512,6 +564,16 @@ it:
 - Circuit breaker at five `review-blocked` PRs, with exemptions for `breaker-override` and
   workflow-only diffs so a tripped breaker is not a trap.
 
+**Planned (ST-76)** (crew, 2026-11-09): After the runway merges a pull request into `main`,
+Steward explicitly closes a same-repository GitHub Issue through the API only when the PR has
+one authoritative `Unit: #n` and a matching `Closes #n` reference, and Issue links are enabled.
+A bare unit reference, mismatched or ambiguous closing references, a failed merge, or a release-
+branch merge does not close an Issue. The existing workflow `github.token` gains `issues: write`
+for that bounded post-merge action; no other credential or merge identity is introduced. A failed
+Issue update leaves the successful merge intact and reports a manual closure action. Manual and
+unattended runway landings share the behavior. Considered but not chosen: always closing the unit
+without a closing reference, using another merge token, or broad post-crash reconciliation.
+
 `review-blocked` is applied automatically when a pull request reaches the round bound, by
 `review-gate.yml`, with the bound derived from the PR's own `block` verdicts rather than
 remembered (OQ-80). Removing the label by hand means "I have seen the cost, proceed", so after a
@@ -576,7 +638,12 @@ remains separate from this approval-order queue; it is not silently retired.
 A bounded, project-neutral coder implements the approved snapshot without
 requiring Steward's own `stories/` schema, and ATC owns the claim, push and PR.
 The authoritative `Unit:` line names the original file path or Issue, not a
-file's destination on the implementation branch. ATC records the coder's actual
+file's destination on the implementation branch. For Issue handoffs, ATC's generated PR
+also carries exactly one matching `Closes #n` reference. File handoffs carry no automatic
+issue-closing reference. Each approved unit is a complete, independently reviewable
+unit of work; the crew splits larger work before handoff instead of authorizing partial
+implementation. Multi-unit feature tracking and grouped handoffs are deferred without a
+release assignment. ATC records the coder's actual
 model as a literal `Coder: model=<id>` token that the reviewer does not remap
 through later choice configuration; older choice-name tokens remain readable.
 The PR cites the historical approved revision as provenance, but the independent reviewer still verifies
@@ -2794,12 +2861,14 @@ shortened where it is long, so that it can be found there with its date.
   protecting each release branch by hand when it is cut, which left a window before protection was
   set.
 - **Planned (ST-74)** **New installation files follow default Prettier formatting**
-  (crew, 2026-11-04, after ST-48 client validation). A fresh installation's generated
-  files pass the pinned default formatter check, without changing their JSON or workflow
-  behavior. The installer and README explain how a client formats only the new files
-  with its own settings before merging. This does not rewrite existing client files.
-  Considered and not chosen: running a formatter inside the project automatically,
-  or promising to match every custom Prettier configuration.
+  (crew, 2026-11-04; refined 2026-11-09 after v0.2.0 upgrades). A fresh installation's generated
+  files pass one exact pinned version's default formatter check, without changing their JSON or
+  workflow behavior. Steward starts with its own generated artifacts rather than reformatting
+  the whole repository. The installer and README explain how a client formats only new files
+  with its own settings before merging; ST-96 makes formatting-only differences acceptable on
+  a later upgrade. This does not rewrite existing client files. Considered and deferred:
+  repository-wide Prettier enforcement. Not chosen: formatting client files automatically or
+  promising to match every custom Prettier configuration.
 - **Planned (ST-75)** **Post-landing CI limitations are documented for clients**
   (crew, 2026-11-04, after ST-48 client validation). The README and installation PR
   explain that runway merges made with `github.token` do not fire new push workflows.
