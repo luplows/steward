@@ -85,9 +85,10 @@ const NULL_DEVICE = process.platform === 'win32' ? 'NUL' : '/dev/null'
 const HOOKS_OFF = ['-c', `core.hooksPath=${NULL_DEVICE}`]
 const PROMPTS_DIR = '.claude/prompts/'
 
-export async function git(cwd, args) {
+export async function git(cwd, args, { env } = {}) {
   const { stdout } = await execFileAsync('git', ['-c', 'core.quotepath=off', ...args], {
     cwd,
+    ...(env !== undefined && { env: { ...process.env, ...env } }),
     maxBuffer: 64 * 1024 * 1024,
   })
   return stdout
@@ -221,8 +222,9 @@ const LEGACY_MACHINE_LABEL_VARIABLE = 'TW_MACHINE_LABEL'
 
 /**
  * The variable the machine's label is read from and its value, or `null` when it is set in
- * neither: `STEWARD_MACHINE_LABEL`, else `TW_MACHINE_LABEL` only when `STEWARD_MACHINE_LABEL` is
- * unset or empty. A set value is returned as it is, matching `MACHINE_LABEL_RE` or not.
+ * neither: `STEWARD_MACHINE_LABEL`, else the legacy variable named above only when
+ * `STEWARD_MACHINE_LABEL` is unset or empty. A set value is returned as it is, matching
+ * `MACHINE_LABEL_RE` or not.
  */
 function machineLabelSetting(env) {
   for (const name of [MACHINE_LABEL_VARIABLE, LEGACY_MACHINE_LABEL_VARIABLE]) {
@@ -255,7 +257,9 @@ export function badMachineLabelReason(env) {
  * `git config --get` resolves them in `cwd`, the checkout the run works in. Read once, before
  * anything is claimed, and handed to every commit the run makes (`claimBranch`,
  * `commitSessionWork`), so none depends on what is configured when it runs. Resolves
- * `{ identity }`, the `-c` arguments to put before the commit command, or `{ refusal }`, the
+ * `{ identity }` (`{ name, email, env }`, `env` being the four `GIT_AUTHOR_*` and `GIT_COMMITTER_*`
+ * variables every ATC commit is run with, so no `author.*` or `committer.*` setting and no inherited
+ * variable can change who it is by), or `{ refusal }`, the
  * `no-git-identity` result's `status`, `missing` (the unset or empty keys) and `reason`.
  */
 export async function readGitIdentity(cwd) {
@@ -272,12 +276,17 @@ export async function readGitIdentity(cwd) {
       },
     }
   }
-  return { identity: ['-c', `user.name=${values['user.name']}`, '-c', `user.email=${values['user.email']}`] }
+  const name = values['user.name']
+  const email = values['user.email']
+  // The environment of a commit, which outranks `author.*`, `committer.*` and `user.*` in every config
+  // file, and replaces any `GIT_AUTHOR_*` or `GIT_COMMITTER_*` the process inherited.
+  const env = { GIT_AUTHOR_NAME: name, GIT_AUTHOR_EMAIL: email, GIT_COMMITTER_NAME: name, GIT_COMMITTER_EMAIL: email }
+  return { identity: { name, email, env } }
 }
 
 /** Throws unless `identity` is what `readGitIdentity` resolves: a commit never falls back to ambient config. */
 function assertIdentity(identity, fnName) {
-  if (!Array.isArray(identity) || identity.length !== 4) throw new Error(`${fnName} requires the identity readGitIdentity resolved`)
+  if (typeof identity?.env?.GIT_COMMITTER_EMAIL !== 'string' || identity.env.GIT_COMMITTER_EMAIL === '') throw new Error(`${fnName} requires the identity readGitIdentity resolved`)
 }
 
 /** The paths `git status --porcelain -z` reports as changed, each once; an original path it lists after a move is not one. */
@@ -382,7 +391,7 @@ export async function commitSessionWork({ cwd, storyId, title, message, identity
   const supplied = typeof message === 'string' && message.trim() !== ''
   const subject = typeof title === 'string' && title.trim() !== '' ? title.trim() : `${storyId}: the coder's work`
   const text = supplied ? message : subject
-  await git(cwd, [...identity, ...HOOKS_OFF, 'commit', '--no-verify', '--cleanup=verbatim', '-q', '-m', text])
+  await git(cwd, [...HOOKS_OFF, 'commit', '--no-verify', '--cleanup=verbatim', '-q', '-m', text], { env: identity.env })
   return { committed: true, subject: text.split(/\r?\n/)[0], message: text }
 }
 
@@ -453,12 +462,11 @@ export async function claimBranch(state, { repoDir, tree, branch, mainSha, unitI
   // bare `git push` on it would aim at `main` (AC-2).
   await git(repoDir, ['worktree', 'add', '--no-track', '-b', branch, tree, mainSha])
   state.worktreeAdded = true
-  // `-c user.name`/`-c user.email`: the identity was read once, before this run claimed anything,
-  // so the claim commit does not depend on what is configured when it is made.
+  // The identity was read once, before this run claimed anything, and is set in this command's
+  // environment, so the claim commit does not depend on what is configured when it is made.
   await git(tree, [
-    ...identity,
     'commit', '--allow-empty', '-m', `Claim ${unitId} on ${label} at ${new Date().toISOString()}`,
-  ])
+  ], { env: identity.env })
   state.baseSha = (await git(tree, ['rev-parse', 'HEAD'])).trim()
   try {
     await git(tree, claimPushArgs(branch))

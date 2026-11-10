@@ -49,8 +49,8 @@ export function leftovers(files, read) {
         if (text.includes(token)) problems.push({ file, line: i + 1, found: token })
       }
       if (text.includes(FALLBACK_NAME)) {
-        const isComment = /^\s*(?:\*|\/\/|\/\*)/.test(text)
-        const allowed = file === FALLBACK_FILE && (isComment || text.trim() === FALLBACK_LINE)
+        // Exactly the one fallback expression: not a comment, and not a line that merely holds it.
+        const allowed = file === FALLBACK_FILE && text.trim() === FALLBACK_LINE
         if (!allowed) problems.push({ file, line: i + 1, found: FALLBACK_NAME })
       }
     })
@@ -89,12 +89,15 @@ describe('ST-99/AC-8: nothing of tower-workshop-paths\' identities is left in wh
       })
     }
 
-    it('ST-99/AC-8: TW_MACHINE_LABEL in any other file, or in code of the fallback file other than its one line', () => {
+    it('ST-99/AC-8: TW_MACHINE_LABEL in any other file, or anywhere in the fallback file other than its one line', () => {
       expect(scan('scripts/dispatch/handoff-coder.mjs', 'env.TW_MACHINE_LABEL')).toEqual([FALLBACK_NAME])
       expect(scan(FALLBACK_FILE, 'const raw = env.TW_MACHINE_LABEL')).toEqual([FALLBACK_NAME])
       expect(scan('.github/workflows/ci.yml', 'TW_MACHINE_LABEL: laptop')).toEqual([FALLBACK_NAME])
       expect(scan(FALLBACK_FILE, FALLBACK_LINE)).toEqual([])
-      expect(scan(FALLBACK_FILE, ' * `TW_MACHINE_LABEL` only when STEWARD_MACHINE_LABEL is unset')).toEqual([])
+      expect(scan(FALLBACK_FILE, ' * `TW_MACHINE_LABEL` only when STEWARD_MACHINE_LABEL is unset')).toEqual([FALLBACK_NAME])
+      expect(scan(FALLBACK_FILE, '/* x */ const label = env.TW_MACHINE_LABEL')).toEqual([FALLBACK_NAME])
+      expect(scan(FALLBACK_FILE, `${FALLBACK_LINE} // and more`)).toEqual([FALLBACK_NAME])
+      expect(scan(FALLBACK_FILE, `/* x */ ${FALLBACK_LINE}`)).toEqual([FALLBACK_NAME])
     })
   })
 })

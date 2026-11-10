@@ -689,8 +689,10 @@ mechanical metadata, and retains the required `Coder:` operational provenance th
 reads. Steward's own repository policy is not imposed on clients. ATC's commits, the claim and a
 Codex session's work, are made as the git identity (`user.name` and `user.email`) that
 `git config --get` resolves in the checkout the run works in (the owned checkout for a handoff,
-the project's repository for a story), read once before anything is claimed and passed to each
-commit; a run with either unset or empty refuses with `no-git-identity` before claiming.
+the project's repository for a story), read once before anything is claimed and set, as author and
+committer, in the environment of each commit (which outranks `author.*` and `committer.*` settings and
+inherited `GIT_AUTHOR_*` and `GIT_COMMITTER_*` variables); a run with either unset or empty refuses
+with `no-git-identity` before claiming.
 Tower-workshop-paths' leftovers that acted on a project are gone: the `tw-dispatch` identity, the
 `e2e/__screenshots__/` carve-out (an untracked file there is an ordinary change), the
 `TW_MACHINE_LABEL` name (now only the fallback for `STEWARD_MACHINE_LABEL`) and the `tw-*`

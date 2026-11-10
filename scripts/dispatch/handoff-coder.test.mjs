@@ -1035,6 +1035,32 @@ describe('ST-99/AC-1: ATC commits as the git identity configured in the owned ch
     }
   })
 
+  it('ST-99/AC-1: author.* and committer.* settings and inherited GIT_AUTHOR_* variables do not change who the claim and the Codex commit are by', async () => {
+    const world = await makeWorld()
+    const id = await approveFile(world)
+    for (const key of ['author', 'committer']) {
+      git(ownedOf(world), 'config', '--local', `${key}.name`, 'Config Author')
+      git(ownedOf(world), 'config', '--local', `${key}.email`, 'config.author@example.com')
+    }
+    const codex = fakeCodex(({ cwd }) => { writeFileSync(path.join(cwd, 'greeting.txt'), 'hello'); return block('Codex greeting') })
+    const saved = { name: process.env.GIT_AUTHOR_NAME, email: process.env.GIT_COMMITTER_EMAIL }
+    let result
+    try {
+      process.env.GIT_AUTHOR_NAME = 'Inherited'
+      process.env.GIT_COMMITTER_EMAIL = 'inherited@example.com'
+      ;({ result } = await exec(world, id, finish, { options: { ...codexOptions(), codexSession: codex.codexSession } }))
+    } finally {
+      if (saved.name === undefined) delete process.env.GIT_AUTHOR_NAME
+      else process.env.GIT_AUTHOR_NAME = saved.name
+      if (saved.email === undefined) delete process.env.GIT_COMMITTER_EMAIL
+      else process.env.GIT_COMMITTER_EMAIL = saved.email
+    }
+    expect(result.status).toBe('pushed')
+    const shas = git(world.bare, 'log', '--format=%H', `refs/heads/main..refs/heads/${firstBranch(world)}`).split('\n')
+    expect(shas).toHaveLength(2)
+    for (const sha of shas) expect(identities(world, sha)).toBe(`${CREW.name}|${CREW.email}|${CREW.name}|${CREW.email}`)
+  })
+
   for (const [title, set, missing] of [
     ['user.name', { name: '' }, ['user.name']],
     ['user.email', { email: '' }, ['user.email']],

@@ -107,7 +107,11 @@ function makeWorld() {
 // ST-99/AC-1: the identity ATC commits as is the one configured in the checkout it works in. Every
 // test repository sets its own, locally; nothing here reads this machine's global git config.
 const CREW = { name: 'Crew Member', email: 'crew.member@example.com' }
-const IDENTITY = ['-c', `user.name=${CREW.name}`, '-c', `user.email=${CREW.email}`]
+const IDENTITY = {
+  name: CREW.name,
+  email: CREW.email,
+  env: { GIT_AUTHOR_NAME: CREW.name, GIT_AUTHOR_EMAIL: CREW.email, GIT_COMMITTER_NAME: CREW.name, GIT_COMMITTER_EMAIL: CREW.email },
+}
 function setIdentity(cwd, { name = CREW.name, email = CREW.email } = {}) {
   git(cwd, 'config', '--local', 'user.name', name)
   git(cwd, 'config', '--local', 'user.email', email)
@@ -2794,6 +2798,38 @@ describe('ST-99/AC-1: ATC commits as the git identity configured in the checkout
     for (const commit of remoteCommits(world)) expect([commit.name, commit.email]).toEqual([CREW.name, CREW.email])
   })
 
+  it('ST-99/AC-1: author.* and committer.* settings, and inherited GIT_AUTHOR_* and GIT_COMMITTER_* variables, do not change who the claim and the Codex commit are by, set before or during the run', async () => {
+    const world = makeWorld()
+    const other = { name: 'Config Author', email: 'config.author@example.com' }
+    const setOthers = () => {
+      for (const key of ['author', 'committer']) {
+        git(world.repoDir, 'config', '--local', `${key}.name`, other.name)
+        git(world.repoDir, 'config', '--local', `${key}.email`, other.email)
+      }
+    }
+    const inherited = ['GIT_AUTHOR_NAME', 'GIT_AUTHOR_EMAIL', 'GIT_COMMITTER_NAME', 'GIT_COMMITTER_EMAIL']
+    const saved = Object.fromEntries(inherited.map((name) => [name, process.env[name]]))
+    try {
+      for (const name of inherited) process.env[name] = 'Inherited'
+      setOthers()
+      const { result } = await dispatchCodex(world, ({ cwd }) => {
+        leaveWork(cwd)
+        setOthers()
+        process.env.GIT_COMMITTER_NAME = 'Changed Mid-Run'
+        return block('Ship it')
+      })
+      expect(result.status).toBe('opened')
+    } finally {
+      for (const name of inherited) {
+        if (saved[name] === undefined) delete process.env[name]
+        else process.env[name] = saved[name]
+      }
+    }
+    const commits = remoteCommits(world)
+    expect(commits).toHaveLength(2)
+    for (const { sha } of commits) expect(remoteIdentities(world, sha)).toBe(`${CREW.name}|${CREW.email}|${CREW.name}|${CREW.email}`)
+  })
+
   it('ST-99/AC-1: retryStory commits a Codex session\'s work as that identity', async () => {
     const world = makeRetryWorld()
     setIdentity(world.repoDir, PAT)
@@ -2824,16 +2860,23 @@ describe('ST-99/AC-1: ATC commits as the git identity configured in the checkout
     })
   }
 
-  it('ST-99/AC-1: retryStory refuses with no-git-identity when a value is empty, and makes and spawns nothing', async () => {
-    const world = makeRetryWorld()
-    setIdentity(world.repoDir, { email: '' })
-    const { result, fake } = await retry(world, () => { throw new Error('must not spawn') }, { install: async () => { throw new Error('must not install') } })
-    expect(result).toMatchObject({ status: 'no-git-identity', missing: ['user.email'], storyId: 'OQ-98', prNumber: 7 })
-    expect(result.reason).toContain('user.email')
-    expect(fake.calls).toHaveLength(0)
-    expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
-    expect(remoteTipOf(world)).toBe(world.tip)
-  })
+  for (const [title, set, missing] of [
+    ['user.name empty', { name: '' }, ['user.name']],
+    ['user.name blank', { name: '   ' }, ['user.name']],
+    ['user.email empty', { email: '' }, ['user.email']],
+    ['both empty', { name: '', email: '' }, ['user.name', 'user.email']],
+  ]) {
+    it(`ST-99/AC-1: retryStory refuses with no-git-identity when ${title}, naming it, and makes and spawns nothing`, async () => {
+      const world = makeRetryWorld()
+      setIdentity(world.repoDir, set)
+      const { result, fake } = await retry(world, () => { throw new Error('must not spawn') }, { install: async () => { throw new Error('must not install') } })
+      expect(result).toMatchObject({ status: 'no-git-identity', missing, storyId: 'OQ-98', prNumber: 7 })
+      for (const key of missing) expect(result.reason).toContain(key)
+      expect(fake.calls).toHaveLength(0)
+      expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
+      expect(remoteTipOf(world)).toBe(world.tip)
+    })
+  }
 
   it('ST-99/AC-1: commitSessionWork and claimBranch refuse a call that does not pass the identity, rather than use whatever is configured', async () => {
     const repo = makeHookRepo()
@@ -2846,7 +2889,12 @@ describe('ST-99/AC-1: ATC commits as the git identity configured in the checkout
     const repo = makeHookRepo()
     git(repo.work, 'config', '--local', 'user.name', '  Local Name ')
     git(repo.work, 'config', '--local', 'user.email', 'local@example.com')
-    expect(await readGitIdentity(repo.work)).toEqual({ identity: ['-c', 'user.name=Local Name', '-c', 'user.email=local@example.com'] })
+    expect(await readGitIdentity(repo.work)).toEqual({
+      identity: {
+        name: 'Local Name', email: 'local@example.com',
+        env: { GIT_AUTHOR_NAME: 'Local Name', GIT_AUTHOR_EMAIL: 'local@example.com', GIT_COMMITTER_NAME: 'Local Name', GIT_COMMITTER_EMAIL: 'local@example.com' },
+      },
+    })
     git(repo.work, 'config', '--local', 'user.name', '   ')
     expect(await readGitIdentity(repo.work)).toMatchObject({ refusal: { status: 'no-git-identity', missing: ['user.name'] } })
   })
