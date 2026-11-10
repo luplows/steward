@@ -922,7 +922,7 @@ describe('ST-90: selection of eligible handoffs', () => {
       expect(ids(down)).toEqual(['H-1:unavailable', 'H-2:unavailable'])
       expect(down.skipped[0].reason).toContain('could not be brought to origin')
       expect(down.skipped[1].reason).toContain('Issue #6 cannot be read')
-      expect(down.skipped.every((s) => s.reason.includes('read again at the next selection'))).toBe(true)
+      expect(down.skipped.every((s) => s.reason.includes('a later selection that reaches it reads it again'))).toBe(true)
       expect(bytes(home)).toBe(before)
     } finally {
       renameSync(moved, bare)
@@ -994,6 +994,16 @@ describe('ST-90: selection of eligible handoffs', () => {
     expect(records(home).nextOrder).toBe(4)
   })
 
+  it('ST-90/AC-4: projects.json is read only for a pending handoff: malformed, it is not read when none is pending', async () => {
+    const home = await twoProjects()
+    await approve(home, REPO, '--file', 'a.md')
+    setStatus(home, 'H-1', 'withdrawn')
+    writeFileSync(projectsPath(home), '{ "projects": 3 }')
+    expect(await select(home)).toEqual({ result: 'no-eligible-handoffs', skipped: [] })
+    setStatus(home, 'H-1', 'pending')
+    await expect(select(home)).rejects.toThrow('projects.json is malformed')
+  })
+
   it('ST-90/AC-5: with no handoff at all the result is no-eligible-handoffs and no file is created', async () => {
     const home = await homeWith()
     expect(await select(home)).toEqual({ result: 'no-eligible-handoffs', skipped: [] })
@@ -1025,7 +1035,7 @@ describe('ST-90: selection of eligible handoffs', () => {
     expect(changed).toContain('a selection that reaches it holds it if its content still differs')
     const gone = lines.find((l) => l.startsWith('  H-3'))
     expect(gone).toContain(`${REPO}  Issue #3  position 3  temporarily ineligible: Issue #3 cannot be read`)
-    expect(gone).toContain('read again at the next selection')
+    expect(gone).toContain('a later selection that reaches it reads it again')
     expect(lines.some((l) => l.startsWith('  H-4'))).toBe(false)
     expect(records(home).handoffs.map((h) => h.status)).toEqual(['held', 'pending', 'pending', 'pending'])
   })

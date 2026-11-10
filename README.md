@@ -357,7 +357,7 @@ Each approval is kept in `~/.steward/state/handoffs.json`, not in the project, `
 every project, the exact approved text, the repository and source, and where the text was read:
 for a file the full commit of `main`, for an Issue its number, title, body and a fingerprint of
 its text. `show` only reads that file. `list` reads it and also reads each pending handoff's
-source, as selection does (below), and writes nothing. None of these commands starts a model or a
+source, as selection does (below), and writes no record. None of these commands starts a model or a
 coder.
 
 `add` again for a source already approved and not yet taken reports the existing handoff when
@@ -387,9 +387,12 @@ coding must check again.
   the source later has the approved text again, and reapproval keeps the handoff's place in order.
 - If the source could not be read (the project was deactivated, the owned checkout or GitHub could
   not be read, the file is no longer on `main`, the Issue is gone or is now a pull request), the
-  handoff is **temporarily ineligible**: selection reports why, holds nothing, and reads it again at
-  the next selection. Nothing needs reapproving when the source comes back unchanged.
-- If `handoffs.json` or `projects.json` is not valid, selection fails and selects nothing.
+  handoff is **temporarily ineligible**: selection reports why, holds nothing, and a later selection
+  that reaches it reads it again. Nothing needs reapproving when the source comes back unchanged.
+  Selection stops at the first eligible handoff, so it reads no handoff after that one.
+- If `handoffs.json` is not valid, selection fails and selects nothing. `projects.json` is read
+  when selection reads a pending handoff's source: if it is not valid then, selection fails and
+  selects nothing, and with no pending handoff it is not read.
 - When none is eligible the result says so. Selection never waits or retries by itself.
 
 `steward handoff list` shows each held handoff and each pending one that is not eligible now, under

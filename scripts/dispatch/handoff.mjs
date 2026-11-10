@@ -26,7 +26,7 @@
  * `selectHandoff` is the operation the coordinator (ST-93) calls to choose the next unit to code:
  * the oldest pending handoff that is eligible now. It admits nothing, claims no branch and starts
  * no model, because selection alone is not a reservation; it reads, and writes only a hold. `list`
- * runs the same checks to report, and writes nothing.
+ * runs the same checks to report, and writes no record.
  *
  * The threat model is one member of the crew running one command at a time: no other process and
  * no other writer of the file.
@@ -67,7 +67,7 @@ const USAGE = [
   '       steward handoff withdraw <id>',
   '',
   'add         approves a file on the activated project\'s main, or one of its Issues, for coding',
-  'list        the approvals, oldest first, and which are held or not eligible now (it changes nothing)',
+  'list        the approvals, oldest first, and which are held or not eligible now (it writes no record)',
   'show        one approval: its complete approved text, version and source',
   'reapprove   reads the source again and approves its new text, keeping the ID and the place in order',
   'withdraw    stops a pending or held approval being selected; its history is kept',
@@ -325,8 +325,8 @@ const sameContent = (h, read) => read.text === h.text
  * `{ eligible: true }`; `{ eligible: false, changed: true, reason }` when the source was read and
  * its text is not the approved text (selection holds it); or `{ eligible: false, changed: false,
  * reason }` when the source could not be read (the project is not activated, the owned checkout or
- * the source cannot be read, GitHub failed), which changes nothing and is read again next time.
- * Rejects when the projects file is malformed, so that nothing is selected.
+ * the source cannot be read, GitHub failed), which changes nothing; a later selection that reaches it reads it again.
+ * Rejects when the projects file is malformed or cannot be read, so that nothing is selected.
  */
 async function assess(h, ctx) {
   const read = await readSource(h.repo, h.source, ctx)
@@ -341,7 +341,7 @@ async function assess(h, ctx) {
 }
 
 const reapproveHint = (h) => `Run \`steward handoff reapprove ${h.id}\` to approve its present text, or \`steward handoff withdraw ${h.id}\`.`
-const retryHint = 'It stays approved and is read again at the next selection.'
+const retryHint = 'It stays approved; a later selection that reaches it reads it again.'
 const heldReason = (h) => `${h.hold?.reason ?? 'its unit changed after it was approved'}. ${reapproveHint(h)}`
 
 /** A handoff passed over, as `selectHandoff` and `list` report it. */
@@ -355,7 +355,7 @@ const passedOver = (h, state, reason) => ({ id: h.id, repo: h.repo, source: h.so
  *   { result: 'selected', handoff, version, skipped }   the first eligible record, and its approved
  *       version `{ version, approvedAt, text, provenance }`
  *   { result: 'no-eligible-handoffs', skipped }         when none qualifies. Each pending handoff
- *       is read once and the call returns, so a caller decides when to ask again.
+ *       is read at most once and the call returns, so a caller decides when to ask again.
  *
  * `skipped` lists, in order, each handoff passed over before the one selected (all of them when none
  * was): `{ id, repo, source, order, state: 'held' | 'unavailable', reason }`. A withdrawn, admitted
@@ -367,8 +367,10 @@ const passedOver = (h, state, reason) => ({ id: h.id, repo: h.repo, source: h.so
  * be read leaves its handoff pending and writes nothing. Selection reserves nothing: the execution
  * boundary (ST-91) rechecks before its first side effect.
  *
- * Rejects, selecting nothing, when the handoffs file or the projects file is malformed or cannot be
- * read, or a hold cannot be written.
+ * Rejects, selecting nothing, when the handoffs file is malformed or cannot be read. The projects
+ * file is read when the first pending handoff's source is: if it is malformed or cannot be read
+ * then, selection rejects before any hold is written, and with no pending handoff it is not read.
+ * It also rejects when a hold cannot be written.
  */
 export async function selectHandoff({ homedir = osHomedir(), now = () => new Date(), createContext: makeContext = createContext } = {}) {
   const ctx = { homedir, now, createContext: makeContext }
