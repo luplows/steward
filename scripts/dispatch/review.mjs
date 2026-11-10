@@ -350,7 +350,7 @@ export async function assertReviewableCheckout(dir, sha, repoDir) {
  *                  automatic eligibility. Changed eligibility returns `head-moved`,
  *                  retaining `eligibilityStatus` and `reason`; omitted for independent
  *                  manual review. Rechecks after a session keep their existing results.
- *   scratchRoot    the directory the `tw-review-*` scratch directory is made in;
+ *   scratchRoot    the directory the `steward-review-*` scratch directory is made in;
  *                  defaults to `os.tmpdir()`. Not exposed by the CLI
  *   sessionOptions extra `spawnSession` options (executable, run, timeouts,
  *                  budget)
@@ -468,7 +468,7 @@ async function executeReview({
       : eligibilityChanged({ ...refusal, reason: 'a verdict is already at its head' })
   }
 
-  const scratch = await mkdtemp(path.join(scratchRoot, 'tw-review-'))
+  const scratch = await mkdtemp(path.join(scratchRoot, 'steward-review-'))
   const tree = path.join(scratch, 'tree')
   let worktreeAdded = false
   // AC-1b: set when a first session leaves the checkout changed, so the

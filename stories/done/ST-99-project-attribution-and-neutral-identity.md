@@ -17,14 +17,14 @@ adds attribution that conflicts with the project's instructions.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — ATC's own commits, the claim commit and the commit of a Codex session's work, are
+- [x] **AC-1** — ATC's own commits, the claim commit and the commit of a Codex session's work, are
       authored and committed as the git identity configured for the checkout ATC works in
       (`user.name` and `user.email`, as `git config --get` resolves them there), in place of
       `DISPATCH_IDENTITY`'s `tw-dispatch <dispatch@tower-workshop-paths.invalid>`. That holds for
       `dispatchCoder`, `retryStory` and `executeHandoff`. The identity is read before anything is
       claimed, installed or spawned. When either value is unset or empty, the run refuses with a
       distinct result that names the missing value, and nothing is claimed.
-- [ ] **AC-2** — ATC's mechanical claim commits use its fixed claim message and no AI
+- [x] **AC-2** — ATC's mechanical claim commits use its fixed claim message and no AI
       attribution, regardless of the project's agent instructions: no agent authored them.
       For agent-generated work, the coder reads the consuming project's applicable agent
       instructions and supplies any attribution those instructions require in its commit
@@ -35,35 +35,35 @@ adds attribution that conflicts with the project's instructions.
       invents, removes or rewrites coder-supplied attribution when composing the PR; it
       preserves the coder's attribution text unchanged while adding mechanical metadata.
       The machine-read `Coder:` line remains required operational provenance, not attribution.
-- [ ] **AC-3** — `.claude/prompts/coder.md` and `.claude/prompts/coder-handoff.md` require the
+- [x] **AC-3** — `.claude/prompts/coder.md` and `.claude/prompts/coder-handoff.md` require the
       coder to read and follow the consuming project's applicable agent instructions on attribution
       for agent-generated commit messages and proposed PR text. Codex supplies a commit message
       for ATC's mechanical commit of its work, as well as the proposed PR description. The prompts
       do not impose steward's own attribution rule on clients, or ask for attribution when the
       project's instructions are silent. No new steward setting or natural-language parser defines
       attribution policy; the project's agent instructions are authoritative.
-- [ ] **AC-4** — The machine label in a claim commit is read from `STEWARD_MACHINE_LABEL`, and from
+- [x] **AC-4** — The machine label in a claim commit is read from `STEWARD_MACHINE_LABEL`, and from
       `TW_MACHINE_LABEL` only when `STEWARD_MACHINE_LABEL` is unset or empty, with the same
       validation as today and the same `bad-machine-label` refusal. Documentation names the new
       variable and the fallback.
-- [ ] **AC-5** — `coder.mjs` no longer treats untracked files under `e2e/__screenshots__/` as
+- [x] **AC-5** — `coder.mjs` no longer treats untracked files under `e2e/__screenshots__/` as
       anything but ordinary changes: they block a push and are included in a Codex work commit like
       any other untracked file, as `classifyStatus`'s other cases are today. `SCREENSHOT_DIR` and
       the `screenshots` result field go, along with every comment and doc line describing them.
-- [ ] **AC-6** — The scratch directories ATC makes are named `steward-coder-*`, `steward-review-*`
+- [x] **AC-6** — The scratch directories ATC makes are named `steward-coder-*`, `steward-review-*`
       and `steward-stop-*`, in place of `tw-coder-*`, `tw-review-*` and `tw-stop-*`, and anything that
       finds them by prefix uses the new names.
-- [ ] **AC-7** — `scripts/dispatch/ci.mjs`'s `CI_WORKFLOW_PATH` and `Setup: ` step prefix are
+- [x] **AC-7** — `scripts/dispatch/ci.mjs`'s `CI_WORKFLOW_PATH` and `Setup: ` step prefix are
       described, in its comments and in the docs that mention them, as steward's own repository's CI
       conventions, read only by steward's own story loop (`story.mjs`). A test asserts that none of
       `handoff-coder.mjs`, `review.mjs`, `land.mjs`, `inspect.mjs` and the runway's scripts imports
       `ci.mjs`.
-- [ ] **AC-8** — A Vitest test scans `scripts/` (other than test files and `fixtures/`),
+- [x] **AC-8** — A Vitest test scans `scripts/` (other than test files and `fixtures/`),
       `.claude/`, `.github/` and `templates/` and fails on `tw-dispatch`,
       `tower-workshop-paths.invalid`, `tw-coder-`, `tw-review-`, `tw-stop-` or `e2e/__screenshots__`,
       and on `TW_MACHINE_LABEL` anywhere but AC-4's fallback. Each check fails without this story's
       change.
-- [ ] **AC-9** — Tests cover AC-1 for each of the three entry points, with an identity set and
+- [x] **AC-9** — Tests cover AC-1 for each of the three entry points, with an identity set and
       with each value missing; mechanical claim commits never carry AI attribution; and ATC
       preserves valid coder-supplied commit messages and PR attribution text, whether it includes
       required attribution or omits it when prohibited or unspecified. Tests exercise Codex
@@ -72,7 +72,7 @@ adds attribution that conflicts with the project's instructions.
       project policies. Tests also cover AC-4's new name, fallback and precedence, and AC-5's
       screenshot files, now committed or blocking. No real model, GitHub mutation or
       `~/.steward/` access runs.
-- [ ] **AC-10** — Resolve `**Planned (ST-99)**` in `docs/agent-workflow-design.md`, and update
+- [x] **AC-10** — Resolve `**Planned (ST-99)**` in `docs/agent-workflow-design.md`, and update
       `README.md` and `docs/agent-workflow-design.md` wherever they name the old identity, variable,
       screenshot rule or scratch names, outside dated records.
 

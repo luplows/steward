@@ -515,7 +515,8 @@ settles it.
   existing configuration is preserved.
 - **`unitLinks` and `rulesFile`**: as decided under Review, above.
 - **Kept out of the settings:** the cap on reviews per rotation, a command-line option (The two
-  sides, below); the machine label, which belongs to a machine, so stays `TW_MACHINE_LABEL`; and
+  sides, below); the machine label, which belongs to a machine, so stays `STEWARD_MACHINE_LABEL`
+  (`TW_MACHINE_LABEL` is read when that is unset); and
   the base branch, the remote and the stories directory, constants until a project needs otherwise
   (design doc, R3).
 
@@ -567,7 +568,7 @@ settles it.
     re-checks it before merging;
   - reviewing is the exposure, since two machines could review the same head and both pay, though
     `review.mjs` notices the race before posting a verdict. A rotation could first post a claim
-    comment naming its machine (`TW_MACHINE_LABEL`), the head and the time, and other rotations
+    comment naming its machine (`STEWARD_MACHINE_LABEL`), the head and the time, and other rotations
     would skip a head with a fresh claim (the planning session, 2026-10-11);
   - or one machine runs the one authoritative ATC, which farms reviewer and coder sessions out to
     other machines (the owner's idea, 2026-10-11).

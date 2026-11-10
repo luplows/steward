@@ -2,7 +2,7 @@
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -92,7 +92,16 @@ async function makeWorld({ files = {}, settings = {} } = {}) {
   const code = await project(['activate', dir], { cwd: base, homedir: home, cloneUrl: () => bare, out: () => {}, err: (l) => errs.push(l) })
   if (code !== 0) throw new Error(errs.join(' | '))
   expect(code).toBe(0)
+  setIdentity(ownedCheckoutPath(home, REPO))
   return { home, bare, dir, issues: new Map(), requests: [] }
+}
+
+// ST-99/AC-1: the identity ATC commits as is the one configured in the project's owned checkout.
+// Each test world sets its own there, locally, so nothing depends on any other git config.
+const CREW = { name: 'Crew Member', email: 'crew.member@example.com' }
+function setIdentity(cwd, { name = CREW.name, email = CREW.email } = {}) {
+  git(cwd, 'config', '--local', 'user.name', name)
+  git(cwd, 'config', '--local', 'user.email', email)
 }
 
 /** Commits `files` to `world`'s `main` on its origin. */
@@ -230,6 +239,7 @@ afterAll(() => {
 const remoteBranch = (world, branch) => gitOk(world.bare, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`)
 const remoteMain = (world) => git(world.bare, 'rev-parse', 'refs/heads/main')
 const ownedOf = (world) => ownedCheckoutPath(world.home, REPO)
+const firstBranch = (world) => handoffBranch(records(world).handoffs[0])
 const noModel = (fake) => expect(fake.calls).toHaveLength(0)
 const installHook = (world, script) => writeFileSync(path.join(world.bare, 'hooks', 'pre-receive'), script, { mode: 0o755 })
 const REFUSE_ALL_HOOK = '#!/bin/sh\necho "refused by test hook" >&2\nexit 1\n'
@@ -721,16 +731,34 @@ describe('ST-91/AC-4: the existing limits and choices still apply', () => {
     expect(result).toMatchObject({ status: 'pushed', choice: { name: 'gpt', tool: 'codex', model: 'gpt-6.1-sol' } })
     expect(codex.calls).toHaveLength(1)
     expect(claude.calls).toHaveLength(0)
-    expect(git(world.bare, 'log', '-1', '--format=%s%x09%an', result.headSha)).toBe('Codex greeting\ttw-dispatch')
+    expect(git(world.bare, 'log', '-1', '--format=%s%x09%an', result.headSha)).toBe(`Codex greeting\t${CREW.name}`)
     expect(result.proposedPr.title).toBe('Codex greeting')
   })
 
   it('ST-91/AC-4: a bad machine label is refused before anything is claimed', async () => {
     const world = await makeWorld()
     const id = await approveFile(world)
-    const { result, fake } = await exec(world, id, finish, { options: { baseEnv: { PATH: '/bin', TW_MACHINE_LABEL: 'has space' } } })
+    const { result, fake } = await exec(world, id, finish, { options: { baseEnv: { PATH: '/bin', STEWARD_MACHINE_LABEL: 'has space' } } })
     expect(result.status).toBe('bad-machine-label')
+    expect(result.reason).toContain('STEWARD_MACHINE_LABEL')
     noModel(fake)
+  })
+
+  it('ST-99/AC-4: a bad label in the fallback variable is refused naming it, and a good one labels the claim', async () => {
+    const world = await makeWorld()
+    const id = await approveFile(world)
+    const bad = await exec(world, id, finish, { options: { baseEnv: { PATH: '/bin', TW_MACHINE_LABEL: 'has space' } } })
+    expect(bad.result.status).toBe('bad-machine-label')
+    expect(bad.result.reason).toContain('TW_MACHINE_LABEL "has space"')
+    noModel(bad.fake)
+    const good = await exec(world, id, finish, { options: { baseEnv: { PATH: '/bin', TW_MACHINE_LABEL: 'old-name' } } })
+    expect(good.result.status).toBe('pushed')
+    expect(git(world.bare, 'log', '--format=%s', `refs/heads/main..refs/heads/${firstBranch(world)}`)).toContain('Claim H-1 on old-name at ')
+    const preferred = await makeWorld()
+    const preferredId = await approveFile(preferred)
+    const both = await exec(preferred, preferredId, finish, { options: { baseEnv: { PATH: '/bin', STEWARD_MACHINE_LABEL: 'new-name', TW_MACHINE_LABEL: 'old-name' } } })
+    expect(both.result.status).toBe('pushed')
+    expect(git(preferred.bare, 'log', '--format=%s', `refs/heads/main..refs/heads/${firstBranch(preferred)}`)).toContain('Claim H-1 on new-name at ')
   })
 })
 
@@ -909,16 +937,19 @@ describe('ST-91/AC-6: failures are distinct, keep the coder\'s only copy, and ar
     expect(result.reason).toBeTruthy()
   })
 
-  it('ST-91/AC-6: a pushed branch with no readable description keeps a worktree holding untracked files', async () => {
+  it('ST-99/AC-5: an untracked file under e2e/__screenshots__/ is an ordinary change: nothing is pushed and the worktree is kept', async () => {
     const world = await makeWorld()
     const id = await approveFile(world)
     const { result } = await exec(world, id, ({ cwd }) => {
       commitWork(cwd)
       mkdirSync(path.join(cwd, 'e2e', '__screenshots__'), { recursive: true })
       writeFileSync(path.join(cwd, 'e2e', '__screenshots__', 'a.png'), 'png')
-      return 'Done, but no block.'
+      return block()
     })
-    expect(result).toMatchObject({ status: 'pr-block-invalid', pushed: true, headSha: remoteBranch(world, branchOf(world)) })
+    expect(result).toMatchObject({ status: 'uncommitted-changes', paths: ['e2e/__screenshots__/a.png'], pushed: false })
+    expect(result).not.toHaveProperty('untrackedScreenshots')
+    expect(result.headSha).toBeNull()
+    expect(git(world.bare, 'log', '--format=%s', `refs/heads/main..refs/heads/${branchOf(world)}`)).toMatch(/^Claim H-1 on /)
     expect(existsSync(path.join(result.retained.worktree, 'e2e', '__screenshots__', 'a.png'))).toBe(true)
     expect(result.retained.branch).toBe(branchOf(world))
   })
@@ -966,5 +997,160 @@ describe('ST-91/AC-6: failures are distinct, keep the coder\'s only copy, and ar
     for (const failure of ['claim-failed', 'install-failed', 'session-failed', 'nothing-committed', 'uncommitted-changes', 'push-failed', 'pr-block-invalid']) {
       expect(REFUSALS).not.toContain(failure)
     }
+  })
+})
+
+describe('ST-99/AC-1: ATC commits as the git identity configured in the owned checkout', () => {
+  const PAT = { name: 'Pat Planner', email: 'pat.planner@example.com' }
+  const codexOptions = () => {
+    const claude = fakeRun(() => { throw new Error('a Codex choice must not run through spawnSession') })
+    return { userConfig: async () => codexUserConfig(), choice: 'gpt', sessionOptions: { executable: 'fake-claude', run: claude.run } }
+  }
+  const identities = (world, ref) => git(world.bare, 'log', '-1', '--format=%an|%ae|%cn|%ce', ref)
+
+  it('ST-99/AC-1: the claim commit and the commit of a Codex session\'s work are authored and committed as that identity', async () => {
+    const world = await makeWorld()
+    setIdentity(ownedOf(world), PAT)
+    const id = await approveFile(world)
+    const codex = fakeCodex(({ cwd }) => { writeFileSync(path.join(cwd, 'greeting.txt'), 'hello'); return block('Codex greeting') })
+    const { result } = await exec(world, id, finish, { options: { ...codexOptions(), codexSession: codex.codexSession } })
+    expect(result.status).toBe('pushed')
+    const [work, claim] = git(world.bare, 'log', '--format=%H', `refs/heads/main..refs/heads/${firstBranch(world)}`).split('\n')
+    for (const sha of [work, claim]) expect(identities(world, sha)).toBe(`${PAT.name}|${PAT.email}|${PAT.name}|${PAT.email}`)
+    expect(git(world.bare, 'log', '-1', '--format=%s', claim)).toMatch(/^Claim H-1 on /)
+  })
+
+  it('ST-99/AC-1: it is read once, before the claim: a change made during the session is not seen by the commit of the work', async () => {
+    const world = await makeWorld()
+    const id = await approveFile(world)
+    const codex = fakeCodex(({ cwd }) => {
+      writeFileSync(path.join(cwd, 'greeting.txt'), 'hello')
+      setIdentity(ownedOf(world), { name: 'Changed Mid-Run', email: 'changed@example.com' })
+      return block('Codex greeting')
+    })
+    const { result } = await exec(world, id, finish, { options: { ...codexOptions(), codexSession: codex.codexSession } })
+    expect(result.status).toBe('pushed')
+    for (const sha of git(world.bare, 'log', '--format=%H', `refs/heads/main..refs/heads/${firstBranch(world)}`).split('\n')) {
+      expect(identities(world, sha)).toBe(`${CREW.name}|${CREW.email}|${CREW.name}|${CREW.email}`)
+    }
+  })
+
+  for (const [title, set, missing] of [
+    ['user.name', { name: '' }, ['user.name']],
+    ['user.email', { email: '' }, ['user.email']],
+    ['both', { name: '', email: '' }, ['user.name', 'user.email']],
+  ]) {
+    it(`ST-99/AC-1: ${title} empty is the refusal no-git-identity, naming it, and nothing is claimed, installed or started`, async () => {
+      const world = await makeWorld()
+      const id = await approveFile(world)
+      setIdentity(ownedOf(world), set)
+      const { result, fake, installs } = await exec(world, id, finish)
+      expect(result.status).toBe('no-git-identity')
+      expect(REFUSALS).toContain('no-git-identity')
+      expect(isRetryableRefusal(result)).toBe(false)
+      expect(result.missing).toEqual(missing)
+      for (const key of missing) expect(result.reason).toContain(key)
+      noModel(fake)
+      expect(installs).toEqual([])
+      expect(remoteBranch(world, firstBranch(world))).toBeNull()
+      expect(gitOk(ownedOf(world), 'rev-parse', '--verify', '--quiet', `refs/heads/${firstBranch(world)}`)).toBeNull()
+      expect(git(ownedOf(world), 'worktree', 'list', '--porcelain').split('\n').filter((l) => l.startsWith('worktree '))).toHaveLength(1)
+    })
+  }
+})
+
+describe('ST-99/AC-2 and AC-9: attribution is the coder\'s, and ATC adds none and removes none', () => {
+  const TRAILER = 'Co-Authored-By: Some Agent <agent@example.invalid>'
+  const codexRun = async (world, report) => {
+    const id = await approveFile(world)
+    const codex = fakeCodex(({ cwd }) => { writeFileSync(path.join(cwd, 'greeting.txt'), 'hello'); return report })
+    const claude = fakeRun(() => { throw new Error('a Codex choice must not run through spawnSession') })
+    return exec(world, id, finish, {
+      options: { userConfig: async () => codexUserConfig(), choice: 'gpt', codexSession: codex.codexSession, sessionOptions: { executable: 'fake-claude', run: claude.run } },
+    })
+  }
+  // `%B` ends the message with one more newline than the commit holds; drop it.
+  const message = (world, sha) => execFileSync('git', ['--git-dir', world.bare, 'log', '-1', '--format=%B', sha], { encoding: 'utf8' }).slice(0, -1)
+  const withMessage = (text, { title = 'Codex greeting', body = '### What changed\n\nIt greets.' } = {}) =>
+    `Done.\n\n## PR title\n${title}\n\n## PR body\n${body}\n\n## Commit message\n${text}\n\n## Open as\nready`
+
+  it('ST-99/AC-2: the claim commit carries its fixed message and no attribution', async () => {
+    const world = await makeWorld()
+    const id = await approveFile(world)
+    const { result } = await exec(world, id, ({ cwd }) => { commitWork(cwd); return block('T', 'ready', `### What changed\n\n${TRAILER}`) })
+    expect(result.status).toBe('pushed')
+    const claim = git(world.bare, 'log', '--format=%H', '--grep=^Claim H-1 on ', `refs/heads/${firstBranch(world)}`)
+    expect(message(world, claim)).toMatch(/^Claim H-1 on unlabelled at \S+\n$/)
+  })
+
+  it('ST-99/AC-2: a Codex session\'s work is committed with the coder\'s message unchanged, and the proposed text keeps its attribution', async () => {
+    const world = await makeWorld()
+    const commit = `Add a greeting\n\nIt says hello.\n\n${TRAILER}`
+    const body = `### What changed\n\nIt greets.\n\n${TRAILER}`
+    const { result } = await codexRun(world, withMessage(commit, { body }))
+    expect(result.status).toBe('pushed')
+    expect(message(world, result.headSha)).toBe(`${commit}\n`)
+    expect(result.proposedPr).toEqual({ title: 'Codex greeting', body, draft: false })
+  })
+
+  it('ST-99/AC-2: a message with no attribution is committed with none, and the proposed text gets none', async () => {
+    const world = await makeWorld()
+    const { result } = await codexRun(world, withMessage('Add a greeting\n\nIt says hello.'))
+    expect(result.status).toBe('pushed')
+    expect(message(world, result.headSha)).toBe('Add a greeting\n\nIt says hello.\n')
+    expect(result.proposedPr.body).toBe('### What changed\n\nIt greets.')
+  })
+
+  it('ST-99/AC-2: without a ## Commit message section the PR title is the subject, as before; an empty section is the same', async () => {
+    const plain = await makeWorld()
+    const first = await codexRun(plain, block('Title as subject'))
+    expect(message(plain, first.result.headSha)).toBe('Title as subject\n')
+    const empty = await makeWorld()
+    const second = await codexRun(empty, withMessage('', { title: 'Title again' }))
+    expect(message(empty, second.result.headSha)).toBe('Title again\n')
+  })
+
+  it('ST-99/AC-2: a closing block that does not parse supplies no message: committed under the handoff id, branch pushed, no description', async () => {
+    const world = await makeWorld()
+    const { result } = await codexRun(world, `${block()}\n\n## Commit message\nShip it\n\n${TRAILER}`)
+    expect(result.status).toBe('pr-block-invalid')
+    expect(message(world, result.headSha)).toBe("H-1: the coder's work\n")
+  })
+})
+
+describe('ST-99/AC-7: ci.mjs belongs to steward\'s own story loop', () => {
+  const dispatchDir = path.dirname(fileURLToPath(import.meta.url))
+  const landDir = path.join(dispatchDir, '..', 'land')
+  const nonTest = (dir) => readdirSync(dir).filter((f) => f.endsWith('.mjs') && !f.endsWith('.test.mjs')).map((f) => path.join(dir, f))
+  // Every relative module a file names, in a static import (also one with no bindings), a re-export or a dynamic import.
+  const importsOf = (file) => [...readFileSync(file, 'utf8').matchAll(/(?:\bfrom\s*|\bimport\s*\(?\s*)['"](\.{1,2}\/[^'"]+)['"]/g)]
+    .map((m) => path.resolve(path.dirname(file), m[1]))
+  const reach = (start) => {
+    const seen = new Set()
+    const todo = [start]
+    while (todo.length > 0) {
+      const file = todo.pop()
+      if (seen.has(file) || !existsSync(file)) continue
+      seen.add(file)
+      todo.push(...importsOf(file))
+    }
+    return seen
+  }
+  const CI = path.join(dispatchDir, 'ci.mjs')
+  const others = ['handoff-coder.mjs', 'review.mjs', 'land.mjs', 'inspect.mjs'].map((f) => path.join(dispatchDir, f))
+
+  it('ST-99/AC-7: handoff-coder.mjs, review.mjs, land.mjs, inspect.mjs and the runway\'s scripts import ci.mjs neither directly nor through another module', () => {
+    const runway = nonTest(landDir)
+    expect(runway.length).toBeGreaterThan(5)
+    for (const file of [...others, ...runway]) {
+      expect(existsSync(file), file).toBe(true)
+      expect(importsOf(file), file).not.toContain(CI)
+      expect([...reach(file)], file).not.toContain(CI)
+    }
+  })
+
+  it('ST-99/AC-7: the check can see an import: story.mjs, the story loop, imports ci.mjs', () => {
+    expect(importsOf(path.join(dispatchDir, 'story.mjs'))).toContain(CI)
+    expect([...reach(path.join(dispatchDir, 'story.mjs'))]).toContain(CI)
   })
 })

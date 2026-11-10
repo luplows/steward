@@ -222,7 +222,7 @@ export async function recordBlocked({ repoDir = process.cwd(), branch, reason })
   await git(repoDir, ['fetch', REMOTE, `+refs/heads/${branch}:refs/remotes/${REMOTE}/${branch}`])
   const baseSha = (await git(repoDir, ['rev-parse', `${REMOTE}/${branch}`])).trim()
 
-  const scratch = await mkdtemp(path.join(tmpdir(), 'tw-stop-'))
+  const scratch = await mkdtemp(path.join(tmpdir(), 'steward-stop-'))
   const tree = path.join(scratch, 'tree')
   let worktreeAdded = false
   try {

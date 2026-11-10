@@ -4,6 +4,11 @@
  * workflow's run on a head commit passed, and if not, what failed, in words a
  * retried coder can act on.
  *
+ * `CI_WORKFLOW_PATH` and the `Setup: ` step prefix (`SETUP_STEP_PREFIX`) are steward's own
+ * repository's CI conventions, read only by steward's own story loop (`story.mjs`). The handoff
+ * coder, review, landing, inspection and the runway's scripts do not import this module; a test
+ * checks it.
+ *
  * CI is the runs of `.github/workflows/ci.yml`, identified by the workflow file
  * (`CI_WORKFLOW_PATH`), never by job or check name: a head's check runs also
  * include `review-gate.yml`'s `pending` and `verdict` jobs, which are not CI.

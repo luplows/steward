@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { coderAllowedTools } from './coder-env.mjs'
 import {
-  STUCK_AFTER_MS, branchFor, claimAgeMs, claimPushArgs, commitSessionWork, dispatchCoder as dispatchCoderWith, findPromptChange,
-  machineLabel, pushArgs, pushBranch, retryStory as retryStoryWith,
+  STUCK_AFTER_MS, branchFor, claimAgeMs, claimBranch, claimPushArgs, commitSessionWork, dispatchCoder as dispatchCoderWith, findPromptChange,
+  machineLabel, pushArgs, pushBranch, readGitIdentity, retryStory as retryStoryWith,
 } from './coder.mjs'
 import { spawnCodexCoder } from './codex.mjs'
 import { buildInvocation } from './invocation.mjs'
@@ -75,7 +75,7 @@ const gitOk = (cwd, ...args) => {
 let root
 let count = 0
 afterAll(() => rmSync(root, { recursive: true, force: true }))
-beforeAll(() => { root = realpathSync(mkdtempSync(path.join(tmpdir(), 'tw-coder-test-'))) })
+beforeAll(() => { root = realpathSync(mkdtempSync(path.join(tmpdir(), 'steward-coder-test-'))) })
 
 /**
  * A bare origin holding OQ-96 (waiting on an unfinished OQ-95), OQ-98 and OQ-99
@@ -100,7 +100,17 @@ function makeWorld() {
   git(seed, 'commit', '-q', '-m', 'base')
   git(seed, 'push', '-q', 'origin', 'main')
   git(dir, 'clone', '-q', origin, repoDir)
+  setIdentity(repoDir)
   return { dir, origin, seed, repoDir }
+}
+
+// ST-99/AC-1: the identity ATC commits as is the one configured in the checkout it works in. Every
+// test repository sets its own, locally; nothing here reads this machine's global git config.
+const CREW = { name: 'Crew Member', email: 'crew.member@example.com' }
+const IDENTITY = ['-c', `user.name=${CREW.name}`, '-c', `user.email=${CREW.email}`]
+function setIdentity(cwd, { name = CREW.name, email = CREW.email } = {}) {
+  git(cwd, 'config', '--local', 'user.name', name)
+  git(cwd, 'config', '--local', 'user.email', email)
 }
 
 const envelope = (result, overrides = {}) => JSON.stringify({
@@ -468,20 +478,23 @@ describe('OQ-84/AC-3: what the session left decides the status', () => {
     expect(git(world.repoDir, 'rev-parse', 'refs/heads/story/OQ-98-first')).toBe(tip)
   })
 
-  it('OQ-84/AC-3: a new screenshot baseline left untracked still pushes, and is listed, never pushed', async () => {
+  it('ST-99/AC-5: an untracked file under e2e/__screenshots__/ is an ordinary change: it stops the push', async () => {
     const world = makeWorld()
-    const { result } = await dispatch(world, ({ cwd }) => {
+    const { result, gh } = await dispatch(world, ({ cwd }) => {
       finishStory(cwd)
       mkdirSync(path.join(cwd, 'e2e', '__screenshots__', 'flow.spec.ts'), { recursive: true })
       writeFileSync(path.join(cwd, 'e2e', '__screenshots__', 'flow.spec.ts', 'new-baseline.png'), 'png')
       return block()
     })
-    expect(result.status).toBe('opened')
-    expect(result.untrackedScreenshots).toEqual(['e2e/__screenshots__/flow.spec.ts/new-baseline.png'])
-    expect(git(world.dir, '--git-dir', world.origin, 'ls-tree', '-r', '--name-only', 'story/OQ-98-first')).not.toContain('__screenshots__')
+    expect(result.status).toBe('uncommitted-changes')
+    expect(result.paths).toEqual(['e2e/__screenshots__/flow.spec.ts/new-baseline.png'])
+    expect(result).not.toHaveProperty('screenshots')
+    expect(result).not.toHaveProperty('untrackedScreenshots')
+    expect(pulls(gh)).toHaveLength(0)
+    remoteClaimOnly(world)
   })
 
-  it('OQ-84/AC-3: any other untracked file stops the push, even beside a baseline', async () => {
+  it('OQ-84/AC-3: any other untracked file stops the push, and is named beside a baseline', async () => {
     const world = makeWorld()
     const { result, gh } = await dispatch(world, ({ cwd }) => {
       finishStory(cwd)
@@ -491,13 +504,12 @@ describe('OQ-84/AC-3: what the session left decides the status', () => {
       return block()
     })
     expect(result.status).toBe('uncommitted-changes')
-    expect(result.paths).toEqual(['notes.txt'])
-    expect(result.screenshots).toEqual(['e2e/__screenshots__/new-baseline.png'])
+    expect(result.paths.sort()).toEqual(['e2e/__screenshots__/new-baseline.png', 'notes.txt'])
     expect(pulls(gh)).toHaveLength(0)
     remoteClaimOnly(world)
   })
 
-  it('OQ-84/AC-3: a tracked change under e2e/__screenshots__/ is not excepted', async () => {
+  it('OQ-84/AC-3: a tracked change under e2e/__screenshots__/ is an uncommitted change like any other', async () => {
     const world = makeWorld()
     const { result } = await dispatch(world, ({ cwd }) => {
       mkdirSync(path.join(cwd, 'e2e', '__screenshots__'), { recursive: true })
@@ -822,7 +834,7 @@ describe('OQ-70/AC-9: the worktree is removed when the run finishes', () => {
     })).rejects.toThrow('spawn blew up')
     leaked(world, cwds)
     expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/story/OQ-98-first')).toBeTruthy()
-    expect(readdirSync(tmpdir()).filter((n) => n.startsWith('tw-coder-') && cwds.some((c) => c.includes(n)))).toEqual([])
+    expect(readdirSync(tmpdir()).filter((n) => n.startsWith('steward-coder-') && cwds.some((c) => c.includes(n)))).toEqual([])
   })
 })
 
@@ -1010,6 +1022,7 @@ describe('OQ-110/AC-2: a failed claim spends nothing', () => {
     // same origin/main -- the race AC-1's context describes.
     const repoDirB = path.join(world.dir, 'dispatcher-b')
     git(world.dir, 'clone', '-q', world.origin, repoDirB)
+    setIdentity(repoDirB)
 
     const common = {
       promptTemplate: TEMPLATE,
@@ -1092,23 +1105,58 @@ describe('OQ-110/AC-5: the next run skips a story whose claim is on origin', () 
 describe('OQ-110/AC-8: a machine label, never the hostname', () => {
   it('OQ-110/AC-8: unset or empty is unlabelled; a matching value is used as is; anything else is refused', () => {
     expect(machineLabel({})).toBe('unlabelled')
-    expect(machineLabel({ TW_MACHINE_LABEL: '' })).toBe('unlabelled')
-    expect(machineLabel({ TW_MACHINE_LABEL: 'owner-laptop_2.local' })).toBe('owner-laptop_2.local')
-    expect(machineLabel({ TW_MACHINE_LABEL: 'a'.repeat(32) })).toBe('a'.repeat(32))
+    expect(machineLabel({ STEWARD_MACHINE_LABEL: '' })).toBe('unlabelled')
+    expect(machineLabel({ STEWARD_MACHINE_LABEL: 'owner-laptop_2.local' })).toBe('owner-laptop_2.local')
+    expect(machineLabel({ STEWARD_MACHINE_LABEL: 'a'.repeat(32) })).toBe('a'.repeat(32))
     for (const bad of ['a'.repeat(33), 'has spaces', 'slash/in/it', 'emoji😀']) {
-      expect(machineLabel({ TW_MACHINE_LABEL: bad })).toBeNull()
+      expect(machineLabel({ STEWARD_MACHINE_LABEL: bad })).toBeNull()
     }
+  })
+
+  it('ST-99/AC-4: STEWARD_MACHINE_LABEL wins; TW_MACHINE_LABEL is read only when it is unset or empty', () => {
+    expect(machineLabel({ TW_MACHINE_LABEL: 'old-name' })).toBe('old-name')
+    expect(machineLabel({ STEWARD_MACHINE_LABEL: '', TW_MACHINE_LABEL: 'old-name' })).toBe('old-name')
+    expect(machineLabel({ STEWARD_MACHINE_LABEL: 'new-name', TW_MACHINE_LABEL: 'old-name' })).toBe('new-name')
+    expect(machineLabel({ TW_MACHINE_LABEL: '' })).toBe('unlabelled')
+    // A set STEWARD_MACHINE_LABEL is never replaced by the fallback, even when it is the bad one.
+    expect(machineLabel({ STEWARD_MACHINE_LABEL: 'has spaces', TW_MACHINE_LABEL: 'old-name' })).toBeNull()
+    expect(machineLabel({ TW_MACHINE_LABEL: 'has spaces' })).toBeNull()
+  })
+
+  it('ST-99/AC-4: the claim commit names the machine by TW_MACHINE_LABEL when STEWARD_MACHINE_LABEL is unset, and by STEWARD_MACHINE_LABEL when both are set', async () => {
+    const fallbackWorld = makeWorld()
+    const fallback = await dispatch(fallbackWorld, ({ cwd }) => { finishStory(cwd); return block() }, {
+      baseEnv: { PATH: '/bin', TW_MACHINE_LABEL: 'old-name' },
+    })
+    expect(fallback.result.status).toBe('opened')
+    expect(git(fallbackWorld.dir, '--git-dir', fallbackWorld.origin, 'log', '--format=%s', 'story/OQ-98-first')).toContain('Claim OQ-98 on old-name at ')
+
+    const bothWorld = makeWorld()
+    const both = await dispatch(bothWorld, ({ cwd }) => { finishStory(cwd); return block() }, {
+      baseEnv: { PATH: '/bin', STEWARD_MACHINE_LABEL: 'new-name', TW_MACHINE_LABEL: 'old-name' },
+    })
+    expect(both.result.status).toBe('opened')
+    expect(git(bothWorld.dir, '--git-dir', bothWorld.origin, 'log', '--format=%s', 'story/OQ-98-first')).toContain('Claim OQ-98 on new-name at ')
+  })
+
+  it('ST-99/AC-4: a bad label read from the fallback is still bad-machine-label, naming that variable', async () => {
+    const { result } = await dispatch(makeWorld(), () => { throw new Error('must not spawn') }, {
+      baseEnv: { PATH: '/bin', TW_MACHINE_LABEL: 'has spaces' },
+      install: async () => { throw new Error('must not install') },
+    })
+    expect(result.status).toBe('bad-machine-label')
+    expect(result.reason).toContain('TW_MACHINE_LABEL "has spaces"')
   })
 
   it('OQ-110/AC-8: a bad label is bad-machine-label before the branch is created, so nothing is claimed, installed or spawned', async () => {
     const world = makeWorld()
     const { result, fake } = await dispatch(world, () => { throw new Error('must not spawn') }, {
-      baseEnv: { PATH: '/bin', TW_MACHINE_LABEL: 'has spaces' },
+      baseEnv: { PATH: '/bin', STEWARD_MACHINE_LABEL: 'has spaces' },
       install: async () => { throw new Error('must not install') },
     })
     expect(result.status).toBe('bad-machine-label')
     expect(result.storyId).toBe('OQ-98')
-    expect(result.reason).toContain('TW_MACHINE_LABEL')
+    expect(result.reason).toContain('STEWARD_MACHINE_LABEL')
     expect(fake.calls).toHaveLength(0)
     expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
     expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/story/OQ-98-first')).toBeNull()
@@ -1127,7 +1175,7 @@ describe('OQ-110/AC-8: a machine label, never the hostname', () => {
   it('OQ-110/AC-8: the claim commit names the machine by its label, or "unlabelled" when none is set', async () => {
     const labelledWorld = makeWorld()
     const labelled = await dispatch(labelledWorld, ({ cwd }) => { finishStory(cwd); return block() }, {
-      baseEnv: { PATH: '/bin', TW_MACHINE_LABEL: 'owner-laptop' },
+      baseEnv: { PATH: '/bin', STEWARD_MACHINE_LABEL: 'owner-laptop' },
     })
     expect(labelled.result.status).toBe('opened')
     const labelledSubjects = git(labelledWorld.dir, '--git-dir', labelledWorld.origin, 'log', '--format=%s', 'story/OQ-98-first')
@@ -1527,17 +1575,18 @@ describe('OQ-91/AC-2: the refusals and outcomes that had no retry test', () => {
   })
 })
 
-describe('OQ-91/AC-3: untracked screenshot baselines are a clean worktree', () => {
-  it('OQ-91/AC-3: a valid block, no commit and only untracked baselines is body-replaced, reporting them', async () => {
+describe('ST-99/AC-5: untracked screenshot baselines are not a clean worktree', () => {
+  it('ST-99/AC-5: a valid block, no commit and only an untracked baseline is uncommitted-changes naming it, and replaces nothing', async () => {
     const world = makeRetryWorld()
     const { result, gh } = await retry(world, ({ cwd }) => {
       mkdirSync(path.join(cwd, 'e2e', '__screenshots__'), { recursive: true })
       writeFileSync(path.join(cwd, 'e2e', '__screenshots__', 'new.png'), 'png')
       return block()
     })
-    expect(result.status).toBe('body-replaced')
-    expect(result.untrackedScreenshots).toEqual(['e2e/__screenshots__/new.png'])
-    expect(patches(gh)).toHaveLength(1)
+    expect(result.status).toBe('uncommitted-changes')
+    expect(result.paths).toEqual(['e2e/__screenshots__/new.png'])
+    expect(result).not.toHaveProperty('untrackedScreenshots')
+    expect(patches(gh)).toHaveLength(0)
     expect(remoteTipOf(world)).toBe(world.tip)
   })
 })
@@ -1606,7 +1655,7 @@ describe("OQ-112/AC-2: a claim's age", () => {
 
 /** A directory holding a `steward.config.json` and a `stories/stories.json` with the given `prefix`. */
 function withStoryPrefix(storyPrefix, fn) {
-  const dir = mkdtempSync(path.join(tmpdir(), 'tw-coder-prefix-'))
+  const dir = mkdtempSync(path.join(tmpdir(), 'steward-coder-prefix-'))
   writeFileSync(path.join(dir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO })))
   mkdirSync(path.join(dir, 'stories'))
   writeFileSync(path.join(dir, 'stories', 'stories.json'), JSON.stringify({ prefix: storyPrefix }))
@@ -2348,7 +2397,7 @@ describe('ST-15/AC-5: the dispatcher commits what a completed Codex session left
     expect(work.subject).toBe('Ship the thing')
     expect(claim.subject).toMatch(/^Claim OQ-98 on /)
     expect([work.name, work.email]).toEqual([claim.name, claim.email])
-    expect(work.name).toBe('tw-dispatch')
+    expect([work.name, work.email]).toEqual([CREW.name, CREW.email])
     expect(remoteNameStatus(world, work.sha)).toEqual([
       'A\tstories/done/OQ-98-first.md', 'A\twork.txt', 'D\tstories/OQ-98-first.md', 'D\tstories/OQ-99-second.md',
     ])
@@ -2356,7 +2405,7 @@ describe('ST-15/AC-5: the dispatcher commits what a completed Codex session left
     expect(result.headSha).toBe(work.sha)
   })
 
-  it('ST-15/AC-5: an untracked file under e2e/__screenshots__/ stays uncommitted and is reported', async () => {
+  it('ST-99/AC-5: an untracked file under e2e/__screenshots__/ is committed like any other untracked file', async () => {
     const world = makeWorld()
     const { result } = await dispatchCodex(world, ({ cwd }) => {
       leaveWork(cwd)
@@ -2365,8 +2414,8 @@ describe('ST-15/AC-5: the dispatcher commits what a completed Codex session left
       return block()
     })
     expect(result.status).toBe('opened')
-    expect(result.untrackedScreenshots).toEqual(['e2e/__screenshots__/new.png'])
-    expect(remoteNameStatus(world, remoteCommits(world)[0].sha).join('\n')).not.toContain('e2e/')
+    expect(result).not.toHaveProperty('untrackedScreenshots')
+    expect(remoteNameStatus(world, remoteCommits(world)[0].sha)).toContain('A\te2e/__screenshots__/new.png')
   })
 
   it('ST-15/AC-5: a block that did not parse is committed under the story id, and the branch is pushed with no pull request', async () => {
@@ -2412,7 +2461,7 @@ describe('ST-15/AC-5: the dispatcher commits what a completed Codex session left
     expect(patches(gh)).toHaveLength(1)
     const tip = remoteTipOf(world)
     expect(tip).not.toBe(world.tip)
-    expect(git(world.dir, '--git-dir', world.origin, 'log', '-1', '--format=%s%x09%an', tip)).toBe('Fixed it\ttw-dispatch')
+    expect(git(world.dir, '--git-dir', world.origin, 'log', '-1', '--format=%s%x09%an', tip)).toBe(`Fixed it\t${CREW.name}`)
     expect(result.headSha).toBe(tip)
   })
 
@@ -2425,12 +2474,12 @@ describe('ST-15/AC-5: the dispatcher commits what a completed Codex session left
     expect(second.result.status).toBe('nothing-committed')
   })
 
-  it('ST-15/AC-5: commitSessionWork makes no commit when the worktree holds only untracked screenshots', async () => {
+  it('ST-99/AC-5: commitSessionWork commits a worktree that holds only an untracked screenshot', async () => {
     const repo = makeHookRepo()
     mkdirSync(path.join(repo.work, 'e2e', '__screenshots__'), { recursive: true })
     writeFileSync(path.join(repo.work, 'e2e', '__screenshots__', 'a.png'), 'png')
-    expect(await commitSessionWork({ cwd: repo.work, storyId: 'OQ-98', title: 'T' })).toEqual({ committed: false })
-    expect(git(repo.work, 'rev-parse', 'HEAD')).toBe(repo.base)
+    expect(await commitSessionWork({ cwd: repo.work, storyId: 'OQ-98', title: 'T', identity: IDENTITY })).toMatchObject({ committed: true, subject: 'T' })
+    expect(git(repo.work, 'show', '--name-only', '--format=', 'HEAD')).toBe('e2e/__screenshots__/a.png')
   })
 })
 
@@ -2486,8 +2535,8 @@ describe('ST-15/AC-6: the commit and the push of a Codex session run with git ho
   it('ST-15/AC-6: commitSessionWork and pushBranch with hooksOff write no marker', async () => {
     const repo = makeHookRepo()
     writeFileSync(path.join(repo.work, 'b.txt'), 'b')
-    const commit = await commitSessionWork({ cwd: repo.work, storyId: 'OQ-98', title: 'Work' })
-    expect(commit).toEqual({ committed: true, subject: 'Work' })
+    const commit = await commitSessionWork({ cwd: repo.work, storyId: 'OQ-98', title: 'Work', identity: IDENTITY })
+    expect(commit).toEqual({ committed: true, subject: 'Work', message: 'Work' })
     expect(repo.fired()).toEqual([])
     const push = await pushBranch({ cwd: repo.work, branch: GPT_BRANCH, baseSha: repo.base, hooksOff: true })
     expect(push.status).toBe('pushed')
@@ -2499,7 +2548,7 @@ describe('ST-15/AC-6: the commit and the push of a Codex session run with git ho
     const repo = makeHookRepo()
     writeFileSync(path.join(repo.markers, 'refuse'), '')
     writeFileSync(path.join(repo.work, 'b.txt'), 'b')
-    expect((await commitSessionWork({ cwd: repo.work, storyId: 'OQ-98', title: 'Work' })).committed).toBe(true)
+    expect((await commitSessionWork({ cwd: repo.work, storyId: 'OQ-98', title: 'Work', identity: IDENTITY })).committed).toBe(true)
     expect(git(repo.work, 'log', '-1', '--format=%s')).toBe('Work')
     expect(repo.fired()).toEqual([])
   })
@@ -2707,4 +2756,227 @@ describe('ST-15/AC-7: nothing under .claude/prompts/ is pushed', () => {
     const line = SOURCE.match(/const NON_FAILURES = \[(.*)\]/)[1]
     expect(line).not.toContain('prompt-change-refused')
   })
+})
+
+// ----------------------------------------- ST-99: ATC's identity, and the coder's own attribution
+
+/** `block`, with the closing block's optional `## Commit message` section between the body and `## Open as`. */
+const blockWithMessage = (message, { title = 'Do the thing', body = '### What changed\n\nIt did.', open = 'ready' } = {}) =>
+  `Done.\n\n## PR title\n${title}\n\n## PR body\n${body}\n\n## Commit message\n${message}\n\n## Open as\n${open}`
+
+/** The full message of the commit `sha` on the bare origin of `world`, as git stores it. */
+// `%B` ends the message with one more newline than the commit holds; drop it.
+const remoteMessage = (world, sha) => execFileSync('git', ['--git-dir', world.origin, 'log', '-1', '--format=%B', sha], { encoding: 'utf8' }).slice(0, -1)
+const remoteIdentities = (world, sha) => git(world.dir, '--git-dir', world.origin, 'log', '-1', '--format=%an|%ae|%cn|%ce', sha)
+const ATTRIBUTION = /Co-Authored-By|Generated with|Claude|noreply@anthropic/i
+
+describe('ST-99/AC-1: ATC commits as the git identity configured in the checkout it works in', () => {
+  const PAT = { name: 'Pat Planner', email: 'pat.planner@example.com' }
+
+  it('ST-99/AC-1: dispatchCoder makes the claim commit, and the commit of a Codex session\'s work, as that identity', async () => {
+    const world = makeWorld()
+    setIdentity(world.repoDir, PAT)
+    const { result } = await dispatchCodex(world, ({ cwd }) => { leaveWork(cwd); return block('Ship it') })
+    expect(result.status).toBe('opened')
+    const [work, claim] = remoteCommits(world)
+    expect(claim.subject).toMatch(/^Claim OQ-98 on /)
+    for (const sha of [work.sha, claim.sha]) expect(remoteIdentities(world, sha)).toBe(`${PAT.name}|${PAT.email}|${PAT.name}|${PAT.email}`)
+  })
+
+  it('ST-99/AC-1: it is read once, before the claim, and passed to every commit: a change made during the session is not seen', async () => {
+    const world = makeWorld()
+    const { result } = await dispatchCodex(world, ({ cwd }) => {
+      leaveWork(cwd)
+      setIdentity(world.repoDir, { name: 'Changed Mid-Run', email: 'changed@example.com' })
+      return block('Ship it')
+    })
+    expect(result.status).toBe('opened')
+    for (const commit of remoteCommits(world)) expect([commit.name, commit.email]).toEqual([CREW.name, CREW.email])
+  })
+
+  it('ST-99/AC-1: retryStory commits a Codex session\'s work as that identity', async () => {
+    const world = makeRetryWorld()
+    setIdentity(world.repoDir, PAT)
+    const { result } = await retryCodex(world, ({ cwd }) => { writeFileSync(path.join(cwd, 'fix.txt'), 'fix'); return block('Fixed it') })
+    expect(result.status).toBe('retried')
+    expect(remoteIdentities(world, remoteTipOf(world))).toBe(`${PAT.name}|${PAT.email}|${PAT.name}|${PAT.email}`)
+  })
+
+  for (const [title, set, missing] of [
+    ['user.name', { name: '' }, ['user.name']],
+    ['user.email', { email: '' }, ['user.email']],
+    ['both', { name: '', email: '' }, ['user.name', 'user.email']],
+  ]) {
+    it(`ST-99/AC-1: dispatchCoder refuses with no-git-identity when ${title} is empty, and claims, installs and spawns nothing`, async () => {
+      const world = makeWorld()
+      setIdentity(world.repoDir, set)
+      const { result, fake } = await dispatch(world, () => { throw new Error('must not spawn') }, {
+        install: async () => { throw new Error('must not install') },
+      })
+      expect(result.status).toBe('no-git-identity')
+      expect(result.missing).toEqual(missing)
+      for (const key of missing) expect(result.reason).toContain(key)
+      expect(result.storyId).toBe('OQ-98')
+      expect(fake.calls).toHaveLength(0)
+      expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
+      expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', 'refs/heads/story/OQ-98-first')).toBeNull()
+      expect(remoteBranch(world, 'story/OQ-98-first')).toBeNull()
+    })
+  }
+
+  it('ST-99/AC-1: retryStory refuses with no-git-identity when a value is empty, and makes and spawns nothing', async () => {
+    const world = makeRetryWorld()
+    setIdentity(world.repoDir, { email: '' })
+    const { result, fake } = await retry(world, () => { throw new Error('must not spawn') }, { install: async () => { throw new Error('must not install') } })
+    expect(result).toMatchObject({ status: 'no-git-identity', missing: ['user.email'], storyId: 'OQ-98', prNumber: 7 })
+    expect(result.reason).toContain('user.email')
+    expect(fake.calls).toHaveLength(0)
+    expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
+    expect(remoteTipOf(world)).toBe(world.tip)
+  })
+
+  it('ST-99/AC-1: commitSessionWork and claimBranch refuse a call that does not pass the identity, rather than use whatever is configured', async () => {
+    const repo = makeHookRepo()
+    writeFileSync(path.join(repo.work, 'b.txt'), 'b')
+    await expect(commitSessionWork({ cwd: repo.work, storyId: 'OQ-98', title: 'T' })).rejects.toThrow(/requires the identity/)
+    await expect(claimBranch({}, { repoDir: repo.work, tree: repo.dir, branch: 'b', mainSha: repo.base, unitId: 'H-1', label: 'x' })).rejects.toThrow(/requires the identity/)
+  })
+
+  it('ST-99/AC-1: readGitIdentity reads what git config --get resolves in the checkout, trimmed, and names what is missing', async () => {
+    const repo = makeHookRepo()
+    git(repo.work, 'config', '--local', 'user.name', '  Local Name ')
+    git(repo.work, 'config', '--local', 'user.email', 'local@example.com')
+    expect(await readGitIdentity(repo.work)).toEqual({ identity: ['-c', 'user.name=Local Name', '-c', 'user.email=local@example.com'] })
+    git(repo.work, 'config', '--local', 'user.name', '   ')
+    expect(await readGitIdentity(repo.work)).toMatchObject({ refusal: { status: 'no-git-identity', missing: ['user.name'] } })
+  })
+})
+
+describe('ST-99/AC-2 and AC-9: attribution is the coder\'s, and ATC adds none and removes none', () => {
+  const TRAILER = 'Co-Authored-By: Some Agent <agent@example.invalid>'
+
+  it('ST-99/AC-2: the claim commit carries its fixed message and no attribution, whatever the coder writes', async () => {
+    const world = makeWorld()
+    const { result } = await dispatch(world, ({ cwd }) => { finishStory(cwd); return block('T', 'ready', `### What changed\n\n${TRAILER}`) })
+    expect(result.status).toBe('opened')
+    const claim = git(world.dir, '--git-dir', world.origin, 'log', '--format=%H', '--grep=^Claim OQ-98 on ', 'story/OQ-98-first')
+    expect(remoteMessage(world, claim)).toMatch(/^Claim OQ-98 on unlabelled at \S+\n$/)
+    expect(remoteMessage(world, claim)).not.toMatch(ATTRIBUTION)
+  })
+
+  it('ST-99/AC-2: ATC commits a Codex session\'s work with the coder\'s commit message unchanged, attribution trailer included', async () => {
+    const world = makeWorld()
+    const message = `Ship the thing\n\n  An indented body line.\n\n\n${TRAILER}`
+    const { result } = await dispatchCodex(world, ({ cwd }) => { leaveWork(cwd); return blockWithMessage(message) })
+    expect(result.status).toBe('opened')
+    const [work, claim] = remoteCommits(world)
+    expect(remoteMessage(world, work.sha)).toBe(`${message}\n`)
+    expect(work.subject).toBe('Ship the thing')
+    expect(remoteMessage(world, claim.sha)).not.toMatch(ATTRIBUTION)
+  })
+
+  it('ST-99/AC-2: a commit message with no attribution is committed with none, and ATC adds nothing', async () => {
+    const world = makeWorld()
+    const { result } = await dispatchCodex(world, ({ cwd }) => { leaveWork(cwd); return blockWithMessage('Ship the thing\n\nWhy it was needed.') })
+    expect(result.status).toBe('opened')
+    const [work] = remoteCommits(world)
+    expect(remoteMessage(world, work.sha)).toBe('Ship the thing\n\nWhy it was needed.\n')
+  })
+
+  it('ST-99/AC-2: a commit message of policy-like prose is only copied, never read as policy', async () => {
+    const world = makeWorld()
+    const message = 'Ship the thing\n\nThe project forbids attribution, and so this has none. Do not add a Co-Authored-By line.'
+    const { result } = await dispatchCodex(world, ({ cwd }) => { leaveWork(cwd); return blockWithMessage(message) })
+    expect(result.status).toBe('opened')
+    expect(remoteMessage(world, remoteCommits(world)[0].sha)).toBe(`${message}\n`)
+  })
+
+  it('ST-99/AC-2: without a ## Commit message section the subject is the PR title, as before, with no body and no attribution', async () => {
+    const world = makeWorld()
+    const { result } = await dispatchCodex(world, ({ cwd }) => { leaveWork(cwd); return block('Title as subject') })
+    expect(result.status).toBe('opened')
+    expect(remoteMessage(world, remoteCommits(world)[0].sha)).toBe('Title as subject\n')
+  })
+
+  it('ST-99/AC-2: an empty ## Commit message section falls back to the PR title the same way', async () => {
+    const world = makeWorld()
+    const { result } = await dispatchCodex(world, ({ cwd }) => { leaveWork(cwd); return blockWithMessage('', { title: 'Title again' }) })
+    expect(result.status).toBe('opened')
+    expect(remoteMessage(world, remoteCommits(world)[0].sha)).toBe('Title again\n')
+  })
+
+  it('ST-99/AC-2: a closing block that does not parse supplies no commit message: the work is committed under the story id', async () => {
+    const world = makeWorld()
+    // The heading after `## Open as` makes the block malformed (nothing may follow it).
+    const { result } = await dispatchCodex(world, ({ cwd }) => { leaveWork(cwd); return `${block()}\n\n## Commit message\nShip it\n\n${TRAILER}` })
+    expect(result.status).toBe('pr-block-invalid')
+    expect(remoteMessage(world, remoteCommits(world)[0].sha)).toBe("OQ-98: the coder's work\n")
+  })
+
+  it('ST-99/AC-2: a Claude coder\'s own commit is pushed as it made it, and its ## Commit message section is not used', async () => {
+    const world = makeWorld()
+    const { result } = await dispatch(world, ({ cwd }) => { finishStory(cwd); return blockWithMessage(`Never used\n\n${TRAILER}`) })
+    expect(result.status).toBe('opened')
+    const messages = git(world.dir, '--git-dir', world.origin, 'log', '--format=%s', 'story/OQ-98-first')
+    expect(messages).toContain('implement')
+    expect(messages).not.toContain('Never used')
+  })
+
+  it('ST-99/AC-2: the pull request text is the coder\'s, attribution included, plus the Coder: line ATC writes', async () => {
+    const world = makeWorld()
+    const body = `### What changed\n\nIt did.\n\n${TRAILER}\n\nCoder: not-the-coder`
+    const { result, gh } = await dispatchCodex(world, ({ cwd }) => { leaveWork(cwd); return blockWithMessage('Ship it', { body }) })
+    expect(result.status).toBe('opened')
+    const sent = pulls(gh)[0].body
+    expect(sent.body).toBe(`### What changed\n\nIt did.\n\n${TRAILER}\n\nCoder: gpt`)
+    expect(sent.title).toBe('Do the thing')
+  })
+
+  it('ST-99/AC-2: a coder that writes no attribution gets none added to the pull request text', async () => {
+    const world = makeWorld()
+    const { result, gh } = await dispatchCodex(world, ({ cwd }) => { leaveWork(cwd); return blockWithMessage('Ship it') })
+    expect(result.status).toBe('opened')
+    expect(pulls(gh)[0].body.body).toBe('### What changed\n\nIt did.\n\nCoder: gpt')
+    expect(pulls(gh)[0].body.body).not.toMatch(ATTRIBUTION)
+  })
+
+  it('ST-99/AC-2: retryStory commits a Codex session\'s work with the new block\'s commit message, and replaces the body with the coder\'s text', async () => {
+    const world = makeRetryWorld()
+    const { result, gh } = await retryCodex(world, ({ cwd }) => {
+      writeFileSync(path.join(cwd, 'fix.txt'), 'fix')
+      return blockWithMessage(`Fixed it\n\n${TRAILER}`, { body: `### What changed\n\n${TRAILER}` })
+    })
+    expect(result.status).toBe('retried')
+    expect(remoteMessage(world, remoteTipOf(world))).toBe(`Fixed it\n\n${TRAILER}\n`)
+    expect(patches(gh)[0].body.body).toBe(`### What changed\n\n${TRAILER}\n\nCoder: gpt`)
+  })
+})
+
+describe('ST-99/AC-3: the coder prompts leave attribution to the consuming project', () => {
+  const PROMPTS = ['coder.md', 'coder-handoff.md'].map((file) => [file, readFileSync(path.join(here, '..', '..', '.claude', 'prompts', file), 'utf8')])
+  // The one place the rule is stated: its bullet, up to the next bullet.
+  const rule = (text) => text.match(/- \*\*Follow this (?:repository|project)'s own rules on attribution\.\*\*[\s\S]*?(?=\n- \*\*)/)?.[0]
+
+  for (const [file, text] of PROMPTS) {
+    it(`ST-99/AC-3: ${file} tells the coder to read and follow the project's agent instructions on attribution, and to apply no other rule`, () => {
+      const bullet = rule(text)
+      expect(bullet).toBeDefined()
+      expect(bullet).toContain('agent instructions')
+      expect(bullet).toMatch(/commit message/)
+      expect(bullet).toMatch(/`## PR body`/)
+      expect(bullet).toMatch(/add the attribution when they require it/)
+      expect(bullet).toMatch(/leave\s+it out when they forbid it/)
+      expect(bullet).toMatch(/add none when they say nothing/)
+      expect(bullet).toMatch(/Apply no other\s+rule/)
+    })
+
+    it(`ST-99/AC-3: ${file} asks a Codex coder for a ## Commit message section, and imposes steward's own rule nowhere`, () => {
+      expect(text).toMatch(/Supply the commit message ATC commits your work with/)
+      expect(text).toContain('## Commit message')
+      // Outside the rule's own bullet, which names the trailers as examples, no instruction demands one.
+      const rest = text.replace(rule(text), '')
+      expect(rest).not.toMatch(/(?:must|always|add|include) (?:a )?`?Co-Authored-By/i)
+      expect(text).not.toMatch(/Generated with \[Claude/)
+    })
+  }
 })

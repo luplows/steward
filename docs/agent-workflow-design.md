@@ -673,25 +673,34 @@ the ready story queue, reapproval moving to the back of FIFO, mandatory
 historical-snapshot review, active change monitoring, automatic restart retries,
 and separate alert infrastructure.
 
-**Planned (ST-99)** (crew, 2026-11-10): The consuming project's applicable agent
+(crew, 2026-11-10) The consuming project's applicable agent
 instructions govern attribution for agent-generated commits and proposed pull request text.
 The coder interprets those instructions: it supplies attribution when required, omits it when
-forbidden, and defaults to none when silent. A Claude coder applies that policy to its commits;
-a Codex coder supplies the commit message, including any attribution, for ATC to write
-mechanically, as well as proposed PR text. ATC's mechanical claim commits carry no AI attribution:
-no model authored them. ATC does not interpret project instructions, launch an attribution-only
-model session, or parse natural-language policy. It validates and preserves coder-supplied
-attribution for generated work and PR text, adds only mechanical metadata, and retains the
-required `Coder:` operational provenance that the reviewer reads. Steward's own repository
-policy is not imposed on clients. ATC's commits, including claims and Codex work commits, use
-the git identity configured for the checkout, read once before the claim; a run with none
-configured refuses before claiming. Tower-workshop-paths' leftovers that act on a project
-go with it: the `tw-dispatch` identity, the `e2e/__screenshots__/` carve-out, the
-`TW_MACHINE_LABEL` name (kept as a fallback) and the `tw-*` scratch names; `ci.mjs`'s
-workflow path and `Setup: ` prefix are named as steward's own CI conventions, used by its
-own story loop only. Considered and not chosen: a universal no-attribution rule, a pre-claim
-model invocation, a settings key for a project's policy, a general-purpose parser, a fixed
-neutral `steward` identity, and an identity in the user config.
+forbidden, and defaults to none when silent (both coder prompts say so, and say nothing else on
+it). A Claude coder applies that policy to its commits; a Codex coder, which cannot commit,
+supplies the commit message, including any attribution, in an optional `## Commit message`
+section of its closing block, between `## PR body` and `## Open as`, which ATC commits
+unchanged (`commitSessionWork`, `parsePrBlock`); with no such section, or an empty one, the
+commit's subject is the PR title, as it was. Proposed PR text is the coder's, too. ATC's
+mechanical claim commits carry no AI attribution: no model authored them. ATC does not interpret
+project instructions, launch an attribution-only model session, or parse natural-language policy.
+It preserves coder-supplied attribution for generated work and PR text unchanged, adds only
+mechanical metadata, and retains the required `Coder:` operational provenance that the reviewer
+reads. Steward's own repository policy is not imposed on clients. ATC's commits, the claim and a
+Codex session's work, are made as the git identity (`user.name` and `user.email`) that
+`git config --get` resolves in the checkout the run works in (the owned checkout for a handoff,
+the project's repository for a story), read once before anything is claimed and passed to each
+commit; a run with either unset or empty refuses with `no-git-identity` before claiming.
+Tower-workshop-paths' leftovers that acted on a project are gone: the `tw-dispatch` identity, the
+`e2e/__screenshots__/` carve-out (an untracked file there is an ordinary change), the
+`TW_MACHINE_LABEL` name (now only the fallback for `STEWARD_MACHINE_LABEL`) and the `tw-*`
+scratch names (now `steward-coder-*`, `steward-handoff-*`, `steward-review-*` and
+`steward-stop-*`); `scripts/no-twp-leftovers.test.mjs` fails if any returns. `ci.mjs`'s workflow
+path and `Setup: ` prefix are steward's own repository's CI conventions, read only by steward's
+own story loop (`story.mjs`); the handoff coder, the reviewer, the pilot, inspection and the
+runway's scripts import nothing of `ci.mjs`. Considered and not chosen: a universal
+no-attribution rule, a pre-claim model invocation, a settings key for a project's policy, a
+general-purpose parser, a fixed neutral `steward` identity, and an identity in the user config.
 
 (crew, 2026-11-10) Steward's own repository adopts pinpoint's rule: no AI attribution anywhere, no
 `Co-Authored-By:` trailer in a commit and no "Generated with" line in a pull request, issue or
@@ -1768,7 +1777,7 @@ The majority of the interesting behaviour.
 | Still failing at the bound | Human queue. Round count **derived from `block` verdicts on the PR**, not stored. `review-gate.yml` applies `review-blocked` itself (OQ-80). `story.mjs` makes the PR a draft (OQ-87), then records `blocked:` in the story file on the story's own branch, as a commit it pushes with `pushBranch`. If the conversion to a draft fails it commits nothing, so a `blocked:` story is never left ready. The PR stays open, as a draft; `main`'s copy is not touched. |
 | CI red on the head | A run that concluded `failure` → failure output → coder respawned on the same branch. Bounded separately at three (OQ-48's AC-4), derived from the PR's failed CI runs (`countRedCiRounds`); then `blocked:` on the branch, no label. |
 | CI cancelled, timed out, or not finished within the dispatcher's wait | Not retried and not counted. The story stops, with `blocked:` on the branch naming the outcome. None of these is something a coder can fix (OQ-48's AC-5); `waitForCi`'s `red` result carries the run's `conclusion` to tell them apart. |
-| CI failed in a setup step | A run that concluded `failure` only in setup steps (checkout, Node, `npm ci`, the browser install, or GitHub's `Set up job`) is treated like a cancelled run: not retried, not counted as a red round, and the story stops with `blocked:` naming the steps (`ci-setup-failed`). `ci.yml` marks its setup steps with a `Setup: ` name prefix that `ci.mjs`'s `isSetupStep` recognises, and `ci.test.mjs` checks the two agree. Decided 2026-10-07 by the owner, after a 403 from Playwright's browser CDN failed a run that the loop would have answered with a coder retry. Re-running CI is left to whoever runs the loop, so `ci.mjs` stays read-only. |
+| CI failed in a setup step | A run that concluded `failure` only in setup steps (checkout, Node, `npm ci`, the browser install, or GitHub's `Set up job`) is treated like a cancelled run: not retried, not counted as a red round, and the story stops with `blocked:` naming the steps (`ci-setup-failed`). `ci.yml` marks its setup steps with a `Setup: ` name prefix that `ci.mjs`'s `isSetupStep` recognises, and `ci.test.mjs` checks the two agree. Decided 2026-10-07 by the owner, after a 403 from Playwright's browser CDN failed a run that the loop would have answered with a coder retry. Re-running CI is left to whoever runs the loop, so `ci.mjs` stays read-only. `CI_WORKFLOW_PATH` and the `Setup: ` prefix are steward's own repository's CI conventions, read only by steward's own story loop (`story.mjs`). |
 | A retry reports the coder's `blocked:`, a draft request or a failure; a review records no verdict; a retry after red CI pushes no commit; landing fails | The story stops. Only the results OQ-48's AC-2 names continue the run (the `decide*` functions of `story.mjs`); every other result stops it. Every stop with an open PR makes the PR a draft first, so nothing can land it, which keeps the rule that a `blocked:` story is always a draft. Then it records `blocked:` on the branch. |
 | The reviewer's verdict does not parse | `reviewPullRequest` runs one more reviewer session, in the same worktree and with the same prompt, story, pull request, environment and model, before returning `malformed-verdict`; a second malformed reply stops the story as above, with both sessions' parse failures in the reason. Only a malformed verdict is re-run, never more than once, dependencies are not installed again, and each session keeps its own budget. Decided 2026-10-08 by the owner, so that one badly formatted reply does not stop a story. Before the second session the checkout is checked again, and if the first session changed it there is no second session and nothing is reset (decided 2026-10-08 by the owner): a reviewer that wrote to its checkout is worth seeing. Every result `reviewPullRequest` returns after running a session says how many it ran (1 or 2). |
 | The dispatcher is interrupted mid-story | The crew resumes it from its PR number (`story.mjs OQ-n --pr <number>`, OQ-48's AC-9), which derives where it was from GitHub alone. Once the run has pushed, the story's branch on `origin` keeps it `in-progress`, so the loop (OQ-86) skips it; a run killed between its push and opening the PR leaves a branch with no PR, which the crew handles by hand. Killed before its claim push, the story has no branch on `origin` and the loop picks it again, but the killed run's local branch makes the dispatch return `branch-exists`, which stops the loop (OQ-86's AC-3 and AC-4). The claim push (OQ-110, above) means a run killed after it almost always leaves a branch every machine sees, since the claim lands before the install or the session starts. The loop skips a story whose branch is only local, after pushing it (OQ-111, above), and opens a `Loop: OQ-n is stuck` issue for either kind of skip (OQ-112, above). |
@@ -1817,7 +1826,7 @@ without a dispatcher session in between.
   session. GitHub's cron is not used (**Watchdog**, Part 1).
 - **Planned (ST-11):** a run takes a lock that a dead holder does not keep, and appends one line to
   a local run log. That log is how the crew hears about the loop's own stops. A leftover
-  `tw-coder-*` worktree from an interrupted run is raised as a GitHub issue, as OQ-112 raises a
+  `steward-coder-*` worktree from an interrupted run is raised as a GitHub issue, as OQ-112 raises a
   stuck story, and the run goes on (decided 2026-10-01 by the owner). A blocked story pull request is also reported by
   GitHub's failure email, since a blocking verdict fails the gate's run.
 - The loop runs from a worktree of its own, beside the repository and at a detached `origin/main`,
@@ -1837,7 +1846,8 @@ without a dispatcher session in between.
   `loop-stuck` issues the queue stops completely: a run starts no coder session, review or landing
   (decided 2026-10-03 by the owner). One stuck story can be its own fault, while two suggest the
   loop's. The claim commit (above, OQ-110) names the machine by the same label, read from
-  `TW_MACHINE_LABEL` (`coder.mjs`'s `machineLabel`): unset or empty is `unlabelled`, and a value
+  `STEWARD_MACHINE_LABEL`, or `TW_MACHINE_LABEL` when that is unset or empty (`coder.mjs`'s
+  `machineLabel`): neither set is `unlabelled`, and a value
   that does not match `^[A-Za-z0-9._-]{1,32}$` stops the dispatch with `bad-machine-label` before
   anything is claimed, installed or spawned.
 - `--max-stories N` caps how many stories one run starts (`scripts/dispatch/loop.mjs`, OQ-86); a
@@ -2415,7 +2425,7 @@ shortened where it is long, so that it can be found there with its date.
   the story has landed. Considered and not chosen: one root for every repository's worktrees,
   away from the checkouts (`E:\Worktrees\steward\`); and a gitignored folder inside the main
   checkout, where tools run in the checkout, such as Vitest and oxlint, can pick up the nested
-  copies. The scripts' own scratch checkouts (`tw-review-*`, `tw-coder-*`, `tw-stop-*` in the
+  copies. The scripts' own scratch checkouts (`steward-review-*`, `steward-coder-*`, `steward-stop-*` in the
   system temporary directory) are not sessions' worktrees, and are not changed by this decision.
 - **This document is in three parts, and a built item is a plain statement** (decided 2026-10-14
   by the owner, in the documents review). Part 1 is steward's design; Part 2 the engine from
@@ -3586,7 +3596,7 @@ Found 2026-10-08 while refining OQ-115. Each is built in steward, before OQ-115 
 - **The screenshot directory as a project setting.** `coder.mjs` line 125 (`main` at `c97aa50`)
   has `SCREENSHOT_DIR = 'e2e/__screenshots__/'`, this project's convention, in the coder's
   exception for new baselines (OQ-84). No deadline here, since the value is this repository's;
-  before the second project has a coder.
+  before the second project has a coder. Superseded: the carve-out is gone (an untracked file there is an ordinary change), so there is no value to set.
 
 ### What ties the workflow to one company today
 
