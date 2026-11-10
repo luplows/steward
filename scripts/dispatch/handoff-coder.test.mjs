@@ -1061,6 +1061,31 @@ describe('ST-99/AC-1: ATC commits as the git identity configured in the owned ch
     for (const sha of shas) expect(identities(world, sha)).toBe(`${CREW.name}|${CREW.email}|${CREW.name}|${CREW.email}`)
   })
 
+  for (const key of ['user.name', 'user.email']) {
+    it(`ST-99/AC-1: ${key} unset, with no global config to fall back on, is the refusal no-git-identity, and nothing is claimed`, async () => {
+      const world = await makeWorld()
+      const id = await approveFile(world)
+      git(ownedOf(world), 'config', '--local', '--unset', key)
+      const empty = path.join(base, 'empty-gitconfig')
+      writeFileSync(empty, '')
+      const saved = process.env.GIT_CONFIG_GLOBAL
+      let outcome
+      try {
+        process.env.GIT_CONFIG_GLOBAL = empty
+        expect(gitOk(ownedOf(world), 'config', '--get', key)).toBeNull()
+        outcome = await exec(world, id, finish)
+      } finally {
+        process.env.GIT_CONFIG_GLOBAL = saved
+      }
+      const { result, fake, installs } = outcome
+      expect(result).toMatchObject({ status: 'no-git-identity', missing: [key] })
+      expect(result.reason).toContain(key)
+      noModel(fake)
+      expect(installs).toEqual([])
+      expect(remoteBranch(world, firstBranch(world))).toBeNull()
+    })
+  }
+
   for (const [title, set, missing] of [
     ['user.name', { name: '' }, ['user.name']],
     ['user.email', { email: '' }, ['user.email']],

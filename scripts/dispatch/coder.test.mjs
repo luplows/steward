@@ -107,6 +107,27 @@ function makeWorld() {
 // ST-99/AC-1: the identity ATC commits as is the one configured in the checkout it works in. Every
 // test repository sets its own, locally; nothing here reads this machine's global git config.
 const CREW = { name: 'Crew Member', email: 'crew.member@example.com' }
+/**
+ * Runs `fn` with git's global and system config unreadable (an empty global file, no system file), so
+ * that only a test repository's own config can supply a value; restores the environment afterwards.
+ */
+async function withoutGlobalGitConfig(fn) {
+  const empty = path.join(root, 'empty-gitconfig')
+  writeFileSync(empty, '')
+  const names = ['GIT_CONFIG_GLOBAL', 'GIT_CONFIG_NOSYSTEM']
+  const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]))
+  try {
+    process.env.GIT_CONFIG_GLOBAL = empty
+    process.env.GIT_CONFIG_NOSYSTEM = '1'
+    return await fn()
+  } finally {
+    for (const name of names) {
+      if (saved[name] === undefined) delete process.env[name]
+      else process.env[name] = saved[name]
+    }
+  }
+}
+
 const IDENTITY = {
   name: CREW.name,
   email: CREW.email,
@@ -2829,6 +2850,33 @@ describe('ST-99/AC-1: ATC commits as the git identity configured in the checkout
     expect(commits).toHaveLength(2)
     for (const { sha } of commits) expect(remoteIdentities(world, sha)).toBe(`${CREW.name}|${CREW.email}|${CREW.name}|${CREW.email}`)
   })
+
+  for (const key of ['user.name', 'user.email']) {
+    it(`ST-99/AC-1: dispatchCoder refuses with no-git-identity when ${key} is unset, with no global config to fall back on, and claims nothing`, () => withoutGlobalGitConfig(async () => {
+      const world = makeWorld()
+      git(world.repoDir, 'config', '--local', '--unset', key)
+      expect(() => execFileSync('git', ['config', '--get', key], { cwd: world.repoDir, stdio: 'pipe' })).toThrow()
+      const { result, fake } = await dispatch(world, () => { throw new Error('must not spawn') }, {
+        install: async () => { throw new Error('must not install') },
+      })
+      expect(result).toMatchObject({ status: 'no-git-identity', missing: [key], storyId: 'OQ-98' })
+      expect(result.reason).toContain(key)
+      expect(fake.calls).toHaveLength(0)
+      expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
+      expect(remoteBranch(world, 'story/OQ-98-first')).toBeNull()
+    }))
+
+    it(`ST-99/AC-1: retryStory refuses with no-git-identity when ${key} is unset, with no global config to fall back on, and makes nothing`, () => withoutGlobalGitConfig(async () => {
+      const world = makeRetryWorld()
+      git(world.repoDir, 'config', '--local', '--unset', key)
+      const { result, fake } = await retry(world, () => { throw new Error('must not spawn') }, { install: async () => { throw new Error('must not install') } })
+      expect(result).toMatchObject({ status: 'no-git-identity', missing: [key], storyId: 'OQ-98', prNumber: 7 })
+      expect(result.reason).toContain(key)
+      expect(fake.calls).toHaveLength(0)
+      expect(worktrees(world.repoDir)).toEqual([path.resolve(world.repoDir)])
+      expect(remoteTipOf(world)).toBe(world.tip)
+    }))
+  }
 
   it('ST-99/AC-1: retryStory commits a Codex session\'s work as that identity', async () => {
     const world = makeRetryWorld()
