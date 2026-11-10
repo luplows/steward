@@ -20,10 +20,12 @@ while still refusing modifications that Steward would otherwise overwrite.
       template at its installed pin, `upgrade` accepts the workflow if both files,
       after the existing pin normalization, produce identical output from the same
       exact pinned version of Prettier's YAML formatter with explicit default options.
-      Both files must parse successfully; use no configuration from the client.
-      Existing exact-text and line-ending-only matches remain accepted.
-- [ ] **AC-2** — If either input cannot be formatted, or the normalized results
-      differ, `upgrade` continues refusing to replace the installed workflow
+      Formatter normalization requires both files to parse successfully and
+      uses no client configuration. Existing exact-text and line-ending-only
+      matches remain accepted without invoking the formatter.
+- [ ] **AC-2** — For inputs needing formatter normalization, if either input
+      cannot be formatted or the normalized results differ, `upgrade` continues
+      refusing to replace the installed workflow
       before cloning, pushing or opening a PR, identifying the affected file.
       Modified triggers, permissions, commands, expressions, nonformatting comments,
       added or removed entries, and alternative repositories in pin references
