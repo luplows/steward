@@ -18,27 +18,27 @@ warning today's install prints.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `scripts/dispatch/install.mjs` runs the project's `setup` setting in place of
+- [x] **AC-1** — `scripts/dispatch/install.mjs` runs the project's `setup` setting in place of
       the fixed `npm ci`: its `command`, run through the platform's shell, in the `cwd` and with
       the `env` its caller passes, reading neither from the process. When `setup` is `null` it
       runs nothing and resolves.
-- [ ] **AC-2** — A setup still running after its `timeoutMinutes` is stopped, with its whole
+- [x] **AC-2** — A setup still running after its `timeoutMinutes` is stopped, with its whole
       process tree, as `spawn.mjs` stops a session: on Windows by `taskkill /T /F`, elsewhere by
       killing the process group. The limit is taken from the setting, and a test can pass a
       shorter one. A stopped setup rejects with a message naming the limit.
-- [ ] **AC-3** — Starting the command never passes an argument array together with
+- [x] **AC-3** — Starting the command never passes an argument array together with
       `shell: true`, which is what Node 24 reports as DEP0190. A test asserts this, through an
       injected process starter, on both a Windows and a non-Windows platform value.
-- [ ] **AC-4** — `coder.mjs` reads `setup` from the project's settings and passes it to the
+- [x] **AC-4** — `coder.mjs` reads `setup` from the project's settings and passes it to the
       install. Any rejection still becomes its existing `install-failed` result. `review.mjs`
       installs nothing since ST-33.
-- [ ] **AC-5** — Tests, with the process starter injected: a setup that never exits is stopped
+- [x] **AC-5** — Tests, with the process starter injected: a setup that never exits is stopped
       at its limit, its tree killed and the rejection names the limit; one that exits 0
       resolves; one that exits non-zero rejects with the last lines of its output, as today; and
       `null` starts no process.
-- [ ] **AC-6** — OQ-78's tests that the install gets exactly the caller's `cwd` and `env`, in
+- [x] **AC-6** — OQ-78's tests that the install gets exactly the caller's `cwd` and `env`, in
       `coder.test.mjs`, pass, changed only as far as the settings fixture needs.
-- [ ] **AC-7** — The `**Planned (ST-7)**` marker in `docs/agent-workflow-design.md` loses
+- [x] **AC-7** — The `**Planned (ST-7)**` marker in `docs/agent-workflow-design.md` loses
       `ST-7`, and the passage is corrected wherever what was built differs.
 
 ## Out of scope
