@@ -648,7 +648,9 @@ model as a literal `Coder: model=<id>` token that the reviewer does not remap
 through later choice configuration; older choice-name tokens remain readable.
 The PR cites the historical approved revision as provenance, but the independent reviewer still verifies
 against the current authoritative unit on `main`. Coding is not interrupted
-to track every mid-session source change. A simple post-session mismatch check
+to track every mid-session source change, and the checks before the claim act on
+what they read: a change made while they run is not detected before the claim
+(crew, 2026-11-10). A simple post-session mismatch check
 leaves completed work in a draft PR and reports the difference; it does not
 automatically recode the newer unit.
 
