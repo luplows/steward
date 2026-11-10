@@ -194,7 +194,7 @@ const isSource = (record, repo, source) => sourceKey(record) === sourceKey({ rep
 /**
  * Reads `source` of `repo` as it stands now, for an approval: the project must be activated, its
  * owned checkout is brought to `origin`'s `main`, and its `unitLinks` there must take the source's
- * kind. Resolves `{ ok: true, text, provenance }`, or `{ ok: false, reason }` with nothing written.
+ * kind. Resolves `{ ok: true, text, provenance }`, or `{ ok: false, reason }` with no handoff record written.
  */
 async function readSource(repo, source, { homedir, createContext: makeContext }) {
   const projects = await readProjects(projectsPath(homedir))
@@ -325,7 +325,7 @@ const sameContent = (h, read) => read.text === h.text
  * `{ eligible: true }`; `{ eligible: false, changed: true, reason }` when the source was read and
  * its text is not the approved text (selection holds it); or `{ eligible: false, changed: false,
  * reason }` when the source could not be read (the project is not activated, the owned checkout or
- * the source cannot be read, GitHub failed), which changes nothing; a later selection that reaches it reads it again.
+ * the source cannot be read, GitHub failed), which changes no handoff record; a later selection that reaches it reads it again.
  * Rejects when the projects file is malformed or cannot be read, so that nothing is selected.
  */
 async function assess(h, ctx) {
@@ -364,7 +364,7 @@ const passedOver = (h, state, reason) => ({ id: h.id, repo: h.repo, source: h.so
  * A source that was read and differs from the approved text makes its handoff `held`, with the
  * reason, written before the next is considered. A held handoff is skipped without reading its
  * source and stays held, whatever the source says later, until `reapprove`. A source that could not
- * be read leaves its handoff pending and writes nothing. Selection reserves nothing: the execution
+ * be read leaves its handoff pending and writes no record. Selection reserves nothing: the execution
  * boundary (ST-91) rechecks before its first side effect.
  *
  * Rejects, selecting nothing, when the handoffs file is malformed or cannot be read. The projects
@@ -410,7 +410,7 @@ async function list(ctx) {
   }
   out(`Approved handoffs, oldest first (${file}):`)
   for (const h of handoffs) out(line(h))
-  // Report only. A pending handoff is read as selection reads it, but nothing is written: a changed
+  // Report only. A pending handoff is read as selection reads it, but no handoff record is written: a changed
   // unit is held by a selection that reaches it, not here, and an unreadable source is never held.
   const attention = []
   for (const h of handoffs) {

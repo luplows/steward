@@ -337,7 +337,7 @@ describe('ST-89/AC-2: what an approval stores', () => {
 })
 
 describe('ST-89/AC-3: list and show read the records', () => {
-  it('ST-89/AC-3: list and show give the complete text, version and source, start nothing and write nothing; show calls no GitHub', async () => {
+  it('ST-89/AC-3: list and show give the complete text, version and source, start nothing and write no handoff record; show calls no GitHub', async () => {
     const home = await homeWith([[REPO, { files: { 'a.md': 'first line\nsecond line\n' } }]])
     setIssue(REPO, 5, issueJson(5, 'Issue title', 'Issue body'))
     await run(['add', '--repo', REPO, '--file', 'a.md'], home)
@@ -1010,7 +1010,7 @@ describe('ST-90: selection of eligible handoffs', () => {
     expect(existsSync(handoffsPath(home))).toBe(false)
   })
 
-  it('ST-90/AC-6: list reports held, changed and temporarily ineligible entries with repository, source, position and reason, and writes nothing', async () => {
+  it('ST-90/AC-6: list reports held, changed and temporarily ineligible entries with repository, source, position and reason, and writes no handoff record', async () => {
     const home = await twoProjects()
     setIssue(REPO, 3, issueJson(3, 'T', 'B'))
     await approve(home, REPO, '--file', 'a.md')
