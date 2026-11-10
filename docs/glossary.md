@@ -34,6 +34,10 @@ Where a file defines the thing, the entry names it, and the file is the authorit
 - **owned checkout** — steward's own clone of an activated project,
   `~/.steward/state/checkouts/<owner>/<name>`, detached at `origin`'s `main`, never the person's
   working checkout. Kept for reuse after deactivation.
+- **handoff** — a crew member's explicit approval of one file on an activated project's `main`, or
+  one of its GitHub Issues, for coding, with the exact text approved. Kept, in the order approved,
+  in `~/.steward/state/handoffs.json` (`scripts/dispatch/handoff.mjs`). Neither installation,
+  activation nor a unit being ready authorizes coding; only a handoff is to.
 - **coder** — a session ATC starts to implement a unit. It commits; ATC pushes its branch and opens
   its flight.
 - **reviewer** — a session ATC starts to judge one flight at one head. It returns a verdict and

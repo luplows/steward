@@ -73,7 +73,9 @@ activation, ownership, reservation or other state. Operational state is kept und
 (`scripts/dispatch/project.mjs`, README "Activating a project"), and the coordinator's record,
 `~/.steward/state/coordinator.json`, a stop request for it, `~/.steward/state/coordinator.stop`
 (`scripts/dispatch/coordinator.mjs`, README "The coordinator"), and its note of each automatic
-review, `~/.steward/state/reviews.json` (`scripts/dispatch/review-admission.mjs`). Those three JSON
+review, `~/.steward/state/reviews.json` (`scripts/dispatch/review-admission.mjs`), and the approved
+coding handoffs, `~/.steward/state/handoffs.json` (`scripts/dispatch/handoff.mjs`, README "Approving a
+coding handoff"). Those four JSON
 files are read and written through `scripts/dispatch/state-file.mjs`: a write goes to a temporary
 file beside its target, `<file>.tmp`, and is renamed over it, so a write that fails leaves the file
 as it was. That covers a failed write only, and is no guard against two processes writing the same

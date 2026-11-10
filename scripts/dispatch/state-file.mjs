@@ -1,7 +1,8 @@
 /**
- * The one way steward reads and writes its JSON state files, `reviews.json`, `projects.json` and
- * `coordinator.json`, under `~/.steward/state/`. The design is `docs/agent-workflow-design.md`,
- * Part 3, "Decided so far", "Per-user coordinator foundations and manual independence".
+ * The one way steward reads and writes its JSON state files, `reviews.json`, `projects.json`,
+ * `coordinator.json` and `handoffs.json`, under `~/.steward/state/`. The design is
+ * `docs/agent-workflow-design.md`, Part 3, "Decided so far", "Per-user coordinator foundations and
+ * manual independence".
  *
  * This module knows nothing of what a valid record is, which is each caller's to decide and report.
  * It is synchronous, and `project.mjs`, which is otherwise asynchronous, calls it too.

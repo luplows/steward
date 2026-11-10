@@ -104,11 +104,16 @@ async function readFileOnMain(target, { repoDir, base }) {
   }
 }
 
+/** An issue's text as a unit: its title, a blank line and its body, without trailing whitespace. */
+export function issueText({ title, body }) {
+  return `${title}\n\n${body}`.trimEnd()
+}
+
 async function readIssue(number, ctx) {
   try {
     const issue = await getIssue(ctx, number)
     if (issue.isPullRequest) return unreadable(`#${number} is a pull request, not an issue`)
-    return { read: true, text: `${issue.title}\n\n${issue.body}`.trimEnd() }
+    return { read: true, text: issueText(issue) }
   } catch (err) {
     return unreadable(`#${number} cannot be read: ${err.message}`)
   }
