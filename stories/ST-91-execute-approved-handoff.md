@@ -36,6 +36,10 @@ As a crew member, I want one explicitly approved file or Issue implemented by St
 - Coordinator scheduling, admission records and restart reconciliation (ST-93).
 - Automatic fixing or model retries following review blocks (0.4).
 - Requiring client story ticks, completion moves or a common acceptance-criteria schema.
+- Detecting a change made while the pre-claim checks of a run are in progress: to the unit's
+  source, the project's activation, the handoff record or the admission. AC-1's checks act on what
+  they read, and a change after that read is not detected before the claim (crew, 2026-11-10). A
+  change to the unit is still found after coding, by ST-92's post-session comparison.
 
 ## Constraints
 
