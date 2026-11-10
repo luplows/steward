@@ -149,6 +149,10 @@ const TRUSTED_INLINE = {
   STORY_ID: /^[A-Za-z0-9][A-Za-z0-9._-]*$/,
   STORY_PATH: /^[A-Za-z0-9][A-Za-z0-9._/-]*$/,
   BRANCH: /^[A-Za-z0-9][A-Za-z0-9._/-]*$/,
+  // ST-91: a handoff's ID and approved version (`handoff.mjs`), the coder's alone. The unit's
+  // source and text are not here, so they are bounded blocks.
+  HANDOFF_ID: /^H-[1-9][0-9]*$/,
+  HANDOFF_VERSION: /^[1-9][0-9]*$/,
   HEAD_BRANCH: /^[A-Za-z0-9][A-Za-z0-9._/-]*$/,
   HEAD_SHA: /^[0-9a-f]{40}$/,
   PR_NUMBER: /^[0-9]+$/,
@@ -256,6 +260,21 @@ function requireRepo(repo) {
   return repo
 }
 
+/** The handoff coder prompt's placeholder values (ST-91); throws on a missing or malformed part. */
+function handoffValues({ repo, handoff, branch }) {
+  const { id, version, source, text } = handoff
+  if (typeof source !== 'string' || source === '') throw new Error("a handoff coder invocation requires the unit's source")
+  if (typeof text !== 'string') throw new Error("a handoff coder invocation requires the unit's text")
+  return {
+    REPO: requireRepo(repo),
+    HANDOFF_ID: String(id),
+    HANDOFF_VERSION: String(version),
+    UNIT_SOURCE: source,
+    UNIT: text,
+    BRANCH: branch,
+  }
+}
+
 /**
  * The reviewer prompt's placeholder values; throws on a missing `repo`, `pr`, base, `rules`,
  * `rulesFile` or `reviewTools`.
@@ -299,6 +318,12 @@ export function renderReviewerPrompt({ promptTemplate, repo, unit, branch, pr, r
  *   repo            required: the repository the run works on, `owner/name`, rendered as
  *                   `{{REPO}}` in both roles' prompts (ST-40)
  *   story           coder only: { id, path, text, model }
+ *   handoff         coder only, instead of `story` (ST-91): { id, version, source, text }, an
+ *                   approved handoff (`handoff.mjs`) as the project-neutral coder is given it:
+ *                   `source` words where the unit came from ("file docs/plan.md", "Issue #7"),
+ *                   `text` is the exact approved text. Rendered as `{{HANDOFF_ID}}`,
+ *                   `{{HANDOFF_VERSION}}`, `{{UNIT_SOURCE}}` and `{{UNIT}}`, the last two as
+ *                   bounded blocks
  *   unit            reviewer only: { note, text }, the note `describeUnit`
  *                   words and the unit's text, rendered as `{{UNIT_NOTE}}` and
  *                   `{{UNIT}}` (ST-22)
@@ -327,9 +352,12 @@ export function renderReviewerPrompt({ promptTemplate, repo, unit, branch, pr, r
  * available (OQ-107).
  */
 export function buildInvocation(options) {
-  const { role, promptTemplate, repo, story, unit, branch, pr, rules, rulesFile, reviewTools, retry, baseEnv, emptyGhConfigDir } = options
+  const { role, promptTemplate, repo, story, handoff, unit, branch, pr, rules, rulesFile, reviewTools, retry, baseEnv, emptyGhConfigDir } = options
   if (!ROLES.includes(role)) throw new Error(`unknown role: ${JSON.stringify(role)}`)
-  if (role === 'coder' && !story) throw new Error('a coder invocation requires a story')
+  if (role === 'coder' && !story && !handoff) throw new Error('a coder invocation requires a story or a handoff')
+  if (role === 'coder' && story && handoff) throw new Error('a coder invocation takes a story or a handoff, not both')
+  if (role === 'coder' && handoff && options.retry) throw new Error('a handoff coder invocation takes no retry')
+  if (role === 'reviewer' && handoff) throw new Error('a reviewer invocation takes no handoff')
   if (role === 'coder' && unit) throw new Error('a coder invocation takes no unit')
   if (role === 'reviewer' && !unit) throw new Error('a reviewer invocation requires a unit')
   if (role === 'reviewer' && story) throw new Error('a reviewer invocation takes no story')
@@ -351,13 +379,15 @@ export function buildInvocation(options) {
     if (rulesFile !== undefined || reviewTools !== undefined) {
       throw new Error('a coder invocation takes no rulesFile or reviewTools')
     }
-    values = {
-      REPO: requireRepo(repo),
-      STORY_ID: story.id,
-      STORY_PATH: retry && retry.storyMoved !== false ? donePath(story.path) : story.path,
-      STORY: story.text,
-      BRANCH: branch,
-    }
+    values = handoff
+      ? handoffValues({ repo, handoff, branch })
+      : {
+        REPO: requireRepo(repo),
+        STORY_ID: story.id,
+        STORY_PATH: retry && retry.storyMoved !== false ? donePath(story.path) : story.path,
+        STORY: story.text,
+        BRANCH: branch,
+      }
     env = coderEnv(baseEnv ?? {}, emptyGhConfigDir)
     env.BASH_DEFAULT_TIMEOUT_MS = SHELL_TIMEOUT_MS
     env.BASH_MAX_TIMEOUT_MS = SHELL_TIMEOUT_MS

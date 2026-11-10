@@ -185,7 +185,7 @@ export function readHandoffs(file) {
   return { handoffs: data.handoffs, nextOrder: data.nextOrder }
 }
 
-const describeSource = (source) => (source.kind === 'file' ? `file ${source.path}` : `Issue #${source.number}`)
+export const describeSource = (source) => (source.kind === 'file' ? `file ${source.path}` : `Issue #${source.number}`)
 const sourceKey = (record) => `${record.repo}\n${record.source.kind}\n${record.source.kind === 'file' ? record.source.path : record.source.number}`
 
 /** Whether `record` and the source `repo`/`source` are one unit. */
@@ -327,8 +327,10 @@ const sameContent = (h, read) => read.text === h.text
  * reason }` when the source could not be read (the project is not activated, the owned checkout or
  * the source cannot be read, GitHub failed), which changes no handoff record; a later selection that reaches it reads it again.
  * Rejects when the projects file is malformed or cannot be read, so that nothing is selected.
+ * Selection, `list` and the execution boundary (`handoff-coder.mjs`, ST-91) all call it; it writes no
+ * handoff record.
  */
-async function assess(h, ctx) {
+export async function assess(h, ctx) {
   const read = await readSource(h.repo, h.source, ctx)
   if (!read.ok) return { eligible: false, changed: false, reason: read.reason }
   if (sameContent(h, read)) return { eligible: true }

@@ -624,7 +624,7 @@ The engine's coder runs inside its single loop, with retries on a `block` or red
 
 ## Approved coding handoffs and sequential execution
 
-**Planned (ST-91, ST-92, ST-93)** (crew, 2026-11-08)
+**Planned (ST-92, ST-93)** (crew, 2026-11-08)
 For the 0.3 coding slice, a crew member explicitly approves a repository file
 on `main` or a GitHub Issue with `steward handoff`; installation, activation
 and a unit merely being ready do not authorize coding. The local, per-OS-user
