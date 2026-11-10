@@ -5,11 +5,13 @@ import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
 import { fixtureSettings } from './settings-fixture.mjs'
 import { handoffsPath, isSafeRelativePath, main as handoff } from './handoff.mjs'
 import { main as project, projectsPath } from './project.mjs'
 
+const DISPATCH = path.dirname(fileURLToPath(import.meta.url))
 const REPO = 'acme/widgets'
 const OTHER = 'acme/gadgets'
 
@@ -334,7 +336,7 @@ describe('ST-89/AC-2: what an approval stores', () => {
   })
 })
 
-describe('ST-89/AC-3: list and show read the records in a fresh process', () => {
+describe('ST-89/AC-3: list and show read the records', () => {
   it('ST-89/AC-3: list and show give the complete text, version and source, start nothing and call no GitHub', async () => {
     const home = await homeWith([[REPO, { files: { 'a.md': 'first line\nsecond line\n' } }]])
     setIssue(REPO, 5, issueJson(5, 'Issue title', 'Issue body'))
@@ -359,6 +361,39 @@ describe('ST-89/AC-3: list and show read the records in a fresh process', () => 
     expect(showIssue.out).toContain(`fingerprint ${sha256('Issue title\n\nIssue body')}`)
     expect(contexts).not.toHaveBeenCalled()
     expect(requests).toEqual([])
+    expect(bytes(home)).toBe(before)
+  })
+
+  it.each([
+    ['handoff.mjs', 'handoff.mjs'],
+    ['cli.mjs handoff', 'cli.mjs'],
+  ])('ST-89/AC-3: a new node process started with %s recovers the stored approvals from the home it is given', async (_name, script) => {
+    const home = await homeWith([[REPO, { files: { 'a.md': 'first line\nsecond line\n' } }]])
+    setIssue(REPO, 5, issueJson(5, 'Issue title', 'Issue body'))
+    await run(['add', '--repo', REPO, '--file', 'a.md'], home)
+    await run(['add', '--repo', REPO, '--issue', '5'], home)
+    commitOnMain(REPO, { 'a.md': 'changed after approval\n' })
+    await run(['reapprove', 'H-1'], home)
+    const sha = records(home).handoffs[0].provenance.commit
+    const before = bytes(home)
+    // The child reads only: it is given the temporary home and no other way to find the real one.
+    const env = { ...process.env, HOME: home, USERPROFILE: home }
+    delete env.STEWARD_CONFIG
+    const child = (...args) => execFileSync(process.execPath, [path.join(DISPATCH, script), ...(script === 'cli.mjs' ? ['handoff'] : []), ...args], { env, encoding: 'utf8' })
+
+    const listed = child('list')
+    expect(listed).toContain(handoffsPath(home))
+    expect(listed).toContain(`H-1  pending  v2  ${REPO}  file a.md`)
+    expect(listed).toContain(`H-2  pending  v1  ${REPO}  Issue #5`)
+    const shownFile = child('show', 'H-1')
+    expect(shownFile).toContain('changed after approval\n')
+    expect(shownFile).toContain('version:   2')
+    expect(shownFile).toContain(`main ${sha}`)
+    expect(shownFile).toContain('earlier versions: v1')
+    expect(shownFile).toContain(`file a.md of ${REPO}`)
+    const shownIssue = child('show', 'H-2')
+    expect(shownIssue).toContain('Issue title\n\nIssue body')
+    expect(shownIssue).toContain(`Issue #5 of ${REPO}`)
     expect(bytes(home)).toBe(before)
   })
 

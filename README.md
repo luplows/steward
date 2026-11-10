@@ -348,8 +348,8 @@ steward handoff withdraw <id>                                     # stop it bein
 
 `add` brings the project's owned checkout to `origin`'s `main` and refuses, recording nothing,
 when the project is not activated, when its `unitLinks` on `main` lacks `file` (or `issue`),
-when the path is not one repository-relative path (no `..`, `.` or empty part, no backslash, control character or drive letter), when
-the file is not on `main`, or when the Issue cannot be read or is a pull request. A file need not
+when the path is not one repository-relative path (no `..`, `.` or empty part, no backslash,
+control character or drive letter), when the file is not on `main`, or when the Issue cannot be read or is a pull request. A file need not
 follow the story schema. Steward reads an Issue and writes nothing to GitHub.
 
 Each approval is kept in `~/.steward/state/handoffs.json`, not in the project, `config.json` or
