@@ -356,7 +356,9 @@ Each approval is kept in `~/.steward/state/handoffs.json`, not in the project, `
 `projects.json`, with a stable ID (`H-1`, `H-2`, ...) that is also its place in one order across
 every project, the exact approved text, the repository and source, and where the text was read:
 for a file the full commit of `main`, for an Issue its number, title, body and a fingerprint of
-its text. `list` and `show` only read it; none of these commands starts a model or a coder.
+its text. `show` only reads that file. `list` reads it and also reads each pending handoff's
+source, as selection does (below), and writes no record. None of these commands starts a model or a
+coder.
 
 `add` again for a source already approved and not yet taken reports the existing handoff when
 the text is the same, and refuses, pointing to `reapprove`, when it differs. `reapprove` reads the
@@ -365,10 +367,40 @@ the version approved so far to the handoff's history and makes the new text the 
 version, keeping the ID and the place in order. `withdraw` stops a pending or held handoff being
 selected and keeps its history. A handoff that is admitted or completed is neither reapproved nor
 withdrawn, and a source whose handoff is admitted or completed is not added again; a withdrawn
-one can be, as a new handoff. Selection, admission and coding do not exist yet, so every handoff
-today is pending or withdrawn. A records file that is not valid refuses every command, and is
+one can be, as a new handoff. Admission and coding do not exist yet, so a handoff today is pending,
+held or withdrawn. A records file that is not valid refuses every command, and is
 never read as an approval. The write goes to a temporary file renamed over the old one, so a write
 that fails leaves the file as it was.
+
+Which handoff is coded next is chosen by selection, an operation the coordinator will call
+(`selectHandoff` in `scripts/dispatch/handoff.mjs`; there is no command for it). It takes the
+oldest pending handoff, in the order approved across every project, that is eligible now, and
+skips the others, which keep their places. A pending handoff is eligible when its project is still
+activated, its source can be read, and the source still has exactly the approved text: for a file
+that text on `origin`'s `main`, for an Issue its title and body. New commits on `main` that leave
+the unit's text unchanged do not matter. A withdrawn, held, admitted or completed handoff is never
+eligible. Selection starts no coder, claims no branch and reserves nothing; the step that starts
+coding must check again.
+
+- If the source was read and its text differs from the approved text, selection **holds** the
+  handoff, recording why in its record. A hold stays until `steward handoff reapprove <id>`, even if
+  the source later has the approved text again, and reapproval keeps the handoff's place in order.
+- If the source could not be read (the project was deactivated, the owned checkout or GitHub could
+  not be read, the file is no longer on `main`, the Issue is gone or is now a pull request), the
+  handoff is **temporarily ineligible**: selection reports why, holds nothing, and a later selection
+  that reaches it reads it again. Nothing needs reapproving when the source comes back unchanged.
+  Selection stops at the first eligible handoff, so it reads no handoff after that one.
+- If `handoffs.json` is not valid, selection fails and selects nothing. `projects.json` is read
+  when selection reads a pending handoff's source: if it is not valid then, selection fails and
+  selects nothing, and with no pending handoff it is not read.
+- When none is eligible the result says so. Selection never waits or retries by itself.
+
+`steward handoff list` shows each held handoff and each pending one that is not eligible now, under
+"Not eligible now", with its repository, source, position (its place in the approval order), and
+what to do. It only reports: a pending handoff whose unit has changed is shown as `changed`. A
+selection holds it when it reaches that handoff and its content still differs, not when it is
+listed. An Issue's title and body, and a file's text, are compared exactly, trailing whitespace
+included.
 
 ### The coordinator
 
