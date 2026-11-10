@@ -73,6 +73,9 @@ These hold for every pull request's content, whoever writes it, the coder includ
   pull request is opened.
 - Write new text with the words in [`docs/glossary.md`](docs/glossary.md), with the meanings it
   gives them. Dated records keep the words they were written with.
+- No AI attribution anywhere: no `Co-Authored-By:` trailer in any commit message, and no
+  "Generated with" line in any pull request, issue or comment. ATC's `Coder:` line is provenance,
+  not attribution, and stays. Commits already on `main` are not rewritten.
 
 ## Stories
 

@@ -671,6 +671,34 @@ the ready story queue, reapproval moving to the back of FIFO, mandatory
 historical-snapshot review, active change monitoring, automatic restart retries,
 and separate alert infrastructure.
 
+**Planned (ST-99)** (crew, 2026-11-10): The consuming project's applicable agent
+instructions govern attribution for agent-generated commits and proposed pull request text.
+The coder interprets those instructions: it supplies attribution when required, omits it when
+forbidden, and defaults to none when silent. A Claude coder applies that policy to its commits;
+a Codex coder supplies the commit message, including any attribution, for ATC to write
+mechanically, as well as proposed PR text. ATC's mechanical claim commits carry no AI attribution:
+no model authored them. ATC does not interpret project instructions, launch an attribution-only
+model session, or parse natural-language policy. It validates and preserves coder-supplied
+attribution for generated work and PR text, adds only mechanical metadata, and retains the
+required `Coder:` operational provenance that the reviewer reads. Steward's own repository
+policy is not imposed on clients. ATC's commits, including claims and Codex work commits, use
+the git identity configured for the checkout, read once before the claim; a run with none
+configured refuses before claiming. Tower-workshop-paths' leftovers that act on a project
+go with it: the `tw-dispatch` identity, the `e2e/__screenshots__/` carve-out, the
+`TW_MACHINE_LABEL` name (kept as a fallback) and the `tw-*` scratch names; `ci.mjs`'s
+workflow path and `Setup: ` prefix are named as steward's own CI conventions, used by its
+own story loop only. Considered and not chosen: a universal no-attribution rule, a pre-claim
+model invocation, a settings key for a project's policy, a general-purpose parser, a fixed
+neutral `steward` identity, and an identity in the user config.
+
+(crew, 2026-11-10) Steward's own repository adopts pinpoint's rule: no AI attribution anywhere, no
+`Co-Authored-By:` trailer in a commit and no "Generated with" line in a pull request, issue or
+comment, apart from ATC's `Coder:` provenance line. `AGENTS.md` states it ("Every pull request").
+History already on `main` is not rewritten. Considered and not chosen: banning the `Coder:` line as
+well, and keeping attribution. **Planned (ST-100):** `REVIEW.md` reviews against the rule, a CI
+check on a pull request's commits and body enforces it, and a committed setting stops Claude Code
+sessions adding their own.
+
 ## The story artifact
 
 ### Format
