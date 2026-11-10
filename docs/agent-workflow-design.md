@@ -671,6 +671,26 @@ the ready story queue, reapproval moving to the back of FIFO, mandatory
 historical-snapshot review, active change monitoring, automatic restart retries,
 and separate alert infrastructure.
 
+**Planned (ST-99)** (crew, 2026-11-10): Commits and pull request text in a project follow that
+project's own attribution rules. The coder learns them from the project's instructions; where those
+say nothing, it adds no AI attribution, no `Co-Authored-By:` trailer and no "Generated with" line.
+ATC writes no attribution itself. Its `Coder:` line is provenance the review reads, and stays. ATC's
+own commits, the claim and a Codex session's work, are made as the git identity configured for the
+checkout it works in, read once before the claim, and a run with none configured refuses before
+anything is claimed. Tower-workshop-paths' leftovers that act on a project go with it: the
+`tw-dispatch` identity, the `e2e/__screenshots__/` carve-out, the `TW_MACHINE_LABEL` name (kept as
+a fallback) and the `tw-*` scratch names; `ci.mjs`'s workflow path and `Setup: ` prefix are named
+as steward's own CI conventions, used by its own story loop only. Considered and not chosen: a
+settings key for a project's policy, with ATC checking the coder's output; a fixed neutral
+`steward` identity; an identity in the user config.
+
+**Planned (ST-100)** (crew, 2026-11-10): Steward's own repository adopts pinpoint's rule: no AI
+attribution anywhere, no `Co-Authored-By:` trailer in a commit and no "Generated with" line in a
+pull request, issue or comment, apart from ATC's `Coder:` provenance line. `AGENTS.md` states it,
+`REVIEW.md` reviews against it, a CI check on a pull request's commits and body enforces it, and a
+committed setting stops Claude Code sessions adding their own. History already on `main` is not
+rewritten. Considered and not chosen: banning the `Coder:` line as well, and keeping attribution.
+
 ## The story artifact
 
 ### Format

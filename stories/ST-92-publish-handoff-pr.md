@@ -3,7 +3,7 @@ id: ST-92
 title: Publish a handoff's coding result as a linked pull request
 tier: normal
 kind: product
-depends_on: [ST-89, ST-91]
+depends_on: [ST-89, ST-91, ST-99]
 model: null
 blocked: null
 ---
@@ -42,7 +42,7 @@ As a crew member, I want Steward to publish a completed coder branch as a correc
 
 ## Constraints
 
-The reviewer continues to read the unit and project rules from current `main`. In 0.3 publication trusts only the ST-91 expected remote head, not a second model output.
+The reviewer continues to read the unit and project rules from current `main`. In 0.3 publication trusts only the ST-91 expected remote head, not a second model output. The pull request text ATC composes carries no AI attribution, no `Co-Authored-By:` trailer and no "Generated with" line; the `Coder:` line is provenance and is required (ST-99, crew 2026-11-10).
 
 ## Context
 
