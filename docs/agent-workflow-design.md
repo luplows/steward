@@ -65,7 +65,7 @@ comments, block-scalar content, GitHub expressions, commands and permissions. A 
 it cannot prove formatting-only refuses, whether from `init` recognition or `upgrade`
 preflight; an accepted upgrade still proposes the target-pin template. Prettier is one
 exact pinned **development dependency only**, used in Steward's own CI to format current
-and historical workflow templates and verify the comparison against their outputs.
+workflow templates and those at each release tag, and verify the comparison against their outputs.
 Neither client command imports or runs Prettier or reads a project's formatter settings.
 Every client gate, runway and inspection invocation installs Steward using
 `npx --package=github:luplows/steward#...`; a runtime Prettier dependency would impose
@@ -82,9 +82,9 @@ separate report artifact or a general post-edit verification service.
 
 **Planned (ST-98)** (crew, 2026-11-09; refined after PR #151 review, 2026-11-10):
 Upgrade refusals identify affected paths and pins, the failed condition, what remains
-and the safe next action. Unsupported formatting and differences that cannot be proven
-formatting-only are described accurately, without claiming broad YAML semantic
-equivalence. Missing evidence cannot be reported as success; no automatic repair
+and the safe next action. A workflow whose YAML does not parse is told apart from
+well-formed YAML whose difference is outside ST-96's supported transformations, without
+claiming broad YAML semantic equivalence. Missing evidence cannot be reported as success; no automatic repair
 or review bypass is introduced.
 Considered and deferred: automatic project repairs and a machine-readable verification protocol.
 

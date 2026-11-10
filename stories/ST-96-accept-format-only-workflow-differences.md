@@ -18,8 +18,8 @@ while still refusing modifications that Steward would otherwise overwrite.
 
 - [ ] **AC-1** — An installed managed YAML workflow still matches the
       template at its installed pin when only the pin or line endings differ.
-      Otherwise, `upgrade` uses Steward's own deterministic, runtime-only-code
-      comparison of a *bounded, explicitly documented* set of presentation-only
+      Otherwise, `upgrade` uses a deterministic comparison in Steward's own
+      code, of a *bounded, explicitly documented* set of presentation-only
       YAML transformations. It accepts transformations only when the underlying
       YAML scalar values, keys, comments (including order), block-scalar content,
       GitHub expressions, command text and permissions remain unchanged. For
@@ -41,9 +41,10 @@ while still refusing modifications that Steward would otherwise overwrite.
       the project's formatting into the target template.
 - [ ] **AC-4** — Steward's own offline CI tests run one exactly pinned
       Prettier *development dependency* with default YAML formatting options
-      against current managed workflow templates and supported historical
-      templates at installed pins. The tests prove that the runtime comparator
-      accepts each resulting formatting-only variant, including relevant
+      against the current managed workflow templates and the managed templates
+      at each release tag (at least `v0.1.0` and `v0.2.0`). The tests prove
+      that the runtime comparator accepts each resulting formatting-only
+      variant, including relevant
       quotes, indentation and line wrapping, while refusing representative
       functional changes, altered comments, other-repository references,
       malformed and unsupported differences. Exercise the shared comparator,
