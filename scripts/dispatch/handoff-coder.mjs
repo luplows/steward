@@ -12,8 +12,12 @@
  * `main`. A call starts at most one session, and no failed result starts another.
  *
  * It checks the handoff at the start, and again immediately before the branch is claimed, because
- * the usage check between them takes time; a refusal at the start returns without the second. A
- * check passes only when
+ * the usage check between them takes time; a refusal at the start returns without the second. Each
+ * check reads the source and then, once it is read, decides again from the records, the project's
+ * activation and the admission (which are read together), with nothing awaited between that last
+ * read and the claim, so a change made while the source was being read is seen. The unit's text is
+ * the one thing read before that last step: it is compared when the source read returns. A check
+ * passes only when
  *
  *   - the handoff exists and its current version is the one asked for;
  *   - without an `admission`, its status is `pending`; with one, its status is `admitted` and the
@@ -78,7 +82,7 @@ import { readCodexUsage, spawnCodexCoder } from './codex.mjs'
 import { createContext } from './github.mjs'
 import { assess, describeSource, handoffsPath, readHandoffs } from './handoff.mjs'
 import { installDependencies } from './install.mjs'
-import { ownedCheckoutPath } from './project.mjs'
+import { ownedCheckoutPath, projectsPath, readProjects } from './project.mjs'
 import { readSettings } from './settings.mjs'
 import { coderChoice, readUserConfig } from './user-config.mjs'
 import { readUsage } from './usage.mjs'
@@ -122,9 +126,11 @@ export function handoffBranch(handoff) {
 const result = (base, status, rest = {}) => ({ status, repo: base.repo, handoffId: base.handoffId, version: base.version, ...rest })
 
 /**
- * The records and admission part of a check: resolves `{ handoff }` or `{ refusal }`.
+ * The part of a check that reads the records and decides from them, with no await: the handoff exists,
+ * its version is the one asked for, its status fits (`pending`; or `admitted` with an admission),
+ * and the admission names this handoff and version. Resolves `{ handoff }` or `{ refusal }`.
  */
-async function authorize(base, { admission, admissionIsActive, ctx }) {
+function fromRecords(base, { admission, ctx }) {
   const refuse = (status, reason, extra = {}) => ({ refusal: result(base, status, { reason, ...extra }) })
   let handoffs
   try {
@@ -149,17 +155,44 @@ async function authorize(base, { admission, admissionIsActive, ctx }) {
     if (h.status !== 'admitted') {
       return refuse('not-executable', `${h.id} is ${h.status}, and an admission applies only to an admitted handoff`, { handoffStatus: h.status })
     }
-    let active = false
-    try {
-      active = (await admissionIsActive(admission.id)) === true
-    } catch {
-      active = false
-    }
-    if (!active) {
-      return refuse('admission-inactive', `the admission ${admission.id} is not the active admission of ${h.id}`)
-    }
   }
   return { handoff: h }
+}
+
+/**
+ * Whether the handoff is authorized now (AC-1): the records say so (`fromRecords`), then the two
+ * facts that need an await are read together -- the project is still activated, and the admission
+ * is still the active one -- and then the records are read and decided from once more, with no
+ * await between that last read and the return. So every condition is decided after the last await.
+ */
+async function authorize(base, args) {
+  const { admission, admissionIsActive, ctx } = args
+  const refuse = (status, reason, extra = {}) => ({ refusal: result(base, status, { reason, ...extra }) })
+  const early = fromRecords(base, args)
+  if (early.refusal) return early
+  const h = early.handoff
+  const isActive = async () => {
+    try {
+      return (await admissionIsActive(admission.id)) === true
+    } catch {
+      return false
+    }
+  }
+  let read
+  try {
+    read = await Promise.all([
+      readProjects(projectsPath(ctx.homedir)),
+      admission === undefined ? true : isActive(),
+    ])
+  } catch (error) {
+    return refuse('records-unreadable', error.message)
+  }
+  const [projects, active] = read
+  if (!projects.some((p) => p.repo === h.repo)) {
+    return refuse('source-unavailable', `${h.repo} is not activated`, { retryable: true })
+  }
+  if (!active) return refuse('admission-inactive', `the admission ${admission.id} is not the active admission of ${h.id}`)
+  return fromRecords(base, args)
 }
 
 /**
@@ -180,8 +213,8 @@ async function check(base, args) {
     return refuse('records-unreadable', error.message)
   }
   if (verdict.eligible) {
-    // The source read may have taken a while: authorization is read again, after it and before
-    // anything is claimed, so a handoff withdrawn or an admission stopped meanwhile is refused.
+    // The source read may have taken a while: authorization is decided again after it, so a
+    // handoff withdrawn, a project deactivated or an admission stopped meanwhile is refused.
     return authorize(base, args)
   }
   if (verdict.changed) return refuse('unit-changed', verdict.reason, { retryable: false })
@@ -290,15 +323,17 @@ export async function executeHandoff({
   }
   if (remote) return result(base, 'branch-exists', { branch, reason: `${branch} already exists on ${REMOTE}` })
 
-  // AC-1: the second check, immediately before the first side effect.
-  const again = await check(base, checkArgs)
-  if (again.refusal) return again.refusal
-
   let scratch
   try {
     scratch = await mkdtemp(path.join(tmpdir(), 'tw-handoff-'))
   } catch (error) {
     return result(base, 'claim-failed', { branch, reason: `a scratch folder cannot be made: ${error.message}` })
+  }
+  // AC-1: the second check. Nothing is awaited between its last read and the claim.
+  const again = await check(base, checkArgs)
+  if (again.refusal) {
+    await rm(scratch, { recursive: true, force: true })
+    return again.refusal
   }
   const tree = path.join(scratch, 'tree')
   const state = { worktreeAdded: false, baseSha: mainSha, sessionStarted: false }

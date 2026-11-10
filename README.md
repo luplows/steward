@@ -419,7 +419,8 @@ passes its admission, `admitted` and the admission's ID, handoff and version mat
 is still active), and its project is activated with its source readable and its text exactly the
 approved text. It checks at the start and again just before the branch is claimed, after the usage
 check, unless an earlier step has already refused. When a check finds the source as approved, it
-then reads the records and the admission once more, so a handoff withdrawn or an admission stopped
+then reads the project's activation and the admission, and the records once more, with nothing
+awaited before the claim, so a handoff withdrawn, a project deactivated or an admission stopped
 during the source read is refused. It writes no handoff record, so a refusal changes nothing in
 the records; the coordinator decides what to record. A refusal is a `status` of the
 result:

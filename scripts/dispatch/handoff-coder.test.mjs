@@ -356,6 +356,31 @@ describe('ST-91/AC-1: the operation rechecks before any side effect', () => {
     expect(remoteBranch(world, handoffBranch(records(world).handoffs[0]))).toBeNull()
   })
 
+  it('ST-91/AC-1: a project deactivated while the final source read is in flight is refused before the claim', async () => {
+    const world = await makeWorld()
+    const id = await approveIssue(world, 23, 'Title', 'Body.')
+    let sends = 0
+    const inner = stubContext(world)
+    const createContext = (o) => {
+      const c = inner(o)
+      return {
+        ...c,
+        send: async (r) => {
+          const out = await c.send(r)
+          if (++sends === 2) await project(['deactivate', REPO], { cwd: base, homedir: world.home, out: () => {}, err: () => {} })
+          return out
+        },
+      }
+    }
+    const { result, fake, installs } = await exec(world, id, finish, { options: { createContext } })
+    expect(sends).toBe(2)
+    expect(result).toMatchObject({ status: 'source-unavailable', retryable: true })
+    expect(result.reason).toContain('not activated')
+    noModel(fake)
+    expect(installs).toEqual([])
+    expect(remoteBranch(world, handoffBranch(records(world).handoffs[0]))).toBeNull()
+  })
+
   it('ST-91/AC-1: an admission stopped while the final source read is in flight is refused before the claim', async () => {
     const world = await makeWorld()
     const id = await approveIssue(world, 22, 'Title', 'Body.')
