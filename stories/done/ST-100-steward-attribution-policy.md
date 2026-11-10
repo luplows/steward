@@ -16,31 +16,31 @@ attribution and a contributor learns of a slip before it lands.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — The rule in `AGENTS.md`'s "Every pull request" ("No AI attribution anywhere")
+- [x] **AC-1** — The rule in `AGENTS.md`'s "Every pull request" ("No AI attribution anywhere")
       keeps its meaning and gains a pointer to the check in AC-3, without restating how the check
       works.
-- [ ] **AC-2** — `REVIEW.md`'s "Every pull request" section gains a numbered item that blocks a pull
+- [x] **AC-2** — `REVIEW.md`'s "Every pull request" section gains a numbered item that blocks a pull
       request whose body, or any commit message in its range, carries a `Co-Authored-By:` trailer or
       a "Generated with" line. The `Coder:` line is not a finding.
-- [ ] **AC-3** — A script, run by `ci.yml`'s `test` job on a pull request as the containment check
+- [x] **AC-3** — A script, run by `ci.yml`'s `test` job on a pull request as the containment check
       is, fails when any commit in the pull request's range, base to head, has a `Co-Authored-By:`
       trailer, or when the pull request body has a "Generated with" line. The body and the commit
       messages reach it as data, through the environment or a file, never interpolated into a shell
       command. Commits already on `main` are not checked. Vitest tests cover a clean range, a trailer
       in one commit of several, a trailer in a merge's own message, a body with and without the line,
       a `Coder:` line, and a trailer-like line inside a commit body that is not a trailer.
-- [ ] **AC-4** — The Claude Code sessions that ATC starts in this repository add no attribution of
+- [x] **AC-4** — The Claude Code sessions that ATC starts in this repository add no attribution of
       their own: a committed project setting turns off Claude Code's default commit trailer and pull
       request line. The pull request names the setting, and the Claude Code documentation it was taken
       from, in its body. Codex sessions commit nothing themselves and are unaffected.
-- [ ] **AC-5** — `README.md`'s contributing notes state the policy for contributors, and say that a
+- [x] **AC-5** — `README.md`'s contributing notes state the policy for contributors, and say that a
       project using steward keeps its own policy: the coder follows that project's instructions
       (ST-99), and pull requests ATC opens there carry the `Coder:` provenance line.
-- [ ] **AC-6** — `.github/pull_request_template.md` and `templates/pull_request_template.md` ask for
+- [x] **AC-6** — `.github/pull_request_template.md` and `templates/pull_request_template.md` ask for
       no attribution line. Any instruction in `docs/planning-session.md`, `docs/controller.md`,
       `.claude/prompts/` or `docs/release-review.md` that asks for a trailer or a "Generated with"
       line is removed.
-- [ ] **AC-7** — Resolve `**Planned (ST-100)**` in `docs/agent-workflow-design.md`.
+- [x] **AC-7** — Resolve `**Planned (ST-100)**` in `docs/agent-workflow-design.md`.
 
 ## Out of scope
 

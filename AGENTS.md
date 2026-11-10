@@ -75,7 +75,8 @@ These hold for every pull request's content, whoever writes it, the coder includ
   gives them. Dated records keep the words they were written with.
 - No AI attribution anywhere: no `Co-Authored-By:` trailer in any commit message, and no
   "Generated with" line in any pull request, issue or comment. ATC's `Coder:` line is provenance,
-  not attribution, and stays. Commits already on `main` are not rewritten.
+  not attribution, and stays. Commits already on `main` are not rewritten. CI checks a pull request
+  for it: [`scripts/dispatch/attribution-check.mjs`](scripts/dispatch/attribution-check.mjs).
 
 ## Stories
 
@@ -96,8 +97,9 @@ These hold for every pull request's content, whoever writes it, the coder includ
 ## Testing
 
 - CI's `test` job runs oxlint (`npm run lint`), then Vitest (`npm test`), and on a pull request the
-  story containment check (`.github/workflows/ci.yml`). `test` is a required check. Vitest includes
-  the story lint over this repository's own stories (`scripts/lint-stories.test.mjs`).
+  story containment check and the attribution check (`.github/workflows/ci.yml`). `test` is a
+  required check. Vitest includes the story lint over this repository's own stories
+  (`scripts/lint-stories.test.mjs`).
 - Add tests alongside new logic, in Vitest. A test uses a temporary home directory, and never reads
   or writes the real `~/.steward/`.
 - Do not add coverage-percentage tooling such as `@vitest/coverage-v8`. Its absence is deliberate.

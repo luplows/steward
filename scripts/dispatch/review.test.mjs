@@ -1288,8 +1288,8 @@ describe('ST-21: review against the checklist from main, in sections', () => {
       ['Changes to stories', "the pull request adds or changes a file under `stories/` without implementing one, or is a story's own pull request and adds a story."],
     ])
     expect(parsed.sections.map((section) => section.items.map((item) => item.number))).toEqual([
-      // "Every pull request" gained item 5 in ST-45/AC-9.
-      [1, 2], [1, 2, 3, 4, 5], [1, 2], [1, 2, 3, 4], [1, 2, 3, 4], [1, 2, 3, 4, 5, 6, 7],
+      // "Every pull request" gained item 5 in ST-45/AC-9 and item 6 in ST-100/AC-2.
+      [1, 2], [1, 2, 3, 4, 5, 6], [1, 2], [1, 2, 3, 4], [1, 2, 3, 4], [1, 2, 3, 4, 5, 6, 7],
     ])
   })
 })

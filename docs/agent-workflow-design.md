@@ -330,7 +330,8 @@ Steward's CI is one job, `test` in `.github/workflows/ci.yml`: `npm ci`, `npm ru
 `stories/` beyond its story's move, ticks and `blocked:` line, and `**After review:**` lines added
 to its **Out of scope**. A pull request that moves its own story may also add new stories, as
 drafts, on the conditions `checkAddedDraft` defines in the same file, whatever the story's `kind`
-(Part 3, "Decided so far", "A case a story excludes does not block"). Vitest includes
+(Part 3, "Decided so far", "A case a story excludes does not block"). On a pull request it also
+runs the attribution check (`scripts/dispatch/attribution-check.mjs`). Vitest includes
 the **story schema lint** (`scripts/lint-stories.mjs`) over every story in `stories/` and
 `stories/done/` and every `**Planned (ST-n)**` marker in `docs/`: frontmatter, sections, AC ids and
 markers (`scripts/lint-stories.test.mjs`, "the real repository lints clean"). The six runs before
@@ -708,9 +709,9 @@ general-purpose parser, a fixed neutral `steward` identity, and an identity in t
 `Co-Authored-By:` trailer in a commit and no "Generated with" line in a pull request, issue or
 comment, apart from ATC's `Coder:` provenance line. `AGENTS.md` states it ("Every pull request").
 History already on `main` is not rewritten. Considered and not chosen: banning the `Coder:` line as
-well, and keeping attribution. **Planned (ST-100):** `REVIEW.md` reviews against the rule, a CI
-check on a pull request's commits and body enforces it, and a committed setting stops Claude Code
-sessions adding their own.
+well, and keeping attribution. `REVIEW.md` reviews against the rule, a CI
+check on a pull request's commits and body (`scripts/dispatch/attribution-check.mjs`) enforces it,
+and a committed setting (`.claude/settings.json`) stops Claude Code sessions adding their own.
 
 ## The story artifact
 
