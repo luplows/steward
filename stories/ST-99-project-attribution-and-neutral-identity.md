@@ -13,7 +13,7 @@ blocked: null
 As a member of the crew running ATC on a project, I want the commits and pull request text that
 ATC and its coder produce there to follow that project's own rules on attribution, under my own git
 identity, so that steward leaves nothing in a project's history that names tower-workshop-paths or
-adds AI attribution the project forbids.
+adds attribution that conflicts with the project's instructions.
 
 ## Acceptance criteria
 
@@ -24,14 +24,19 @@ adds AI attribution the project forbids.
       `dispatchCoder`, `retryStory` and `executeHandoff`. The identity is read before anything is
       claimed, installed or spawned. When either value is unset or empty, the run refuses with a
       distinct result that names the missing value, and nothing is claimed.
-- [ ] **AC-2** — No commit message or pull request text that ATC writes itself carries AI
-      attribution: no `Co-Authored-By:` trailer and no "Generated with" line. This covers the claim
-      commit, the Codex work commit and any pull request title or body ATC composes. ATC's
-      machine-read `Coder:` line is provenance the review reads, not attribution, and is unchanged.
-- [ ] **AC-3** — `.claude/prompts/coder.md` and `.claude/prompts/coder-handoff.md` tell the coder
-      to follow the project's own instructions on attribution in its commits and its PR text, and,
-      where those instructions say nothing about it, to add no AI attribution: no `Co-Authored-By:`
-      trailer and no "Generated with" line. Neither prompt asks for attribution anywhere.
+- [ ] **AC-2** — ATC and the coder follow the applicable attribution requirements in the
+      consuming project's agent instructions for every commit and PR artifact they produce,
+      including the claim commit, Codex work commit and PR title/body ATC composes. Where the
+      instructions explicitly require attribution, the corresponding artifact includes it; where
+      they forbid it, the artifact omits it; where they are silent, neither ATC nor the coder adds
+      AI attribution. ATC reads the applicable project instructions before composing its own
+      commits or PR text, not by assuming the coder read them. ATC's machine-read `Coder:` line
+      remains required operational provenance, not optional attribution.
+- [ ] **AC-3** — `.claude/prompts/coder.md` and `.claude/prompts/coder-handoff.md` require the
+      coder to read and follow the consuming project's applicable agent instructions on attribution
+      for commits and PR text. The prompts do not impose steward's own attribution rule on
+      clients, or ask for attribution when the project's instructions are silent. No new steward
+      setting defines attribution policy; the project's agent instructions are authoritative.
 - [ ] **AC-4** — The machine label in a claim commit is read from `STEWARD_MACHINE_LABEL`, and from
       `TW_MACHINE_LABEL` only when `STEWARD_MACHINE_LABEL` is unset or empty, with the same
       validation as today and the same `bad-machine-label` refusal. Documentation names the new
@@ -53,10 +58,12 @@ adds AI attribution the project forbids.
       `tower-workshop-paths.invalid`, `tw-coder-`, `tw-review-`, `tw-stop-` or `e2e/__screenshots__`,
       and on `TW_MACHINE_LABEL` anywhere but AC-4's fallback. Each check fails without this story's
       change.
-- [ ] **AC-9** — Tests cover AC-1 for each of the three entry points, with an identity set and with
-      each value missing; AC-2 for the claim commit, the Codex commit and a composed PR body; AC-4's
-      new name, fallback and precedence; and AC-5's screenshot files, now committed or blocking. No
-      real model, GitHub mutation or `~/.steward/` access runs.
+- [ ] **AC-9** — Tests cover AC-1 for each of the three entry points, with an identity set and
+      with each value missing; AC-2 for claim commits, Codex work commits and ATC-composed PR
+      bodies under three sets of applicable project agent instructions: explicitly requiring
+      attribution, explicitly prohibiting it, and silent on it. Tests also cover AC-4's new name,
+      fallback and precedence, and AC-5's screenshot files, now committed or blocking. No real
+      model, GitHub mutation or `~/.steward/` access runs.
 - [ ] **AC-10** — Resolve `**Planned (ST-99)**` in `docs/agent-workflow-design.md`, and update
       `README.md` and `docs/agent-workflow-design.md` wherever they name the old identity, variable,
       screenshot rule or scratch names, outside dated records.
@@ -64,8 +71,9 @@ adds AI attribution the project forbids.
 ## Out of scope
 
 - Reviewing against and checking steward's own rule, which `AGENTS.md` states (ST-100).
-- A settings key for a project's attribution policy, or ATC checking what the coder wrote: the
-  coder follows the project's own instructions (crew, 2026-11-10).
+- A steward settings key for attribution, a universal attribution format, or a general-purpose
+  natural-language policy parser. The applicable project's agent instructions are the policy;
+  this story does not promise automatic auditing of every coder-authored statement.
 - Removing or changing the `Coder:` line, which ST-92 writes into handoff pull requests.
 - `OQ-<n>` references in comments and docs, which `AGENTS.md` defines; CI-log test fixtures from
   tower-workshop-paths; dated records such as `docs/steward-bootstrap.md`.
@@ -92,10 +100,14 @@ makes in that run.
   Once AC-5 lands, a coder there follows that rule from the project's own instructions, or the
   project ignores those files in `.gitignore`.
 - `TW_MACHINE_LABEL` is set on the machine that runs ATC today, so AC-4 keeps the old name working.
-- Crew decisions, 2026-11-10: the coder follows the project's instructions, and adds no AI
-  attribution where they are silent; ATC commits as the crew member's git identity; the four
-  leftovers in AC-4 to AC-7 go with it. Considered and not chosen: a settings key for the policy, a
-  fixed neutral `steward` identity, an identity in the user config.
+- Crew decisions, 2026-11-10: both the coder and ATC follow the consuming project's applicable
+  agent instructions on attribution, whether they require or forbid it; absent a project rule,
+  neither adds AI attribution. ATC reads those instructions for the artifacts it composes.
+  `Coder:` is mandatory operational provenance, not attribution. ATC commits as the crew
+  member's git identity; the four leftovers in AC-4 to AC-7 go with it. Considered and not
+  chosen: applying steward's own no-attribution rule to clients, a separate settings key for the
+  policy, a general-purpose policy parser, a fixed neutral `steward` identity, and an identity
+  in user config.
 
 ## Open questions
 
