@@ -56,6 +56,29 @@ does not validate is refused and no PR is opened. A project already on the targe
 no-op. The crew approves and lands the PR. Local
 coordinator stop/restart, activation and authorization remain separate and manual.
 General historical migrations and automatic conflict resolution are not promised.
+
+**Planned (ST-96)** (crew, 2026-11-09): Managed-workflow identity accepts formatting-only
+changes that canonicalize identically under the same exact pinned Prettier YAML formatter, after
+existing pin normalization, in both init's recognition and upgrade's preflight. Unparseable or
+nonformatting modifications still refuse. Comparison uses no consuming-project formatter
+configuration, changes no client file by itself, and the target-pin template remains the proposal.
+This repairs the v0.2.0 upgrade trap for clients that formatted installed YAML. Considered but
+not chosen: comparing parsed YAML objects while discarding comments or arbitrarily ignoring
+whitespace, which could silently accept changes to executable commands.
+
+**Planned (ST-97)** (crew, 2026-11-09): The upgrade command fills the existing reviewable PR
+sections with what it actually generated and verified, tied to the base and generated head SHA.
+It clearly distinguishes `Verified`, `Crew action required` and `Not checked`, without
+inventing a unit, project CI results or future edits. Custom project templates and requirements
+remain crew decisions. It opens a draft, not a preapproved PR. Considered and deferred: a
+separate report artifact or a general post-edit verification service.
+
+**Planned (ST-98)** (crew, 2026-11-09): Upgrade refusals identify affected paths and pins,
+the failed condition, what remains, and the safe next action. Formatter errors are distinguished
+from nonformatting mismatches without claiming arbitrary YAML semantic equivalence. Missing
+evidence cannot be reported as success; no new automatic repair or review bypass is introduced.
+Considered and deferred: automatic project repairs and a machine-readable verification protocol.
+
 (crew, 2026-11-07) Both sides of the comparison are read from `luplows/steward` on GitHub at
 their pins: an installed workflow is compared with the template at the pin it carries, and the
 proposed one is the template at the target pin. So nothing extra is shipped, the installed pin
@@ -2820,12 +2843,14 @@ shortened where it is long, so that it can be found there with its date.
   protecting each release branch by hand when it is cut, which left a window before protection was
   set.
 - **Planned (ST-74)** **New installation files follow default Prettier formatting**
-  (crew, 2026-11-04, after ST-48 client validation). A fresh installation's generated
-  files pass the pinned default formatter check, without changing their JSON or workflow
-  behavior. The installer and README explain how a client formats only the new files
-  with its own settings before merging. This does not rewrite existing client files.
-  Considered and not chosen: running a formatter inside the project automatically,
-  or promising to match every custom Prettier configuration.
+  (crew, 2026-11-04; refined 2026-11-09 after v0.2.0 upgrades). A fresh installation's generated
+  files pass one exact pinned version's default formatter check, without changing their JSON or
+  workflow behavior. Steward starts with its own generated artifacts rather than reformatting
+  the whole repository. The installer and README explain how a client formats only new files
+  with its own settings before merging; ST-96 makes formatting-only differences acceptable on
+  a later upgrade. This does not rewrite existing client files. Considered and deferred:
+  repository-wide Prettier enforcement. Not chosen: formatting client files automatically or
+  promising to match every custom Prettier configuration.
 - **Planned (ST-75)** **Post-landing CI limitations are documented for clients**
   (crew, 2026-11-04, after ST-48 client validation). The README and installation PR
   explain that runway merges made with `github.token` do not fire new push workflows.
