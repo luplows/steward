@@ -671,18 +671,22 @@ the ready story queue, reapproval moving to the back of FIFO, mandatory
 historical-snapshot review, active change monitoring, automatic restart retries,
 and separate alert infrastructure.
 
-**Planned (ST-99)** (crew, 2026-11-10): Commits and pull request text in a project follow that
-project's own attribution rules. The coder learns them from the project's instructions; where those
-say nothing, it adds no AI attribution, no `Co-Authored-By:` trailer and no "Generated with" line.
-ATC writes no attribution itself. Its `Coder:` line is provenance the review reads, and stays. ATC's
-own commits, the claim and a Codex session's work, are made as the git identity configured for the
-checkout it works in, read once before the claim, and a run with none configured refuses before
-anything is claimed. Tower-workshop-paths' leftovers that act on a project go with it: the
-`tw-dispatch` identity, the `e2e/__screenshots__/` carve-out, the `TW_MACHINE_LABEL` name (kept as
-a fallback) and the `tw-*` scratch names; `ci.mjs`'s workflow path and `Setup: ` prefix are named
-as steward's own CI conventions, used by its own story loop only. Considered and not chosen: a
-settings key for a project's policy, with ATC checking the coder's output; a fixed neutral
-`steward` identity; an identity in the user config.
+**Planned (ST-99)** (crew, 2026-11-10): Both the coder and ATC follow the consuming
+project's applicable agent instructions for attribution in commits and pull request text. They
+read the project's instructions for the artifacts they produce; ATC must not assume the coder
+read instructions on its behalf. Explicit requirements to add attribution are honored, explicit
+prohibitions are honored, and silence means neither adds AI attribution. Steward does not impose
+its own repository's no-attribution policy on clients. No separate steward attribution setting
+or general-purpose natural-language policy parser is introduced. The required `Coder:` line is
+operational provenance the reviewer reads, not optional attribution. ATC's own commits, the claim
+and a Codex session's work, use the git identity configured for the checkout, read once before
+the claim; a run with none configured refuses before claiming. Tower-workshop-paths' leftovers
+that act on a project go with it: the `tw-dispatch` identity, the `e2e/__screenshots__/` carve-out,
+the `TW_MACHINE_LABEL` name (kept as a fallback) and the `tw-*` scratch names; `ci.mjs`'s
+workflow path and `Setup: ` prefix are named as steward's own CI conventions, used by its own
+story loop only. Considered and not chosen: a universal no-attribution rule, a settings key for a
+project's policy, a general-purpose parser, a fixed neutral `steward` identity, and an identity
+in the user config.
 
 (crew, 2026-11-10) Steward's own repository adopts pinpoint's rule: no AI attribution anywhere, no
 `Co-Authored-By:` trailer in a commit and no "Generated with" line in a pull request, issue or
