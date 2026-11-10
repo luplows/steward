@@ -250,6 +250,52 @@ export function readHandoffs(file) {
   return { handoffs: data.handoffs, nextOrder: data.nextOrder }
 }
 
+/** Whether two records are exactly the same, field for field. */
+export const sameRecord = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+
+/**
+ * The one way a command or the coordinator changes `handoffs.json` (ST-93). Whatever is awaited (a
+ * source read, a fetch, a coding run) is awaited first. Then, in one step with no await in it, this
+ * reads the file afresh and validates it (`readHandoffs`), calls `change(handoffs, nextOrder)` on
+ * that fresh copy, and writes what it returns (`writeStateFile`, which is synchronous). `change` is
+ * synchronous too, and gives `{ handoffs, nextOrder?, result? }`, the whole new list to write
+ * (`nextOrder` is kept unless given), or, to write nothing, `{ result }` or `{ refuse: reason, ... }`.
+ * So a change touches only the records it concerns, as they are at
+ * the moment of the write, and a record another writer changed during the await is never put back
+ * as it was: `change` is where a writer re-checks what its change depends on (that a record is
+ * still pending, still holds this admission) and refuses if not.
+ *
+ * Returns `{ ok: true, result }` or `{ ok: false, reason, ... }` (the rest of what `change` gave).
+ * Throws what `readHandoffs` or `writeStateFile` throws, with `phase` set to `read` or `write`; a
+ * write that fails leaves the file as it was.
+ *
+ * The step is atomic within one process. Two processes can still interleave within it (one reads,
+ * the other writes, the first writes over it); the threat model is one coordinator and one command
+ * at a time, so that is outside it.
+ */
+export function updateHandoffs(file, change) {
+  let current
+  try {
+    current = readHandoffs(file)
+  } catch (error) {
+    error.phase = 'read'
+    throw error
+  }
+  const outcome = change(current.handoffs, current.nextOrder)
+  if (outcome.refuse !== undefined) {
+    const { refuse, ...rest } = outcome
+    return { ok: false, reason: refuse, ...rest }
+  }
+  if (outcome.handoffs === undefined) return { ok: true, result: outcome.result }
+  try {
+    writeStateFile(file, { handoffs: outcome.handoffs, nextOrder: outcome.nextOrder ?? current.nextOrder })
+  } catch (error) {
+    error.phase = 'write'
+    throw error
+  }
+  return { ok: true, result: outcome.result }
+}
+
 export const describeSource = (source) => (source.kind === 'file' ? `file ${source.path}` : `Issue #${source.number}`)
 const sourceKey = (record) => `${record.repo}\n${record.source.kind}\n${record.source.kind === 'file' ? record.source.path : record.source.number}`
 
@@ -413,7 +459,7 @@ async function add(args, ctx) {
   }
 
   const file = handoffsPath(homedir)
-  const { handoffs, nextOrder } = readHandoffs(file)
+  const { handoffs } = readHandoffs(file)
   const existing = handoffs.find((h) => isSource(h, repo, source) && h.status !== 'withdrawn')
   if (existing !== undefined && !OPEN_STATUSES.includes(existing.status)) {
     err(`${describeSource(source)} of ${repo} is already ${existing.status} as ${existing.id}. A new request after a coder has taken it needs the crew's handling. Nothing was recorded.`)
@@ -432,19 +478,30 @@ async function add(args, ctx) {
     err(`${describeSource(source)} of ${repo} is already approved as ${existing.id}, at different text. \`steward handoff reapprove ${existing.id}\` approves its new text. Nothing was recorded.`)
     return 1
   }
-  const record = {
-    id: `H-${nextOrder}`,
-    order: nextOrder,
-    repo,
-    source,
-    status: 'pending',
-    version: 1,
-    approvedAt: ctx.now().toISOString(),
-    text: read.text,
-    provenance: read.provenance,
-    history: [],
+  // The source read took time: the records are read again, and the new record is added to them as
+  // they are now.
+  const added = updateHandoffs(file, (current, next) => {
+    const meanwhile = current.find((h) => isSource(h, repo, source) && h.status !== 'withdrawn')
+    if (meanwhile !== undefined) return { refuse: `${describeSource(source)} of ${repo} was approved as ${meanwhile.id} while its source was read` }
+    const created = {
+      id: `H-${next}`,
+      order: next,
+      repo,
+      source,
+      status: 'pending',
+      version: 1,
+      approvedAt: ctx.now().toISOString(),
+      text: read.text,
+      provenance: read.provenance,
+      history: [],
+    }
+    return { handoffs: [...current, created], nextOrder: next + 1, result: created }
+  })
+  if (!added.ok) {
+    err(`Not approved: ${added.reason}. Nothing was recorded.`)
+    return 1
   }
-  writeStateFile(file, { handoffs: [...handoffs, record], nextOrder: nextOrder + 1 })
+  const record = added.result
   out(`Approved ${record.id}: ${describeSource(source)} of ${repo}, pending (order ${record.order}, version 1).`)
   out(source.kind === 'file' ? `  read at main ${record.provenance.commit}` : `  Issue #${source.number}, fingerprint ${record.provenance.fingerprint}`)
   out(`  record: ${file}`)
@@ -505,9 +562,11 @@ const passedOver = (h, state, reason) => ({ id: h.id, repo: h.repo, source: h.so
  *
  * A source that was read and differs from the approved text makes its handoff `held`, with the
  * reason, written before the next is considered. A held handoff is skipped without reading its
- * source and stays held, whatever the source says later, until `reapprove`. A source that could not
- * be read leaves its handoff pending and writes no record. Selection reserves nothing: the execution
- * boundary (ST-91) rechecks before its first side effect.
+ * source and stays held, whatever the source says later, until `reapprove`. A hold is written to
+ * the record as the file has it when the hold is written, and only if that record is unchanged
+ * since it was read; otherwise the handoff is passed over as `unavailable`. A source that could not
+ * be read leaves its handoff pending and writes no record. Selection reserves nothing: the
+ * execution boundary (ST-91) rechecks before its first side effect.
  *
  * Rejects, selecting nothing, when the handoffs file is malformed or cannot be read. The projects
  * file is read when the first pending handoff's source is: if it is malformed or cannot be read
@@ -517,7 +576,7 @@ const passedOver = (h, state, reason) => ({ id: h.id, repo: h.repo, source: h.so
 export async function selectHandoff({ homedir = osHomedir(), now = () => new Date(), createContext: makeContext = createContext } = {}) {
   const ctx = { homedir, now, createContext: makeContext }
   const file = handoffsPath(homedir)
-  let { handoffs, nextOrder } = readHandoffs(file)
+  const { handoffs } = readHandoffs(file)
   const skipped = []
   for (const h of [...handoffs]) {
     if (h.status === 'held') {
@@ -534,10 +593,14 @@ export async function selectHandoff({ homedir = osHomedir(), now = () => new Dat
       skipped.push(passedOver(h, 'unavailable', `${verdict.reason}. ${retryHint}`))
       continue
     }
+    // The source read took time: the hold goes onto the record as it is now, if unchanged.
     const held = { ...h, status: 'held', hold: { reason: verdict.reason, heldAt: now().toISOString() } }
-    handoffs = handoffs.map((x) => (x === h ? held : x))
-    writeStateFile(file, { handoffs, nextOrder })
-    skipped.push(passedOver(held, 'held', heldReason(held)))
+    const wrote = updateHandoffs(file, (current) => {
+      const meanwhile = current.find((x) => x.id === h.id)
+      if (meanwhile === undefined || !sameRecord(meanwhile, h)) return { refuse: `${h.id} changed while its source was read` }
+      return { handoffs: current.map((x) => (x === meanwhile ? held : x)) }
+    })
+    skipped.push(wrote.ok ? passedOver(held, 'held', heldReason(held)) : passedOver(h, 'unavailable', `${wrote.reason}, so it was not held. ${retryHint}`))
   }
   return { result: 'no-eligible-handoffs', skipped }
 }
@@ -601,7 +664,7 @@ async function show(id, { homedir, out, err }) {
 async function reapprove(id, ctx) {
   const { homedir, out, err } = ctx
   const file = handoffsPath(homedir)
-  const { handoffs, nextOrder } = readHandoffs(file)
+  const { handoffs } = readHandoffs(file)
   const h = handoffs.find((x) => x.id === id)
   if (h === undefined) {
     err(unknown(id, handoffs))
@@ -630,28 +693,37 @@ async function reapprove(id, ctx) {
     provenance: read.provenance,
     history: [...h.history, { version: h.version, approvedAt: h.approvedAt, text: h.text, provenance: h.provenance }],
   }
-  writeStateFile(file, { handoffs: handoffs.map((x) => (x === h ? next : x)), nextOrder })
+  // The source read took time: the record is read again, and changed only if it is as it was.
+  const done = updateHandoffs(file, (current) => {
+    const now = current.find((x) => x.id === id)
+    if (now === undefined || !sameRecord(now, h)) {
+      return { refuse: `${id} changed while its source was read (it is now ${now === undefined ? 'gone' : now.status})` }
+    }
+    return { handoffs: current.map((x) => (x === now ? next : x)) }
+  })
+  if (!done.ok) {
+    err(`Not reapproved: ${done.reason}. Nothing was changed.`)
+    return 1
+  }
   out(`Reapproved ${id}: ${describeSource(h.source)} of ${h.repo}, pending at version ${next.version}, in its place (order ${h.order}). Version ${h.version} is kept in its history.`)
   return 0
 }
 
 async function withdraw(id, { homedir, out, err }) {
   const file = handoffsPath(homedir)
-  const { handoffs, nextOrder } = readHandoffs(file)
-  const h = handoffs.find((x) => x.id === id)
-  if (h === undefined) {
-    err(unknown(id, handoffs))
-    return 1
+  const done = updateHandoffs(file, (current) => {
+    const h = current.find((x) => x.id === id)
+    if (h === undefined) return { refuse: unknown(id, current), code: 1 }
+    if (h.status === 'withdrawn') return { refuse: `${id} is already withdrawn. Nothing was changed.`, code: 0 }
+    if (!OPEN_STATUSES.includes(h.status)) {
+      return { refuse: `${id} is ${h.status}: a coder has taken it, and this command cannot cancel or withdraw it. Nothing was changed.`, code: 1 }
+    }
+    return { handoffs: current.map((x) => (x === h ? { ...h, status: 'withdrawn' } : x)) }
+  })
+  if (!done.ok) {
+    ;(done.code === 0 ? out : err)(done.reason)
+    return done.code
   }
-  if (h.status === 'withdrawn') {
-    out(`${id} is already withdrawn. Nothing was changed.`)
-    return 0
-  }
-  if (!OPEN_STATUSES.includes(h.status)) {
-    err(`${id} is ${h.status}: a coder has taken it, and this command cannot cancel or withdraw it. Nothing was changed.`)
-    return 1
-  }
-  writeStateFile(file, { handoffs: handoffs.map((x) => (x === h ? { ...h, status: 'withdrawn' } : x)), nextOrder })
   out(`Withdrew ${id}: it will not be selected for coding, and its text and history are kept in ${file}.`)
   return 0
 }

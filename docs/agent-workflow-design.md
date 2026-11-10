@@ -663,25 +663,29 @@ review or landing that falls due meanwhile, until it ends; that is accepted for 
 ST-85 is what separates them. It stores the coding admission, with a unique identity, before any
 side effect: in one write the handoff's own record becomes `admitted` and gains the admission (its
 ID, the handoff, the approved revision, the repository, the intended branch and the time), so a
-handoff and its admission cannot disagree. Only the matching active admission may be passed into
-execution, and execution checks it against that record each time. A confirmed pre-claim, pre-model
-refusal is resolved only after that admission is durably cleared: a retryable one (usage, or a
-temporary condition such as a failed read) returns to pending, and one because the unit's content
-changed is held for explicit reapproval, as at selection. Any other refusal is not retried: the
-handoff is `stopped`. If an admission or its clearing cannot be written, no more coding is admitted
-until the coordinator is restarted, and reviews and landing carry on. An uncertain outcome never
-authorizes a second execution. A stopped or uncertain admitted run is not recoded after restart: a
-`start` that finds a coordinator gone marks each handoff it had `admitted` as `interrupted`,
-resuming nothing, killing nothing and removing nothing. A published pull request completes the
-handoff; a failure, or a pushed branch with no pull request, stops it with the branch, head, pull
-request and kept work known. No command releases a stopped or interrupted handoff; its recoding is
-the crew's to arrange. Surviving evidence and a specific crew action are shown in `coordinator
-status` and `handoff list`, without dedicated notifications, whether or not a coordinator is
-running. No general concurrent scheduler, automatic fixer or exceptional process reconciliation is
-required for this initial slice; ST-85 holds that later boundary. Considered but not chosen for 0.3:
-automatic selection from the ready story queue, reapproval moving to the back of FIFO, mandatory
-historical-snapshot review, active change monitoring, automatic restart retries, and separate alert
-infrastructure.
+handoff and its admission cannot disagree. Every writer of the handoff records (the commands,
+selection's hold and the coordinator) reads them afresh in the same synchronous step as its write,
+after any awaited work, and changes only its own record if that is still as it expected; a writer
+never puts back a snapshot taken before an await. Two processes can still interleave within that
+step, which is outside the one-coordinator, one-command threat model. Only the matching active
+admission may be passed into execution, and execution checks it against that record each time. A
+confirmed pre-claim, pre-model refusal is resolved only after that admission is durably cleared: a
+retryable one (usage, or a temporary condition such as a failed read) returns to pending, and one
+because the unit's content changed is held for explicit reapproval, as at selection. Any other
+refusal is not retried: the handoff is `stopped`. If an admission or its clearing cannot be written,
+no more coding is admitted until the coordinator is restarted, and reviews and landing carry on. An
+uncertain outcome never authorizes a second execution. A stopped or uncertain admitted run is not
+recoded after restart: a `start` that finds a coordinator gone marks each handoff it had `admitted`
+as `interrupted`, resuming nothing, killing nothing and removing nothing. A published pull request
+completes the handoff; a failure, or a pushed branch with no pull request, stops it with the branch,
+head, pull request and kept work known. No command releases a stopped or interrupted handoff; its
+recoding is the crew's to arrange. Surviving evidence and a specific crew action are shown in
+`coordinator status` and `handoff list`, without dedicated notifications, whether or not a
+coordinator is running. No general concurrent scheduler, automatic fixer or exceptional process
+reconciliation is required for this initial slice; ST-85 holds that later boundary. Considered but
+not chosen for 0.3: automatic selection from the ready story queue, reapproval moving to the back of
+FIFO, mandatory historical-snapshot review, active change monitoring, automatic restart retries, and
+separate alert infrastructure.
 
 (crew, 2026-11-10) The consuming project's applicable agent
 instructions govern attribution for agent-generated commits and proposed pull request text.

@@ -58,8 +58,7 @@ import { randomUUID } from 'node:crypto'
 import { withoutCredentials } from './coordinator-scheduler.mjs'
 import { PUSHED, REFUSALS, executeHandoff, handoffBranch, isRetryableRefusal } from './handoff-coder.mjs'
 import { publishHandoff } from './handoff-publish.mjs'
-import { handoffsPath, readHandoffs, selectHandoff } from './handoff.mjs'
-import { writeStateFile } from './state-file.mjs'
+import { handoffsPath, readHandoffs, selectHandoff, updateHandoffs } from './handoff.mjs'
 
 const SHA_RE = /^[0-9a-f]{40}$/
 const text = (value) => (typeof value === 'string' && value !== '' ? value : null)
@@ -96,9 +95,6 @@ export function admissionIsActive(homedir, id) {
  */
 export function interruptAdmissions({ homedir, now = () => new Date() }) {
   const file = handoffsPath(homedir)
-  const { handoffs, nextOrder } = readHandoffs(file)
-  const admitted = handoffs.filter((h) => h.status === 'admitted')
-  if (admitted.length === 0) return []
   const at = now().toISOString()
   const interrupted = ({ admission, ...kept }) => ({
     ...kept,
@@ -114,8 +110,12 @@ export function interruptAdmissions({ homedir, now = () => new Date() }) {
       retained: null,
     },
   })
-  writeStateFile(file, { handoffs: handoffs.map((h) => (h.status === 'admitted' ? interrupted(h) : h)), nextOrder })
-  return admitted
+  const done = updateHandoffs(file, (handoffs) => {
+    const admitted = handoffs.filter((h) => h.status === 'admitted')
+    if (admitted.length === 0) return { result: [] }
+    return { handoffs: handoffs.map((h) => (h.status === 'admitted' ? interrupted(h) : h)), result: admitted }
+  })
+  return done.result
 }
 
 /** What a result that is not a push says, in a line: its status, a session's outcome and reason. */
@@ -174,33 +174,36 @@ export async function codeNextHandoff({
   /** The turn's work for the handoff `selected` chose, from the admission to the record of its end. */
   async function admitAndCode({ handoff: selectedHandoff, version }) {
     const named = { handoffId: selectedHandoff.id, repo: selectedHandoff.repo }
-    let handoffs
-    let nextOrder
+    // AC-2: the admission is durable before any claim, setup or model. The records are read afresh
+    // in the same step as the write, and the handoff is admitted only if it is still the pending
+    // version that was selected and nothing else is admitted. A write that fails starts nothing,
+    // and no more coding is admitted.
+    let admission
+    let h
     try {
-      ;({ handoffs, nextOrder } = readHandoffs(file))
+      const admitted = updateHandoffs(file, (handoffs) => {
+        const now0 = handoffs.find((x) => x.id === selectedHandoff.id)
+        if (now0 === undefined || now0.status !== 'pending' || now0.version !== version.version) {
+          return {
+            status: 'not-admitted',
+            refuse: `${selectedHandoff.id} was selected at version ${version.version} and is now ${now0 === undefined ? 'gone' : `${now0.status} at version ${now0.version}`}, so nothing was admitted`,
+          }
+        }
+        if (handoffs.some((x) => x.status === 'admitted')) {
+          return { status: 'blocked', refuse: `another handoff is admitted for coding, so ${now0.id} was not admitted. Nothing is coded until the coordinator is restarted` }
+        }
+        h = now0
+        admission = { id: newId(), handoffId: h.id, version: h.version, repo: h.repo, branch: handoffBranch(h), admittedAt: now().toISOString() }
+        return { handoffs: handoffs.map((x) => (x === now0 ? { ...now0, status: 'admitted', admission } : x)) }
+      })
+      if (!admitted.ok) return { status: admitted.status, ...named, reason: admitted.reason }
     } catch (error) {
-      return { status: 'not-admitted', ...named, reason: `the records cannot be read, so nothing was admitted: ${withoutCredentials(error.message)}` }
-    }
-    const h = handoffs.find((x) => x.id === selectedHandoff.id)
-    if (h === undefined || h.status !== 'pending' || h.version !== version.version) {
-      return {
-        status: 'not-admitted', ...named,
-        reason: `${selectedHandoff.id} was selected at version ${version.version} and is now ${h === undefined ? 'gone' : `${h.status} at version ${h.version}`}, so nothing was admitted`,
+      if (error.phase === 'read') {
+        return { status: 'not-admitted', ...named, reason: `the records cannot be read, so nothing was admitted: ${withoutCredentials(error.message)}` }
       }
-    }
-    if (handoffs.some((x) => x.status === 'admitted')) {
-      return { status: 'blocked', ...named, reason: `another handoff is admitted for coding, so ${h.id} was not admitted. Nothing is coded until the coordinator is restarted` }
-    }
-
-    // AC-2: the admission is durable before any claim, setup or model. A write that fails starts
-    // nothing, and no more coding is admitted.
-    const admission = { id: newId(), handoffId: h.id, version: h.version, repo: h.repo, branch: handoffBranch(h), admittedAt: now().toISOString() }
-    try {
-      writeStateFile(file, { handoffs: handoffs.map((x) => (x === h ? { ...h, status: 'admitted', admission } : x)), nextOrder })
-    } catch (error) {
       return {
         status: 'blocked', ...named,
-        reason: `the admission of ${h.id} could not be written to ${file}, so no branch was claimed and no model was started: ${withoutCredentials(error.message)}. Nothing is coded until the cause is fixed and the coordinator is restarted`,
+        reason: `the admission of ${selectedHandoff.id} could not be written to ${file}, so no branch was claimed and no model was started: ${withoutCredentials(error.message)}. Nothing is coded until the cause is fixed and the coordinator is restarted`,
       }
     }
     report({ codingActive: { repo: h.repo, handoffId: h.id, branch: admission.branch, admissionId: admission.id, admittedAt: admission.admittedAt } })
@@ -285,11 +288,15 @@ export async function codeNextHandoff({
   function finish(admission, next, outcome) {
     const named = { handoffId: admission.handoffId, repo: admission.repo }
     try {
-      const { handoffs, nextOrder } = readHandoffs(file)
-      const h = handoffs.find((x) => x.status === 'admitted' && x.admission?.id === admission.id)
-      if (h === undefined) throw new Error(`${file} no longer shows ${admission.handoffId} as admitted under ${admission.id}`)
-      const { admission: _cleared, ...kept } = h
-      writeStateFile(file, { handoffs: handoffs.map((x) => (x === h ? { ...kept, ...next } : x)), nextOrder })
+      // The run took time: the records are read afresh in the same step as the write, and only the
+      // record that still holds this admission is changed.
+      const done = updateHandoffs(file, (handoffs) => {
+        const h = handoffs.find((x) => x.status === 'admitted' && x.admission?.id === admission.id)
+        if (h === undefined) return { refuse: `${file} no longer shows ${admission.handoffId} as admitted under ${admission.id}` }
+        const { admission: _cleared, ...kept } = h
+        return { handoffs: handoffs.map((x) => (x === h ? { ...kept, ...next } : x)) }
+      })
+      if (!done.ok) throw new Error(done.reason)
     } catch (error) {
       return {
         status: 'blocked', ...named,

@@ -2,7 +2,7 @@
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { codeNextHandoff, admissionIsActive, interruptAdmissions } from './handoff-coding.mjs'
@@ -462,6 +462,7 @@ describe('ST-93/AC-4: an admission left by the previous coordinator is interrupt
     expect(bytes(home)).toBe(before)
     const empty = fresh('home')
     expect(interruptAdmissions({ homedir: empty })).toEqual([])
+    expect(existsSync(handoffsPath(empty))).toBe(false)
     writeFileSync(handoffsPath(home), '{ not json')
     expect(() => interruptAdmissions({ homedir: home })).toThrow('is malformed')
   })
@@ -658,5 +659,134 @@ describe('ST-93: the records of coding are validated', () => {
       handoffRecord({ order: 4, status: 'admitted', admission: admission({ handoffId: 'H-4' }) }),
     ]).handoffs
     expect(records.map((h) => h.status)).toEqual(['stopped', 'interrupted', 'completed', 'admitted'])
+  })
+})
+
+describe('ST-93: a write reads the records afresh, after whatever it awaited', () => {
+  const ISSUE = { number: 7, title: 'Add a thing', body: 'Do it.' }
+  const admissionOf = (id, branch) => ({ id: 'adm-race', handoffId: id, version: 1, repo: REPO, branch, admittedAt: '2026-11-10T10:00:00.000Z' })
+  const completionOf = (branch) => ({
+    admissionId: 'adm-race', at: '2026-11-10T11:00:00.000Z', branch, headSha: HEAD, pr: { number: 3, url: 'https://github.com/acme/widgets/pull/3' }, draft: false,
+  })
+  /** What the coordinator writes to a record, written here as a stand-in during an await. */
+  const COORDINATOR = {
+    'an admission': (record) => ({ ...record, status: 'admitted', admission: admissionOf(record.id, `handoff/${record.id}-issue-7`) }),
+    'a completion': (record) => ({ ...record, status: 'completed', completion: completionOf(`handoff/${record.id}-issue-7`) }),
+  }
+  const editRaw = (home, id, change) => {
+    const data = JSON.parse(readFileSync(handoffsPath(home), 'utf8'))
+    data.handoffs = data.handoffs.map((h) => (h.id === id ? change(h) : h))
+    writeFileSync(handoffsPath(home), `${JSON.stringify(data, null, 2)}\n`)
+  }
+  /** A GitHub stand-in that answers Issue 7 with `issue`, and runs `during` while it is being read. */
+  const issueContext = (getIssue, during = () => {}) => ({ repo }) => ({
+    repo,
+    async send() {
+      await during()
+      return getIssue()
+    },
+  })
+  async function runWith(args, home, createContext) {
+    const out = []
+    const err = []
+    const code = await handoff(args, { homedir: home, now, createContext, out: (l) => out.push(l), err: (l) => err.push(l) })
+    return { code, out: out.join('\n'), err: err.join('\n') }
+  }
+  /** A home with Issue 7 approved as H-1. */
+  async function issueHome() {
+    const home = await homeWith([[REPO, 'a.md', 'alpha\n']])
+    expect((await runWith(['withdraw', 'H-1'], home, stubContext)).code).toBe(0)
+    expect((await runWith(['add', '--repo', REPO, '--issue', '7'], home, issueContext(() => ISSUE))).code).toBe(0)
+    expect(records(home).map((h) => [h.id, h.status])).toEqual([['H-1', 'withdrawn'], ['H-2', 'pending']])
+    return home
+  }
+
+  it.each(Object.keys(COORDINATOR))('ST-93/AC-2: add, while its source is read and the coordinator writes %s to another handoff, adds its record and keeps the coordinator\'s', async (name) => {
+    const home = await issueHome()
+    const before = recordOf(home, 'H-2')
+    const during = () => editRaw(home, 'H-2', COORDINATOR[name])
+    const result = await runWith(['add', '--repo', REPO, '--issue', '8'], home, issueContext(() => ({ ...ISSUE, number: 8 }), during))
+    expect(result.code).toBe(0)
+    expect(records(home).map((h) => [h.id, h.status])).toEqual([['H-1', 'withdrawn'], ['H-2', name === 'an admission' ? 'admitted' : 'completed'], ['H-3', 'pending']])
+    expect(recordOf(home, 'H-2')).toEqual(COORDINATOR[name](before))
+  })
+
+  it('ST-93/AC-2: add refuses, recording nothing, when the same source was approved while it was read', async () => {
+    const home = await issueHome()
+    await runWith(['withdraw', 'H-2'], home, stubContext)
+    const during = () => writeHandoffs(home, [...records(home), { ...recordOf(home, 'H-2'), id: 'H-3', order: 3, status: 'pending' }])
+    const result = await runWith(['add', '--repo', REPO, '--issue', '7'], home, issueContext(() => ISSUE, during))
+    expect(result.code).toBe(1)
+    expect(result.err).toContain('was approved as H-3 while its source was read')
+    expect(records(home).map((h) => h.id)).toEqual(['H-1', 'H-2', 'H-3'])
+  })
+
+  it.each(Object.keys(COORDINATOR))('ST-93/AC-3, ST-93/AC-4: reapprove, while its source is read and the coordinator writes %s to the same handoff, refuses and keeps the coordinator\'s', async (name) => {
+    const home = await issueHome()
+    const during = () => editRaw(home, 'H-2', COORDINATOR[name])
+    const result = await runWith(['reapprove', 'H-2'], home, issueContext(() => ({ ...ISSUE, body: 'Do it differently.' }), during))
+    expect(result.code).toBe(1)
+    expect(result.err).toContain('H-2 changed while its source was read')
+    expect(recordOf(home, 'H-2')).toMatchObject({ status: name === 'an admission' ? 'admitted' : 'completed', version: 1 })
+    expect(recordOf(home, 'H-2')).toHaveProperty(name === 'an admission' ? 'admission' : 'completion')
+  })
+
+  it.each(Object.keys(COORDINATOR))('ST-93/AC-2: reapprove, while the coordinator writes %s to another handoff, reapproves its own and keeps the other', async (name) => {
+    const home = await issueHome()
+    expect((await runWith(['add', '--repo', REPO, '--issue', '8'], home, issueContext(() => ({ ...ISSUE, number: 8 })))).code).toBe(0)
+    const during = () => editRaw(home, 'H-3', COORDINATOR[name])
+    const result = await runWith(['reapprove', 'H-2'], home, issueContext(() => ({ ...ISSUE, body: 'Do it differently.' }), during))
+    expect(result.code).toBe(0)
+    expect(recordOf(home, 'H-2')).toMatchObject({ status: 'pending', version: 2 })
+    expect(recordOf(home, 'H-3').status).toBe(name === 'an admission' ? 'admitted' : 'completed')
+  })
+
+  it.each(Object.keys(COORDINATOR))('ST-93/AC-2: a hold from selection, while its source is read and the coordinator writes %s to that handoff, is not written over it', async (name) => {
+    const home = await issueHome()
+    const during = () => editRaw(home, 'H-2', COORDINATOR[name])
+    const result = await selectHandoff({ homedir: home, now, createContext: issueContext(() => ({ ...ISSUE, body: 'Changed.' }), during) })
+    expect(result.result).toBe('no-eligible-handoffs')
+    expect(result.skipped).toEqual([expect.objectContaining({ id: 'H-2', state: 'unavailable', reason: expect.stringContaining('changed while its source was read') })])
+    expect(recordOf(home, 'H-2')).toMatchObject({ status: name === 'an admission' ? 'admitted' : 'completed' })
+    expect(recordOf(home, 'H-2')).not.toHaveProperty('hold')
+  })
+
+  it('ST-93/AC-2: the coordinator, racing a withdraw, either admits the handoff before it is withdrawn, which then refuses, or does not admit it', async () => {
+    const home = await homeWith(APPROVALS)
+    // Withdrawn after selection and before admission: not admitted, and the withdrawal stands.
+    const select = async (args) => {
+      const selected = await selectHandoff(args)
+      expect((await run(['withdraw', 'H-1'], home)).code).toBe(0)
+      return selected
+    }
+    const t = turn(home)
+    expect((await t({ select })).status).toBe('not-admitted')
+    expect(recordOf(home, 'H-1').status).toBe('withdrawn')
+    // Withdrawn while the coding runs: refused, and the ending is written to the record.
+    let refusal0
+    const t2 = turn(home, {
+      execute: async (args) => {
+        refusal0 = await run(['withdraw', args.handoffId], home)
+        return pushedFor(home, args)
+      },
+    })
+    expect((await t2()).status).toBe('completed')
+    expect(refusal0.code).toBe(1)
+    expect(refusal0.err).toContain('a coder has taken it')
+    expect(recordOf(home, 'H-2').status).toBe('completed')
+  })
+
+  it('ST-93/AC-3: the coordinator\'s record of an ending is written onto the file as it is then, keeping what the crew added meanwhile', async () => {
+    const home = await homeWith(APPROVALS)
+    const t = turn(home, {
+      execute: async (args) => {
+        // The crew approves another handoff while the coding runs.
+        await run(['withdraw', 'H-3'], home)
+        expect((await run(['add', '--repo', REPO, '--file', 'c.md'], home)).code).toBe(0)
+        return pushedFor(home, args)
+      },
+    })
+    expect((await t()).status).toBe('completed')
+    expect(records(home).map((h) => [h.id, h.status])).toEqual([['H-1', 'completed'], ['H-2', 'pending'], ['H-3', 'withdrawn'], ['H-4', 'pending']])
   })
 })

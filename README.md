@@ -375,7 +375,11 @@ it is being coded, then `completed`, or `stopped` or `interrupted` (see "The coo
 no command releases a stopped or interrupted one, and `add`, `reapprove` and `withdraw` refuse it as
 they refuse an admitted one. A records file that is not valid refuses every command, and is never
 read as an approval. The write goes to a temporary file renamed over the old one, so a write that
-fails leaves the file as it was.
+fails leaves the file as it was. Every write, by a command or by the coordinator, reads the file
+afresh in the same step and changes only the record it concerns, after any source has been read:
+`add` and `reapprove` refuse, changing nothing, when the records changed while they read the source,
+and a record the coordinator admitted or completed in the meantime is never put back as it was. Two
+processes writing at the same instant are not guarded against.
 
 Which handoff is coded next is chosen by selection, an operation the coordinator calls
 (`selectHandoff` in `scripts/dispatch/handoff.mjs`; there is no command for it). It takes the oldest
