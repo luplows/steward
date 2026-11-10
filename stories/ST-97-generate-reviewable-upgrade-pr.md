@@ -51,10 +51,10 @@ or stale claims about what the upgrade checked.
       unfilled `Unit:` remains explicitly identified for the crew.
 - [ ] **AC-6** — Tests using the actual generated upgrade commit and PR body
       cover a standard template, no template, a custom template, project-owned
-      config edits, a pin-only upgrade, optional workflows, generation-time
-      `land` state and later edits to the PR body. They verify that generated
-      claims remain accurate about the generated snapshot and that untouched
-      custom fields are preserved.
+      config edits, a pin-only upgrade, optional workflows and generation-time
+      `land` state. They verify that generated claims are explicitly scoped
+      to the generated base/head, that untouched custom fields are preserved,
+      and that the body does not claim to validate subsequent crew edits.
 - [ ] **AC-7** — Update `README.md`'s upgrade guidance with the remaining
       project-specific responsibilities, particularly links to independently
       complete units and docs affected by pin-form changes; resolve

@@ -34,9 +34,9 @@ ordinary formatting checks or force needless corrections to managed files.
 - [ ] **AC-4** — `README.md` and the generated installation PR explain that a project
       with custom formatting settings may format *only newly installed files* on its
       installation branch before merging, with an example scoped command. Do not claim
-      this is required for all projects. Explain that verified formatting-only workflow
-      differences are accepted on a future upgrade by ST-96; substantive modifications
-      remain subject to refusal.
+      this is required for all projects or promise that a later upgrade will accept
+      those formatting changes. ST-96 separately owns support for proven formatting-only
+      differences; until it lands, the existing strict comparison applies.
 - [ ] **AC-5** — Keep the pinned formatter version explicit and reproducible in
       Steward's package/lockfile and tests. Do not add a formatter invocation to
       `steward init` or require a client to install one. Do not introduce a

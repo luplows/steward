@@ -16,38 +16,47 @@ while still refusing modifications that Steward would otherwise overwrite.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — When comparing an installed managed YAML workflow with the
-      template at its installed pin, `upgrade` accepts the workflow if both files,
-      after the existing pin normalization, produce identical output from the same
-      exact pinned version of Prettier's YAML formatter with explicit default options.
-      Formatter normalization requires both files to parse successfully and
-      uses no client configuration. Existing exact-text and line-ending-only
-      matches remain accepted without invoking the formatter.
-- [ ] **AC-2** — For inputs needing formatter normalization, if either input
-      cannot be formatted or the normalized results differ, `upgrade` continues
-      refusing to replace the installed workflow
-      before cloning, pushing or opening a PR, identifying the affected file.
-      Modified triggers, permissions, commands, expressions, nonformatting comments,
-      added or removed entries, and alternative repositories in pin references
-      do not become acceptable merely because YAML parses.
+- [ ] **AC-1** — An installed managed YAML workflow still matches the
+      template at its installed pin when only the pin or line endings differ.
+      Otherwise, `upgrade` uses Steward's own deterministic, runtime-only-code
+      comparison of a *bounded, explicitly documented* set of presentation-only
+      YAML transformations. It accepts transformations only when the underlying
+      YAML scalar values, keys, comments (including order), block-scalar content,
+      GitHub expressions, command text and permissions remain unchanged. For
+      example, it may recognize equivalent single- and double-quoted YAML
+      scalar values with escaping handled correctly. It does not invoke Prettier
+      or read a client's formatting configuration.
+- [ ] **AC-2** — If the fallback comparison cannot prove that a difference
+      is among its supported presentation-only transformations, `upgrade`
+      refuses to replace the workflow before cloning, pushing or opening a PR
+      and identifies the file. Unsupported or malformed YAML, modified triggers,
+      permissions, commands, expressions or comments, added or removed entries,
+      and changed repositories in pin references cannot be accepted merely
+      because their YAML syntax parses.
 - [ ] **AC-3** — The shared workflow identity check used by `init` also recognizes
       proven formatting-only differences without losing its existing distinction
       between managed and project-modified workflows. Neither command rewrites
       existing client workflows as a side effect of comparing them. An accepted
       upgrade still proposes the *target-pin* Steward template, not a merge of
       the project's formatting into the target template.
-- [ ] **AC-4** — Offline tests using the actual Steward workflow fixtures exercise
-      Prettier-induced quote, indentation and line-break changes, including
-      previously installed workflows, and refusals for representative functional,
-      comment and repository-reference differences and malformed YAML. The tests
-      exercise `upgrade` as well as the shared comparator and `init`'s detection;
-      they verify that a refused upgrade creates no branch, push or PR.
-- [ ] **AC-5** — The exact pinned formatter version is installed as a Steward
-      runtime dependency when needed by `upgrade`, and is available under the
-      supported `npx --package=github:luplows/steward#...` invocation. Document
-      the version-independent comparison rule and continued refusal of unproven
-      differences. No formatter installation or configuration is required in
-      a consuming project.
+- [ ] **AC-4** — Steward's own offline CI tests run one exactly pinned
+      Prettier *development dependency* with default YAML formatting options
+      against current managed workflow templates and supported historical
+      templates at installed pins. The tests prove that the runtime comparator
+      accepts each resulting formatting-only variant, including relevant
+      quotes, indentation and line wrapping, while refusing representative
+      functional changes, altered comments, other-repository references,
+      malformed and unsupported differences. Exercise the shared comparator,
+      `init` recognition and `upgrade` preflight, and prove refused upgrades
+      make no branch, push or PR. These tests never run in a client command.
+- [ ] **AC-5** — Prettier is an exact pinned `devDependency` of Steward
+      only; neither `init` nor `upgrade` nor any other client command imports,
+      executes or depends on it, including when installed with
+      `npx --package=github:luplows/steward#...`. Implement the comparison
+      using Steward's own code without adding a new runtime package. Document
+      the supported transformation set, the fail-closed boundary and the
+      build/test-only role of Prettier. No client project must configure or
+      install a formatter.
 - [ ] **AC-6** — Resolve `**Planned (ST-96)**` in
       `docs/agent-workflow-design.md` when implemented.
 
@@ -64,11 +73,11 @@ while still refusing modifications that Steward would otherwise overwrite.
 
 ## Constraints
 
-The threat model is the ordinary project's own formatter changing YAML presentation
-without changing the commands or settings in a managed workflow. Unknown or
-unparseable differences fail closed. One exact formatter version and fixed options
-must be used for both comparison inputs; a project's `.prettierrc` must never
-change the acceptance rule.
+The threat model is ordinary formatting changes to Steward-managed workflows,
+not arbitrary YAML equivalence. The runtime comparison accepts only recognized,
+tested presentation transformations; unsupported changes fail closed. Steward
+uses one pinned default Prettier version as a development test oracle, not in
+client commands. A client's `.prettierrc` cannot change the acceptance rule.
 
 ## Context
 
@@ -82,10 +91,13 @@ change the acceptance rule.
   consuming project is needed to reproduce that formatting class.
 - ST-74 standardizes newly generated artifacts; this story must work for
   installations created *before* ST-74 lands.
-- Crew decision, 2026-11-09: accept formatting-only differences, keep
-  rejecting changes that cannot be proved formatting-only. Considered and
-  rejected: YAML object equivalence without comments or key order, and an
-  unconditional ignore of whitespace or quote changes.
+- Crew decision, 2026-11-09; refined after PR #151 review, 2026-11-10:
+  accept only proven formatting-only differences; refuse others. Prettier is
+  a build/test-time dev dependency only because every client gate, runway and
+  inspection invocation installs Steward via `npx --package=github:luplows/steward#...`,
+  and a runtime dependency would burden all of those commands. Considered and
+  rejected: runtime Prettier, parsed-YAML equivalence that drops comments or
+  key order, and unconditional whitespace or quote normalization.
 
 ## Open questions
 

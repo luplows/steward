@@ -57,14 +57,21 @@ no-op. The crew approves and lands the PR. Local
 coordinator stop/restart, activation and authorization remain separate and manual.
 General historical migrations and automatic conflict resolution are not promised.
 
-**Planned (ST-96)** (crew, 2026-11-09): Managed-workflow identity accepts formatting-only
-changes that canonicalize identically under the same exact pinned Prettier YAML formatter, after
-existing pin normalization, in both init's recognition and upgrade's preflight. Unparseable or
-nonformatting modifications still refuse. Comparison uses no consuming-project formatter
-configuration, changes no client file by itself, and the target-pin template remains the proposal.
-This repairs the v0.2.0 upgrade trap for clients that formatted installed YAML. Considered but
-not chosen: comparing parsed YAML objects while discarding comments or arbitrarily ignoring
-whitespace, which could silently accept changes to executable commands.
+**Planned (ST-96)** (crew, 2026-11-09; refined after PR #151 review, 2026-11-10):
+Installed managed workflows still match when only the pin or line endings differ. A
+runtime comparison written in Steward's own code recognizes only a bounded, documented
+set of presentation-only YAML transformations, preserving scalar values, keys, ordered
+comments, block-scalar content, GitHub expressions, commands and permissions. A difference
+it cannot prove formatting-only refuses, whether from `init` recognition or `upgrade`
+preflight; an accepted upgrade still proposes the target-pin template. Prettier is one
+exact pinned **development dependency only**, used in Steward's own CI to format current
+and historical workflow templates and verify the comparison against their outputs.
+Neither client command imports or runs Prettier or reads a project's formatter settings.
+Every client gate, runway and inspection invocation installs Steward using
+`npx --package=github:luplows/steward#...`; a runtime Prettier dependency would impose
+installation cost on all those unrelated runs. Considered and not chosen: runtime
+Prettier, parsed-YAML equivalence that ignores comments or ordering, and unconditional
+whitespace normalization.
 
 **Planned (ST-97)** (crew, 2026-11-09): The upgrade command fills the existing reviewable PR
 sections with what it actually generated and verified, tied to the base and generated head SHA.
@@ -73,10 +80,12 @@ inventing a unit, project CI results or future edits. Custom project templates a
 remain crew decisions. It opens a draft, not a preapproved PR. Considered and deferred: a
 separate report artifact or a general post-edit verification service.
 
-**Planned (ST-98)** (crew, 2026-11-09): Upgrade refusals identify affected paths and pins,
-the failed condition, what remains, and the safe next action. Formatter errors are distinguished
-from nonformatting mismatches without claiming arbitrary YAML semantic equivalence. Missing
-evidence cannot be reported as success; no new automatic repair or review bypass is introduced.
+**Planned (ST-98)** (crew, 2026-11-09; refined after PR #151 review, 2026-11-10):
+Upgrade refusals identify affected paths and pins, the failed condition, what remains
+and the safe next action. Unsupported formatting and differences that cannot be proven
+formatting-only are described accurately, without claiming broad YAML semantic
+equivalence. Missing evidence cannot be reported as success; no automatic repair
+or review bypass is introduced.
 Considered and deferred: automatic project repairs and a machine-readable verification protocol.
 
 (crew, 2026-11-07) Both sides of the comparison are read from `luplows/steward` on GitHub at

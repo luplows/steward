@@ -26,8 +26,9 @@ so that I can repair the issue without guessing or weakening the review gate.
       that the upgrade partially succeeded when it has not.
 - [ ] **AC-2** — For a workflow that is not equivalent to its installed
       template under ST-96, the refusal identifies each affected path
-      and installed pin, distinguishes parse/formatter failure from
-      a proven nonformatting mismatch, and explains the safe choices:
+      and installed pin, distinguishes an unsupported or malformed formatting
+      difference from a difference that could not be proved formatting-only,
+      and explains the safe choices:
       restore the installed version's managed template via a project
       PR, or reconcile the intended target change by hand. When
       equivalence cannot be established, say so rather than guessing
@@ -46,8 +47,8 @@ so that I can repair the issue without guessing or weakening the review gate.
       the first. Tests prove failure details are redacted as needed.
 - [ ] **AC-5** — Offline tests cover each AC-1 failure class, at
       least two simultaneous workflow mismatches, formatting-only
-      success from ST-96, formatter parse failure, a failed
-      external read and failures before and after cloning. Assert
+      success from ST-96, unsupported or malformed formatting differences,
+      a failed external read and failures before and after cloning. Assert
       the suggested next action and actual remaining artifacts
       for each, with no live GitHub mutation.
 - [ ] **AC-6** — Update the upgrade troubleshooting section in

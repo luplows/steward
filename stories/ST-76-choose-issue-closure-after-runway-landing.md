@@ -22,10 +22,13 @@ issue cleanup to the crew.
       `unitLinks`, it explicitly closes that Issue through the GitHub API. The same behavior
       applies to manual and unattended runway landings. An already-closed Issue is a successful
       no-op, not an error.
-- [ ] **AC-2** — A PR with no matching explicit `Closes #<n>` leaves the Issue open. A missing,
-      file-based, unreadable or ambiguous unit reference, additional conflicting closing
-      references, or a closing reference to another Issue results in no automatic Issue closure
-      and an actionable explanation. A bare `Unit: #<n>` never suffices to close an Issue.
+- [ ] **AC-2** — A PR with no explicit Issue-closing reference results in no Issue
+      closure and no closure-related warning, even when its `Unit:` is missing,
+      file-based, unreadable or ambiguous. A bare `Unit: #<n>` does not close an Issue.
+      Only when an explicit closing reference is present but does not qualify
+      (missing, file-based, unreadable or ambiguous unit, additional conflicting
+      closing references, or a reference to another Issue) does the runway report
+      an actionable reason while closing no Issue.
 - [ ] **AC-3** — Refused, skipped and failed merges close no Issue. A runway merge into a release
       branch closes no Issue. Issue closure happens only after the merge has succeeded, and is
       not an additional gate on which PRs may merge.
@@ -39,7 +42,8 @@ issue cleanup to the crew.
       Repeated cleanup of an Issue already closed is harmless.
 - [ ] **AC-6** — Tests using injected GitHub and merge stand-ins cover a successful default-branch
       landing (manual and unattended), already-closed Issue, missing or mismatched closing
-      reference, extra conflicting reference, file or missing unit, disabled Issue links,
+      reference, extra conflicting reference, file or missing unit (with and without
+      a closing reference), disabled Issue links,
       release-branch landing, failed or refused merge, and failed Issue API read/update. Tests
       verify that only the matching same-repository Issue can be updated and that both workflow
       variants grant the required permission, without making real GitHub mutations.
