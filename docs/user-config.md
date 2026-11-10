@@ -194,12 +194,13 @@ file that gives Codex to the reviewer alone may leave it out.
     and no GitHub credential, and with `--ignore-user-config`, so that none of the user's Codex
     plugins or `notify` programs run in it.
   - It cannot run `git add`, `git mv` or `git commit`: the sandbox refuses them. **ATC commits for
-    it**, after a session that ended `completed`, in `dispatchCoder` and in `retryStory`, before the
-    push. The commit holds what the session left in the worktree, new, changed, deleted and moved
-    files, but not an untracked file under `e2e/__screenshots__/`; its subject is the title of the
-    session's PR block, or `<story id>: the coder's work` when the block did not parse; and it, and
-    the push that follows, run with git's hooks off, since the worktree may hold hook scripts the
-    session could edit. A session that left nothing gives `nothing-committed`, as a Claude one does.
+    it**, after a session that ended `completed`, in `dispatchCoder`, in `retryStory` and in
+    `executeHandoff`, before the push. The commit holds what the session left in the worktree, new,
+    changed, deleted and moved files, untracked ones included; it is made as the git identity of
+    the checkout the run works in; its message is the session's own, the `## Commit message`
+    section of its PR block, unchanged, else the title of the block, or `<story or handoff id>: the coder's
+    work` when the block did not parse; and it, and the push that follows, run with git's hooks
+    off, since the worktree may hold hook scripts the session could edit. A session that left nothing gives `nothing-committed`, as a Claude one does.
   - It can edit files under `.claude/prompts/`, which the sandbox allows. For any tool, ATC pushes
     nothing when the branch's commits beyond its base change one, and returns
     `prompt-change-refused` with the paths. The commits stay on the local branch.

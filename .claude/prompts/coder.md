@@ -91,6 +91,13 @@ the diff, and the story file moved to `stories/done/`.
 
 ## Constraints that apply to every story
 
+- **Follow this repository's own rules on attribution.** Its agent instructions (`AGENTS.md`,
+  and any other file they send you to) say whether a commit message, or the pull request text you
+  propose, carries attribution for the agent that wrote it, such as a `Co-Authored-By:` trailer
+  or a "Generated with" line. Read what applies, and follow it for your commit messages and for
+  `## PR body`: add the attribution when they require it, leave it out when they forbid it, and
+  add none when they say nothing. Apply no other rule on it. ATC copies what you write
+  unchanged, and adds only the `Coder:` line.
 - **Keep the diff to what the story asks for.** If you find unrelated problems,
   report them rather than fixing them here — scope is `REVIEW.md`, "Integrity",
   item 4, and "Conformance to the unit", item 3, and both are checked.
@@ -155,6 +162,28 @@ The rules above and below are the same for you. These things differ:
   leave. So your report gives no head SHA, and uncommitted work is not a reason
   to say `draft`. Wherever this prompt says to commit, leave the work in the
   worktree.
+- **Supply the commit message ATC commits your work with**, under a
+  `## Commit message` heading between `## PR body` and `## Open as` in your closing
+  block, alone on its line like the other headings:
+
+  ```
+  ## PR body
+  <the filled pull_request_template.md sections>
+
+  ## Commit message
+  <subject line, a blank line, then any body>
+
+  ## Open as
+  <ready or draft>
+  ```
+
+  Write the whole message as it should be committed, including any attribution this
+  repository's agent instructions require for a commit (see "Follow this repository's own
+  rules on attribution", above), and none when they forbid it or say nothing. ATC commits the
+  text unchanged and neither adds attribution nor takes it out. Without a `## Commit message`
+  section, or with an empty one, ATC uses your PR title as the commit's subject and writes no
+  body. The `## PR body` ends where `## Commit message` begins, so no line of it may be that
+  heading. A Claude Code session commits for itself and leaves this section out.
 - **There is no network**, whatever "Environment" says.
 - **Commands run in Windows PowerShell 5.1, where `&&` does not parse**, so run
   them one at a time. Run npm as `npm.cmd`: PowerShell's policy blocks

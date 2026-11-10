@@ -36,8 +36,9 @@
  *   refused before anything is claimed or started, so no model session ran (`REFUSALS`):
  *     handoff-unknown, version-not-current, not-executable, admission-mismatch, admission-inactive,
  *     records-unreadable, unit-changed, source-unavailable, over-usage, usage-unknown,
- *     choice-unavailable (including a user config that cannot be read), bad-machine-label,
- *     branch-exists
+ *     no-git-identity (`user.name` or `user.email` unset or empty in the project's owned checkout,
+ *     with `missing` naming them), choice-unavailable (including a user config that cannot be
+ *     read), bad-machine-label, branch-exists
  *       `unit-changed` is the refusal because the source was read and its text differs from the
  *       approved version: the one ST-93 answers with ST-90 AC-3's hold. `source-unavailable` (the
  *       source could not be read now, or `main` could not be fetched), `over-usage` and
@@ -75,8 +76,8 @@ import { homedir as osHomedir, tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  BASE, MACHINE_LABEL_RE, REMOTE, claimBranch, cleanUp, commitSessionWork, git, gitOrNull, machineLabel,
-  pickCoderChoice, pushBranch, remoteTip, sessionSummary, startCoderSession, titleOf,
+  BASE, REMOTE, badMachineLabelReason, claimBranch, cleanUp, commitMessageOf, commitSessionWork, git, gitOrNull,
+  machineLabel, pickCoderChoice, pushBranch, readGitIdentity, remoteTip, sessionSummary, startCoderSession, titleOf,
 } from './coder.mjs'
 import { coderEnv } from './coder-env.mjs'
 import { readCodexUsage, spawnCodexCoder } from './codex.mjs'
@@ -100,8 +101,8 @@ export const RETRYABLE_REFUSALS = ['source-unavailable', 'over-usage', 'usage-un
 /** Every `status` meaning this run claimed no branch and no model ran. */
 export const REFUSALS = [
   'handoff-unknown', 'version-not-current', 'not-executable', 'admission-mismatch', 'admission-inactive',
-  'records-unreadable', 'unit-changed', ...RETRYABLE_REFUSALS, 'choice-unavailable', 'bad-machine-label',
-  'branch-exists',
+  'records-unreadable', 'unit-changed', ...RETRYABLE_REFUSALS, 'no-git-identity', 'choice-unavailable',
+  'bad-machine-label', 'branch-exists',
 ]
 
 /** The `status` of a result whose branch was pushed with a description. */
@@ -277,6 +278,12 @@ export async function executeHandoff({
   const repoDir = ownedCheckoutPath(homedir, handoff.repo)
   const branch = handoffBranch(handoff)
 
+  // ST-99/AC-1: the identity ATC commits as in this run, read once from the owned checkout, before
+  // the user config or the usage is read and before anything is claimed.
+  const who = await readGitIdentity(repoDir)
+  if (who.refusal) return result(base, who.refusal.status, { branch, missing: who.refusal.missing, reason: who.refusal.reason })
+  const { identity } = who
+
   let machine
   try {
     machine = await userConfig()
@@ -300,7 +307,7 @@ export async function executeHandoff({
 
   const label = machineLabel(baseEnv)
   if (label === null) {
-    return result(base, 'bad-machine-label', { branch, reason: `TW_MACHINE_LABEL ${JSON.stringify(baseEnv.TW_MACHINE_LABEL)} does not match ${MACHINE_LABEL_RE}` })
+    return result(base, 'bad-machine-label', { branch, reason: badMachineLabelReason(baseEnv) })
   }
   const template = promptTemplate ?? readFileSync(HANDOFF_PROMPT, 'utf8')
 
@@ -325,7 +332,7 @@ export async function executeHandoff({
 
   let scratch
   try {
-    scratch = await mkdtemp(path.join(tmpdir(), 'tw-handoff-'))
+    scratch = await mkdtemp(path.join(tmpdir(), 'steward-handoff-'))
   } catch (error) {
     return result(base, 'claim-failed', { branch, reason: `a scratch folder cannot be made: ${error.message}` })
   }
@@ -358,7 +365,7 @@ export async function executeHandoff({
     let step = 'claim'
     try {
       // AC-3: the claim, the existing non-forced claim push, before the setup or the model.
-      const refused = await claimBranch(state, { repoDir, tree, branch, mainSha, unitId: handoff.id, label })
+      const refused = await claimBranch(state, { repoDir, tree, branch, mainSha, unitId: handoff.id, label, identity })
       if (refused) return result(base, refused.status, { branch, reason: refused.reason })
 
       // The project's setup, read from the revision the worktree was made from (ST-7).
@@ -388,17 +395,18 @@ export async function executeHandoff({
       const viaCodex = choice.tool === 'codex'
       if (viaCodex) {
         step = 'commit'
-        await commitSessionWork({ cwd: tree, storyId: handoff.id, title: titleOf(classification.prText) })
+        await commitSessionWork({
+          cwd: tree, storyId: handoff.id, title: titleOf(classification.prText), message: commitMessageOf(classification.prText), identity,
+        })
       }
       step = 'push'
       const push = await pushBranch({ cwd: tree, branch, baseSha: state.baseSha, hooksOff: viaCodex })
       if (push.status !== PUSHED) {
-        const { status, screenshots: _screenshots, ...rest } = push
+        const { status, ...rest } = push
         return result(base, status, { ...context, ...rest })
       }
       context.headSha = push.headSha
       context.pushed = true
-      if (push.screenshots.length > 0) context.untrackedScreenshots = push.screenshots
       const block = classification.prText
       if (block.status !== 'parsed') return result(base, 'pr-block-invalid', { ...context, reason: block.reason })
       return result(base, PUSHED, { ...context, proposedPr: { title: block.title, body: block.body, draft: block.draft } })

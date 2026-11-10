@@ -863,7 +863,7 @@ describe('OQ-112/AC-3, AC-4, AC-5: a stuck story opens exactly one GitHub issue'
     const { ctx, fetch } = makeCtx([noIssuesOpen, noIssuesOpen, issueCreated(11), noIssuesOpen])
     const pickStory = async () => ({ story: null, skipped: [{ id: 'OQ-1', branch: 'story/OQ-1-x', location: 'origin' }] })
     const result = await runLoop({
-      ctx, baseEnv: { TW_MACHINE_LABEL: 'laptop' },
+      ctx, baseEnv: { STEWARD_MACHINE_LABEL: 'laptop' },
       deps: {
         updateCheckout: updated, pickStory, runStoryProcess: neverCalled('runStoryProcess'),
         listOpenPullRequestsForHead: async () => [], claimAgeMs: async () => null,

@@ -434,7 +434,7 @@ result:
   may be executed again later. The result says `retryable: true`; no other refusal does.
 - `handoff-unknown`, `version-not-current`, `not-executable` (held, withdrawn, completed, or admitted
   with no admission passed), `admission-mismatch`, `admission-inactive` (also when it cannot be asked), `records-unreadable`,
-  `choice-unavailable` (also when the user config cannot be read), `bad-machine-label` and
+  `no-git-identity` (`user.name` or `user.email` is unset or empty in the project's owned checkout), `choice-unavailable` (also when the user config cannot be read), `bad-machine-label` and
   `branch-exists`.
 
 Then it works as the story coder does. The branch is `handoff/<id>-<source>`, named from the
@@ -445,7 +445,7 @@ the remote and never replacing one, before the project's `setup` (read from the 
 worktree is made from) runs or the coder starts. It never pushes to `main` and opens no pull
 request. The coder is the user config's default coder choice (or the one its caller names), with
 the same usage limits, time limits, allowed tools and credential-free environment as for a story,
-and a Codex choice is committed by ATC. It does not read a unit's own choice of model.
+and a Codex choice is committed by ATC, with the coder's own commit message when it supplied one (else the PR title) and, like the claim commit, as the git identity of the owned checkout (read once, before the claim). The machine label of the claim commit is `STEWARD_MACHINE_LABEL`, or `TW_MACHINE_LABEL` when that is unset or empty. It does not read a unit's own choice of model.
 
 When the coder finishes, the result has `status: "pushed"` with the repository, handoff ID and
 version, the branch, the pushed `headSha`, the session's outcome, the choice that ran (its name,

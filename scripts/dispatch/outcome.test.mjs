@@ -161,8 +161,38 @@ describe('OQ-75/AC-3 coder PR block', () => {
       status: 'parsed',
       title: 'Add outcome classifier',
       body: '### What changed\nA pure function.\n\n### Verification\n`npm test` passed.',
+      commitMessage: null,
       draft: true,
     })
+  })
+
+  it('ST-99/AC-2 reads an optional ## Commit message section between the body and ## Open as, as written', () => {
+    const message = 'Add the classifier\n\n  Indented line kept.\n\nCo-Authored-By: Some Agent <agent@example.invalid>'
+    const text = `Done.\n\n## PR title\nT\n\n## PR body\nB1\n\nB2\n\n## Commit message\n\n${message}\n\n\n## Open as\nready\n`
+    expect(parsePrBlock(text)).toEqual({ status: 'parsed', title: 'T', body: 'B1\n\nB2', commitMessage: message, draft: false })
+  })
+
+  it('ST-99/AC-2 gives no commit message for a block without the section, or with an empty one', () => {
+    expect(parsePrBlock(PR_REPORT).commitMessage).toBeNull()
+    expect(parsePrBlock('## PR title\nT\n## PR body\nB\n## Commit message\n\n   \n## Open as\nready')).toEqual({
+      status: 'parsed', title: 'T', body: 'B', commitMessage: null, draft: false,
+    })
+  })
+
+  it('ST-99/AC-2 a ## Commit message heading outside the stretch between body and ## Open as is not the section', () => {
+    // After `## Open as`, nothing may follow: the block is malformed, with no commit message to use.
+    const after = parsePrBlock(`${PR_REPORT}\n\n## Commit message\nShip it`)
+    expect(after).toMatchObject({ status: 'malformed' })
+    expect(after).not.toHaveProperty('commitMessage')
+    // Before `## PR body`, it is part of the title.
+    const before = parsePrBlock('## PR title\nT\n## Commit message\nShip it\n## PR body\nB\n## Open as\nready')
+    expect(before).toMatchObject({ status: 'parsed', commitMessage: null })
+    expect(before.title).toContain('Ship it')
+  })
+
+  it('ST-99/AC-2 the last ## Commit message heading opens the section, and the body ends where it begins', () => {
+    const parsed = parsePrBlock('## PR title\nT\n## PR body\nB\n## Commit message\nfirst\n## Commit message\nsecond\n## Open as\nready')
+    expect(parsed).toMatchObject({ body: 'B\n## Commit message\nfirst', commitMessage: 'second' })
   })
 
   it('OQ-75/AC-3 parses ready, with markers in backticks and CRLF line endings', () => {
@@ -235,7 +265,7 @@ describe('OQ-75/AC-3 coder PR block', () => {
     const body = bodyPart.split(/^\*\*Draft or ready:\*\*/m)[0].trim()
     const sha = report.match(/^Branch head is .*$/m)[0]
     const reEnded = `${head}${sha}\n\n## PR title\n${title}\n\n## PR body\n${body}\n\n## Open as\nready\n`
-    expect(parsePrBlock(reEnded)).toEqual({ status: 'parsed', title, body, draft: false })
+    expect(parsePrBlock(reEnded)).toEqual({ status: 'parsed', title, body, commitMessage: null, draft: false })
   })
 })
 

@@ -105,11 +105,17 @@ function parseEnvelope(stdout) {
  *   <one line>
  *   ## PR body
  *   <the filled template>
+ *   ## Commit message        (optional; a Codex coder's, ST-99)
+ *   <the message ATC commits its work with>
  *   ## Open as
  *   draft            (or ready; nothing may follow)
  *
- * Returns `{ status: 'parsed', title, body, draft }` or
+ * Returns `{ status: 'parsed', title, body, commitMessage, draft }` or
  * `{ status: 'absent' | 'malformed', reason }`. Never invents a body.
+ * `commitMessage` is the text of the `## Commit message` section between the body and
+ * `## Open as`, trimmed of surrounding blank lines and otherwise as written, or `null` when the
+ * block has no such section or it is empty. The last such heading in that stretch opens the
+ * section, and the body ends where it begins, so a body cannot hold a line that is that heading.
  *
  * The last `## PR title` opens the block, so a report that quotes the
  * headings earlier still parses. After `## Open as` there must be exactly
@@ -148,12 +154,14 @@ export function parsePrBlock(text) {
   const marker = after[0].match(/^[`*_]*(draft|ready)[`*_]*$/i)
   if (!marker) return { status: 'malformed', reason: '"## Open as" is not "draft" or "ready"' }
 
+  const messageAt = lines.findLastIndex((line, i) => i > bodyAt && i < openAt && /^##\s+Commit message\s*$/i.test(line))
   const title = lines.slice(titleAt + 1, bodyAt).join('\n').trim()
-  const body = lines.slice(bodyAt + 1, openAt).join('\n').trim()
+  const body = lines.slice(bodyAt + 1, messageAt === -1 ? openAt : messageAt).join('\n').trim()
   if (title === '') return { status: 'malformed', reason: '"## PR title" is empty' }
   if (body === '') return { status: 'malformed', reason: '"## PR body" is empty' }
+  const message = messageAt === -1 ? '' : lines.slice(messageAt + 1, openAt).join('\n').trim()
 
-  return { status: 'parsed', title, body, draft: marker[1].toLowerCase() === 'draft' }
+  return { status: 'parsed', title, body, commitMessage: message === '' ? null : message, draft: marker[1].toLowerCase() === 'draft' }
 }
 
 /**

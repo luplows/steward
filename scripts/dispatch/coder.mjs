@@ -31,8 +31,10 @@
  * session that ended `completed`, so the session needs no write access to the
  * remote. A coder run through the Codex CLI (ST-15) cannot commit under its sandbox, so the
  * dispatcher commits what a completed Codex session left (`commitSessionWork`), with git's hooks
- * off, and then pushes the same way. Every result returned after a session has run carries that
- * session's output under `session`.
+ * off and with the commit message the session supplied, and then pushes the same way. Every ATC
+ * commit, that one and the claim's, is made as the git identity of the checkout the run works in,
+ * read once before anything is claimed (`readGitIdentity`, ST-99). Every result returned after a
+ * session has run carries that session's output under `session`.
  *
  * Every way this can stop short is a distinct `status` on the result, and each
  * leaves a state someone can see: a pushed branch with no pull request, a local
@@ -78,16 +80,15 @@ const CODER_PROMPT = path.join(ENGINE_ROOT, '.claude', 'prompts', 'coder.md')
 
 export const REMOTE = 'origin'
 export const BASE = 'main'
-// The identity of the dispatcher's own commits: the claim commit, and a Codex session's work.
-export const DISPATCH_IDENTITY = ['-c', 'user.name=tw-dispatch', '-c', 'user.email=dispatch@tower-workshop-paths.invalid']
 // ST-15/AC-6: git's hooks off for one command. The null device is a folder with no hooks in it.
 const NULL_DEVICE = process.platform === 'win32' ? 'NUL' : '/dev/null'
 const HOOKS_OFF = ['-c', `core.hooksPath=${NULL_DEVICE}`]
 const PROMPTS_DIR = '.claude/prompts/'
 
-export async function git(cwd, args) {
+export async function git(cwd, args, { env } = {}) {
   const { stdout } = await execFileAsync('git', ['-c', 'core.quotepath=off', ...args], {
     cwd,
+    ...(env !== undefined && { env: { ...process.env, ...env } }),
     maxBuffer: 64 * 1024 * 1024,
   })
   return stdout
@@ -152,7 +153,6 @@ export function findPromptChange(body) {
 }
 
 const BRANCH_NAME = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/
-const SCREENSHOT_DIR = 'e2e/__screenshots__/'
 
 /** Throws unless `branch` is a plain name: no refspec, no option, and never `main`. */
 function assertPlainBranch(branch, fnName) {
@@ -215,37 +215,89 @@ export async function claimAgeMs(repoDir, branch, now = Date.now()) {
 
 export const MACHINE_LABEL_RE = /^[A-Za-z0-9._-]{1,32}$/
 
+/** The variable that names the machine in a claim commit. */
+export const MACHINE_LABEL_VARIABLE = 'STEWARD_MACHINE_LABEL'
+// The name the label was read from before `STEWARD_MACHINE_LABEL`; still read, as its fallback.
+const LEGACY_MACHINE_LABEL_VARIABLE = 'TW_MACHINE_LABEL'
+
+/**
+ * The variable the machine's label is read from and its value, or `null` when it is set in
+ * neither: `STEWARD_MACHINE_LABEL`, else the legacy variable named above only when
+ * `STEWARD_MACHINE_LABEL` is unset or empty. A set value is returned as it is, matching
+ * `MACHINE_LABEL_RE` or not.
+ */
+function machineLabelSetting(env) {
+  for (const name of [MACHINE_LABEL_VARIABLE, LEGACY_MACHINE_LABEL_VARIABLE]) {
+    if (env[name] !== undefined && env[name] !== '') return { name, value: env[name] }
+  }
+  return null
+}
+
 /**
  * The machine's label for a claim commit (AC-8): never the hostname, since
- * the repository is public. Reads `TW_MACHINE_LABEL` from `env`: unset or
- * empty is `'unlabelled'`, a value matching `MACHINE_LABEL_RE` is used as is,
+ * the repository is public. Reads it from `env` (`machineLabelSetting`): set in
+ * neither variable is `'unlabelled'`, a value matching `MACHINE_LABEL_RE` is used as is,
  * and anything else is refused by returning `null` -- the caller turns that
  * into `bad-machine-label` before anything is claimed, installed or spawned.
  */
 export function machineLabel(env) {
-  const raw = env.TW_MACHINE_LABEL
-  if (raw === undefined || raw === '') return 'unlabelled'
-  return MACHINE_LABEL_RE.test(raw) ? raw : null
+  const setting = machineLabelSetting(env)
+  if (setting === null) return 'unlabelled'
+  return MACHINE_LABEL_RE.test(setting.value) ? setting.value : null
+}
+
+/** The `reason` of `bad-machine-label`: names the variable the refused value was read from. */
+export function badMachineLabelReason(env) {
+  const { name, value } = machineLabelSetting(env) ?? { name: MACHINE_LABEL_VARIABLE, value: undefined }
+  return `${name} ${JSON.stringify(value)} does not match ${MACHINE_LABEL_RE}`
 }
 
 /**
- * What `git status --porcelain -z` reports, split into changes that block a
- * push and untracked screenshot baselines that do not (tower-workshop-paths'
- * `CLAUDE.md` forbids committing one generated locally, so a coder that
- * follows it leaves them).
+ * The git identity ATC commits as in the run (ST-99/AC-1): `user.name` and `user.email` as
+ * `git config --get` resolves them in `cwd`, the checkout the run works in. Read once, before
+ * anything is claimed, and handed to every commit the run makes (`claimBranch`,
+ * `commitSessionWork`), so none depends on what is configured when it runs. Resolves
+ * `{ identity }` (`{ name, email, env }`, `env` being the four `GIT_AUTHOR_*` and `GIT_COMMITTER_*`
+ * variables every ATC commit is run with, so no `author.*` or `committer.*` setting and no inherited
+ * variable can change who it is by), or `{ refusal }`, the
+ * `no-git-identity` result's `status`, `missing` (the unset or empty keys) and `reason`.
  */
-function classifyStatus(porcelainZ) {
+export async function readGitIdentity(cwd) {
+  const values = {}
+  for (const key of ['user.name', 'user.email']) {
+    values[key] = ((await gitOrNull(cwd, ['config', '--get', key])) ?? '').trim()
+  }
+  const missing = Object.keys(values).filter((key) => values[key] === '')
+  if (missing.length > 0) {
+    return {
+      refusal: {
+        status: 'no-git-identity', missing,
+        reason: `git config ${missing.join(' and ')} ${missing.length === 1 ? 'is' : 'are'} not set in ${cwd}, so ATC has no identity to commit as`,
+      },
+    }
+  }
+  const name = values['user.name']
+  const email = values['user.email']
+  // The environment of a commit, which outranks `author.*`, `committer.*` and `user.*` in every config
+  // file, and replaces any `GIT_AUTHOR_*` or `GIT_COMMITTER_*` the process inherited.
+  const env = { GIT_AUTHOR_NAME: name, GIT_AUTHOR_EMAIL: email, GIT_COMMITTER_NAME: name, GIT_COMMITTER_EMAIL: email }
+  return { identity: { name, email, env } }
+}
+
+/** Throws unless `identity` is what `readGitIdentity` resolves: a commit never falls back to ambient config. */
+function assertIdentity(identity, fnName) {
+  if (typeof identity?.env?.GIT_COMMITTER_EMAIL !== 'string' || identity.env.GIT_COMMITTER_EMAIL === '') throw new Error(`${fnName} requires the identity readGitIdentity resolved`)
+}
+
+/** The paths `git status --porcelain -z` reports as changed, each once; an original path it lists after a move is not one. */
+function statusPaths(porcelainZ) {
   const entries = porcelainZ.split('\0').filter((e) => e !== '')
   const changes = []
-  const screenshots = []
   for (let i = 0; i < entries.length; i++) {
-    const code = entries[i].slice(0, 2)
-    const file = entries[i].slice(3)
-    if (/[RC]/.test(code)) i++ // the next entry is the original path, not a change
-    if (code === '??' && file.startsWith(SCREENSHOT_DIR)) screenshots.push(file)
-    else changes.push(file)
+    changes.push(entries[i].slice(3))
+    if (/[RC]/.test(entries[i].slice(0, 2))) i++ // the next entry is the original path, not a change
   }
-  return { changes, screenshots }
+  return changes
 }
 
 /**
@@ -256,7 +308,7 @@ function classifyStatus(porcelainZ) {
  * never forces. `dispatchCoder` and the retry path share it. With `hooksOff` (a Codex session,
  * ST-15/AC-6) the push runs with git's hooks off.
  *
- * Resolves `{ status: 'pushed', headSha, screenshots }`, or a status that means
+ * Resolves `{ status: 'pushed', headSha }`, or a status that means
  * nothing was pushed: `nothing-committed` and `uncommitted-changes` (each with
  * `paths`, the uncommitted changes, empty when there are none),
  * `prompt-change-refused` (with `paths`, the prompt files the commits touch, and a `reason`
@@ -265,14 +317,13 @@ function classifyStatus(porcelainZ) {
 export async function pushBranch({ cwd, branch, baseSha, hooksOff = false }) {
   const args = pushArgs(branch)
   const ahead = Number((await git(cwd, ['rev-list', '--count', `${baseSha}..refs/heads/${branch}`])).trim())
-  const { changes, screenshots } = classifyStatus(await git(cwd, ['status', '--porcelain', '-z', '--untracked-files=all']))
+  const changes = statusPaths(await git(cwd, ['status', '--porcelain', '-z', '--untracked-files=all']))
   if (ahead > 0) {
     const prompts = await promptPathsTouched(cwd, baseSha, branch)
     if (prompts.length > 0) {
       return {
         status: 'prompt-change-refused',
         paths: prompts,
-        screenshots,
         reason: `the commits beyond ${baseSha} change ${PROMPTS_DIR}, which is the crew's to change: ${prompts.join(', ')}`,
       }
     }
@@ -281,13 +332,12 @@ export async function pushBranch({ cwd, branch, baseSha, hooksOff = false }) {
     // No commit wins over uncommitted changes, but the paths are still named:
     // the worktree is removed after this, so the result is their only record.
     const left = changes.length > 0 ? `; uncommitted changes: ${changes.join(', ')}` : ''
-    return { status: 'nothing-committed', paths: changes, screenshots, reason: `${branch} has no commit beyond ${BASE}${left}` }
+    return { status: 'nothing-committed', paths: changes, reason: `${branch} has no commit beyond ${BASE}${left}` }
   }
   if (changes.length > 0) {
     return {
       status: 'uncommitted-changes',
       paths: changes,
-      screenshots,
       reason: `the worktree has uncommitted changes: ${changes.join(', ')}`,
     }
   }
@@ -295,10 +345,10 @@ export async function pushBranch({ cwd, branch, baseSha, hooksOff = false }) {
     await git(cwd, [...(hooksOff ? HOOKS_OFF : []), ...args])
   } catch (error) {
     const reason = String(error.stderr ?? '').trim() || error.message
-    return { status: 'push-failed', reason, screenshots }
+    return { status: 'push-failed', reason }
   }
   const headSha = (await git(cwd, ['rev-parse', `refs/heads/${branch}`])).trim()
-  return { status: 'pushed', headSha, screenshots }
+  return { status: 'pushed', headSha }
 }
 
 /**
@@ -323,27 +373,33 @@ async function promptPathsTouched(cwd, baseSha, branch) {
 
 /**
  * Commits what a completed Codex session left in the worktree `cwd` (ST-15/AC-5): new, changed,
- * deleted and moved files, but not an untracked file under `e2e/__screenshots__/`, which
- * `classifyStatus` leaves out of the changes. The commit has the claim commit's identity, runs with
- * git's hooks off and `--no-verify` (ST-15/AC-6), and its subject is `title`, or
- * `<storyId>: the coder's work` when there is none. Resolves `{ committed: false }` when the worktree
- * holds nothing to commit, else `{ committed: true, subject }`.
+ * deleted and moved files, untracked ones included. The commit is made as `identity`
+ * (`readGitIdentity`, read before the run claimed anything), runs with git's hooks off and
+ * `--no-verify` (ST-15/AC-6), and its message is the coder's own, `message`, exactly as the coder
+ * wrote it (`--cleanup=verbatim`), which ATC neither adds to nor removes from: any attribution in
+ * it is the coder's. Without a `message` the subject is `title`, else `<storyId>: the coder's
+ * work`. Resolves `{ committed: false }` when the worktree holds nothing to commit, else
+ * `{ committed: true, subject, message }`, `subject` being the message's first line.
  */
-export async function commitSessionWork({ cwd, storyId, title }) {
-  const status = await git(cwd, ['status', '--porcelain', '-z', '--untracked-files=all'])
-  const { changes, screenshots } = classifyStatus(status)
+export async function commitSessionWork({ cwd, storyId, title, message, identity }) {
+  assertIdentity(identity, 'commitSessionWork')
+  const changes = statusPaths(await git(cwd, ['status', '--porcelain', '-z', '--untracked-files=all']))
   if (changes.length === 0) return { committed: false }
-  const left = screenshots.map((file) => `:(exclude,literal)${file}`)
-  await git(cwd, [...HOOKS_OFF, 'add', '-A', '--', '.', ...left])
+  await git(cwd, [...HOOKS_OFF, 'add', '-A', '--', '.'])
   const staged = await git(cwd, ['diff', '--cached', '--name-only'])
   if (staged.trim() === '') return { committed: false }
+  const supplied = typeof message === 'string' && message.trim() !== ''
   const subject = typeof title === 'string' && title.trim() !== '' ? title.trim() : `${storyId}: the coder's work`
-  await git(cwd, [...DISPATCH_IDENTITY, ...HOOKS_OFF, 'commit', '--no-verify', '-q', '-m', subject])
-  return { committed: true, subject }
+  const text = supplied ? message : subject
+  await git(cwd, [...HOOKS_OFF, 'commit', '--no-verify', '--cleanup=verbatim', '-q', '-m', text], { env: identity.env })
+  return { committed: true, subject: text.split(/\r?\n/)[0], message: text }
 }
 
 /** The title of a parsed PR block, else `null`. */
 export const titleOf = (block) => (block?.status === 'parsed' ? block.title : null)
+
+/** The commit message a parsed PR block carries (`## Commit message`), else `null`. */
+export const commitMessageOf = (block) => (block?.status === 'parsed' ? block.commitMessage : null)
 
 /**
  * Starts one coder session and resolves `spawnSession`'s result shape. A choice whose tool is
@@ -397,20 +453,20 @@ export async function cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded })
  * records in `state` (`{ worktreeAdded, baseSha }`) what a cleanup needs, as it goes, so that a
  * step that throws still leaves the worktree known. Resolves `null` when the claim is on the
  * remote, and `baseSha` is the claim commit; else `{ status, reason }`: `branch-exists` (the
- * remote has the branch, which a race can cause) or `claim-failed`.
+ * remote has the branch, which a race can cause) or `claim-failed`. The claim commit is made as
+ * `identity` (`readGitIdentity`) and carries no attribution: no agent authored it.
  */
-export async function claimBranch(state, { repoDir, tree, branch, mainSha, unitId, label }) {
+export async function claimBranch(state, { repoDir, tree, branch, mainSha, unitId, label, identity }) {
+  assertIdentity(identity, 'claimBranch')
   // `--no-track`: a branch made from `origin/main` otherwise tracks it, and a
   // bare `git push` on it would aim at `main` (AC-2).
   await git(repoDir, ['worktree', 'add', '--no-track', '-b', branch, tree, mainSha])
   state.worktreeAdded = true
-  // `-c user.name`/`-c user.email`: the claim commit is the dispatcher's own action, not an
-  // authored change, so it must not depend on whichever git identity happens to be configured on
-  // the machine running it (CI's runners have none at all).
+  // The identity was read once, before this run claimed anything, and is set in this command's
+  // environment, so the claim commit does not depend on what is configured when it is made.
   await git(tree, [
-    ...DISPATCH_IDENTITY,
     'commit', '--allow-empty', '-m', `Claim ${unitId} on ${label} at ${new Date().toISOString()}`,
-  ])
+  ], { env: identity.env })
   state.baseSha = (await git(tree, ['rev-parse', 'HEAD'])).trim()
   try {
     await git(tree, claimPushArgs(branch))
@@ -447,8 +503,9 @@ export async function claimBranch(state, { repoDir, tree, branch, mainSha, unitI
  * `claimPushArgs`, which only ever creates the branch there (AC-1); from then
  * on that commit, not `origin/main`, is the base the dispatch measures
  * "committed beyond" from. A failed claim push spends nothing further
- * (AC-2): `bad-machine-label` is refused before the branch is even created,
- * and `claim-failed` or `branch-exists` before the install or the session.
+ * (AC-2): `bad-machine-label` and `no-git-identity` (`user.name` or `user.email` unset or empty
+ * in `repoDir`, ST-99/AC-1, with `missing` naming them) are refused before the branch is even
+ * created, and `claim-failed` or `branch-exists` before the install or the session.
  *
  *   choice         the name of a key of `roles.coder.available` to run instead of the story's
  *                  choice (ST-35/AC-1); `choice-unavailable` when it is none, before the usage
@@ -528,11 +585,13 @@ export async function dispatchCoder({
   // AC-8: a bad label is refused before anything is claimed, installed or spawned.
   const label = machineLabel(baseEnv)
   if (label === null) {
-    return {
-      status: 'bad-machine-label', storyId: chosen.id, branch,
-      reason: `TW_MACHINE_LABEL ${JSON.stringify(baseEnv.TW_MACHINE_LABEL)} does not match ${MACHINE_LABEL_RE}`,
-    }
+    return { status: 'bad-machine-label', storyId: chosen.id, branch, reason: badMachineLabelReason(baseEnv) }
   }
+
+  // ST-99/AC-1: the identity ATC commits as, read once here, before anything is claimed.
+  const who = await readGitIdentity(repoDir)
+  if (who.refusal) return { ...who.refusal, storyId: chosen.id, branch }
+  const { identity } = who
 
   // ST-34/AC-4: the story's choice, before the usage is read or anything is claimed.
   const first = await storyChoiceAt({ repoDir, ref: mainSha, filename, storyId: chosen.id, machine, named })
@@ -545,7 +604,7 @@ export async function dispatchCoder({
   if (picked.refusal) return picked.refusal
   const { choice, ran } = picked
 
-  const scratch = await mkdtemp(path.join(tmpdir(), 'tw-coder-'))
+  const scratch = await mkdtemp(path.join(tmpdir(), 'steward-coder-'))
   const tree = path.join(scratch, 'tree')
   // `baseSha` becomes the claim commit's sha once it is made (AC-3): from then on it is the base
   // `pushBranch` and `cleanUp` measure "committed beyond" from, not `origin/main`.
@@ -556,7 +615,7 @@ export async function dispatchCoder({
     // claim beat us to `origin`) or a genuine push failure (AC-2); either way
     // nothing below this is installed or spawned, and `cleanUp` below removes
     // the local branch and worktree since their tip is still this claim.
-    const refused = await claimBranch(claim, { repoDir, tree, branch, mainSha, unitId: chosen.id, label })
+    const refused = await claimBranch(claim, { repoDir, tree, branch, mainSha, unitId: chosen.id, label, identity })
     if (refused) return { status: refused.status, storyId: chosen.id, branch, reason: refused.reason }
 
     const text = readFileSync(path.join(tree, storyPath), 'utf8')
@@ -594,7 +653,11 @@ export async function dispatchCoder({
     }
     // ST-15/AC-5: a Codex session cannot commit, so the dispatcher commits what it left.
     const viaCodex = choice.tool === 'codex'
-    if (viaCodex) await commitSessionWork({ cwd: tree, storyId: chosen.id, title: titleOf(classification.prText) })
+    if (viaCodex) {
+      await commitSessionWork({
+        cwd: tree, storyId: chosen.id, title: titleOf(classification.prText), message: commitMessageOf(classification.prText), identity,
+      })
+    }
     const push = await pushBranch({ cwd: tree, branch, baseSha: claim.baseSha, hooksOff: viaCodex })
     if (push.status !== 'pushed') {
       const { status, ...rest } = push
@@ -602,7 +665,6 @@ export async function dispatchCoder({
     }
     const pushedSha = push.headSha
     context.headSha = pushedSha
-    if (push.screenshots.length > 0) context.untrackedScreenshots = push.screenshots
 
     const block = classification.prText
     if (block.status !== 'parsed') {
@@ -766,7 +828,7 @@ async function hasStoryFile(repoDir, ref, filename, storyId) {
  * Resolves `{ status, ... }`. Only `retried` (a commit was pushed and the body
  * replaced) and `body-replaced` (no commit and nothing uncommitted, body
  * replaced) mean the retry completed. Every other status means it did not:
- * `pr-not-open`, `choice-unavailable` (ST-34/AC-4), `wrong-branch` (the head is not `branchFor` of a story file
+ * `pr-not-open`, `no-git-identity` (ST-99/AC-1, with `missing`), `choice-unavailable` (ST-34/AC-4), `wrong-branch` (the head is not `branchFor` of a story file
  * with this id at its tip on `origin`), `branch-missing`, `local-branch-exists`
  * (refusals, before anything is spawned), `install-failed`, `session-failed`,
  * `nothing-committed`, `uncommitted-changes` (with `paths`), `prompt-change-refused` (with
@@ -820,6 +882,11 @@ export async function retryStory({
     return { status: 'wrong-branch', storyId, branch, prNumber, reason: `${branch} has no ${filename} with id ${storyId} in stories/ or stories/done/ at its tip on ${REMOTE}, so it is not the branch ${storyId} is worked on` }
   }
 
+  // ST-99/AC-1: the identity ATC commits as, read once here, before anything is made.
+  const who = await readGitIdentity(repoDir)
+  if (who.refusal) return { ...who.refusal, storyId, branch, prNumber }
+  const { identity } = who
+
   // ST-34/AC-4: the story's choice, before the usage is read or anything is made.
   const first = await storyChoiceAt({ repoDir, ref: baseSha, filename, storyId, machine, named })
   if (first.refusal) return first.refusal
@@ -829,7 +896,7 @@ export async function retryStory({
   if (picked.refusal) return picked.refusal
   const { choice, ran } = picked
 
-  const scratch = await mkdtemp(path.join(tmpdir(), 'tw-coder-'))
+  const scratch = await mkdtemp(path.join(tmpdir(), 'steward-coder-'))
   const tree = path.join(scratch, 'tree')
   let worktreeAdded = false
   try {
@@ -875,11 +942,12 @@ export async function retryStory({
 
     // ST-15/AC-5: as in `dispatchCoder`, the dispatcher commits what a Codex session left.
     const viaCodex = choice.tool === 'codex'
-    if (viaCodex) await commitSessionWork({ cwd: tree, storyId, title: titleOf(block) })
+    if (viaCodex) {
+      await commitSessionWork({ cwd: tree, storyId, title: titleOf(block), message: commitMessageOf(block), identity })
+    }
     const push = await pushBranch({ cwd: tree, branch, baseSha, hooksOff: viaCodex })
     const decided = await readBlocked(tree, branch, filename)
     context.blocked = decided.blocked
-    if (push.screenshots?.length > 0) context.untrackedScreenshots = push.screenshots
 
     // Nothing to push is only "nothing" when nothing was left uncommitted, too.
     const nothingToPush = push.status === 'nothing-committed' && push.paths.length === 0
@@ -887,7 +955,7 @@ export async function retryStory({
       return { status: 'uncommitted-changes', ...context, paths: push.paths, reason: push.reason }
     }
     if (push.status !== 'pushed' && !nothingToPush) {
-      const { status, screenshots: _screenshots, ...rest } = push
+      const { status, ...rest } = push
       return { status, ...context, ...rest }
     }
     if (push.status === 'pushed') context.headSha = push.headSha
