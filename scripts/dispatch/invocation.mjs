@@ -262,11 +262,13 @@ function requireRepo(repo) {
 
 /** The handoff coder prompt's placeholder values (ST-91); throws on a missing or malformed part. */
 function handoffValues({ repo, handoff, branch }) {
-  const { id, version, source, text } = handoff
+  const { id, version, source, text, rulesFile } = handoff
   if (typeof source !== 'string' || source === '') throw new Error("a handoff coder invocation requires the unit's source")
   if (typeof text !== 'string') throw new Error("a handoff coder invocation requires the unit's text")
+  if (typeof rulesFile !== 'string') throw new Error("a handoff coder invocation requires the project's checklist path, rulesFile")
   return {
     REPO: requireRepo(repo),
+    RULES_FILE: rulesFile,
     HANDOFF_ID: String(id),
     HANDOFF_VERSION: String(version),
     UNIT_SOURCE: source,
@@ -318,10 +320,10 @@ export function renderReviewerPrompt({ promptTemplate, repo, unit, branch, pr, r
  *   repo            required: the repository the run works on, `owner/name`, rendered as
  *                   `{{REPO}}` in both roles' prompts (ST-40)
  *   story           coder only: { id, path, text, model }
- *   handoff         coder only, instead of `story` (ST-91): { id, version, source, text }, an
+ *   handoff         coder only, instead of `story` (ST-91): { id, version, source, text, rulesFile }, an
  *                   approved handoff (`handoff.mjs`) as the project-neutral coder is given it:
  *                   `source` words where the unit came from ("file docs/plan.md", "Issue #7"),
- *                   `text` is the exact approved text. Rendered as `{{HANDOFF_ID}}`,
+ *                   `text` is the exact approved text, `rulesFile` the project's setting. Rendered as `{{RULES_FILE}}`, `{{HANDOFF_ID}}`,
  *                   `{{HANDOFF_VERSION}}`, `{{UNIT_SOURCE}}` and `{{UNIT}}`, the last two as
  *                   bounded blocks
  *   unit            reviewer only: { note, text }, the note `describeUnit`

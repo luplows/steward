@@ -409,7 +409,8 @@ coder, to a branch pushed to the project's remote. There is no command for it: t
 call it (ST-93), and nothing does yet. It is project-neutral. It needs no `stories/` folder, story
 frontmatter, `blocked:` field or `AGENTS.md`/`REVIEW.md` in the project; its prompt
 (`.claude/prompts/coder-handoff.md`) gives the coder the approved text exactly, where it came from
-and the repository, and tells it to read whichever instruction files the project has. The story
+and the repository, and tells it to read the project's checklist (its `rulesFile` setting) and
+whichever of `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md` and `README.md` it has. The story
 coder, which takes steward's own `stories/`, is unchanged.
 
 It is given a handoff's ID and the approved version, and starts no model session unless the handoff
@@ -417,17 +418,19 @@ passes a check: its version is the current one, its status is `pending` (or, whe
 passes its admission, `admitted` and the admission's ID, handoff and version match and the admission
 is still active), and its project is activated with its source readable and its text exactly the
 approved text. It checks at the start and again just before the branch is claimed, after the usage
-check, unless an earlier step has already refused. It writes no handoff record, so a refusal changes
-nothing in the records; the coordinator decides what to record. A refusal is a `status` of the
+check, unless an earlier step has already refused. When a check finds the source as approved, it
+then reads the records and the admission once more, so a handoff withdrawn or an admission stopped
+during the source read is refused. It writes no handoff record, so a refusal changes nothing in
+the records; the coordinator decides what to record. A refusal is a `status` of the
 result:
 
 - `unit-changed`: the source was read and its text differs from the approved version. This is the
   one the coordinator answers with a hold, as selection does. It is not retryable.
-- `source-unavailable` (the source cannot be read now, or `main` cannot be fetched), `over-usage`
-  and `usage-unknown`: the same handoff may be executed again later. The result says
-  `retryable: true`; no other refusal does.
+- `source-unavailable` (the source cannot be read now, or `main` or the remote's branches cannot
+  be read), `over-usage` and `usage-unknown` (also when the usage reader fails): the same handoff
+  may be executed again later. The result says `retryable: true`; no other refusal does.
 - `handoff-unknown`, `version-not-current`, `not-executable` (held, withdrawn, completed, or admitted
-  with no admission passed), `admission-mismatch`, `admission-inactive`, `records-unreadable`,
+  with no admission passed), `admission-mismatch`, `admission-inactive` (also when it cannot be asked), `records-unreadable`,
   `choice-unavailable` (also when the user config cannot be read), `bad-machine-label` and
   `branch-exists`.
 

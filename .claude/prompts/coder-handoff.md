@@ -22,6 +22,7 @@ placeholders:
 | `{{HANDOFF_VERSION}}` | the approved version of the handoff, e.g. `2` |
 | `{{UNIT_SOURCE}}` | where the unit came from, e.g. `file docs/plan.md`, as a bounded block |
 | `{{UNIT}}` | the approved text, exactly, as a bounded block |
+| `{{RULES_FILE}}` | the path of the project's checklist, its `rulesFile` setting, at the revision the branch was made from |
 | `{{BRANCH}}` | the branch to work on, e.g. `handoff/H-3-docs-plan-md` |
 
 `render` (`scripts/dispatch/render.mjs`) refuses a prompt that uses a placeholder this table does
@@ -57,10 +58,11 @@ do not do more than it asks.
 
 ## Before you write anything
 
-This project may or may not have instructions for contributors. Look for them: read whichever of
-`AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `README.md` and `REVIEW.md` exist in your checkout, and
-follow what they say about how work is done here, how it is checked and how it is reviewed. If none
-exists, work from the unit above and from the code. Do not look for a `stories/` folder, a story
+This project may or may not have instructions for contributors. Look for them. Its checklist,
+which its pull requests are reviewed against, is `{{RULES_FILE}}`: read it if it is in your
+checkout. Read too whichever of `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md` and `README.md` exist,
+and follow what they say about how work is done here, how it is checked and how it is reviewed. If
+none exists, work from the unit above and from the code. Do not look for a `stories/` folder, a story
 file or a `blocked:` field, and do not create any: this project need not use them.
 
 ## Constraints

@@ -63,6 +63,7 @@ const put = (dir, files) => {
 
 const UNDER_LIMITS = { ok: true, session: { percent: 10, resetsAt: 't1' }, weekly: { percent: 10, resetsAt: 't2' } }
 const OVER_LIMITS = { ok: true, session: { percent: 99, resetsAt: 't1' }, weekly: { percent: 10, resetsAt: 't2' } }
+const CHECKLIST = ['# Checklist', '', '## Every pull request', '', '1. The diff matches its description.', ''].join(String.fromCharCode(10))
 const PLAN = 'Add a greeting.\n\nIt says hello.\n'
 
 /**
@@ -87,7 +88,9 @@ async function makeWorld({ files = {}, settings = {} } = {}) {
   git(bare, 'init', '-q', '--bare', '-b', 'main')
   git(dir, 'push', '-q', bare, 'main')
   const home = fresh('home')
-  const code = await project(['activate', dir], { cwd: base, homedir: home, cloneUrl: () => bare, out: () => {}, err: () => {} })
+  const errs = []
+  const code = await project(['activate', dir], { cwd: base, homedir: home, cloneUrl: () => bare, out: () => {}, err: (l) => errs.push(l) })
+  if (code !== 0) throw new Error(errs.join(' | '))
   expect(code).toBe(0)
   return { home, bare, dir, issues: new Map(), requests: [] }
 }
@@ -336,6 +339,43 @@ describe('ST-91/AC-1: the operation rechecks before any side effect', () => {
     noModel(fake)
   })
 
+  it('ST-91/AC-1: a handoff withdrawn while the final source read is in flight is refused before the claim', async () => {
+    const world = await makeWorld()
+    const id = await approveIssue(world, 21, 'Title', 'Body.')
+    let sends = 0
+    const inner = stubContext(world)
+    const createContext = (o) => {
+      const c = inner(o)
+      return { ...c, send: async (r) => { const out = await c.send(r); if (++sends === 2) setStatus(world, id, 'withdrawn'); return out } }
+    }
+    const { result, fake, installs } = await exec(world, id, finish, { options: { createContext } })
+    expect(sends).toBe(2)
+    expect(result).toMatchObject({ status: 'not-executable', handoffStatus: 'withdrawn' })
+    noModel(fake)
+    expect(installs).toEqual([])
+    expect(remoteBranch(world, handoffBranch(records(world).handoffs[0]))).toBeNull()
+  })
+
+  it('ST-91/AC-1: an admission stopped while the final source read is in flight is refused before the claim', async () => {
+    const world = await makeWorld()
+    const id = await approveIssue(world, 22, 'Title', 'Body.')
+    setStatus(world, id, 'admitted')
+    let sends = 0
+    let stopped = false
+    const inner = stubContext(world)
+    const createContext = (o) => {
+      const c = inner(o)
+      return { ...c, send: async (r) => { const out = await c.send(r); if (++sends === 2) stopped = true; return out } }
+    }
+    const { result, fake, installs } = await exec(world, id, finish, {
+      options: { createContext, admission: { id: 'A-1', handoffId: id, version: 1 }, admissionIsActive: async () => !stopped },
+    })
+    expect(result.status).toBe('admission-inactive')
+    noModel(fake)
+    expect(installs).toEqual([])
+    expect(remoteBranch(world, handoffBranch(records(world).handoffs[0]))).toBeNull()
+  })
+
   describe('with an admission from the coordinator (ST-93)', () => {
     const admissionOf = (id, extra = {}) => ({ id: 'A-1', handoffId: id, version: 1, ...extra })
 
@@ -348,7 +388,7 @@ describe('ST-91/AC-1: the operation rechecks before any side effect', () => {
         options: { admission: admissionOf(id), admissionIsActive: async (admissionId) => { asked.push(admissionId); return true } },
       })
       expect(result.status).toBe('pushed')
-      expect(asked).toEqual(['A-1', 'A-1']) // at each of the two checks
+      expect(asked).toEqual(['A-1', 'A-1', 'A-1', 'A-1']) // before and after the source read, at each of the two checks
     })
 
     it.each([
@@ -422,6 +462,14 @@ describe('ST-91/AC-2: the prompt is project-neutral', () => {
     expect(prompt).not.toContain('stories/done')
   })
 
+  it('ST-91/AC-2: the prompt names the configured checklist, even when it is not a root file', async () => {
+    const world = await makeWorld({ files: { 'docs/checklist.md': CHECKLIST }, settings: { rulesFile: 'docs/checklist.md' } })
+    const id = await approveFile(world)
+    const { result, fake } = await exec(world, id)
+    expect(result.status).toBe('pushed')
+    expect(fake.calls[0].prompt).toContain('is `docs/checklist.md`: read it')
+  })
+
   it('ST-91/AC-2: an Issue coder is given its title and body and its number', async () => {
     const world = await makeWorld()
     const id = await approveIssue(world, 12, 'Fix the greeting', 'It says goodbye.')
@@ -446,7 +494,7 @@ describe('ST-91/AC-2: the prompt is project-neutral', () => {
 
   it('ST-91/AC-2: buildInvocation takes a handoff only for a coder, and not with a story or a retry', () => {
     const template = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '.claude', 'prompts', 'coder-handoff.md'), 'utf8')
-    const handoffArg = { id: 'H-1', version: 1, source: 'file a.md', text: 'x' }
+    const handoffArg = { id: 'H-1', version: 1, source: 'file a.md', text: 'x', rulesFile: 'docs/checklist.md' }
     const common = { promptTemplate: template, repo: REPO, branch: 'handoff/H-1-a-md', model: 'sonnet', effort: 'medium', baseEnv: {}, emptyGhConfigDir: '/x' }
     expect(buildInvocation({ ...common, role: 'coder', handoff: handoffArg }).prompt).toContain('H-1')
     expect(() => buildInvocation({ ...common, role: 'coder', handoff: handoffArg, story: { id: 'ST-1', path: 'stories/ST-1.md', text: 't' } })).toThrow(/not both/)
@@ -844,6 +892,27 @@ describe('ST-91/AC-6: failures are distinct, keep the coder\'s only copy, and ar
     expect(fetchFails.result).toMatchObject({ status: 'source-unavailable', retryable: true })
     expect(fetchFails.result.reason).toContain('cannot be fetched')
     noModel(fetchFails.fake)
+  })
+
+  it('ST-91/AC-6: a remote whose branches cannot be listed is a retryable refusal, not a throw', async () => {
+    const world = await makeWorld()
+    const id = await approveFile(world)
+    const { result, fake, installs } = await exec(world, id, finish, {
+      options: { remoteTip: async () => { throw new Error('ls-remote: connection reset') } },
+    })
+    expect(result).toMatchObject({ status: 'source-unavailable', retryable: true })
+    expect(result.reason).toContain('connection reset')
+    noModel(fake)
+    expect(installs).toEqual([])
+    expect(remoteBranch(world, branchOf(world))).toBeNull()
+  })
+
+  it('ST-91/AC-6: a usage reader that throws is a retryable usage-unknown refusal, not a throw', async () => {
+    const world = await makeWorld()
+    const id = await approveFile(world)
+    const { result, fake } = await exec(world, id, finish, { options: { usage: async () => { throw new Error('cli missing') } } })
+    expect(result).toMatchObject({ status: 'usage-unknown', retryable: true })
+    noModel(fake)
   })
 
   it('ST-91/AC-6: the refusal statuses are distinct from one another and from the failure statuses', async () => {

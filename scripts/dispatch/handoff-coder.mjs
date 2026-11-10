@@ -58,6 +58,11 @@
  * the failure, `pr-block-invalid` included: `worktree` (with its `branch`) when the worktree holds
  * uncommitted changes or untracked files, `branch` alone when it holds commits not on the remote.
  * What is named is left where it is.
+ *
+ * What still throws, and only that: a caller error (an `admission` without `admissionIsActive`), the
+ * engine's own prompt file being unreadable, and a failure of the clean-up after the run. A read of
+ * the records, the projects, the source, the user config, the usage, `main` or the remote's
+ * branches that fails is a refusal; each step from the claim on that fails is a result.
  */
 import { readFileSync } from 'node:fs'
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
@@ -117,11 +122,9 @@ export function handoffBranch(handoff) {
 const result = (base, status, rest = {}) => ({ status, repo: base.repo, handoffId: base.handoffId, version: base.version, ...rest })
 
 /**
- * Whether the handoff `base.handoffId` can be executed now, per the module's header. Resolves
- * `{ handoff }`, or `{ refusal }` (a result). Reads the records file and the unit's source afresh
- * each time it is called.
+ * The records and admission part of a check: resolves `{ handoff }` or `{ refusal }`.
  */
-async function check(base, { admission, admissionIsActive, ctx }) {
+async function authorize(base, { admission, admissionIsActive, ctx }) {
   const refuse = (status, reason, extra = {}) => ({ refusal: result(base, status, { reason, ...extra }) })
   let handoffs
   try {
@@ -146,17 +149,41 @@ async function check(base, { admission, admissionIsActive, ctx }) {
     if (h.status !== 'admitted') {
       return refuse('not-executable', `${h.id} is ${h.status}, and an admission applies only to an admitted handoff`, { handoffStatus: h.status })
     }
-    if ((await admissionIsActive(admission.id)) !== true) {
+    let active = false
+    try {
+      active = (await admissionIsActive(admission.id)) === true
+    } catch {
+      active = false
+    }
+    if (!active) {
       return refuse('admission-inactive', `the admission ${admission.id} is not the active admission of ${h.id}`)
     }
   }
+  return { handoff: h }
+}
+
+/**
+ * Whether the handoff `base.handoffId` can be executed now, per the module's header. Resolves
+ * `{ handoff }`, or `{ refusal }` (a result). Reads the records file and the unit's source afresh
+ * each time it is called, and the records and the admission once more after the source is read,
+ * since that read can take a while.
+ */
+async function check(base, args) {
+  const refuse = (status, reason, extra = {}) => ({ refusal: result(base, status, { reason, ...extra }) })
+  const before = await authorize(base, args)
+  if (before.refusal) return before
+  const h = before.handoff
   let verdict
   try {
-    verdict = await assess(h, ctx)
+    verdict = await assess(h, args.ctx)
   } catch (error) {
     return refuse('records-unreadable', error.message)
   }
-  if (verdict.eligible) return { handoff: h }
+  if (verdict.eligible) {
+    // The source read may have taken a while: authorization is read again, after it and before
+    // anything is claimed, so a handoff withdrawn or an admission stopped meanwhile is refused.
+    return authorize(base, args)
+  }
   if (verdict.changed) return refuse('unit-changed', verdict.reason, { retryable: false })
   return refuse('source-unavailable', verdict.reason, { retryable: true })
 }
@@ -183,6 +210,8 @@ async function cleanUpKeeping({ repoDir, tree, branch, state, succeeded }) {
  *   admission, admissionIsActive   see the header; both from ST-93's coordinator
  *   homedir            where `~/.steward/` is; defaults to the OS user's home. The handoff records,
  *                      the project's owned checkout and (by default) the user config are under it
+ *   remoteTip          `(repoDir, branch)`, resolving the branch's tip on the remote or `null`; defaults
+ *                      to `remoteTip` of `coder.mjs`; for tests
  *   now                the clock, passed to the source read
  *   createContext      the GitHub context an Issue is read through (a stand-in in tests)
  *   promptTemplate     coder-handoff.md's text; defaults to the copy beside the engine
@@ -198,7 +227,7 @@ export async function executeHandoff({
   handoffId, version, admission, admissionIsActive,
   homedir = osHomedir(), now = () => new Date(), createContext: makeContext = createContext,
   promptTemplate, baseEnv = process.env, sessionOptions = {}, install = installDependencies,
-  usage = readUsage, choice: named, codexUsage = readCodexUsage, codexSession = spawnCodexCoder,
+  usage = readUsage, remoteTip: readRemoteTip = remoteTip, choice: named, codexUsage = readCodexUsage, codexSession = spawnCodexCoder,
   userConfig = () => readUserConfig({ env: process.env, homedir }),
 }) {
   if (admission !== undefined && typeof admissionIsActive !== 'function') {
@@ -225,9 +254,14 @@ export async function executeHandoff({
     ? { choice: typeof named === 'string' ? coderChoice(machine, named) : null, why: 'crew' }
     : { choice: coderChoice(machine, null), why: 'default' }
   if (picked0.choice === null) return result(base, 'choice-unavailable', { choice: named ?? null, reason: 'the user config names no such coder choice' })
-  const picked = await pickCoderChoice({
-    machine, first: picked0, named, usage, codexUsage, cwd: repoDir, extra: { handoffId },
-  })
+  let picked
+  try {
+    picked = await pickCoderChoice({
+      machine, first: picked0, named, usage, codexUsage, cwd: repoDir, extra: { handoffId },
+    })
+  } catch (error) {
+    return result(base, 'usage-unknown', { retryable: true, reason: `the usage cannot be read: ${error.message}` })
+  }
   if (picked.refusal) return result(base, picked.refusal.status, { ...picked.refusal, retryable: isRetryableRefusal(picked.refusal) })
   const { choice, ran } = picked
 
@@ -248,15 +282,24 @@ export async function executeHandoff({
   if (await gitOrNull(repoDir, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])) {
     return result(base, 'branch-exists', { branch, reason: `${branch} already exists locally` })
   }
-  if (await remoteTip(repoDir, branch)) {
-    return result(base, 'branch-exists', { branch, reason: `${branch} already exists on ${REMOTE}` })
+  let remote
+  try {
+    remote = await readRemoteTip(repoDir, branch)
+  } catch (error) {
+    return result(base, 'source-unavailable', { retryable: true, reason: `${REMOTE}'s branches cannot be listed: ${String(error.stderr ?? '').trim() || error.message}` })
   }
+  if (remote) return result(base, 'branch-exists', { branch, reason: `${branch} already exists on ${REMOTE}` })
 
   // AC-1: the second check, immediately before the first side effect.
   const again = await check(base, checkArgs)
   if (again.refusal) return again.refusal
 
-  const scratch = await mkdtemp(path.join(tmpdir(), 'tw-handoff-'))
+  let scratch
+  try {
+    scratch = await mkdtemp(path.join(tmpdir(), 'tw-handoff-'))
+  } catch (error) {
+    return result(base, 'claim-failed', { branch, reason: `a scratch folder cannot be made: ${error.message}` })
+  }
   const tree = path.join(scratch, 'tree')
   const state = { worktreeAdded: false, baseSha: mainSha, sessionStarted: false }
   let outcome
@@ -276,8 +319,7 @@ export async function executeHandoff({
 
   async function attempt() {
     // Each step that can throw is named, so a throw is a result of that step's kind (AC-6). What
-    // is left to throw out of `executeHandoff` is a programming error or a failure to read the
-    // user config, the settings or the records before anything was claimed.
+    // is left to throw out of `executeHandoff` is described in its header.
     let step = 'claim'
     try {
       // AC-3: the claim, the existing non-forced claim push, before the setup or the model.
@@ -286,7 +328,7 @@ export async function executeHandoff({
 
       // The project's setup, read from the revision the worktree was made from (ST-7).
       step = 'setup'
-      const { setup } = await readSettings(tree)
+      const { setup, rulesFile } = await readSettings(tree)
       const ghConfigDir = path.join(scratch, 'gh-config')
       await mkdir(ghConfigDir)
       await install({ cwd: tree, env: coderEnv(baseEnv, ghConfigDir), setup })
@@ -297,7 +339,7 @@ export async function executeHandoff({
         choice, machine, sessionOptions, codexSession, scratch,
         promptTemplate: template,
         repo: handoff.repo,
-        handoff: { id: handoff.id, version: handoff.version, source: describeSource(handoff.source), text: handoff.text },
+        handoff: { id: handoff.id, version: handoff.version, source: describeSource(handoff.source), text: handoff.text, rulesFile },
         branch,
         baseEnv,
         emptyGhConfigDir: ghConfigDir,
