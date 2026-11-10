@@ -8,8 +8,9 @@
  * path and push (`coder.mjs`) and the project's `setup` (`install.mjs`, ST-7).
  *
  * `executeHandoff` is called with a handoff's ID and the version approved. It opens no pull request
- * and updates none (ST-92), writes no handoff record and no admission (ST-93), and never pushes to
- * `main`. A call starts at most one session, and no failed result starts another.
+ * and updates none (`publishHandoff`, `handoff-publish.mjs`, does, from a `pushed` result), writes
+ * no handoff record and no admission (ST-93), and never pushes to `main`. A call starts at most one
+ * session, and no failed result starts another.
  *
  * It checks the handoff at the start, and again immediately before the branch is claimed, because
  * the usage check between them takes time; a refusal at the start returns without the second. Each

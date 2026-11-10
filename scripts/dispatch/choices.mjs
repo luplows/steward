@@ -70,3 +70,20 @@ export function withCoderLine(body, names) {
   const line = `Coder: ${names.join(', ')}`
   return kept === '' ? line : `${kept}\n\n${line}`
 }
+
+/** What a `Coder:` token starts with when it is a model identifier as it ran, not a choice name. */
+export const MODEL_TOKEN_PREFIX = 'model='
+
+// One written form for a model identifier on a `Coder:` line: no whitespace, comma, newline or
+// other character that could split or end the line's tokens. Brackets are allowed for names such as
+// `claude-opus-4-1[1m]`.
+const UNAMBIGUOUS_MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:/@+[\]-]*$/
+
+/**
+ * The `Coder:` token for the model that actually ran, `model=<id>` (ST-92/AC-6), or `null` when
+ * `model` is not a string `UNAMBIGUOUS_MODEL_RE` accepts, so that the line it goes on has exactly
+ * the tokens that were meant. Pure.
+ */
+export function coderModelToken(model) {
+  return typeof model === 'string' && UNAMBIGUOUS_MODEL_RE.test(model) ? `${MODEL_TOKEN_PREFIX}${model}` : null
+}

@@ -450,15 +450,63 @@ and a Codex choice is committed by ATC, with the coder's own commit message when
 When the coder finishes, the result has `status: "pushed"` with the repository, handoff ID and
 version, the branch, the pushed `headSha`, the session's outcome, the choice that ran (its name,
 tool and model) and `proposedPr`, the title, body and draft flag the coder wrote. Opening the pull
-request is ST-92's. A run that stops short has its own `status`: `claim-failed`, `install-failed`,
-`session-failed`, `nothing-committed`, `uncommitted-changes`, `prompt-change-refused`,
-`commit-failed`, `push-failed` or `pr-block-invalid` (the branch is pushed, with no description).
+request is `publishHandoff`'s, below. A run that stops short has its own `status`: `claim-failed`,
+`install-failed`, `session-failed`, `nothing-committed`, `uncommitted-changes`,
+`prompt-change-refused`, `commit-failed`, `push-failed` or `pr-block-invalid` (the branch is pushed, with no description).
 A step that throws once the claim begins (the claim, the setup, starting the session, ATC's commit
 or push) is the result of that step's kind, not a throw. A call starts at most one session, and no
 failure starts another. After any failure that started the session, `pr-block-invalid` included,
 the result's `retained` names the worktree (and its branch) when the worktree holds uncommitted
 changes or untracked files, and the branch when it holds commits that are not on the remote; both
 are left in place. The claim commit stays on the remote after any failure that follows it.
+
+### Publishing a handoff's pull request
+
+`publishHandoff` in `scripts/dispatch/handoff-publish.mjs` opens the pull request for the `pushed`
+result of `executeHandoff`. There is no command for it: the coordinator will call it (ST-93), and
+nothing does yet. It runs no model, claims and pushes nothing and writes no handoff record. It
+trusts only the branch and head SHA that were pushed, and resolves a result, never a throw.
+
+It opens a pull request into `main` only when the handoff record names that project, version and
+branch, the remote branch's tip is still the pushed head SHA, the model the session ran can be
+written as one `Coder:` token (letters, digits and `. _ : / @ + [ ] -`, starting with a letter or
+digit), and the coder's body has no line starting `Unit:` and no closing keyword followed by an
+issue reference (`coder-link-conflict`, which names the lines and rewrites nothing). Then it compares
+the unit's source with the approved text once, just before opening the pull request, and reads the
+project's `unitLinks` from the checkout that comparison refreshed: when they no longer include the
+unit's kind it refuses (`unit-link-refused`), never opening a draft. Nothing watches the source
+while the coder works. A source that changed then and still differs when the comparison is made is
+found by it; a change after the comparison is not detected. When the source is as approved,
+the pull request is ready or a draft as the coder asked. When the source changed or could not be
+read, it is a draft with a "Handoff discrepancy" section in its body, and the result's
+`discrepancy` (`changed` or `unreadable`, with the reason) is for the crew to act on; the coder's
+work is not redone.
+
+The body is ATC's frame around the coder's text, and the reviewer still reads the unit as it
+stands now on `main`:
+
+- `Unit:` is ATC's: the original file path on `main` (not where the coder moved the file), or
+  `#<number>`. For an Issue, one `Closes #<number>` follows it. A file has no closing reference.
+- The coder's body is kept as written, verification statements included, except for its outer
+  blank space, its line endings (written as `\n`) and that every `Coder:` line is removed, since ATC never trusts a coder-written one. A body with a line starting
+  `Unit:`, or any closing keyword followed by an issue reference (`Closes #9`, `fixes owner/name#9`,
+  also inside a quoted command), is refused rather than rewritten. ATC adds no attribution and
+  removes none the coder wrote.
+- A "Handoff provenance" section gives the handoff's ID, the approved revision, the original path
+  and approved `main` SHA (or the Issue's number and its approved title and body fingerprint) and the
+  tool, choice and model that ran. It says the approved revision is provenance, not the reviewer's
+  source of truth; `steward handoff show <id>` has the approved text and version history.
+- The last line is `Coder: model=<id>`, the model that actually ran. The reviewer reads a
+  `model=` token as that literal model, whatever `roles.coder.available` holds now, and reads a
+  choice-name token as before.
+
+Before sending, it reads the body with `findUnitLink` under the current `unitLinks` and sends it
+only when that names exactly the intended unit and the body has the intended closing references.
+A failure has `recoverable: true`, the handoff ID, branch and head SHA, and leaves the pushed
+branch alone and re-executes nothing: `not-a-pushed-result`, `handoff-mismatch`,
+`records-unreadable`, `bad-model-id`, `pr-invalid` (no title or body, or a draft flag that is not
+true or false), `coder-link-conflict`, `head-moved` (with the tip found, or `null`), `head-unverified`,
+`unit-link-refused`, `unit-link-ambiguous` and `publish-failed` (GitHub's error).
 
 ### The coordinator
 
