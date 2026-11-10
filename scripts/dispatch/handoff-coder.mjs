@@ -31,27 +31,32 @@
  *   refused before anything is claimed or started, so no model session ran (`REFUSALS`):
  *     handoff-unknown, version-not-current, not-executable, admission-mismatch, admission-inactive,
  *     records-unreadable, unit-changed, source-unavailable, over-usage, usage-unknown,
- *     choice-unavailable, bad-machine-label, branch-exists
+ *     choice-unavailable (including a user config that cannot be read), bad-machine-label,
+ *     branch-exists
  *       `unit-changed` is the refusal because the source was read and its text differs from the
  *       approved version: the one ST-93 answers with ST-90 AC-3's hold. `source-unavailable` (the
- *       source could not be read now), `over-usage` and `usage-unknown` carry `retryable: true`
- *       (`RETRYABLE_REFUSALS`): the same handoff may be executed again later. No other refusal
- *       does.
- *   failed while claiming or setting up, before any model ran: claim-failed, install-failed
+ *       source could not be read now, or `main` could not be fetched), `over-usage` and
+ *       `usage-unknown` carry `retryable: true` (`RETRYABLE_REFUSALS`): the same handoff may be
+ *       executed again later. No other refusal does.
+ *   failed while claiming or setting up, before any model ran: claim-failed (including a throw
+ *       while making the worktree or the claim commit), install-failed (the setting or the setup)
  *       (a `branch-exists` found only when the claim is pushed is a refusal too)
- *   failed in the model: session-failed (with `outcome`)
+ *   failed in the model: session-failed (with `outcome`; `not-started` when the session could not be
+ *       started, for example its executable could not be run)
  *   failed after a completed session, with the branch not pushed: nothing-committed,
- *       uncommitted-changes, prompt-change-refused, push-failed
+ *       uncommitted-changes, prompt-change-refused, push-failed, commit-failed (ATC's commit of a
+ *       Codex session's work threw)
  *   failed after the push: pr-block-invalid (the branch is pushed, with no description)
  *   pushed: the branch is on the remote at `headSha`, with `proposedPr`, the coder's parsed
  *       `{ title, body, draft }`, and `choice`, the choice that actually ran
  *
- * Every result after a session started carries `session`. A failed result after the claim is
- * pushed leaves that claim on the remote. A failed result after the session started also carries
- * `retained` -- `{ repoDir, branch, worktree? }` -- when removing what the run made would have
- * destroyed the only copy of the coder's work: `worktree` (with its `branch`) when the worktree
- * holds uncommitted changes or untracked files, `branch` alone when it holds commits not on the
- * remote.
+ * A result after a session that ran to its end carries `session`; one for a step that threw (the
+ * session could not be started, or ATC's commit or push threw) carries the error as `reason`
+ * instead. A failed result after the claim is pushed leaves that claim on the remote. A failed
+ * result after the session started also carries `retained` -- `{ repoDir, branch, worktree? }` --
+ * when removing what the run made would have destroyed the only copy of the coder's work, whatever
+ * the failure, `pr-block-invalid` included: `worktree` (with its `branch`) when the worktree holds
+ * uncommitted changes or untracked files, `branch` alone when it holds commits not on the remote.
  * What is named is left where it is.
  */
 import { readFileSync } from 'node:fs'
@@ -162,9 +167,9 @@ async function check(base, { admission, admissionIsActive, ctx }) {
  * `null` when nothing was. Never throws for a git failure: a worktree whose state cannot be read is
  * kept.
  */
-async function cleanUpKeeping({ repoDir, tree, branch, state, pushed }) {
+async function cleanUpKeeping({ repoDir, tree, branch, state, succeeded }) {
   if (!state.worktreeAdded) return null
-  if (!pushed && state.sessionStarted) {
+  if (!succeeded && state.sessionStarted) {
     const status = await gitOrNull(tree, ['status', '--porcelain', '-z', '--untracked-files=all'])
     if (status === null || status !== '') return { repoDir, worktree: tree, branch }
   }
@@ -210,7 +215,12 @@ export async function executeHandoff({
   const repoDir = ownedCheckoutPath(homedir, handoff.repo)
   const branch = handoffBranch(handoff)
 
-  const machine = await userConfig()
+  let machine
+  try {
+    machine = await userConfig()
+  } catch (error) {
+    return result(base, 'choice-unavailable', { choice: named ?? null, reason: `the user config cannot be read: ${error.message}` })
+  }
   const picked0 = named !== undefined
     ? { choice: typeof named === 'string' ? coderChoice(machine, named) : null, why: 'crew' }
     : { choice: coderChoice(machine, null), why: 'default' }
@@ -225,11 +235,15 @@ export async function executeHandoff({
   if (label === null) {
     return result(base, 'bad-machine-label', { branch, reason: `TW_MACHINE_LABEL ${JSON.stringify(baseEnv.TW_MACHINE_LABEL)} does not match ${MACHINE_LABEL_RE}` })
   }
-  const { setup } = await readSettings(repoDir)
   const template = promptTemplate ?? readFileSync(HANDOFF_PROMPT, 'utf8')
 
-  await git(repoDir, ['fetch', REMOTE, BASE])
-  const mainSha = (await git(repoDir, ['rev-parse', `${REMOTE}/${BASE}`])).trim()
+  let mainSha
+  try {
+    await git(repoDir, ['fetch', REMOTE, BASE])
+    mainSha = (await git(repoDir, ['rev-parse', `${REMOTE}/${BASE}`])).trim()
+  } catch (error) {
+    return result(base, 'source-unavailable', { retryable: true, reason: `${REMOTE}'s ${BASE} cannot be fetched: ${String(error.stderr ?? '').trim() || error.message}` })
+  }
   // AC-3: an existing branch, local or remote, is refused.
   if (await gitOrNull(repoDir, ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])) {
     return result(base, 'branch-exists', { branch, reason: `${branch} already exists locally` })
@@ -252,8 +266,7 @@ export async function executeHandoff({
   } catch (error) {
     failure = error
   }
-  const pushed = outcome?.status === PUSHED || outcome?.status === 'pr-block-invalid'
-  const retained = await cleanUpKeeping({ repoDir, tree, branch, state, pushed })
+  const retained = await cleanUpKeeping({ repoDir, tree, branch, state, succeeded: outcome?.status === PUSHED })
   if (retained === null || retained.worktree === undefined) await rm(scratch, { recursive: true, force: true })
   if (failure !== null) {
     if (retained !== null) failure.retained = retained
@@ -262,45 +275,59 @@ export async function executeHandoff({
   return retained === null ? outcome : { ...outcome, retained }
 
   async function attempt() {
-    // AC-3: the claim, the existing non-forced claim push, before the setup or the model.
-    const refused = await claimBranch(state, { repoDir, tree, branch, mainSha, unitId: handoff.id, label })
-    if (refused) return result(base, refused.status, { branch, reason: refused.reason })
-
-    const ghConfigDir = path.join(scratch, 'gh-config')
-    await mkdir(ghConfigDir)
+    // Each step that can throw is named, so a throw is a result of that step's kind (AC-6). What
+    // is left to throw out of `executeHandoff` is a programming error or a failure to read the
+    // user config, the settings or the records before anything was claimed.
+    let step = 'claim'
     try {
+      // AC-3: the claim, the existing non-forced claim push, before the setup or the model.
+      const refused = await claimBranch(state, { repoDir, tree, branch, mainSha, unitId: handoff.id, label })
+      if (refused) return result(base, refused.status, { branch, reason: refused.reason })
+
+      // The project's setup, read from the revision the worktree was made from (ST-7).
+      step = 'setup'
+      const { setup } = await readSettings(tree)
+      const ghConfigDir = path.join(scratch, 'gh-config')
+      await mkdir(ghConfigDir)
       await install({ cwd: tree, env: coderEnv(baseEnv, ghConfigDir), setup })
+
+      step = 'session'
+      state.sessionStarted = true
+      const { classification, output } = await startCoderSession({
+        choice, machine, sessionOptions, codexSession, scratch,
+        promptTemplate: template,
+        repo: handoff.repo,
+        handoff: { id: handoff.id, version: handoff.version, source: describeSource(handoff.source), text: handoff.text },
+        branch,
+        baseEnv,
+        emptyGhConfigDir: ghConfigDir,
+        cwd: tree,
+      })
+      const context = { branch, headSha: null, pushed: false, session: sessionSummary(classification, output), ...ran }
+      if (classification.outcome !== 'completed') {
+        return result(base, 'session-failed', { ...context, outcome: classification.outcome, reason: classification.reason })
+      }
+      // ST-15/AC-5: a Codex session cannot commit, so the dispatcher commits what it left.
+      const viaCodex = choice.tool === 'codex'
+      if (viaCodex) {
+        step = 'commit'
+        await commitSessionWork({ cwd: tree, storyId: handoff.id, title: titleOf(classification.prText) })
+      }
+      step = 'push'
+      const push = await pushBranch({ cwd: tree, branch, baseSha: state.baseSha, hooksOff: viaCodex })
+      if (push.status !== PUSHED) {
+        const { status, screenshots: _screenshots, ...rest } = push
+        return result(base, status, { ...context, ...rest })
+      }
+      context.headSha = push.headSha
+      context.pushed = true
+      if (push.screenshots.length > 0) context.untrackedScreenshots = push.screenshots
+      const block = classification.prText
+      if (block.status !== 'parsed') return result(base, 'pr-block-invalid', { ...context, reason: block.reason })
+      return result(base, PUSHED, { ...context, proposedPr: { title: block.title, body: block.body, draft: block.draft } })
     } catch (error) {
-      return result(base, 'install-failed', { branch, reason: error.message })
+      const failed = { claim: 'claim-failed', setup: 'install-failed', session: 'session-failed', commit: 'commit-failed', push: 'push-failed' }[step]
+      return result(base, failed, { branch, reason: error.message, ...(step === 'session' && { outcome: 'not-started', pushed: false }) })
     }
-    state.sessionStarted = true
-    const { classification, output } = await startCoderSession({
-      choice, machine, sessionOptions, codexSession, scratch,
-      promptTemplate: template,
-      repo: handoff.repo,
-      handoff: { id: handoff.id, version: handoff.version, source: describeSource(handoff.source), text: handoff.text },
-      branch,
-      baseEnv,
-      emptyGhConfigDir: ghConfigDir,
-      cwd: tree,
-    })
-    const context = { branch, headSha: null, pushed: false, session: sessionSummary(classification, output), ...ran }
-    if (classification.outcome !== 'completed') {
-      return result(base, 'session-failed', { ...context, outcome: classification.outcome, reason: classification.reason })
-    }
-    // ST-15/AC-5: a Codex session cannot commit, so the dispatcher commits what it left.
-    const viaCodex = choice.tool === 'codex'
-    if (viaCodex) await commitSessionWork({ cwd: tree, storyId: handoff.id, title: titleOf(classification.prText) })
-    const push = await pushBranch({ cwd: tree, branch, baseSha: state.baseSha, hooksOff: viaCodex })
-    if (push.status !== PUSHED) {
-      const { status, screenshots: _screenshots, ...rest } = push
-      return result(base, status, { ...context, ...rest })
-    }
-    context.headSha = push.headSha
-    context.pushed = true
-    if (push.screenshots.length > 0) context.untrackedScreenshots = push.screenshots
-    const block = classification.prText
-    if (block.status !== 'parsed') return result(base, 'pr-block-invalid', { ...context, reason: block.reason })
-    return result(base, PUSHED, { ...context, proposedPr: { title: block.title, body: block.body, draft: block.draft } })
   }
 }

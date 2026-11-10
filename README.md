@@ -423,32 +423,35 @@ result:
 
 - `unit-changed`: the source was read and its text differs from the approved version. This is the
   one the coordinator answers with a hold, as selection does. It is not retryable.
-- `source-unavailable`, `over-usage` and `usage-unknown`: the same handoff may be executed again
-  later. The result says `retryable: true`; no other refusal does.
+- `source-unavailable` (the source cannot be read now, or `main` cannot be fetched), `over-usage` and
+  `usage-unknown`: the same handoff may be executed again later. The result says `retryable: true`; no other refusal does.
 - `handoff-unknown`, `version-not-current`, `not-executable` (held, withdrawn, completed, or admitted
   with no admission passed), `admission-mismatch`, `admission-inactive`, `records-unreadable`,
-  `choice-unavailable`, `bad-machine-label` and `branch-exists`.
+  `choice-unavailable` (also when the user config cannot be read), `bad-machine-label` and
+  `branch-exists`.
 
 Then it works as the story coder does. The branch is `handoff/<id>-<source>`, named from the
 handoff's ID and its source (the file's path in lower-case letters and digits, or
 `issue-<number>`), so it is the same for every execution of one handoff. An existing local or
 remote branch is refused. ATC makes the claim commit on it and pushes it, creating the branch on
-the remote and never replacing one, before the project's `setup` runs or the coder starts. It
-never pushes to `main` and opens no pull request. The coder is the user config's default coder
-choice (or the one its caller names), with the same usage limits, time limits, allowed tools and
-credential-free environment as for a story, and a Codex choice is committed by ATC. It does not
-read a unit's own choice of model.
+the remote and never replacing one, before the project's `setup` (read from the revision the
+worktree is made from) runs or the coder starts. It never pushes to `main` and opens no pull
+request. The coder is the user config's default coder choice (or the one its caller names), with
+the same usage limits, time limits, allowed tools and credential-free environment as for a story,
+and a Codex choice is committed by ATC. It does not read a unit's own choice of model.
 
 When the coder finishes, the result has `status: "pushed"` with the repository, handoff ID and
 version, the branch, the pushed `headSha`, the session's outcome, the choice that ran (its name,
 tool and model) and `proposedPr`, the title, body and draft flag the coder wrote. Opening the pull
 request is ST-92's. A run that stops short has its own `status`: `claim-failed`, `install-failed`,
 `session-failed`, `nothing-committed`, `uncommitted-changes`, `prompt-change-refused`,
-`push-failed` or `pr-block-invalid` (the branch is pushed, with no description). A call starts at
-most one session, and no failure starts another. After a failure that started the session, the
-result's `retained` names the worktree (and its branch) when the worktree holds uncommitted changes
-or untracked files, and the branch when it holds commits that are not on the remote; both are left
-in place. The claim commit stays on the remote after any failure that follows it.
+`commit-failed`, `push-failed` or `pr-block-invalid` (the branch is pushed, with no description).
+A step that throws once the claim begins (the claim, the setup, starting the session, ATC's commit
+or push) is the result of that step's kind, not a throw. A call starts at most one session, and no
+failure starts another. After any failure that started the session, `pr-block-invalid` included,
+the result's `retained` names the worktree (and its branch) when the worktree holds uncommitted
+changes or untracked files, and the branch when it holds commits that are not on the remote; both
+are left in place. The claim commit stays on the remote after any failure that follows it.
 
 ### The coordinator
 

@@ -596,6 +596,20 @@ describe('ST-91/AC-4: the existing limits and choices still apply', () => {
     expect(call.cwd).not.toBe(ownedOf(world))
   })
 
+  it('ST-91/AC-4: the setup is the one in the revision the worktree is made from, not an earlier read', async () => {
+    const world = await makeWorld()
+    const id = await approveFile(world)
+    const usage = async () => {
+      const changed = fixtureSettings({ repo: REPO, unitLinks: ['file', 'issue'], setup: { command: 'echo changed', timeoutMinutes: 7 } })
+      commitOnMain(world, { 'steward.config.json': `${JSON.stringify(changed, null, 2)}
+` })
+      return UNDER_LIMITS
+    }
+    const { result, installs } = await exec(world, id, finish, { options: { usage } })
+    expect(result.status).toBe('pushed')
+    expect(installs[0].setup).toEqual({ command: 'echo changed', timeoutMinutes: 7 })
+  })
+
   it('ST-91/AC-4: a Codex choice runs through the Codex session, and the dispatcher commits what it left', async () => {
     const world = await makeWorld()
     const id = await approveFile(world)
@@ -752,6 +766,84 @@ describe('ST-91/AC-6: failures are distinct, keep the coder\'s only copy, and ar
     expect(result).toMatchObject({ status: 'pr-block-invalid', pushed: true, headSha: remoteBranch(world, branchOf(world)) })
     expect(result.proposedPr).toBeUndefined()
     expect(fake.calls).toHaveLength(1)
+  })
+
+  it('ST-91/AC-6: a throw while making the claim commit is claim-failed, with no setup and no model', async () => {
+    const world = await makeWorld()
+    const id = await approveFile(world)
+    const hook = path.join(ownedOf(world), '.git', 'hooks', 'pre-commit')
+    writeFileSync(hook, REFUSE_ALL_HOOK, { mode: 0o755 })
+    const { result, fake, installs } = await exec(world, id)
+    expect(result.status).toBe('claim-failed')
+    expect(result.reason).toContain('refused by test hook')
+    noModel(fake)
+    expect(installs).toEqual([])
+    expect(result.retained).toBeUndefined()
+    expect(remoteBranch(world, branchOf(world))).toBeNull()
+    expect(git(ownedOf(world), 'worktree', 'list', '--porcelain').split(String.fromCharCode(10)).filter((l) => l.startsWith('worktree '))).toHaveLength(1)
+  })
+
+  it('ST-91/AC-6: a session that cannot be started is session-failed (not-started), and keeps what it left', async () => {
+    const world = await makeWorld()
+    const id = await approveFile(world)
+    const { result, fake } = await exec(world, id, ({ cwd }) => {
+      writeFileSync(path.join(cwd, 'half.txt'), 'half')
+      throw new Error('spawn fake-claude ENOENT')
+    })
+    expect(result).toMatchObject({ status: 'session-failed', outcome: 'not-started', pushed: false })
+    expect(result.reason).toContain('ENOENT')
+    expect(fake.calls).toHaveLength(1)
+    expect(existsSync(path.join(result.retained.worktree, 'half.txt'))).toBe(true)
+
+    const other = await makeWorld()
+    const otherId = await approveFile(other)
+    const clean = await exec(other, otherId, () => { throw new Error('spawn fake-claude ENOENT') })
+    expect(clean.result).toMatchObject({ status: 'session-failed', outcome: 'not-started' })
+    expect(clean.result.retained).toBeUndefined()
+  })
+
+  it('ST-91/AC-6: a throw in the push is push-failed, and keeps the commit', async () => {
+    const world = await makeWorld()
+    const id = await approveFile(world)
+    // Removing the worktree's .git link makes the dispatcher's own git calls in it throw.
+    const { result } = await exec(world, id, ({ cwd }) => {
+      commitWork(cwd)
+      rmSync(path.join(cwd, '.git'), { force: true })
+      return block()
+    })
+    expect(result.status).toBe('push-failed')
+    expect(result.reason).toBeTruthy()
+  })
+
+  it('ST-91/AC-6: a pushed branch with no readable description keeps a worktree holding untracked files', async () => {
+    const world = await makeWorld()
+    const id = await approveFile(world)
+    const { result } = await exec(world, id, ({ cwd }) => {
+      commitWork(cwd)
+      mkdirSync(path.join(cwd, 'e2e', '__screenshots__'), { recursive: true })
+      writeFileSync(path.join(cwd, 'e2e', '__screenshots__', 'a.png'), 'png')
+      return 'Done, but no block.'
+    })
+    expect(result).toMatchObject({ status: 'pr-block-invalid', pushed: true, headSha: remoteBranch(world, branchOf(world)) })
+    expect(existsSync(path.join(result.retained.worktree, 'e2e', '__screenshots__', 'a.png'))).toBe(true)
+    expect(result.retained.branch).toBe(branchOf(world))
+  })
+
+  it('ST-91/AC-1: a user config that cannot be read, and a main that cannot be fetched, are refusals, not throws', async () => {
+    const world = await makeWorld()
+    const id = await approveFile(world)
+    const broken = await exec(world, id, finish, { options: { userConfig: async () => { throw new Error('config is gone') } } })
+    expect(broken.result).toMatchObject({ status: 'choice-unavailable' })
+    expect(broken.result.reason).toContain('config is gone')
+    noModel(broken.fake)
+    const usage = async () => {
+      git(ownedOf(world), 'remote', 'set-url', 'origin', path.join(base, 'no-such-remote'))
+      return UNDER_LIMITS
+    }
+    const fetchFails = await exec(world, id, finish, { options: { usage } })
+    expect(fetchFails.result).toMatchObject({ status: 'source-unavailable', retryable: true })
+    expect(fetchFails.result.reason).toContain('cannot be fetched')
+    noModel(fetchFails.fake)
   })
 
   it('ST-91/AC-6: the refusal statuses are distinct from one another and from the failure statuses', async () => {
