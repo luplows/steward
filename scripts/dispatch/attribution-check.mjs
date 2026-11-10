@@ -4,12 +4,13 @@
  * request: no commit in its range, base to head, has a `Co-Authored-By:` trailer, and its body has
  * no "Generated with" line. Commits already on `main` are outside the range and are not checked.
  *
- * What counts as a trailer is git's decision, not a text search: a commit carries the trailer when
- * `git log --format=%(trailers:key=Co-Authored-By)` returns it, which needs the line to be in the
- * message's last paragraph and read as a trailer there (git also matches the key without regard to
- * case). A `Co-Authored-By:` line elsewhere in a body, or among prose in the last paragraph, is
- * not a trailer and is not a finding. A merge commit in the range is checked on its own message
- * like any other.
+ * What counts as a trailer is git's trailer parsing, not a text search: a commit is a finding when
+ * `git log -1 --format=%(trailers:key=Co-Authored-By,unfold)` returns a line for it, whatever its
+ * value (the same parsing as `git interpret-trailers --parse`). Examples run through that command:
+ * a final-paragraph `Co-Authored-By:` with an empty value is a trailer; one beside a
+ * `Signed-off-by:` line after a line of prose is a trailer; one on a line of its own in an earlier
+ * paragraph, or one of five lines in a final paragraph of prose, is not. A merge commit in the range
+ * is checked on its own message like any other.
  *
  * A "Generated with" line is a line of the body whose first letter begins the words "Generated
  * with", after any leading marks such as a bullet or the robot emoji Claude Code writes.
@@ -55,12 +56,12 @@ export async function checkAttribution({ cwd, base, head, body }) {
   const shas = (await git(cwd, 'rev-list', `${base}..${head}`)).split('\n').filter(Boolean)
   for (const sha of shas) {
     const trailers = (
-      await git(cwd, 'log', '-1', '--format=%(trailers:key=Co-Authored-By,valueonly,unfold)', sha)
+      await git(cwd, 'log', '-1', '--format=%(trailers:key=Co-Authored-By,unfold)', sha)
     )
       .split('\n')
       .filter((line) => line.trim() !== '')
-    for (const value of trailers) {
-      findings.push(`commit ${sha.slice(0, 12)}: has a Co-Authored-By: trailer (${value.trim()})`)
+    for (const trailer of trailers) {
+      findings.push(`commit ${sha.slice(0, 12)}: has a Co-Authored-By: trailer (${trailer.trim()})`)
     }
   }
   for (const { line, text } of generatedWithLines(body)) {

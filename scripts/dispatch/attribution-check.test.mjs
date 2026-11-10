@@ -25,7 +25,7 @@ const commit = (message, file = 'f.txt') => {
   n += 1
   writeFileSync(path.join(repo, file), `${n}\n`)
   git(repo, 'add', '.')
-  git(repo, 'commit', '-q', '-m', message)
+  git(repo, 'commit', '-q', '--cleanup=verbatim', '-m', message)
   return git(repo, 'rev-parse', 'HEAD')
 }
 
@@ -130,6 +130,25 @@ describe('attribution check', () => {
       `two\n\nNote that ${TRAILER} is quoted mid-sentence\nand here is prose\nthat follows it\nand more prose.`,
     ])
     expect(await checkAttribution({ cwd: repo, base, head, body: '' })).toEqual({ ok: true })
+  }, TEST_TIMEOUT)
+
+  it('ST-100/AC-3: a Co-Authored-By: trailer with an empty or whitespace-only value fails', async () => {
+    for (const [name, value] of [['empty', ''], ['blank', '   ']]) {
+      const { base, head } = branch(`value-${name}`, [`one\n\nWhat it does.\n\nCo-Authored-By:${value}`])
+      const result = await checkAttribution({ cwd: repo, base, head, body: '' })
+      expect(result.ok).toBe(false)
+      expect(result.findings).toHaveLength(1)
+    }
+  }, TEST_TIMEOUT)
+
+  it('ST-100/AC-3: a trailer in a final paragraph that also holds prose and another trailer fails', async () => {
+    const { base, head } = branch('mixed', [
+      'one\n\nWhat it does.\n\nProse here.\nSigned-off-by: T <t@example.com>\nCo-Authored-By: Some Model <m@example.com>',
+    ])
+    const result = await checkAttribution({ cwd: repo, base, head, body: '' })
+    expect(result.ok).toBe(false)
+    expect(result.findings).toHaveLength(1)
+    expect(result.findings[0]).toContain('Some Model')
   }, TEST_TIMEOUT)
 
   it('ST-100/AC-3: prose about the phrase inside a sentence is not a "Generated with" line', () => {
