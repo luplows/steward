@@ -167,6 +167,9 @@ recovery after restart belong in this first slice, not in a later hardening rele
 tier/id queue is not automatically the authorization or scheduling mechanism for this slice.
 One machine and sequential work suffice for this first coding slice; concurrency is not a
 reason to defer its safety obligations. ST-82's own-gate conversion moves to 0.3.
+ST-95 also gives a newly passing coordinator review the existing bounded gate-lag wait before
+unattended landing, avoiding an otherwise unnecessary next scan. It does not change unattended
+landing authorization or make parallel execution part of 0.3.
 
 ### 0.4.0 — Automated fixing and discovery/execution separation
 

@@ -166,6 +166,17 @@ pilot waits only for one sweep run's bound after its own dispatch, and returns a
 status that says why, for a pull request it cannot dispatch for yet (`not-landable`, and the final
 statuses). The coordinator merges nothing, dispatches nothing itself, and has no manual mode.
 
+**Planned (ST-95)** (crew, 2026-11-09): When this coordinator has just recorded a
+`pass` or `pass-with-observations` verdict on a PR/head, and a subsequent landing attempt in
+the same scheduling cycle targets that exact repository, PR and head, it supplies `passedAt` to
+the existing pilot. The pilot then uses ST-51's short bounded wait for `review/agent` to catch
+up, instead of deferring an otherwise landable PR to the next scan. No unrelated or older review
+receives that wait, and changed heads cannot inherit it. This is not an authorization head pin:
+unattended runway dispatches still use the project's standing `land: true`, with the runway
+rechecking the actual head and all checks. Other pending checks do not gain a new wait.
+Considered but not chosen: a second coordinator polling path, continuous event-driven scans,
+and head-pinned unattended authorization.
+
 Its record, and so `steward coordinator status`, shows the attempt under way apart from a review,
 and the last attempt's repository, pull request, head, time, status and reason. The pilot reads the
 head itself, so the head recorded is the one it reports, with the head the scan found beside it when
