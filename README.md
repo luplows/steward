@@ -423,8 +423,9 @@ result:
 
 - `unit-changed`: the source was read and its text differs from the approved version. This is the
   one the coordinator answers with a hold, as selection does. It is not retryable.
-- `source-unavailable` (the source cannot be read now, or `main` cannot be fetched), `over-usage` and
-  `usage-unknown`: the same handoff may be executed again later. The result says `retryable: true`; no other refusal does.
+- `source-unavailable` (the source cannot be read now, or `main` cannot be fetched), `over-usage`
+  and `usage-unknown`: the same handoff may be executed again later. The result says
+  `retryable: true`; no other refusal does.
 - `handoff-unknown`, `version-not-current`, `not-executable` (held, withdrawn, completed, or admitted
   with no admission passed), `admission-mismatch`, `admission-inactive`, `records-unreadable`,
   `choice-unavailable` (also when the user config cannot be read), `bad-machine-label` and
