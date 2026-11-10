@@ -137,6 +137,40 @@ describe('installDependencies', () => {
     }
   })
 
+  it('ST-7/AC-2: a limit longer than setTimeout can hold is not cut short', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.spyOn(process, 'kill').mockImplementation(() => true)
+      const starter = fakeStarter()
+      // 40000 minutes is 2.4e9 ms, over the 2^31 - 1 ms a single timer holds.
+      const result = installDependencies({
+        cwd: '/w', env: ENV, setup: { command: 'slow', timeoutMinutes: 40_000 }, spawnFn: starter.spawnFn,
+      }).catch((e) => e)
+      await vi.advanceTimersByTimeAsync(2 ** 31)
+      expect(starter.children[0].kill).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(40_000 * 60_000 - 2 ** 31)
+      await vi.advanceTimersByTimeAsync(10) // the fake `taskkill` ends on setImmediate
+      const error = await result
+      expect(error.message).toContain('40000 minutes')
+      expect(starter.children[0].kill).toHaveBeenCalledWith('SIGKILL')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('ST-7/AC-5: a character split across two chunks of output is decoded whole', async () => {
+    const euro = Buffer.from('€ done', 'utf8') // E2 82 AC ...
+    const starter = fakeStarter((child) => setImmediate(() => {
+      child.stdout.emit('data', euro.subarray(0, 2))
+      child.stdout.emit('data', euro.subarray(2))
+      child.emit('close', 1, null)
+    }))
+    const error = await installDependencies({ cwd: '/w', env: ENV, setup: SETUP, spawnFn: starter.spawnFn })
+      .catch((e) => e)
+    expect(error.message).toContain('€ done')
+    expect(error.message).not.toContain('�')
+  })
+
   it('ST-7/AC-2: a setup that closes after being stopped still rejects naming the limit', async () => {
     // The command closes as soon as the tree kill starts, before the kill has finished.
     const closeFirst = () => starter.children[0].emit('close', null, 'SIGKILL')

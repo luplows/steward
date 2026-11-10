@@ -15,12 +15,17 @@
  * with the limit it overran when it was stopped.
  */
 import { spawn } from 'node:child_process'
+import { StringDecoder } from 'node:string_decoder'
 import { killTree } from './spawn.mjs'
 
 const MINUTE_MS = 60_000
 const OUTPUT_LINES = 20
-// Enough to hold the last lines of a noisy command without keeping all of its output.
+// Output is kept as the last 65536 characters (UTF-16 code units, not bytes): enough to hold the
+// last lines of a noisy command without keeping all of its output.
 const OUTPUT_KEEP = 64 * 1024
+// The longest delay `setTimeout` honours; a longer one is clamped to 1 ms. A limit beyond it is
+// waited out in steps of at most this long.
+const MAX_TIMER_MS = 2 ** 31 - 1
 
 /**
  *   cwd, env     where the command runs and the environment it gets
@@ -69,18 +74,31 @@ export async function installDependencies({
       return
     }
 
-    const collect = (chunk) => { output = (output + chunk).slice(-OUTPUT_KEEP) }
-    child.stdout?.on('data', collect)
-    child.stderr?.on('data', collect)
+    // One decoder per stream, so a character split across two chunks is decoded whole.
+    const collectFrom = (stream) => {
+      const decoder = new StringDecoder('utf8')
+      stream?.on('data', (chunk) => {
+        const text = typeof chunk === 'string' ? chunk : decoder.write(chunk)
+        output = (output + text).slice(-OUTPUT_KEEP)
+      })
+    }
+    collectFrom(child.stdout)
+    collectFrom(child.stderr)
 
-    timer = setTimeout(() => {
+    const stop = () => {
       stopped = true
       // A timeout that leaves a process running is a leak, not a timeout: reject once the kill
       // has been carried out.
       killTree(child, spawnFn).then(() => {
         if (!settled) fail(`\`${command}\` was stopped after its limit of ${limit}`)
       })
-    }, limitMs)
+    }
+    // A limit longer than `setTimeout` can hold is waited out in steps, so it is never cut short.
+    const arm = (remainingMs) => {
+      const step = Math.min(remainingMs, MAX_TIMER_MS)
+      timer = setTimeout(() => (remainingMs > step ? arm(remainingMs - step) : stop()), step)
+    }
+    arm(limitMs)
 
     child.on('error', (error) => fail(error.message))
     child.on('close', (code, signal) => {
