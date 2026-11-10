@@ -1942,7 +1942,7 @@ shortened where it is long, so that it can be found there with its date.
   required, even beside `null`. What follows (the planning session, 2026-10-11): the coder runs
   `check` as one shell call, and a shell call is cut off at 10 minutes (`SHELL_TIMEOUT_MS`,
   `scripts/dispatch/invocation.mjs`), so a longer limit also needs that bound raised, and the
-  stall interval with it (`DEFAULT_STALL_MS`, `scripts/dispatch/spawn.mjs`). ST-7 builds `setup`'s
+  stall interval with it (`DEFAULT_STALL_MS`, `scripts/dispatch/spawn.mjs`). ST-7 built `setup`'s
   time limit.
 - **When GitHub reports a pull request `blocked` though the checks `landWhen` names are green,
   steward does not ask the runway to land it.** Considered and not chosen: triggering the runway
@@ -2207,8 +2207,8 @@ shortened where it is long, so that it can be found there with its date.
   Settings and The two sides), decided the same day; each part is built by the story named:
   - The settings keys `setup`, `check`, `landWhen`, `land`, `unitLinks` and
     `rulesFile`, each required, with no default in the code (`docs/settings.md`).
-  - **Planned (ST-7):** the project's `setup` command, within its time limit, in place of
-    `npm ci`.
+  - The project's `setup` command, within its time limit, in place of `npm ci`
+    (`scripts/dispatch/install.mjs`).
   - Finding a pull request's unit from the link in its body, and reading it from `main`
     (`scripts/dispatch/unit.mjs`).
   - Reading the rules file from `main`, in sections that each say when they apply and number

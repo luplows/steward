@@ -865,6 +865,46 @@ describe('OQ-78/AC-8 and AC-9: dependencies are installed before the coder, or t
   })
 })
 
+describe('ST-7/AC-4: the install is given the project\'s setup setting', () => {
+  const SETUP = { command: 'npm run prepare-tree', timeoutMinutes: 3 }
+  const STOPPED = 'setup stopped after its limit of 3 minutes'
+
+  it('ST-7/AC-4: dispatchCoder reads setup from the settings and passes it to the install', async () => {
+    const world = makeWorld()
+    writeFileSync(path.join(world.repoDir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO, setup: SETUP })))
+    const installs = []
+    await dispatch(world, ({ cwd }) => { finishStory(cwd); return block() }, { install: async (options) => { installs.push(options) } })
+    expect(installs).toHaveLength(1)
+    expect(installs[0].setup).toEqual(SETUP)
+  })
+
+  it('ST-7/AC-4: dispatchCoder passes a null setup as null', async () => {
+    const world = makeWorld()
+    writeFileSync(path.join(world.repoDir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO, setup: null })))
+    const installs = []
+    await dispatch(world, ({ cwd }) => { finishStory(cwd); return block() }, { install: async (options) => { installs.push(options) } })
+    expect(installs).toHaveLength(1)
+    expect(installs[0].setup).toBeNull()
+  })
+
+  it('ST-7/AC-4: retryStory reads setup from the settings and passes it to the install', async () => {
+    const world = makeRetryWorld()
+    writeFileSync(path.join(world.repoDir, 'steward.config.json'), JSON.stringify(fixtureSettings({ repo: REPO, setup: SETUP })))
+    const installs = []
+    await retry(world, ({ cwd }) => { commitWork(cwd); return block() }, { install: async (options) => { installs.push(options) } })
+    expect(installs).toHaveLength(1)
+    expect(installs[0].setup).toEqual(SETUP)
+  })
+
+  it('ST-7/AC-4: a rejected install, such as a setup stopped at its limit, is install-failed in both', async () => {
+    const reject = async () => { throw new Error(STOPPED) }
+    const first = await dispatch(makeWorld(), () => { throw new Error('must not spawn') }, { install: reject })
+    expect(first.result).toMatchObject({ status: 'install-failed', reason: STOPPED })
+    const second = await retry(makeRetryWorld(), () => { throw new Error('must not spawn') }, { install: reject })
+    expect(second.result).toMatchObject({ status: 'install-failed', reason: STOPPED })
+  })
+})
+
 describe('OQ-78/AC-10: the story is chosen from the freshly fetched origin/main', () => {
   it('OQ-78/AC-10: a story finished on origin but open in a stale checkout is not chosen, and nothing throws', async () => {
     const world = makeWorld()

@@ -399,8 +399,9 @@ async function cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded }) {
  *                  `origin/main`, never from its working tree. Also where
  *                  `steward.config.json` is read from. Defaults to the
  *                  current working directory
- *   install        `({ cwd, env })`, the dependency install run in the worktree
- *                  before the coder starts; defaults to `npm ci`. It gets the
+ *   install        `({ cwd, env, setup })`, run in the worktree before the coder starts;
+ *                  defaults to `install.mjs`, which runs the project's `setup` setting (read
+ *                  from `repoDir`'s `steward.config.json`) within its time limit. It gets the
  *                  coder's own credential-free environment
  *   storyId        run this story instead of the head of the queue. It must
  *                  still be `ready`; this is not a second ordering
@@ -463,6 +464,8 @@ export async function dispatchCoder({
   // Stopgap: the coder reads the story prefix from stories/stories.json. The coder's stories own
   // this and will rework it with the coder's readiness setting.
   const storyPrefix = await readStoryPrefix(repoDir)
+  // ST-7: the project's `setup`, read before anything is claimed, made or installed.
+  const { setup } = await readSettings(repoDir)
   const machine = await userConfig()
   await git(repoDir, ['fetch', REMOTE, BASE])
   const mainSha = (await git(repoDir, ['rev-parse', `${REMOTE}/${BASE}`])).trim()
@@ -559,7 +562,7 @@ export async function dispatchCoder({
     // coder session gets (what `spawnSession` derives from `baseEnv` and
     // `emptyGhConfigDir`), never the dispatcher's own.
     try {
-      await install({ cwd: tree, env: coderEnv(baseEnv, ghConfigDir) })
+      await install({ cwd: tree, env: coderEnv(baseEnv, ghConfigDir), setup })
     } catch (error) {
       return { status: 'install-failed', storyId: chosen.id, branch, reason: error.message }
     }
@@ -773,6 +776,8 @@ export async function retryStory({
   // Stopgap: the coder reads the story prefix from stories/stories.json. The coder's stories own
   // this and will rework it with the coder's readiness setting.
   const storyPrefix = await readStoryPrefix(repoDir)
+  // ST-7: the project's `setup`, read before the worktree is made or anything installed.
+  const { setup } = await readSettings(repoDir)
   const machine = await userConfig()
   if (!new RegExp(`^${storyPrefix}-\\d+$`).test(storyId ?? '')) {
     throw new Error(`retryStory requires a story id of the form ${storyPrefix}-<n>, got ${JSON.stringify(storyId)}`)
@@ -836,7 +841,7 @@ export async function retryStory({
     const ghConfigDir = path.join(scratch, 'gh-config')
     await mkdir(ghConfigDir)
     try {
-      await install({ cwd: tree, env: coderEnv(baseEnv, ghConfigDir) })
+      await install({ cwd: tree, env: coderEnv(baseEnv, ghConfigDir), setup })
     } catch (error) {
       return { status: 'install-failed', storyId, branch, prNumber, reason: error.message }
     }
