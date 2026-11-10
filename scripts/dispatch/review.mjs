@@ -62,7 +62,7 @@ import { homedir, tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { coderLineNames, firstWithUsage } from './choices.mjs'
+import { MODEL_TOKEN_PREFIX, coderLineNames, firstWithUsage } from './choices.mjs'
 import { readCodexUsage, spawnCodexReviewer } from './codex.mjs'
 import { coderEnv } from './coder-env.mjs'
 import {
@@ -149,14 +149,18 @@ export function unitCoderModel(machine, found, read) {
 /**
  * The models the coder ran (ST-35/AC-8), which the reviewer's choice must differ from: for each
  * name on the last `Coder:` line of the pull request's `body`, the `model` of that key of
- * `roles.coder.available`, else the name as written; with no such line, the model the unit gives
- * (`unitCoderModel`), or none when the unit names none.
+ * `roles.coder.available`, else the name as written; a token `model=<id>` (ST-92/AC-6) is the
+ * literal identifier `<id>`, whatever `roles.coder.available` holds now; with no such line, the
+ * model the unit gives (`unitCoderModel`), or none when the unit names none.
  */
 export function coderModelsRan(machine, body, found, read) {
   const names = coderLineNames(body)
   if (names !== null) {
     const { available } = machine.roles.coder
-    return names.map((name) => (Object.hasOwn(available, name) ? available[name].model : name))
+    return names.map((name) => {
+      if (name.startsWith(MODEL_TOKEN_PREFIX)) return name.slice(MODEL_TOKEN_PREFIX.length)
+      return Object.hasOwn(available, name) ? available[name].model : name
+    })
   }
   const model = unitCoderModel(machine, found, read)
   return model === null ? [] : [model]

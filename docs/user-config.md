@@ -149,8 +149,10 @@ file that gives Codex to the reviewer alone may leave it out.
   ran. When none differs, `reviewPullRequest` returns `reviewer-unavailable` and starts no session.
 - **The models the coder ran** are those of the choices on the last line of the pull request's body
   that starts `Coder:`: for each name, the `model` of that key of `roles.coder.available`, or the
-  name as written when it is not one. When the body has no such line, it is the model of the choice
-  the unit's `model:` names, or, when the unit's `model:` is `null`, that of
+  name as written when it is not one, except a token `model=<id>`, which is the literal model
+  `<id>` whatever `roles.coder.available` holds now (ATC writes it for a handoff's pull request,
+  `publishHandoff`, with the model that actually ran). When the body has no such line, it is the
+  model of the choice the unit's `model:` names, or, when the unit's `model:` is `null`, that of
   `roles.coder.default`. The line is ATC's: `dispatchCoder` opens the pull request with the coder's
   body, every line of it that starts `Coder:` removed, followed by a last line `Coder: <name>`
   naming the choice that ran, and `retryStory` replaces the body the same way, its line naming the
