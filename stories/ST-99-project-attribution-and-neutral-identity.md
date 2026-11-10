@@ -33,7 +33,7 @@ adds attribution that conflicts with the project's instructions.
       Codex coder, which cannot commit, its output supplies the commit message, including any
       attribution, for ATC to commit mechanically. ATC neither interprets project policy nor
       invents, removes or rewrites coder-supplied attribution when composing the PR; it
-      preserves the coder's permitted attribution text while adding mechanical metadata.
+      preserves the coder's attribution text unchanged while adding mechanical metadata.
       The machine-read `Coder:` line remains required operational provenance, not attribution.
 - [ ] **AC-3** — `.claude/prompts/coder.md` and `.claude/prompts/coder-handoff.md` require the
       coder to read and follow the consuming project's applicable agent instructions on attribution
