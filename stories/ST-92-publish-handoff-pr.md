@@ -42,7 +42,7 @@ As a crew member, I want Steward to publish a completed coder branch as a correc
 
 ## Constraints
 
-The reviewer continues to read the unit and project rules from current `main`. In 0.3 publication trusts only the ST-91 expected remote head, not a second model output. The pull request text ATC composes carries no AI attribution, no `Co-Authored-By:` trailer and no "Generated with" line; the `Coder:` line is provenance and is required (ST-99, crew 2026-11-10).
+The reviewer continues to read the unit and project rules from current `main`. In 0.3 publication trusts only the ST-91 expected remote head, not a second model output. The pull request text ATC composes follows the consuming project's applicable agent instructions on attribution: include what they require, omit what they forbid, and add no AI attribution when they are silent (ST-99, crew 2026-11-10). The `Coder:` line is required operational provenance regardless of that policy.
 
 ## Context
 
