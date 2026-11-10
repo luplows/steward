@@ -285,7 +285,7 @@ async function add(args, ctx) {
     return 1
   }
   if (existing !== undefined) {
-    if (existing.text === read.text) {
+    if (sameContent(existing, read)) {
       out(`${existing.id} already approves this ${describeSource(source)} of ${repo} at this text (${existing.status}, version ${existing.version}). Nothing was changed.`)
       return 0
     }
@@ -313,6 +313,14 @@ async function add(args, ctx) {
 }
 
 /**
+ * Whether what `read` found (from `readSource`) is exactly what `h` approved, with nothing trimmed
+ * or normalised on either side: a file's text as Git gives it, and an Issue's title and body as
+ * GitHub gives them (its `text` trims trailing whitespace, so a change there alone is not seen in it).
+ */
+const sameContent = (h, read) => read.text === h.text
+  && (h.source.kind === 'file' || (read.provenance.title === h.provenance.title && read.provenance.body === h.provenance.body))
+
+/**
  * Whether the pending handoff `h` could be selected now, by reading its source as it stands:
  * `{ eligible: true }`; `{ eligible: false, changed: true, reason }` when the source was read and
  * its text is not the approved text (selection holds it); or `{ eligible: false, changed: false,
@@ -323,12 +331,12 @@ async function add(args, ctx) {
 async function assess(h, ctx) {
   const read = await readSource(h.repo, h.source, ctx)
   if (!read.ok) return { eligible: false, changed: false, reason: read.reason }
-  if (read.text === h.text) return { eligible: true }
-  const now = h.source.kind === 'file' ? `main ${read.provenance.commit.slice(0, 12)}` : `fingerprint ${read.provenance.fingerprint.slice(0, 12)}`
+  if (sameContent(h, read)) return { eligible: true }
+  const now = h.source.kind === 'file' ? `read at main ${read.provenance.commit.slice(0, 12)}` : 'its title or body now differs'
   return {
     eligible: false,
     changed: true,
-    reason: `${describeSource(h.source)} of ${h.repo} no longer has the text approved as version ${h.version} (now read at ${now})`,
+    reason: `${describeSource(h.source)} of ${h.repo} no longer has the text approved as version ${h.version} (${now})`,
   }
 }
 
@@ -401,7 +409,7 @@ async function list(ctx) {
   out(`Approved handoffs, oldest first (${file}):`)
   for (const h of handoffs) out(line(h))
   // Report only. A pending handoff is read as selection reads it, but nothing is written: a changed
-  // unit becomes held at the next selection, not here, and an unreadable source is never held.
+  // unit is held by a selection that reaches it, not here, and an unreadable source is never held.
   const attention = []
   for (const h of handoffs) {
     if (h.status === 'held') {
@@ -410,7 +418,7 @@ async function list(ctx) {
       const verdict = await assess(h, ctx)
       if (verdict.eligible) continue
       attention.push(verdict.changed
-        ? passedOver(h, 'changed', `${verdict.reason}; the next selection will hold it. ${reapproveHint(h)}`)
+        ? passedOver(h, 'changed', `${verdict.reason}; a selection that reaches it holds it if its content still differs. ${reapproveHint(h)}`)
         : passedOver(h, 'unavailable', `${verdict.reason}. ${retryHint}`))
     }
   }
@@ -460,7 +468,7 @@ async function reapprove(id, ctx) {
     err(`Not reapproved: ${read.reason}. Nothing was changed.`)
     return 1
   }
-  if (h.status === 'pending' && h.text === read.text) {
+  if (h.status === 'pending' && sameContent(h, read)) {
     out(`${id}: ${describeSource(h.source)} of ${h.repo} still has the approved text (version ${h.version}). Nothing was changed.`)
     return 0
   }

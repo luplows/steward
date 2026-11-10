@@ -394,8 +394,10 @@ coding must check again.
 
 `steward handoff list` shows each held handoff and each pending one that is not eligible now, under
 "Not eligible now", with its repository, source, position (its place in the approval order), and
-what to do. It only reports: a pending handoff whose unit has changed is shown as `changed` and becomes
-held at the next selection, not when it is listed.
+what to do. It only reports: a pending handoff whose unit has changed is shown as `changed`. A
+selection holds it when it reaches that handoff and its content still differs, not when it is
+listed. An Issue's title and body, and a file's text, are compared exactly, trailing whitespace
+included.
 
 ### The coordinator
 

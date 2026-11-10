@@ -837,6 +837,43 @@ describe('ST-90: selection of eligible handoffs', () => {
     expect((await select(home)).handoff.id).toBe('H-1')
   })
 
+  it.each([
+    ['an Issue body', { title: 'Title', body: 'Body' }, { title: 'Title', body: 'Body\n' }],
+    ['an Issue title (with an empty body, so the trimmed text is the same)', { title: 'Title', body: '' }, { title: 'Title ', body: '' }],
+  ])('ST-90/AC-3: a change of only trailing whitespace in %s is held, listed as changed, and reapprovable', async (_name, approved, now) => {
+    const home = await twoProjects()
+    setIssue(REPO, 3, issueJson(3, approved.title, approved.body))
+    await approve(home, REPO, '--issue', '3')
+    setIssue(REPO, 3, issueJson(3, now.title, now.body))
+    const listed = await run(['list'], home)
+    expect(listed.out).toContain('position 1  changed:')
+    expect(records(home).handoffs[0].status).toBe('pending')
+    expect((await run(['add', '--repo', REPO, '--issue', '3'], home)).err).toContain('reapprove H-1')
+    const result = await select(home)
+    expect(result.result).toBe('no-eligible-handoffs')
+    expect(records(home).handoffs[0]).toMatchObject({ status: 'held', provenance: { title: approved.title, body: approved.body } })
+    expect((await run(['reapprove', 'H-1'], home)).code).toBe(0)
+    expect(records(home).handoffs[0]).toMatchObject({ status: 'pending', version: 2, provenance: { title: now.title, body: now.body } })
+  })
+
+  it('ST-90/AC-3: a pending Issue handoff changed only in trailing whitespace is reapproved, not reported unchanged', async () => {
+    const home = await twoProjects()
+    setIssue(REPO, 3, issueJson(3, 'Title', 'Body'))
+    await approve(home, REPO, '--issue', '3')
+    setIssue(REPO, 3, issueJson(3, 'Title', 'Body\n\n'))
+    expect((await run(['reapprove', 'H-1'], home)).out).toContain('Reapproved H-1')
+    expect(records(home).handoffs[0]).toMatchObject({ version: 2, provenance: { body: 'Body\n\n' } })
+  })
+
+  it('ST-90/AC-3: a change of only trailing whitespace in a file is held', async () => {
+    const home = await twoProjects()
+    await approve(home, REPO, '--file', 'a.md')
+    commitOnMain(REPO, { 'a.md': 'alpha\n\n' })
+    expect((await run(['list'], home)).out).toContain('position 1  changed:')
+    expect((await select(home)).result).toBe('no-eligible-handoffs')
+    expect(records(home).handoffs[0]).toMatchObject({ status: 'held', text: 'alpha\n' })
+  })
+
   it('ST-90/AC-3: reapproval keeps the original position and the earlier snapshot', async () => {
     const home = await twoProjects()
     await approve(home, REPO, '--file', 'a.md')
@@ -985,7 +1022,7 @@ describe('ST-90: selection of eligible handoffs', () => {
     expect(held).toContain('steward handoff reapprove H-1')
     const changed = lines.find((l) => l.startsWith('  H-2'))
     expect(changed).toContain(`${OTHER}  file b.md  position 2  changed:`)
-    expect(changed).toContain('the next selection will hold it')
+    expect(changed).toContain('a selection that reaches it holds it if its content still differs')
     const gone = lines.find((l) => l.startsWith('  H-3'))
     expect(gone).toContain(`${REPO}  Issue #3  position 3  temporarily ineligible: Issue #3 cannot be read`)
     expect(gone).toContain('read again at the next selection')
