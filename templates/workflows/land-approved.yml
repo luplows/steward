@@ -58,6 +58,9 @@ permissions:
   statuses: read
   # For reading the head's check runs (`runway`); nothing else.
   checks: read
+  # For closing the Issue a landed PR links, after the merge (`runway`): the workflow's own
+  # token, no other credential.
+  issues: write
 
 # Never two sweeps at once: both would read the same pre-merge state.
 concurrency:

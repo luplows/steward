@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { createContext } from './github.mjs'
-import { describeUnit, findUnitLink, readUnit } from './unit.mjs'
+import { closingIssueNumbers, describeUnit, findUnitLink, readUnit, unitLineTexts } from './unit.mjs'
 
 // The readUnit tests build git repositories before each test; a slow machine
 // needs more than Vitest's default 10 s (hook) and 5 s (test).
@@ -337,5 +337,17 @@ describe('ST-19/AC-5: describeUnit', () => {
     ).toBe(
       'Unit: the pull request body links several units. None was read:\n- issue #12\n- file a.md',
     )
+  })
+})
+
+describe('ST-76: the closing references and Unit: lines the runway reads', () => {
+  it('ST-76/AC-1: closingIssueNumbers lists each Issue a closing keyword names once, in order', () => {
+    expect(closingIssueNumbers('Unit: #5\nCloses #5\nfixes #7\nResolved #5\nSee #9')).toEqual([5, 7])
+    expect(closingIssueNumbers('Closes luplows/steward#7\nUnit: #7')).toEqual([])
+    expect(closingIssueNumbers(null)).toEqual([])
+  })
+
+  it('ST-76/AC-2: unitLineTexts lists every non-empty Unit: line, repeats kept', () => {
+    expect(unitLineTexts('Unit: #5\n  Unit:  a.md \nUnit:\nUnit: #5\r\nnot Unit: #6')).toEqual(['#5', 'a.md', '#5'])
   })
 })

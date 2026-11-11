@@ -239,10 +239,10 @@ describe('ST-24/AC-3: the runway decides with it in place of the mergeable_state
     }
   })
 
-  it('ST-24/AC-3a: its permissions are the three it had and checks: read, with a comment saying why', () => {
+  it('ST-24/AC-3a: its permissions are the three it had, checks: read and (ST-76) issues: write, with a comment saying why checks: read', () => {
     const permissions = WORKFLOW.slice(WORKFLOW.indexOf('\npermissions:'), WORKFLOW.indexOf('\n# Never two sweeps'))
     expect(permissions.split('\n').filter((line) => /^\s+\w[\w-]*: /.test(line)).map((l) => l.trim()))
-      .toEqual(['contents: write', 'pull-requests: write', 'statuses: read', 'checks: read'])
+      .toEqual(['contents: write', 'pull-requests: write', 'statuses: read', 'checks: read', 'issues: write'])
     expect(permissions).toMatch(/# For reading the head's check runs[^\n]*\n\s+checks: read/)
   })
 

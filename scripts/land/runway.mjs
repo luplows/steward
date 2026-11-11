@@ -40,7 +40,10 @@
 //     goes on to the next one; a merge ends the run.
 //
 // `landWhen` is read from the project's `steward.config.json` on `main` through the API, so the
-// command needs no checkout of the project.
+// command needs no checkout of the project. So is `unitLinks`, for the one thing done after a merge:
+// when the merge into `main` has succeeded, `close-issue.mjs` closes the Issue the pull request's
+// body links and says it closes (ST-76). That is cleanup, never a gate: the run still reports the
+// pull request landed when it cannot.
 //
 // Usage: steward runway
 // Reads GH_TOKEN, REPO (owner/name), MODE_INPUT, PR_INPUT, HEAD_INPUT, EVENT_NAME and ACTOR from
@@ -50,6 +53,7 @@ import { existsSync, realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { isHonouredAuthor } from './check-author.mjs'
 import { assertLandWhen, runwayDecision } from './checks-green.mjs'
+import { closeLinkedIssue } from './close-issue.mjs'
 import { gh, ghApi, parseNdjson } from './gh.mjs'
 import { REVIEW_CONTEXT } from './mark-pending.mjs'
 import { PR_INPUT_PATTERN, selectCandidates } from './select-candidates.mjs'
@@ -81,9 +85,10 @@ export function touchesOnlyWorkflows(changedFiles) {
 }
 
 /**
- * Reads `steward.config.json` on `main` and returns `{ land, landWhen }` with `land` checked to be
- * a boolean; `landWhen` is returned as read, for the caller to check. Throws, saying why, when
- * the file cannot be read or parsed, is not an object, or has no boolean `land`.
+ * Reads `steward.config.json` on `main` and returns `{ land, landWhen, unitLinks }` with `land`
+ * checked to be a boolean; `landWhen` and `unitLinks` are returned as read, for the caller to check.
+ * Throws, saying why, when the file cannot be read or parsed, is not an object, or has no boolean
+ * `land`.
  */
 function readAuthorization(api, repo) {
   let settings
@@ -98,13 +103,13 @@ function readAuthorization(api, repo) {
   if (typeof settings.land !== 'boolean') {
     throw new Error(`${SETTINGS_PATH} on ${BASE_BRANCH}: land must be true or false, got ${JSON.stringify(settings.land)}`)
   }
-  return { land: settings.land, landWhen: settings.landWhen }
+  return { land: settings.land, landWhen: settings.landWhen, unitLinks: settings.unitLinks }
 }
 
 /**
  * Decides the authorization (ST-54) from the inputs and the project's `main`, before any pull
- * request is looked at. Returns `{ mode, landWhen }` or `{ refusal }`; the reason names what
- * failed.
+ * request is looked at. Returns `{ mode, landWhen, unitLinks }` or `{ refusal }`; the reason names
+ * what failed.
  */
 function authorize({ repo, modeInput, prInput, headInput, eventName, actor }, api, log) {
   const mode = modeInput === '' ? MODE_UNATTENDED : modeInput
@@ -131,7 +136,7 @@ function authorize({ repo, modeInput, prInput, headInput, eventName, actor }, ap
   if (mode === MODE_UNATTENDED) {
     if (!settings.land) return { refusal: `standing authorization absent: land is false in ${SETTINGS_PATH} on ${BASE_BRANCH}` }
     log(`Standing authorization: land is true in ${SETTINGS_PATH} on ${BASE_BRANCH}.`)
-    return { mode, landWhen: settings.landWhen }
+    return { mode, landWhen: settings.landWhen, unitLinks: settings.unitLinks }
   }
 
   let permission
@@ -144,7 +149,7 @@ function authorize({ repo, modeInput, prInput, headInput, eventName, actor }, ap
     return { refusal: `${actor} has ${JSON.stringify(permission)} permission on ${repo}; a manual landing needs ${MANUAL_PERMISSIONS.join(', ')}` }
   }
   log(`Manual authorization: ${actor} has ${permission} permission on ${repo}; land is ${settings.land} in ${SETTINGS_PATH} on ${BASE_BRANCH}.`)
-  return { mode, landWhen: settings.landWhen }
+  return { mode, landWhen: settings.landWhen, unitLinks: settings.unitLinks }
 }
 
 /**
@@ -168,7 +173,7 @@ export function runRunway({ repo, prInput = '', modeInput = '', headInput = '', 
   }
   const authorization = authorize({ repo, modeInput, prInput, headInput, eventName, actor }, api, log)
   if (authorization.refusal) return refuse(authorization.refusal)
-  const { mode, landWhen } = authorization
+  const { mode, landWhen, unitLinks } = authorization
   const manual = mode === MODE_MANUAL
   log(`Landing authorized: ${who}`)
 
@@ -272,6 +277,8 @@ export function runRunway({ repo, prInput = '', modeInput = '', headInput = '', 
     log(`Landing PR #${pr}: ${who}, merging at ${sha}`)
     merge([String(pr), '--repo', repo, '--squash', '--match-head-commit', sha])
     log(`::notice title=Landed::PR #${pr} merged at ${sha}`)
+    // Cleanup after the merge, never a gate on it (ST-76): it cannot throw, and the landing stands.
+    closeLinkedIssue({ repo, pr, base: pull.base?.ref, body: pull.body, unitLinks }, { api, log })
     return { landed: pr }
   }
 

@@ -18,6 +18,7 @@ export function pull(number, overrides = {}) {
     association: 'OWNER',
     labels: [],
     mergeableState: 'clean',
+    body: '',
     files: ['src/a.js'],
     checkRuns: [GREEN_RUN],
     statuses: [REVIEW_PASSED],
@@ -33,11 +34,16 @@ const lines = (items) => items.map((item) => JSON.stringify(item)).join('\n')
  * `land` and `landWhen` are the project's settings on `main`; `settingsText`, when given, is
  * served as the file's text instead. `permissions` maps a login to its collaborator permission; a
  * login not in it is a request GitHub fails. `calls` records each argument list given to `api`.
+ * `unitLinks` is the project's setting on `main`. `issues` maps an Issue number to `{ state }` (and
+ * `pull_request`, for a number that is a pull request); `failIssue` is `'read'` or `'update'` to
+ * make that request fail. A PATCH of `state=closed` sets the Issue's state; `patches` records each
+ * path patched.
  */
-export function fakeGitHub({ pulls = [], blockedCount = null, landWhen = 'all-checks', land = true, settingsText = null, permissions = {} } = {}) {
+export function fakeGitHub({ pulls = [], blockedCount = null, landWhen = 'all-checks', land = true, settingsText = null, permissions = {}, unitLinks = ['file', 'issue'], issues = {}, failIssue = null } = {}) {
   const calls = []
   const logs = []
   const merges = []
+  const patches = []
   const byNumber = (n) => pulls.find((p) => p.number === Number(n))
   const bySha = (sha) => pulls.find((p) => p.sha === sha)
 
@@ -45,7 +51,7 @@ export function fakeGitHub({ pulls = [], blockedCount = null, landWhen = 'all-ch
     calls.push(args)
     const url = args.find((a) => a.startsWith('repos/')) ?? ''
     const path = url.replace(`repos/${REPO}/`, '').split('?')[0]
-    if (url.includes('/contents/')) return settingsText ?? JSON.stringify({ land, landWhen })
+    if (url.includes('/contents/')) return settingsText ?? JSON.stringify({ land, landWhen, unitLinks })
     const collaborator = path.match(/^collaborators\/([^/]+)\/permission$/)
     if (collaborator) {
       const permission = permissions[collaborator[1]]
@@ -58,6 +64,18 @@ export function fakeGitHub({ pulls = [], blockedCount = null, landWhen = 'all-ch
     if (path === 'pulls') {
       return String(blockedCount ?? pulls.filter((p) => p.labels.includes('review-blocked')).length)
     }
+    const issuePath = path.match(/^issues\/(\d+)$/)
+    if (issuePath) {
+      const issue = issues[issuePath[1]]
+      if (args.includes('PATCH')) {
+        if (failIssue === 'update') throw new Error('gh: Resource not accessible by integration (HTTP 403)')
+        patches.push(url)
+        if (issue) issue.state = args.find((a) => a.startsWith('state='))?.slice('state='.length)
+        return JSON.stringify(issue ?? {})
+      }
+      if (failIssue === 'read' || issue === undefined) throw new Error(`gh: Not Found (HTTP 404): ${path}`)
+      return JSON.stringify(issue)
+    }
     let match = path.match(/^pulls\/(\d+)\/files$/)
     if (match) return lines(byNumber(match[1]).files)
     match = path.match(/^pulls\/(\d+)$/)
@@ -65,6 +83,8 @@ export function fakeGitHub({ pulls = [], blockedCount = null, landWhen = 'all-ch
       const p = byNumber(match[1])
       return JSON.stringify({
         head: { sha: p.sha },
+        base: { ref: p.base },
+        body: p.body,
         mergeable_state: p.mergeableState,
         author_association: p.association,
         labels: p.labels.map((name) => ({ name })),
@@ -90,5 +110,6 @@ export function fakeGitHub({ pulls = [], blockedCount = null, landWhen = 'all-ch
     calls,
     logs,
     merges,
+    patches,
   }
 }
