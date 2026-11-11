@@ -3484,7 +3484,7 @@ shortened where it is long, so that it can be found there with its date.
     conversion lands, rather than being required by ST-82's own PR.
     Considered and not chosen: requiring a manual merge, converting during
     release stabilization, pinning an interim `main` commit and repinning
-    again after tagging, or adding a special `init`/ `upgrade` case for
+    again after tagging, or adding a special `init`/`upgrade` case for
     the legacy workflows.
 
 - **Installation through a reviewable pull request** (crew, 2026-10-26).
