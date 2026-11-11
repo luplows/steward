@@ -47,7 +47,7 @@ issue cleanup to the crew.
       release-branch landing, failed or refused merge, and failed Issue API read/update. Tests
       verify that only the matching same-repository Issue can be updated and that both workflow
       variants grant the required permission, without making real GitHub mutations.
-- [ ] **AC-7** — Validate explicit post-merge closure on an authorized public scratch repository,
+- [x] **AC-7** — Validate explicit post-merge closure on an authorized public scratch repository,
       recording the PR, Issue, workflow run and observed final Issue state. Also record the result
       of a landing with no `Closes #<n>`; do not claim the API remedy works solely from the
       existing controlled merge-token comparison.
