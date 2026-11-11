@@ -7,6 +7,9 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { coordinatorPath, isRunning, main, readRecord, runCoordinator, stopRequestPath } from './coordinator.mjs'
+import { handoffRecord, writeHandoffs } from './handoff-fixture.mjs'
+import { handoffsPath, readHandoffs } from './handoff.mjs'
+import { projectsPath } from './project.mjs'
 import { admitReview, readReviews, reviewEnding, reviewsPath } from './review-admission.mjs'
 import { fixtureUserConfig } from './settings-fixture.mjs'
 import { userConfigPath } from './user-config.mjs'
@@ -690,5 +693,157 @@ describe('steward coordinator: its command line', () => {
     const result = await run(['restart'], freshHome())
     expect(result.code).toBe(2)
     expect(result.err).toMatch(/^usage: steward coordinator start/)
+  })
+})
+
+describe('ST-93/AC-4: start interrupts a coding admission the previous coordinator left', () => {
+  const url = (name) => JSON.stringify(pathToFileURL(path.join(DISPATCH, name)).href)
+
+  it('ST-93/AC-4: a stand-in coordinator killed during coding: start marks its handoff interrupted, says what to inspect, resumes nothing and starts', async () => {
+    const home = freshHome()
+    const file = writeHandoffs(home, [handoffRecord({ order: 1 }), handoffRecord({ order: 2 })])
+    const script = `
+      import { runCoordinator } from ${url('coordinator.mjs')}
+      import { codeNextHandoff } from ${url('handoff-coding.mjs')}
+      import { handoffsPath, readHandoffs } from ${url('handoff.mjs')}
+      const [, homedir] = process.argv
+      const { admit } = runCoordinator({ homedir })
+      const select = async () => {
+        const handoff = readHandoffs(handoffsPath(homedir)).handoffs.find((h) => h.status === 'pending')
+        const { version, approvedAt, text, provenance } = handoff
+        return { result: 'selected', handoff, version: { version, approvedAt, text, provenance }, skipped: [] }
+      }
+      codeNextHandoff({ homedir, admit, select, execute: () => new Promise(() => {}) })
+    `
+    const child = spawn(process.execPath, ['--input-type=module', '-e', script, home], { stdio: 'ignore' })
+    started.push(child.pid)
+    await until(() => readHandoffs(file).handoffs[0].status === 'admitted')
+    const [admitted] = readHandoffs(file).handoffs
+    process.kill(child.pid)
+    await until(() => !isRunning(child.pid))
+    expect(readHandoffs(file).handoffs[0]).toEqual(admitted)
+
+    const { spawnFn, spawned } = countingSpawn()
+    const result = await run(['start'], home, { spawnFn })
+    expect(result.code).toBe(0)
+    expect(result.out).toContain('interrupted: the previous coordinator ended without writing how its coding of H-1, file docs/unit-1.md of acme/widgets, ended.')
+    expect(result.out).toContain('It is not coded again automatically, and nothing was resumed, stopped or removed.')
+    expect(result.out).toContain('Inspect handoff/H-1-docs-unit-1-md on acme/widgets')
+    expect(result.out).toMatch(/started: /)
+    const { admission, ...kept } = admitted
+    const [moved, other] = readHandoffs(file).handoffs
+    expect(moved).toEqual({
+      ...kept, status: 'interrupted',
+      stop: { admissionId: admission.id, at: expect.any(String), outcome: 'interrupted', reason: expect.any(String), branch: 'handoff/H-1-docs-unit-1-md', headSha: null, pr: null, retained: null },
+    })
+    expect(other.status).toBe('pending')
+
+    // The new coordinator never takes the interrupted handoff again, and says what it knows of it.
+    await settledRecord(home)
+    const status = await statusOf(home)
+    expect(status.coding.stopped).toEqual([expect.objectContaining({ id: 'H-1', status: 'interrupted', branch: 'handoff/H-1-docs-unit-1-md', nextAction: expect.stringContaining('Inspect') })])
+    expect(readHandoffs(file).handoffs[0]).toEqual(moved)
+    expect((await run(['stop'], home)).code).toBe(0)
+    await until(() => !isRunning(spawned[0]))
+    // A later start has nothing left to interrupt.
+    const before = readFileSync(file, 'utf8')
+    const later = await run(['start'], home, { spawnFn })
+    expect(later.out).not.toMatch(/coding of/)
+    expect(readFileSync(file, 'utf8')).toBe(before)
+    expect((await run(['stop'], home)).code).toBe(0)
+    await until(() => !isRunning(spawned[1]))
+  })
+
+  it('ST-93/AC-4: a start that cannot read the approved handoffs refuses, launching nothing and naming the file', async () => {
+    const home = freshHome()
+    const file = handoffsPath(home)
+    mkdirSync(path.dirname(file), { recursive: true })
+    writeFileSync(file, '{ not json')
+    const { spawnFn, spawned } = countingSpawn()
+    const result = await run(['start'], home, { spawnFn })
+    expect(result.code).toBe(1)
+    expect(result.err).toContain(`could not read or update its approved handoffs, ${file}`)
+    expect(result.err).toContain('Nothing was started.')
+    expect(spawned).toEqual([])
+    expect(existsSync(coordinatorPath(home))).toBe(false)
+  })
+
+  it('ST-93/AC-4: a start that cannot write the interruption refuses, and the handoff stays admitted', async () => {
+    const home = freshHome()
+    const file = writeHandoffs(home, [handoffRecord({
+      order: 1, status: 'admitted',
+      admission: { id: 'adm-1', handoffId: 'H-1', version: 1, repo: 'acme/widgets', branch: 'handoff/H-1-x', admittedAt: '2026-11-10T10:00:00.000Z' },
+    })])
+    mkdirSync(`${file}.tmp`)
+    const { spawnFn, spawned } = countingSpawn()
+    const result = await run(['start'], home, { spawnFn })
+    rmSync(`${file}.tmp`, { recursive: true })
+    expect(result.code).toBe(1)
+    expect(result.err).toContain('Nothing was started.')
+    expect(spawned).toEqual([])
+    expect(readHandoffs(file).handoffs[0].status).toBe('admitted')
+  })
+
+  it('ST-93/AC-1: the process start launches schedules coding: a handoff it cannot select is reported in its record', async () => {
+    const home = freshHome()
+    writeHandoffs(home, [handoffRecord({ order: 1 })])
+    mkdirSync(path.dirname(projectsPath(home)), { recursive: true })
+    writeFileSync(projectsPath(home), '{ "projects": [')
+    const { spawnFn, spawned } = countingSpawn()
+    expect((await run(['start'], home, { spawnFn })).code).toBe(0)
+    await until(() => readRecord(coordinatorPath(home)).codingProblem !== undefined)
+    expect(readRecord(coordinatorPath(home)).codingProblem).toContain('no handoff is coded until a later scan')
+    const text = (await run(['status'], home)).out
+    expect(text).toContain('No handoff is coded: no handoff is coded until a later scan')
+    expect((await run(['stop'], home)).code).toBe(0)
+    await until(() => !isRunning(spawned[0]))
+  })
+})
+
+describe('ST-93/AC-6: status shows the coding work, with or without a coordinator', () => {
+  const record = (order, status, extra = {}) => handoffRecord({ order, repo: 'acme/widgets', status, ...extra })
+  const seedAll = (home) => writeHandoffs(home, [
+    record(1, 'pending'),
+    record(2, 'completed', { completion: { admissionId: 'adm-2', at: '2026-11-10T14:00:00.000Z', branch: 'handoff/H-2-x', headSha: 'd'.repeat(40), pr: { number: 31, url: 'https://github.com/acme/widgets/pull/31' }, draft: false } }),
+    record(3, 'stopped', { stop: { admissionId: 'adm-3', at: '2026-11-10T13:00:00.000Z', outcome: 'head-moved', reason: 'the branch was pushed, but its pull request was not opened (head-moved)', branch: 'handoff/H-3-x', headSha: 'd'.repeat(40), pr: null, retained: null } }),
+    record(4, 'held', { hold: { reason: 'file docs/unit-4.md of acme/widgets no longer has the text approved as version 1', heldAt: '2026-11-10T12:00:00.000Z' } }),
+    record(5, 'withdrawn'),
+    record(6, 'admitted', { admission: { id: 'adm-6', handoffId: 'H-6', version: 1, repo: 'acme/widgets', branch: 'handoff/H-6-x', admittedAt: '2026-11-10T15:00:00.000Z' } }),
+  ])
+
+  it('ST-93/AC-6: with no coordinator running, status --json lists queued, running, completed, stopped and held work, and not withdrawn work', async () => {
+    const home = freshHome()
+    seedAll(home)
+    const status = await statusOf(home)
+    expect(status.status).toBe('stopped')
+    expect(Object.keys(status.coding)).toEqual(['queued', 'running', 'completed', 'stopped', 'held'])
+    expect(status.coding.queued.map((h) => h.id)).toEqual(['H-1'])
+    expect(status.coding.running).toEqual([expect.objectContaining({ id: 'H-6', repo: 'acme/widgets', unit: 'file docs/unit-6.md', branch: 'handoff/H-6-x', nextAction: expect.stringContaining('steward coordinator start') })])
+    expect(status.coding.completed).toEqual([expect.objectContaining({ id: 'H-2', pr: { number: 31, url: 'https://github.com/acme/widgets/pull/31' }, headSha: 'd'.repeat(40) })])
+    expect(status.coding.stopped).toEqual([expect.objectContaining({ id: 'H-3', reason: expect.stringContaining('head-moved'), branch: 'handoff/H-3-x', nextAction: expect.stringContaining('Inspect handoff/H-3-x on acme/widgets') })])
+    expect(status.coding.held).toEqual([expect.objectContaining({ id: 'H-4', nextAction: expect.stringContaining('steward handoff reapprove H-4') })])
+    const before = readFileSync(handoffsPath(home), 'utf8')
+    const text = (await run(['status'], home)).out
+    expect(text).toContain('stopped: no coordinator is running for this OS user.')
+    expect(text).toContain('Coding queued: H-1, file docs/unit-1.md of acme/widgets, version 1.')
+    expect(text).toContain('Coding completed: H-2, file docs/unit-2.md of acme/widgets, version 1.')
+    expect(text).toContain('  pull request: #31 https://github.com/acme/widgets/pull/31')
+    expect(text).toContain('Coding stopped: H-3, file docs/unit-3.md of acme/widgets, version 1.')
+    expect(text).toContain('  reason: the branch was pushed, but its pull request was not opened (head-moved) (2026-11-10T13:00:00.000Z)')
+    expect(text).toContain('  next: Inspect handoff/H-3-x on acme/widgets')
+    expect(text).toContain('Coding held: H-4')
+    expect(text).not.toContain('H-5')
+    expect(readFileSync(handoffsPath(home), 'utf8')).toBe(before)
+  })
+
+  it('ST-93/AC-6: with no handoffs, status has no coding section, and a handoffs file that cannot be read is reported', async () => {
+    const home = freshHome()
+    expect(await statusOf(home)).toEqual({ status: 'stopped' })
+    const file = handoffsPath(home)
+    mkdirSync(path.dirname(file), { recursive: true })
+    writeFileSync(file, '{ not json')
+    const status = await statusOf(home)
+    expect(status.handoffsProblem).toContain('is malformed')
+    expect((await run(['status'], home)).out).toContain('The approved handoffs cannot be read: ')
   })
 })

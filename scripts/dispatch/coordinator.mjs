@@ -23,13 +23,25 @@
  * the activated projects (`coordinator-scheduler.mjs`), discovers the pull requests that
  * unattended landing may consider (ST-83), and asks the pilot, `landPullRequest`, to land each one
  * in unattended `once` mode (ST-84), after rechecking it. The pilot and the runway decide; a stop
- * lets an attempt already admitted finish.
+ * lets an attempt already admitted finish. After each pass of those it admits at most one approved
+ * coding handoff (`steward handoff`, ST-93), the oldest eligible, and waits for its coding and its
+ * pull request (`handoff-coding.mjs`) before it looks at anything else, so a long coding session
+ * delays the scans that come due meanwhile. A stop lets that bounded work finish too, and leaves
+ * the handoffs not yet admitted pending for the next start.
  *
  * `start` reads the scan interval, `coordinator.scanIntervalMinutes`, and the optional landing scan
  * interval, `coordinator.landingScanIntervalMinutes`, through `readUserConfig`, and refuses,
  * changing nothing, when that throws. It hands the intervals to the process it launches, so a
  * change takes effect at the next `start`. Without the landing interval, landing discovery shares
  * the review scan.
+ *
+ * A `start` that finds no coordinator running also moves each handoff the previous one had
+ * `admitted` for coding to `interrupted` (`interruptAdmissions`, `handoff-coding.mjs`), with what
+ * the coordinator kept for it in `coding-evidence.json`, and says so. That handoff is never coded
+ * again automatically, and `start` neither resumes it, nor looks for or stops a surviving worker,
+ * nor touches its branch or worktree. A `start` that cannot read or update `handoffs.json` refuses,
+ * launching nothing. `status` lists every handoff that is queued, running, completed, stopped or
+ * held, from `handoffs.json`, whether or not a coordinator is running, and changes nothing.
  *
  * A `start` that finds no coordinator running first moves each `running` entry in the record of its
  * reviews to `ended` with `interrupted` (`interruptRunning`, `review-admission.mjs`), and says so.
@@ -56,6 +68,8 @@ import { homedir as osHomedir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { scheduleReviews } from './coordinator-scheduler.mjs'
+import { codeNextHandoff, interruptAdmissions } from './handoff-coding.mjs'
+import { codingReport, codingState, describeSource, evidencePath, handoffsPath, keptWhere, readEvidence, readHandoffs, reportLines } from './handoff.mjs'
 import { classifyResult, interruptRunning, readReviews, reviewsPath } from './review-admission.mjs'
 import { readStateFile, writeStateFile } from './state-file.mjs'
 import { readUserConfig, stateDir } from './user-config.mjs'
@@ -225,6 +239,28 @@ function failedHeads(homedir) {
   return failed.length > 0 ? { failedHeads: failed } : {}
 }
 
+/**
+ * The coding work the handoff records show, by state, `{ coding: { queued, running, completed,
+ * stopped, held } }` with each handoff as `codingReport` gives it, or `{ handoffsProblem }` when
+ * they cannot be read, or nothing when there is none. Reads only.
+ */
+function codingWork(homedir) {
+  let handoffs
+  let evidence
+  try {
+    ;({ handoffs } = readHandoffs(handoffsPath(homedir)))
+    evidence = readEvidence(evidencePath(homedir))
+  } catch (error) {
+    return { handoffsProblem: error.message }
+  }
+  const coding = { queued: [], running: [], completed: [], stopped: [], held: [] }
+  for (const h of handoffs) {
+    const state = codingState(h)
+    if (state !== null) coding[state].push(codingReport(h, evidence))
+  }
+  return Object.values(coding).some((list) => list.length > 0) ? { coding } : {}
+}
+
 async function start({ homedir, env, spawnFn, pollMs, waitMs, out, err }) {
   const file = coordinatorPath(homedir)
   const record = readRecord(file)
@@ -252,6 +288,18 @@ async function start({ homedir, env, spawnFn, pollMs, waitMs, out, err }) {
   }
   for (const { repo, number, headSha } of interrupted) {
     out(`interrupted: the previous coordinator ended without writing how its review of ${repo} pull request #${number}, head ${headSha}, ended. It counts as failed, and this head will not be reviewed again automatically. A manual review of it, or a new head, is how it gets a verdict.`)
+  }
+  let interruptedHandoffs
+  try {
+    interruptedHandoffs = interruptAdmissions({ homedir })
+  } catch (error) {
+    err(`The coordinator did not start: it could not read or update its approved handoffs, ${handoffsPath(homedir)}. ${error.message}`)
+    err('Nothing was started.')
+    return 1
+  }
+  for (const { id, repo, source, admission } of interruptedHandoffs) {
+    const where = admission?.branch ?? `${repo}'s branches`
+    out(`interrupted: the previous coordinator ended without writing how its coding of ${id}, ${describeSource(source)} of ${repo}, ended. It is not coded again automatically, and nothing was resumed, stopped or removed. Inspect ${where} on ${repo}, any pull request from it, and any worktree it left (\`git worktree list\` in the project's owned checkout). \`steward handoff list\` shows it.`)
   }
   if (record !== null) {
     out(`The previous coordinator, process ${record.pid}, started ${record.startedAt}, ended without removing its record; replacing that record.`)
@@ -283,7 +331,7 @@ async function start({ homedir, env, spawnFn, pollMs, waitMs, out, err }) {
 }
 
 /** The lines `status` adds to its first, for the fields in `result`. */
-function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, nextLandingScanAt, landingCandidates, active, landingActive, lastLanding, lastOutcome, usage, recordsProblem, projectProblems, landingProblems, failedHeads: failed, reviewsProblem }) {
+function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, nextLandingScanAt, landingCandidates, active, landingActive, lastLanding, lastOutcome, usage, recordsProblem, projectProblems, landingProblems, failedHeads: failed, reviewsProblem, codingActive, lastCoding, codingProblem, coding, handoffsProblem }) {
   const pull = ({ repo, number, headSha }) => `${repo} pull request #${number}, head ${headSha ?? 'unknown'}`
   const lines = []
   if (intervalMinutes !== undefined) lines.push(`Scan interval: ${intervalMinutes} minutes.`)
@@ -292,6 +340,7 @@ function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, 
   if (nextLandingScanAt) lines.push(`Next landing scan: ${nextLandingScanAt}.`)
   if (active) lines.push(`Reviewing: ${pull(active)}.`)
   if (landingActive) lines.push(`Landing: ${pull(landingActive)}.`)
+  if (codingActive) lines.push(`Coding: ${codingActive.handoffId} of ${codingActive.repo}, on branch ${codingActive.branch}, since ${codingActive.admittedAt}. No scan runs until it ends.`)
   if (landingCandidates?.length > 0) {
     lines.push('Landing candidates found by the latest landing scan:')
     for (const candidate of landingCandidates) lines.push(`  ${pull(candidate)}`)
@@ -307,6 +356,16 @@ function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, 
     const { status: ended, counted, reason, at } = lastOutcome
     lines.push(`Last outcome: ${pull(lastOutcome)}: ${ended}${counted ? ` (${counted})` : ''}, at ${at}${reason ? `: ${reason}` : ''}.`)
   }
+  if (lastCoding) {
+    const { repo, handoffId, status: ended, reason, branch, pr, at } = lastCoding
+    lines.push(`Last coding: ${handoffId ? `${handoffId} of ${repo}: ` : ''}${ended}${branch ? `, branch ${branch}` : ''}${pr ? `, pull request #${pr.number}` : ''}, at ${at}${reason ? `: ${reason}` : ''}.`)
+  }
+  if (lastCoding?.evidence) {
+    const known = lastCoding.evidence
+    const kept = known.retained ? keptWhere(known.retained) : null
+    lines.push(`  Known of it: ${[`outcome ${known.outcome}`, known.branch && `branch ${known.branch}`, known.headSha && `head ${known.headSha}`, known.pr && `pull request #${known.pr.number} ${known.pr.url}`, kept && `work kept at ${kept}`].filter(Boolean).join(', ')}.`)
+  }
+  if (codingProblem) lines.push(`No handoff is coded: ${codingProblem}`)
   if (usage) lines.push(`No more reviews until the next scan: ${usage.status}: ${usage.reason}.`)
   if (recordsProblem) lines.push(`No automatic review starts: the project records cannot be read: ${recordsProblem}`)
   for (const { repo, reason } of projectProblems ?? []) lines.push(`${repo}: no review until a later scan: ${reason}`)
@@ -316,11 +375,18 @@ function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, 
     for (const head of failed) lines.push(`  ${pull(head)}: ${head.status}, at ${head.endedAt}`)
   }
   if (reviewsProblem) lines.push(`The record of reviews cannot be read: ${reviewsProblem}`)
+  if (handoffsProblem) lines.push(`The approved handoffs cannot be read: ${handoffsProblem}`)
+  for (const [state, list] of Object.entries(coding ?? {})) {
+    for (const entry of list) {
+      lines.push(`Coding ${state}: ${entry.id}, ${entry.unit} of ${entry.repo}, version ${entry.version}.`)
+      for (const detail of reportLines(entry)) lines.push(`  ${detail}`)
+    }
+  }
   return lines
 }
 
 function status(json, { homedir, out }) {
-  const result = { ...describe(homedir), ...failedHeads(homedir) }
+  const result = { ...describe(homedir), ...failedHeads(homedir), ...codingWork(homedir) }
   if (json) {
     out(JSON.stringify(result))
     return 0
@@ -370,7 +436,10 @@ async function run(homedir, intervalMinutes, landingMinutes) {
   try {
     const landingFields = landingMinutes === undefined ? {} : { landingScanIntervalMinutes: landingMinutes }
     const coordinator = runCoordinator({ homedir, fields: { intervalMinutes, ...landingFields } })
-    scheduleReviews({ homedir, coordinator, intervalMinutes, landing: { intervalMinutes: landingMinutes, attempt: {} } })
+    scheduleReviews({
+      homedir, coordinator, intervalMinutes, landing: { intervalMinutes: landingMinutes, attempt: {} },
+      coding: { turn: (args) => codeNextHandoff({ homedir, ...args }) },
+    })
     const failure = await coordinator.done
     return failure ? 1 : 0
   } catch {

@@ -11,6 +11,9 @@ import { dispatchCoder } from './coder.mjs'
 import { scheduleReviews, waitMs, withoutCredentials } from './coordinator-scheduler.mjs'
 import { coordinatorPath, main, readRecord, runCoordinator, stopRequestPath } from './coordinator.mjs'
 import { createContext } from './github.mjs'
+import { handoffBranch } from './handoff-coder.mjs'
+import { codeNextHandoff } from './handoff-coding.mjs'
+import { handoffRecord, readRaw, writeHandoffs } from './handoff-fixture.mjs'
 import { createInspectContext, inspect, inspectMerges, inspectStalls, main as inspection } from './inspect.mjs'
 import { landPullRequest } from './land.mjs'
 import { ownedCheckoutPath, projectsPath, updateOwnedCheckout } from './project.mjs'
@@ -1577,5 +1580,259 @@ describe('ST-84: the coordinator requests bounded unattended landing and reports
     expect(recordOf(h).landingCandidates).toHaveLength(1)
     expect(recordOf(h)).not.toHaveProperty('lastLanding')
     expect(recordOf(h)).not.toHaveProperty('landingActive')
+  })
+})
+
+describe('ST-93: the coordinator codes one approved handoff at a time, after what is due', () => {
+  const MERGED = (number) => ({ status: 'merged', pr: number, headSha: HEAD, mode: 'unattended', triggers: 1 })
+  const turnsOf = (h) => h.turn.mock.calls.length
+  const done = { status: 'completed', handoffId: 'H-1', repo: A, branch: 'handoff/H-1-x', pr: { number: 3, url: 'https://github.com/crew/alpha/pull/3' } }
+
+  /** A scheduler whose coding turns are `turn`, a stand-in; `over` is as for `schedule`. */
+  function coded(turn, over = {}) {
+    const fn = vi.fn(turn)
+    const h = schedule({ ...over, coding: { turn: fn } })
+    return Object.assign(h, { turn: fn })
+  }
+  const gate = () => {
+    let release
+    const held = new Promise((resolve) => { release = resolve })
+    return { held, release }
+  }
+
+  it('ST-93/AC-1: in a pass, the due review and the landing attempt run first, then one coding turn', async () => {
+    const order = []
+    const home = freshHome()
+    const h = coded(async () => { order.push('turn'); return { status: 'none' } }, {
+      home, repos: [A], listings: { [A]: [eligible(A, 1)] }, reply: () => { order.push('review'); return { status: 'recorded', sessions: 1 } },
+      readSettings: async () => fixtureSettings({ repo: A, land: true }),
+      landing: { attempt: { land: async ({ number }) => { order.push('land'); return MERGED(number) }, readPull: async () => ({ state: 'open', headSha: HEAD }) } },
+    })
+    await idle(h)
+    expect(order).toEqual(['review', 'land', 'turn'])
+  })
+
+  it('ST-93/AC-1: a landing scan that comes due during a review turn is run before coding is admitted', async () => {
+    const order = []
+    let h
+    h = coded(async () => { order.push('turn'); return { status: 'none' } }, {
+      repos: [A], listings: { [A]: [eligible(A, 1)] },
+      // The review takes longer than the landing interval of 5 minutes.
+      reply: () => { order.push('review'); h.clock.advance(6 * 60_000); return { status: 'recorded', sessions: 1 } },
+      landing: { intervalMinutes: 5, onCandidates: () => { order.push('landing-scan') } },
+    })
+    await idle(h)
+    expect(order).toEqual(['landing-scan', 'review', 'landing-scan', 'turn'])
+  })
+
+  it('ST-93/AC-1: a pass has one coding turn, and the next waits for the next scan', async () => {
+    const h = coded(async () => ({ status: 'none' }), { repos: [A] })
+    await idle(h)
+    expect(turnsOf(h)).toBe(1)
+    await sleep(50)
+    expect(turnsOf(h)).toBe(1)
+    await nextScan(h, 2)
+    expect(turnsOf(h)).toBe(2)
+  })
+
+  it('ST-93/AC-1: a handoff carried to an ending is followed by another turn at once, until none is left, and only then does the scheduler wait', async () => {
+    const answers = [done, { ...done, status: 'stopped' }, { ...done, status: 'held' }, { status: 'none' }]
+    const h = coded(async () => answers.shift(), { repos: [A] })
+    await idle(h)
+    expect(turnsOf(h)).toBe(4)
+    expect(h.clock.wait).toHaveBeenCalledTimes(1)
+    expect(recordOf(h).lastCoding).toMatchObject({ repo: A, handoffId: 'H-1', status: 'held' })
+  })
+
+  it('ST-93/AC-1: a long coding session delays a scan that comes due meanwhile, which runs before the next turn', async () => {
+    const long = gate()
+    const scansAtTurn = []
+    const h = coded(async () => {
+      scansAtTurn.push(h.listCandidates.mock.calls.length)
+      if (scansAtTurn.length === 1) await long.held
+      return scansAtTurn.length === 1 ? done : { status: 'none' }
+    }, { repos: [A] })
+    await until(() => turnsOf(h) === 1)
+    h.clock.advance(INTERVAL_MS * 3)
+    await sleep(50)
+    expect(h.listCandidates).toHaveBeenCalledTimes(1)
+    expect(turnsOf(h)).toBe(1)
+    long.release()
+    await idle(h)
+    expect(scansAtTurn).toEqual([1, 2])
+  })
+
+  it('ST-93/AC-1: a turn runs one at a time, however many passes', async () => {
+    let open = 0
+    let most = 0
+    const h = coded(async () => {
+      open += 1
+      most = Math.max(most, open)
+      await sleep(5)
+      open -= 1
+      return turnsOf(h) % 2 === 0 ? { status: 'none' } : done
+    }, { repos: [A] })
+    await idle(h)
+    await nextScan(h, 2)
+    expect(turnsOf(h)).toBeGreaterThan(2)
+    expect(most).toBe(1)
+  })
+
+  it('ST-93/AC-5: a handoff returned to pending is reconsidered at a later scan, never in a busy loop', async () => {
+    const h = coded(async () => ({ status: 'retry-later', handoffId: 'H-1', repo: A, reason: 'over-usage: the weekly window is at 99%' }), { repos: [A] })
+    await idle(h)
+    await sleep(100)
+    expect(turnsOf(h)).toBe(1)
+    expect(recordOf(h).lastCoding).toMatchObject({ handoffId: 'H-1', status: 'retry-later', reason: 'over-usage: the weekly window is at 99%' })
+    expect(recordOf(h).nextScanAt).toBe(new Date(h.clock.now().getTime() + INTERVAL_MS).toISOString())
+    await nextScan(h, 2)
+    expect(turnsOf(h)).toBe(2)
+  })
+
+  it('ST-93/AC-2, ST-93/AC-5: a blocked turn ends all coding until a restart, reports why, and leaves reviews and landing running', async () => {
+    const h = coded(async () => ({ status: 'blocked', handoffId: 'H-1', repo: A, reason: 'the admission of H-1 could not be written to handoffs.json' }), {
+      repos: [A], listings: { [A]: [eligible(A, 1)] },
+    })
+    await idle(h)
+    expect(recordOf(h).codingProblem).toBe('no handoff is coded until the coordinator is restarted: the admission of H-1 could not be written to handoffs.json')
+    expect(recordOf(h).lastCoding).toMatchObject({ handoffId: 'H-1', status: 'blocked' })
+    h.listings[A] = [eligible(A, 2)]
+    const before = h.reviewed.length
+    await nextScan(h, 2)
+    await nextScan(h, 3)
+    expect(turnsOf(h)).toBe(1)
+    expect(h.reviewed.length).toBe(before + 2)
+    expect(h.reviewed.slice(before)).toEqual([`${A}#2`, `${A}#2`])
+  })
+
+  it('ST-93/AC-3, ST-93/AC-6: the evidence of a run whose ending could not be written is in the record and in status, in words and as JSON, while the coordinator runs', async () => {
+    const evidence = {
+      outcome: 'session-failed', branch: 'handoff/H-1-x', headSha: null, pr: null,
+      retained: { repoDir: '/owned/crew/alpha', worktree: '/tmp/steward-handoff-x/tree', branch: 'handoff/H-1-x' },
+    }
+    const h = coded(async () => ({ status: 'blocked', handoffId: 'H-1', repo: A, reason: 'H-1 ended as stopped, but the record of it could not be written', evidence }), { repos: [A] })
+    await idle(h)
+    expect(recordOf(h).lastCoding).toMatchObject({ handoffId: 'H-1', status: 'blocked', evidence })
+    const text = (await command(['status'], h.home)).out
+    expect(text).toContain('Known of it: outcome session-failed, branch handoff/H-1-x, work kept at worktree /tmp/steward-handoff-x/tree (branch handoff/H-1-x) in /owned/crew/alpha.')
+    const json = JSON.parse((await command(['status', '--json'], h.home)).out)
+    expect(json.lastCoding.evidence).toEqual(evidence)
+  })
+
+  it('ST-93/AC-1: a turn that throws blocks coding and does not end the coordinator', async () => {
+    const h = coded(async () => { throw new Error('boom') }, { repos: [A], listings: { [A]: [eligible(A, 1)] } })
+    await idle(h)
+    expect(recordOf(h).codingProblem).toContain('the coding turn failed: boom')
+    expect(recordOf(h).state).toBe('running')
+    const before = h.reviewed.length
+    await nextScan(h, 2)
+    expect(turnsOf(h)).toBe(1)
+    expect(h.reviewed.length).toBe(before + 1)
+  })
+
+  it('ST-93/AC-1: a selection that failed is reported, looked at again at the next scan, and cleared once one succeeds', async () => {
+    const answers = [{ status: 'select-failed', reason: 'handoffs.json is malformed' }, { status: 'none' }]
+    const h = coded(async () => answers.shift(), { repos: [A] })
+    await idle(h)
+    expect(recordOf(h).codingProblem).toBe('no handoff is coded until a later scan: handoffs.json is malformed')
+    await nextScan(h, 2)
+    expect(recordOf(h).codingProblem).toBe(null)
+    expect(turnsOf(h)).toBe(2)
+  })
+
+  describe('with the real turn', () => {
+    const firstPending = (home) => async () => {
+      const found = readRaw(home).find((x) => x.status === 'pending')
+      if (found === undefined) return { result: 'no-eligible-handoffs', skipped: [] }
+      const { version, approvedAt, text, provenance } = found
+      return { result: 'selected', handoff: found, version: { version, approvedAt, text, provenance }, skipped: [] }
+    }
+    const pushed = (home, args) => {
+      const record = readRaw(home).find((x) => x.id === args.handoffId)
+      return {
+        status: 'pushed', repo: record.repo, handoffId: record.id, version: record.version, branch: handoffBranch(record), headSha: 'd'.repeat(40),
+        proposedPr: { title: 't', body: 'b', draft: false }, choice: { tool: 'claude', name: 'opus', model: 'claude-opus-4' },
+      }
+    }
+    const pr = { status: 'published', pr: { number: 5, url: 'https://github.com/crew/alpha/pull/5' }, draft: false }
+
+    /** A scheduler whose coding turn is `codeNextHandoff` with stand-ins, over `handoffs` in a new home. */
+    function real({ execute, publish = async () => pr, handoffs, ...over }) {
+      const home = freshHome()
+      writeProjects(home, [A, B])
+      writeHandoffs(home, handoffs)
+      const exec = vi.fn((args) => execute(args, home))
+      let h
+      const turn = (args) => codeNextHandoff({ homedir: home, select: firstPending(home), execute: exec, publish, now: h.clock.now, ...args })
+      h = schedule({ ...over, home, repos: [A, B], coding: { turn } })
+      return Object.assign(h, { exec })
+    }
+
+    it('ST-93/AC-1, ST-93/AC-8: handoffs of different repositories are coded oldest first, one at a time', async () => {
+      let open = 0
+      let most = 0
+      const h = real({
+        handoffs: [handoffRecord({ order: 1, repo: B }), handoffRecord({ order: 2, repo: A }), handoffRecord({ order: 3, repo: B })],
+        execute: async (args, home) => {
+          open += 1
+          most = Math.max(most, open)
+          await sleep(5)
+          open -= 1
+          return pushed(home, args)
+        },
+      })
+      await idle(h)
+      expect(h.exec.mock.calls.map(([args]) => args.handoffId)).toEqual(['H-1', 'H-2', 'H-3'])
+      expect(most).toBe(1)
+      expect(readRaw(h.home).map((x) => x.status)).toEqual(['completed', 'completed', 'completed'])
+      expect(recordOf(h).lastCoding).toMatchObject({ handoffId: 'H-3', status: 'completed', pr: { number: 5 } })
+      expect(recordOf(h).codingActive).toBe(null)
+    })
+
+    it('ST-93/AC-6: while a handoff is coded the coordinator reports it, and shows no next scan', async () => {
+      const long = gate()
+      const h = real({ handoffs: [handoffRecord({ order: 1, repo: A })], execute: async (args, home) => { await long.held; return pushed(home, args) } })
+      await until(() => recordOf(h)?.codingActive)
+      expect(recordOf(h).codingActive).toMatchObject({ repo: A, handoffId: 'H-1', branch: 'handoff/H-1-docs-unit-1-md', admissionId: expect.any(String), admittedAt: expect.any(String) })
+      expect(recordOf(h).nextScanAt).toBe(null)
+      const lines = (await command(['status'], h.home)).out
+      expect(lines).toContain('Coding: H-1 of crew/alpha, on branch handoff/H-1-docs-unit-1-md')
+      expect(lines).toContain('Coding running: H-1, file docs/unit-1.md of crew/alpha, version 1.')
+      long.release()
+      await idle(h)
+      expect(recordOf(h).codingActive).toBe(null)
+    })
+
+    it('ST-93/AC-7: after a stop is acknowledged, the coding in progress is finished and recorded, and no other handoff is admitted', async () => {
+      const long = gate()
+      const h = real({
+        handoffs: [handoffRecord({ order: 1, repo: A }), handoffRecord({ order: 2, repo: B })],
+        execute: async (args, home) => { await long.held; return pushed(home, args) },
+      })
+      await until(() => recordOf(h)?.codingActive)
+      writeFileSync(stopRequestPath(h.home), 'stop\n')
+      await until(() => recordOf(h)?.state === 'stopping')
+      expect(readRaw(h.home)[0].status).toBe('admitted')
+      long.release()
+      expect(await h.coordinator.done).toBe(null)
+      await h.scheduling
+      expect(readRaw(h.home).map((x) => x.status)).toEqual(['completed', 'pending'])
+      expect(h.exec).toHaveBeenCalledTimes(1)
+      expect(existsSync(coordinatorPath(h.home))).toBe(false)
+    })
+
+    it('ST-93/AC-7: once admission is closed, a turn admits nothing and leaves every handoff pending', async () => {
+      const home = freshHome()
+      writeProjects(home, [A])
+      writeHandoffs(home, [handoffRecord({ order: 1, repo: A })])
+      const exec = vi.fn()
+      const coordinator = runCoordinator({ homedir: home, pollMs: 10, now: controllableClock().now })
+      coordinator.fail(new Error('stopped'))
+      const outcome = await codeNextHandoff({ homedir: home, admit: coordinator.admit, select: firstPending(home), execute: exec })
+      expect(outcome).toEqual({ status: 'admission-closed' })
+      expect(exec).not.toHaveBeenCalled()
+      expect(readRaw(home)[0].status).toBe('pending')
+      await coordinator.done
+    })
   })
 })

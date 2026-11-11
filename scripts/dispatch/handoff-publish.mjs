@@ -4,9 +4,9 @@
  * `docs/agent-workflow-design.md`, "Approved coding handoffs and sequential execution".
  *
  * `publishHandoff` is called with the `pushed` result of `executeHandoff`. It runs no model, makes
- * no claim and pushes nothing, writes no handoff record and no admission (ST-93), and opens at most
- * one pull request. Nothing calls it yet: the coordinator will (ST-93). Whatever `pushed` it is
- * given, it resolves a result and never throws.
+ * no claim and pushes nothing, writes no handoff record and no admission (the coordinator does,
+ * `handoff-coding.mjs`, ST-93), and opens at most one pull request. The coordinator calls it, once,
+ * for each `pushed` result. Whatever `pushed` it is given, it resolves a result and never throws.
  *
  * It trusts one thing from the coding run: the branch and head SHA ST-91 pushed. In order, it
  *
@@ -48,8 +48,9 @@
  * `published` (with `pr` as `createPullRequest` returns it, `draft`, `discrepancy` or `null`,
  * `coder` as `{ tool, choice, model }` and `unit`, the `Unit:` text written), or one of
  * `PUBLISH_FAILURES`. A failure has `recoverable: true` and a `reason`: the branch is left on the
- * remote as it is, nothing is re-executed, and the crew or ST-93 decides what to do. A moved head
- * also carries `remoteHead` (the tip found, or `null` when the branch is gone).
+ * remote as it is, nothing is re-executed, and the coordinator records the handoff as stopped, for
+ * the crew to decide what to do (`handoff-coding.mjs`, ST-93). A moved head also carries
+ * `remoteHead` (the tip found, or `null` when the branch is gone).
  */
 import { homedir as osHomedir } from 'node:os'
 import { coderModelToken, withCoderLine } from './choices.mjs'

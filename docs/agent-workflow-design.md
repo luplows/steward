@@ -170,7 +170,8 @@ do not yet exist. The review rotation is started by hand. Explicit activation (`
 review, and starts nothing. The local coordinator (`steward coordinator`,
 `scripts/dispatch/coordinator.mjs`) is built, and schedules automatic reviews of those projects
 (`scripts/dispatch/coordinator-scheduler.mjs`); where a project's `main` has `land: true` it
-also asks the pilot to land that project's pull requests, one at a time.
+also asks the pilot to land that project's pull requests, one at a time, and it codes the handoffs
+the crew has approved (`steward handoff`, `scripts/dispatch/handoff-coding.mjs`), one at a time.
 `migration-plan.md` preserves the earlier migration plan and is not the version roadmap.
 
 `steward init` delivers repository installation files through a draft installation pull
@@ -625,7 +626,7 @@ The engine's coder runs inside its single loop, with retries on a `block` or red
 
 ## Approved coding handoffs and sequential execution
 
-**Planned (ST-93)** (crew, 2026-11-08)
+(crew, 2026-11-08)
 For the 0.3 coding slice, a crew member explicitly approves a repository file
 on `main` or a GitHub Issue with `steward handoff`; installation, activation
 and a unit merely being ready do not authorize coding. The local, per-OS-user
@@ -655,24 +656,44 @@ what they read: a change made while they run is not detected before the claim
 leaves completed work in a draft PR and reports the difference; it does not
 automatically recode the newer unit.
 
-The existing coordinator remains sequential: service currently due review and
-landing under their present rules, admit one oldest eligible coding handoff,
-wait for bounded coding and PR publication, then reconsider all work. It stores
-the coding admission, with a unique identity, before any side effect. Only the
-matching active admission may be passed into execution. A confirmed pre-claim,
-pre-model refusal is resolved only after that admission is durably cleared: a
-retryable one (usage, or a temporary condition such as a failed read) returns
-to pending, and one because the unit's content changed is held for explicit
-reapproval, as at selection. An uncertain outcome never authorizes a second
-execution. A stopped
-or uncertain admitted run is not recoded after restart; surviving evidence and a specific crew action
-are shown in `coordinator status` and `handoff list`, without dedicated
-notifications. No general concurrent scheduler, automatic fixer or exceptional
-process reconciliation is required for this initial slice; ST-85 holds that
-later boundary. Considered but not chosen for 0.3: automatic selection from
-the ready story queue, reapproval moving to the back of FIFO, mandatory
-historical-snapshot review, active change monitoring, automatic restart retries,
-and separate alert infrastructure.
+The existing coordinator remains sequential: service currently due review and landing under their
+present rules, admit one oldest eligible coding handoff, wait for bounded coding and PR publication,
+then reconsider all work. The wait is the whole coding session, so a long session delays any scan,
+review or landing that falls due meanwhile, until it ends; that is accepted for this slice, and
+ST-85 is what separates them. It stores the coding admission, with a unique identity, before any
+side effect: in one write the handoff's own record becomes `admitted` and gains the admission (its
+ID, the handoff, the approved revision, the repository, the intended branch and the time), so a
+handoff and its admission cannot disagree. Every writer of the handoff records (the commands,
+selection's hold and the coordinator, which are separate processes) takes an exclusive lock file
+beside them (`handoffs.json.lock`, created atomically, holding its process id and the time), reads
+them afresh, changes only its own record if that is still as it expected, writes, and releases the
+lock, in one synchronous step after any awaited work; a writer never puts back a snapshot taken
+before an await. A writer that finds the lock held waits up to 5 seconds and then refuses, writing
+nothing, and the coordinator treats that as a failed write. A lock is never taken over: the error
+names the lock file and the process and time it records, and the crew deletes the file if that
+process is not running; only a writer that made a lock deletes it. Reads take no lock. A second
+coordinator is outside the threat model. When the ending of an admitted run cannot be written to the
+records, the coordinator keeps what the run left (branch, head, pull request, kept work), with the
+admission ID, in `coding-evidence.json` beside them, which `status` and `handoff list` show with or
+without a coordinator and the next `start` merges into the `interrupted` record and clears. Only the
+matching active admission may be passed into execution, and execution checks it against that record
+each time. A confirmed pre-claim, pre-model refusal is resolved only after that admission is durably
+cleared: a retryable one (usage, or a temporary condition such as a failed read) returns to pending,
+and one because the unit's content changed is held for explicit reapproval, as at selection. Any
+other refusal is not retried: the handoff is `stopped`. If an admission or its clearing cannot be
+written, no more coding is admitted until the coordinator is restarted, and reviews and landing
+carry on. An uncertain outcome never authorizes a second execution. A stopped or uncertain admitted
+run is not recoded after restart: a `start` that finds a coordinator gone marks each handoff it had
+`admitted` as `interrupted`, resuming nothing, killing nothing and removing nothing. A published
+pull request completes the handoff; a failure, or a pushed branch with no pull request, stops it
+with the branch, head, pull request and kept work known. No command releases a stopped or
+interrupted handoff; its recoding is the crew's to arrange. Surviving evidence and a specific crew
+action are shown in `coordinator status` and `handoff list`, without dedicated notifications,
+whether or not a coordinator is running. No general concurrent scheduler, automatic fixer or
+exceptional process reconciliation is required for this initial slice; ST-85 holds that later
+boundary. Considered but not chosen for 0.3: automatic selection from the ready story queue,
+reapproval moving to the back of FIFO, mandatory historical-snapshot review, active change
+monitoring, automatic restart retries, and separate alert infrastructure.
 
 (crew, 2026-11-10) The consuming project's applicable agent
 instructions govern attribution for agent-generated commits and proposed pull request text.
