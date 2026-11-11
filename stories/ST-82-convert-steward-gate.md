@@ -48,11 +48,12 @@ it ships without putting its 0.3.0 release review at risk.
 - [ ] **AC-4** — Resolve the `**Planned (ST-82)**` marker in
       `docs/agent-workflow-design.md` when the conversion is implemented.
 
-- [ ] **AC-5** — The implementation PR names the separate post-landing
-      smoke check: observe `review/agent` and the normal gated landing of
-      the next ordinary steward PR under the newly installed thin workflows,
-      and record its PR/run evidence. The ST-82 implementation PR does not
-      claim that this post-merge validation has already happened.
+- [ ] **AC-5** — The implementation PR documents the separate
+      post-landing smoke-check procedure: on the next ordinary steward PR,
+      observe `review/agent` and normal gated landing under the new thin
+      workflows, then record its PR/run evidence. The implementation PR
+      does not claim this future check succeeded or make its own acceptance
+      depend on a later PR.
 
 ## Out of scope
 
