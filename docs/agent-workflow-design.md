@@ -203,21 +203,23 @@ exactly `true`, and that the pull request is open at the head the scan found; a 
 any of these dispatches nothing; activation is read again once the checkout, settings and pull
 request have been read, just before the attempt is admitted. It then admits one call of the pilot,
 `landPullRequest`, with `mode: unattended` and `once: true`, on a context from `createLandContext`
-with the project's `landWhen`. The coordinator gives the call no head it holds a verdict for, so the
-pilot waits only for one sweep run's bound after its own dispatch, and returns at once, with a
-status that says why, for a pull request it cannot dispatch for yet (`not-landable`, and the final
-statuses). The coordinator merges nothing, dispatches nothing itself, and has no manual mode.
-
-**Planned (ST-95)** (crew, 2026-11-09): When this coordinator has just recorded a
-`pass` or `pass-with-observations` verdict on a PR/head, and a subsequent landing attempt in
-the same scheduling cycle targets that exact repository, PR and head, it supplies `passedAt` to
-the existing pilot. The pilot then uses ST-51's short bounded wait for `review/agent` to catch
-up, instead of deferring an otherwise landable PR to the next scan. No unrelated or older review
-receives that wait, and changed heads cannot inherit it. This is not an authorization head pin:
-unattended runway dispatches still use the project's standing `land: true`, with the runway
-rechecking the actual head and all checks. Other pending checks do not gain a new wait.
-Considered but not chosen: a second coordinator polling path, continuous event-driven scans,
-and head-pinned unattended authorization.
+with the project's `landWhen`. When a review turn of the same pass of the scheduler's loop
+recorded a `pass` or `pass-with-observations` for exactly that repository, pull request and full
+head SHA, the call also gets `passedAt` set to that head; otherwise it gets none. The set of such
+passes lives in memory for that pass alone, so a head that passed earlier, a result read from the
+record after a restart, a `block`, a result with no verdict, a failed or interrupted review and an
+`already-reviewed` head with no pass recorded in the pass all get no `passedAt`, and a candidate
+found only by a landing scan keeps the pilot's single look. With `passedAt` the pilot's ST-51
+wait applies to that head alone: a `review/agent` status that is pending, absent, `failure` or
+`error` is read again every `POLL_INTERVAL_MS` for up to `GATE_LAG_BOUND_MS`, and when the bound
+passes, unless the pull request has changed meanwhile, it returns `not-landable` with the reason
+`gate-lag` having dispatched nothing, and the coordinator does not try that head again until a
+later scan. Other pending checks get no wait. The dispatch is the same with or without `passedAt`: it names the pull request only, with no head, so
+`passedAt` is evidence for the bounded wait and not an authorization, and the runway still reads
+the actual head and every check. Without `passedAt` the pilot waits only for one sweep run's bound
+after its own dispatch, and returns at once, with a status that says why, for a pull request it
+cannot dispatch for yet (`not-landable`, and the final statuses). The coordinator merges nothing,
+dispatches nothing itself, and has no manual mode.
 
 Its record, and so `steward coordinator status`, shows the attempt under way apart from a review,
 and the last attempt's repository, pull request, head, time, status and reason. The pilot reads the
