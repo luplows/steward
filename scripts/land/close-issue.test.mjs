@@ -103,7 +103,7 @@ describe('ST-76/AC-2: no closing reference is silent; one that does not qualify 
     ['Unit: none', 'Unit: none\nCloses #5', 'not an Issue of this repository'],
     ['an ambiguous unit', 'Unit: #5\nUnit: #6\nCloses #5', '2 Unit: lines'],
     ['a different Issue', 'Unit: #5\nCloses #6', 'is not its unit, Issue #5'],
-    ['an extra conflicting reference', 'Unit: #5\nCloses #5\nFixes #6', 'conflicting closing references #5, #6'],
+    ['an extra conflicting reference', 'Unit: #5\nCloses #5\nFixes #6', 'closing references #5, #6, and a reference to any Issue but its unit, #5, is a conflict'],
   ])('ST-76/AC-2: %s with a closing reference closes nothing and gives an actionable reason', (_name, body, reason) => {
     const { result, patches, logs } = land({ body })
     expect(result).toEqual({ landed: 1 })

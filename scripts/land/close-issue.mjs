@@ -1,12 +1,13 @@
 // Closing the Issue a landed pull request completes (ST-76). The runway calls `closeLinkedIssue`
 // after a merge into `main` has succeeded; it is cleanup, never a gate on which pull requests may
-// merge, and it never throws. `docs/agent-workflow-design.md`, "GitHub mechanics", says why the
-// runway closes the Issue itself: GitHub's own closing does not follow a merge made by the
-// workflow's token.
+// merge, and it never throws. The runway closes the Issue itself because GitHub's own closing did
+// not follow a merge made by the workflow's token, as the controlled comparison recorded in
+// ST-76's Context found.
 //
-// An Issue is closed only when the body has exactly one `Unit: #<n>` and exactly one closing
-// reference, `Closes #<n>` or another of GitHub's keywords, naming that same Issue, and the
-// project's `unitLinks` includes `issue`. A body with no closing reference closes nothing and says
+// An Issue is closed only when the body has exactly one `Unit: #<n>`, at least one closing
+// reference, `Closes #<n>` or another of GitHub's keywords, and every closing reference names that
+// same Issue (the same reference repeated is fine; a reference to any other Issue is a conflict),
+// and the project's `unitLinks` includes `issue`. A body with no closing reference closes nothing and says
 // nothing: a bare `Unit: #<n>` is not a request to close. A closing reference that does not
 // qualify closes nothing and says why in a `::warning::` line.
 
@@ -38,7 +39,7 @@ export function planIssueClosure(body, unitLinks) {
   const unit = ISSUE_UNIT_RE.exec(units[0])
   if (!unit) return warn(`its Unit: is "${units[0]}", not an Issue of this repository ("Unit: #<n>")`)
   const issue = Number(unit[1])
-  if (closing.length > 1) return warn(`the body has conflicting closing references ${refs}; it needs one, #${issue}`)
+  if (closing.length > 1) return warn(`the body has closing references ${refs}, and a reference to any Issue but its unit, #${issue}, is a conflict`)
   if (closing[0] !== issue) return warn(`the closing reference ${refs} is not its unit, Issue #${issue}`)
   return { action: 'close', issue }
 }
