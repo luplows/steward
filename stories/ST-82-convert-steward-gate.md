@@ -32,8 +32,9 @@ it ships without putting its 0.3.0 release review at risk.
       references in them name `v0.3.0`, and none invokes the old
       checkout-local `node scripts/dispatch/cli.mjs` path. Record actual
       command results, not an assertion that a future PR has already passed
-      the new gate. The implementation PR receives independent review and
-      normal runway landing through steward's existing gate, not a hand merge.
+      the new gate. The verification identifies the existing base-commit
+      review gate that will review the conversion; no hand merge or
+      post-landing outcome is claimed as pre-landing evidence.
 
 - [ ] **AC-3** — Update current, non-historical passages in
       `docs/agent-workflow-design.md` that describe steward's own GitHub
