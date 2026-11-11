@@ -133,9 +133,13 @@ existing `steward.config.json` it reads only `rulesFile`, to find the checklist.
   commit's full SHA instead);
 - a pull request template, only when the project has none.
 
-Each file it adds is as Prettier's default options print it, checked by steward's tests with the
-one Prettier version steward's `package.json` pins. `init` runs no formatter, and the project needs
-none. A project whose own formatting settings differ may format only the newly installed files, on
+Each file it adds whose name ends in `.json`, `.yml` or `.md` is as Prettier's default options print
+it, checked by steward's tests with the one Prettier version steward's `package.json` pins. That is
+every file but a checklist at a path that ends otherwise, such as `--rules-file REVIEW`, from whose
+name Prettier may infer no parser: that one is not covered, and the pull request's body leaves it
+out of its command. `init` runs no formatter, and the project needs none.
+
+A project whose own formatting settings differ may format only the newly installed files, on
 the installation's branch before merging it, for example, for the files a `--yes` run adds to a
 project with no pull request template:
 
@@ -145,7 +149,8 @@ npx prettier --write steward.config.json REVIEW.md .github/workflows/review-gate
   .github/pull_request_template.md
 ```
 
-The pull request's body gives the command for the files it added. Not every project needs to.
+The pull request's body gives the command for the files it added, with those three endings only.
+Not every project needs to.
 `steward upgrade` refuses a managed workflow that differs from steward's template at its pin by
 more than the pin and line endings, so a workflow that this formatting changes is refused by a
 later upgrade.

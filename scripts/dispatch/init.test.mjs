@@ -15,6 +15,7 @@ import {
   DEFAULT_BRANCH,
   fillPin,
   findOnPath,
+  formattable,
   formattingNote,
   GATE_WORKFLOWS,
   INSPECTION_WORKFLOW,
@@ -1931,15 +1932,20 @@ const PIN_RE = /github:luplows\/steward#\S+/g
 /** The files `init` added: those in its clone that the project's `main` did not have. */
 const addedBy = (cwd, before) => tree(installed(cwd)).filter((rel) => !before.includes(rel))
 
-/** Runs `init` in a new project with `files`, checks each file it added, and returns their paths. */
-async function addedFilesPass(args, { files = {} } = {}) {
+/**
+ * Runs `init` in a new project with `files`, checks each file it added whose name ends in `.json`,
+ * `.yml` or `.md` (`formattable`), and returns their paths. The files added that are not
+ * formattable must be exactly `unformattable`: none, unless a test names an excluded checklist.
+ */
+async function addedFilesPass(args, { files = {}, unformattable = [] } = {}) {
   const cwd = makeRepo({ files })
   const before = tree(cwd)
   const gh = fakeGitHub()
   const { code } = await runInit(args, { cwd, gh })
   expect(code).toBe(0)
   const added = addedBy(cwd, before)
-  for (const rel of added) expect(await passes(rel, read(installed(cwd), rel)), rel).toBe(true)
+  expect(added.filter((rel) => !formattable(rel))).toEqual(unformattable)
+  for (const rel of added.filter(formattable)) expect(await passes(rel, read(installed(cwd), rel)), rel).toBe(true)
   return { cwd, gh, added }
 }
 
@@ -1982,7 +1988,7 @@ function behaviour(text) {
   }
 }
 
-describe('ST-74/AC-1: every file init adds passes the pinned Prettier check with default options', () => {
+describe('ST-74/AC-1: every file init adds whose name ends in .json, .yml or .md passes the pinned Prettier check with default options', () => {
   it('ST-74/AC-1: a --yes run, with inspection, adds six files, and each passes', async () => {
     const { added } = await addedFilesPass(['--yes'])
     expect(added).toEqual([
@@ -2138,8 +2144,38 @@ describe('ST-74/AC-4: the installation pull request and the README say how to fo
     expect(body).not.toMatch(/upgrade (?:will )?accepts?/)
   })
 
+  it('ST-74/AC-4: with a checklist at an extensionless path, the command leaves it out and names only files Prettier has a parser for', async () => {
+    const { gh, added } = await addedFilesPass(['--yes', '--rules-file', 'REVIEW'], { unformattable: ['REVIEW'] })
+    expect(added).toContain('REVIEW')
+    const body = writes(gh).find((r) => r.rest === '/pulls').body.body
+    const command = /`npx prettier --write ([^`]*)`/.exec(body)[1].split(' ')
+    expect(command).toEqual([
+      'steward.config.json',
+      '.github/workflows/review-gate.yml',
+      '.github/workflows/land-approved.yml',
+      '.github/workflows/inspection.yml',
+      '.github/pull_request_template.md',
+    ])
+    for (const rel of command) expect((await prettier.getFileInfo(rel, { resolveConfig: false })).inferredParser, rel).not.toBeNull()
+    expect((await prettier.getFileInfo('REVIEW', { resolveConfig: false })).inferredParser).toBeNull()
+    expect(body).toContain('`REVIEW` is left out, since its name ends in none of those, so Prettier may infer no parser for it.')
+  })
+
+  it('ST-74/AC-4: Prettier infers a parser for each name here that formattable accepts, and none for each excluded checklist path here', async () => {
+    const accepted = [...NEW_FILES.filter((rel) => rel !== 'package.json'), 'docs/RULES.md', 'CHECKLIST.MD', 'a b/Rules.Md', 'x.JSON', 'y.YML']
+    for (const rel of accepted) {
+      expect(formattable(rel), rel).toBe(true)
+      expect((await prettier.getFileInfo(rel, { resolveConfig: false })).inferredParser, rel).not.toBeNull()
+    }
+    for (const rel of ['REVIEW', 'docs/rules', 'RULES.txt', 'review.md.bak']) {
+      expect(formattable(rel), rel).toBe(false)
+      expect((await prettier.getFileInfo(rel, { resolveConfig: false })).inferredParser, rel).toBeNull()
+    }
+  })
+
   it('ST-74/AC-4: a path the shell would split is quoted, and with nothing added there is no note', () => {
     expect(formattingNote([])).toEqual([])
+    expect(formattingNote(['REVIEW'])).toEqual([])
     expect(formattingNote(['docs/my rules.md', 'steward.config.json'])[0]).toContain("`npx prettier --write 'docs/my rules.md' steward.config.json`")
     const body = pullBody({ version: '9.8.7', pin: 'v9.8.7', added: ['steward.config.json'], left: [], landing: ['x'], template: 'T' })
     expect(body).toContain('`npx prettier --write steward.config.json`')
@@ -2150,6 +2186,8 @@ describe('ST-74/AC-4: the installation pull request and the README say how to fo
     expect(readme).toMatch(/A project whose own formatting settings differ may format only the newly installed files, on\nthe installation's branch before merging it/)
     expect(readme).toContain('npx prettier --write steward.config.json REVIEW.md .github/workflows/review-gate.yml \\\n')
     expect(readme).toContain('Not every project needs to.')
+    expect(readme).toMatch(/whose name ends in `\.json`, `\.yml` or `\.md` is as Prettier's default options print/)
+    expect(readme).toMatch(/such as `--rules-file REVIEW`, from whose\nname Prettier may infer no parser: that one is not covered/)
     expect(readme).not.toMatch(/upgrade (?:will )?accepts? (?:the|those|a) formatt/)
   })
 })

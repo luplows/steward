@@ -2933,14 +2933,17 @@ shortened where it is long, so that it can be found there with its date.
   (crew, 2026-11-04; refined 2026-11-09 after v0.2.0 upgrades). A fresh installation's generated
   files pass one exact pinned version's default formatter check, without changing their JSON or
   workflow behavior: the formatter is Prettier, at the exact version steward's `package.json` pins
-  as a development dependency, and `init.test.mjs` checks with it the files `init` writes. `init`
-  runs no formatter, and a client installs none. Steward starts with its own generated artifacts
-  rather than reformatting the whole repository. The installation pull request's body and the
-  README explain how a client formats only new files with its own settings before merging, and
-  that `upgrade`'s comparison, which ignores only the pin and line endings, refuses a workflow
-  that formatting changed; the planned ST-96, in Part 1, is to make formatting-only differences
-  acceptable on a later upgrade. This does not rewrite existing client files. Considered and deferred:
-  repository-wide Prettier enforcement. Not chosen: formatting client files automatically or
+  as a development dependency, and `init.test.mjs` checks with it the files `init` writes. It
+  covers the files whose names end in `.json`, `.yml` or `.md`, which is every file but a
+  checklist at a path the project names otherwise, such as `REVIEW`, from which Prettier may infer
+  no parser (crew, 2026-11-11, after review): that one is not covered. `init` runs no formatter,
+  and a client installs none. Steward starts with its own generated artifacts rather than
+  reformatting the whole repository. The installation pull request's body and the README explain
+  how a client formats only new files with its own settings before merging, with a command that
+  names only the files with those endings, and that `upgrade`'s comparison, which ignores only
+  the pin and line endings, refuses a workflow that formatting changed; the planned ST-96, in
+  Part 1, is to make formatting-only differences acceptable on a later upgrade. This does not
+  rewrite existing client files. Considered and deferred: repository-wide Prettier enforcement. Not chosen: formatting client files automatically or
   promising to match every custom Prettier configuration.
 - **Planned (ST-75)** **Post-landing CI limitations are documented for clients**
   (crew, 2026-11-04, after ST-48 client validation). The README and installation PR

@@ -51,6 +51,7 @@ ordinary formatting checks or force needless corrections to managed files.
 - Relaxing the workflow-upgrade comparison, which is ST-96.
 - Formatting all Steward JavaScript, documentation and historical artifacts, or
   turning a repository-wide format check on.
+- **After review:** A checklist path whose name gives default Prettier no parser to infer, such as one with no extension, like `--rules-file REVIEW` (crew, 2026-11-11). Follow-up: none.
 
 ## Constraints
 

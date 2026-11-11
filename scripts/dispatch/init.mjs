@@ -724,16 +724,36 @@ const DIFFERS_NOTE = ' (differs from the workflow this version of init writes, a
 const shellPath = (rel) => (/^[\w./-]+$/.test(rel) ? rel : `'${rel.replaceAll("'", "'\\''")}'`)
 
 /**
- * The pull request body's note on formatting (ST-74): the files added follow Prettier's defaults,
- * and a project with formatting settings of its own may format only those files, on the
- * installation's branch, before merging. Nothing when no file was added.
+ * The endings of the names of the files `init` writes from which Prettier infers a parser: JSON,
+ * YAML and Markdown, in any case. Every file `init` writes ends so but the checklist, whose path
+ * is the project's choice; one ending otherwise, such as `REVIEW` with no extension, may give
+ * Prettier no parser, and ST-74 leaves it out.
+ */
+const FORMATTED_NAME = /\.(?:json|yml|md)$/i
+
+/** Whether `rel` is a file the formatting note's command names: one `FORMATTED_NAME` matches. */
+export const formattable = (rel) => FORMATTED_NAME.test(rel)
+
+/**
+ * The pull request body's note on formatting (ST-74): the files added that are `formattable`
+ * follow Prettier's defaults, and a project with formatting settings of its own may format only
+ * those files, on the installation's branch, before merging. Any other file added is named as
+ * left out of the command. Nothing when no file added is formattable.
  */
 export function formattingNote(added) {
-  if (added.length === 0) return []
+  const files = added.filter(formattable)
+  if (files.length === 0) return []
+  const others = added.filter((rel) => !formattable(rel))
+  const leftOut =
+    others.length === 0
+      ? ''
+      : ` ${others.map((rel) => `\`${rel}\``).join(', ')} ${others.length === 1 ? 'is' : 'are'} left out, since ` +
+        `${others.length === 1 ? 'its name ends' : 'their names end'} in none of those, so Prettier may infer no parser for ${others.length === 1 ? 'it' : 'them'}.`
   return [
-    "- The files added follow Prettier's default formatting. A project whose own formatting settings differ may format " +
+    "- The files added whose names end in `.json`, `.yml` or `.md` follow Prettier's default formatting. " +
+      'A project whose own formatting settings differ may format ' +
       'only the files this pull request adds, on its branch, before merging it, for example with ' +
-      `\`npx prettier --write ${added.map(shellPath).join(' ')}\`. Nothing requires it. ` +
+      `\`npx prettier --write ${files.map(shellPath).join(' ')}\`.${leftOut} Nothing requires it. ` +
       "`steward upgrade` refuses a managed workflow that differs from steward's template at its pin by more than the pin " +
       'and line endings, a change of formatting included.',
   ]
