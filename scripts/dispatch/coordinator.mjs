@@ -36,12 +36,12 @@
  * the review scan.
  *
  * A `start` that finds no coordinator running also moves each handoff the previous one had
- * `admitted` for coding to `interrupted` (`interruptAdmissions`, `handoff-coding.mjs`), and says
- * so. That handoff is never coded again automatically, and `start` neither resumes it, nor looks
- * for or stops a surviving worker, nor touches its branch or worktree. A `start` that cannot read
- * or update `handoffs.json` refuses, launching nothing. `status` lists every handoff that is
- * queued, running, completed, stopped or held, from `handoffs.json`, whether or not a coordinator
- * is running, and changes nothing.
+ * `admitted` for coding to `interrupted` (`interruptAdmissions`, `handoff-coding.mjs`), with what
+ * the coordinator kept for it in `coding-evidence.json`, and says so. That handoff is never coded
+ * again automatically, and `start` neither resumes it, nor looks for or stops a surviving worker,
+ * nor touches its branch or worktree. A `start` that cannot read or update `handoffs.json` refuses,
+ * launching nothing. `status` lists every handoff that is queued, running, completed, stopped or
+ * held, from `handoffs.json`, whether or not a coordinator is running, and changes nothing.
  *
  * A `start` that finds no coordinator running first moves each `running` entry in the record of its
  * reviews to `ended` with `interrupted` (`interruptRunning`, `review-admission.mjs`), and says so.
@@ -69,7 +69,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { scheduleReviews } from './coordinator-scheduler.mjs'
 import { codeNextHandoff, interruptAdmissions } from './handoff-coding.mjs'
-import { codingReport, codingState, describeSource, handoffsPath, keptWhere, readHandoffs, reportLines } from './handoff.mjs'
+import { codingReport, codingState, describeSource, evidencePath, handoffsPath, keptWhere, readEvidence, readHandoffs, reportLines } from './handoff.mjs'
 import { classifyResult, interruptRunning, readReviews, reviewsPath } from './review-admission.mjs'
 import { readStateFile, writeStateFile } from './state-file.mjs'
 import { readUserConfig, stateDir } from './user-config.mjs'
@@ -246,15 +246,17 @@ function failedHeads(homedir) {
  */
 function codingWork(homedir) {
   let handoffs
+  let evidence
   try {
     ;({ handoffs } = readHandoffs(handoffsPath(homedir)))
+    evidence = readEvidence(evidencePath(homedir))
   } catch (error) {
     return { handoffsProblem: error.message }
   }
   const coding = { queued: [], running: [], completed: [], stopped: [], held: [] }
   for (const h of handoffs) {
     const state = codingState(h)
-    if (state !== null) coding[state].push(codingReport(h))
+    if (state !== null) coding[state].push(codingReport(h, evidence))
   }
   return Object.values(coding).some((list) => list.length > 0) ? { coding } : {}
 }

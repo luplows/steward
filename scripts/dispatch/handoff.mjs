@@ -43,7 +43,7 @@
  * write, a malformed records file, an unknown ID); 2 for a command line it does not take.
  */
 import { createHash } from 'node:crypto'
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync, statSync, writeSync } from 'node:fs'
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync, writeSync } from 'node:fs'
 import { homedir as osHomedir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -150,17 +150,51 @@ function completionProblem({ completion }) {
   return null
 }
 
+/** Whether `retained` is null or the work a run kept: `{ repoDir, branch?, worktree? }`. */
+const keptOk = (retained) => retained === null || (isObject(retained) && isText(retained.repoDir)
+  && Object.keys(retained).every((key) => ['repoDir', 'branch', 'worktree'].includes(key) && isText(retained[key])))
+
 /** Why `record.stop` is not what the coordinator writes when it stops a handoff, or null. */
 function stopProblem({ stop }) {
-  const retained = stop?.retained
-  const retainedOk = retained === null || (isObject(retained) && isText(retained.repoDir)
-    && Object.keys(retained).every((key) => ['repoDir', 'branch', 'worktree'].includes(key) && isText(retained[key])))
+  const retainedOk = keptOk(stop?.retained)
   if (!sameKeys(stop, STOP_KEYS) || !(stop.admissionId === null || isText(stop.admissionId)) || !isTimestamp(stop.at)
     || !isText(stop.outcome) || !isText(stop.reason) || !(stop.branch === null || isText(stop.branch))
     || !(stop.headSha === null || isSha(stop.headSha)) || !(stop.pr === null || isPr(stop.pr)) || !retainedOk) {
     return `must be ${STOP_KEYS.join(', ')}: the admission, when, the outcome and why, and the branch, head, pull request and kept work known`
   }
   return null
+}
+
+const EVIDENCE_KEYS = ['admissionId', 'handoffId', 'repo', 'at', 'outcome', 'branch', 'headSha', 'pr', 'retained']
+
+/** Where the coordinator keeps what a run left when its ending could not be written. */
+export const evidencePath = (homedir) => path.join(stateDir({ homedir }), 'coding-evidence.json')
+
+/**
+ * The entries in `file`, `~/.steward/state/coding-evidence.json` (ST-93): `[]` when there is no
+ * file. Each is `{ admissionId, handoffId, repo, at, outcome, branch, headSha, pr, retained }`,
+ * what the coordinator knew of an admitted run whose ending it could not write to `handoffs.json`,
+ * and is removed once `interruptAdmissions` has put it in the handoff's record. Throws, naming the
+ * file, on anything else.
+ */
+export function readEvidence(file) {
+  const bad = (what) => new Error(`${file} is malformed: ${what}. Fix or remove it.`)
+  let data
+  try {
+    data = readStateFile(file)
+  } catch (error) {
+    throw error instanceof SyntaxError ? bad(`it is not valid JSON (${error.message})`) : error
+  }
+  if (data === undefined) return []
+  if (!sameKeys(data, ['evidence']) || !Array.isArray(data.evidence)) throw bad('it must be an object whose only key, "evidence", is a list')
+  data.evidence.forEach((e, i) => {
+    if (!sameKeys(e, EVIDENCE_KEYS) || ![e.admissionId, e.handoffId, e.outcome].every(isText) || typeof e.repo !== 'string' || !REPO_RE.test(e.repo)
+      || !isTimestamp(e.at) || !(e.branch === null || isText(e.branch)) || !(e.headSha === null || isSha(e.headSha))
+      || !(e.pr === null || isPr(e.pr)) || !keptOk(e.retained)) {
+      throw bad(`entry ${i + 1} must be ${EVIDENCE_KEYS.join(', ')}`)
+    }
+  })
+  return data.evidence
 }
 
 /**
@@ -257,8 +291,7 @@ export const sameRecord = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 
 /**
  * How long a write waits for the lock on `handoffs.json` (`updateHandoffs`), in milliseconds,
- * before it refuses; and how long a lock file that cannot be read may be old before it counts as
- * stale.
+ * before it refuses.
  */
 export const LOCK_WAIT_MS = 5000
 const LOCK_POLL_MS = 5
@@ -268,48 +301,24 @@ const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),
 /** The lock file of `file`: beside it, so that it is on the same volume and in the same folder. */
 export const lockPath = (file) => `${file}.lock`
 
-/** Whether a process with id `pid` is running. */
-function isRunning(pid) {
+/** What a lock file says of its holder: its process id and the time, or why it cannot say. */
+function describeLock(lock) {
   try {
-    process.kill(pid, 0)
-    return true
+    const { pid, at } = JSON.parse(readFileSync(lock, 'utf8'))
+    return `it records process ${pid}, taken ${at}`
   } catch (error) {
-    return error.code !== 'ESRCH'
-  }
-}
-
-/**
- * Whether the lock file `lock` is stale, and what it said: `{ stale, text }`. It is stale when it
- * names a process that is not running, or when it cannot be read as a lock and is older than
- * `waitMs`. A lock that is gone, or cannot be looked at, is not stale: the next attempt sees it.
- */
-function staleLock(lock, waitMs) {
-  let text
-  try {
-    text = readFileSync(lock, 'utf8')
-  } catch {
-    return { stale: false, text: null }
-  }
-  let pid
-  try {
-    ;({ pid } = JSON.parse(text))
-  } catch {
-    // Not a lock steward wrote, or one still being written: judged by its age.
-  }
-  if (Number.isSafeInteger(pid) && pid > 0) return { stale: !isRunning(pid), text }
-  try {
-    return { stale: Date.now() - statSync(lock).mtimeMs > waitMs, text }
-  } catch {
-    return { stale: false, text }
+    return `what it records cannot be read (${error.message})`
   }
 }
 
 /**
  * Takes the exclusive lock on `file`: creates `lockPath(file)` with `wx` (which fails when it
- * exists), holding this process's id and the time. While another holds it, waits, a few
- * milliseconds at a time and synchronously, for up to `waitMs`. A stale lock (`staleLock`) is
- * removed, if it is still the file that was judged, and taken again. Throws, with `phase` set to
- * `lock`, when the bound passes with the lock held by a live process, or when it cannot be made.
+ * exists), holding this process's id and the time. While the file exists, whoever made it, waits, a
+ * few milliseconds at a time and synchronously, and checks the deadline on every pass. When
+ * `waitMs` has passed and the file is still there, throws, with `phase` set to `lock`, naming the
+ * file, who it records, and that the crew deletes it if that process is not running. A lock is
+ * never taken over, and only the process that made one deletes it (`updateHandoffs`, in its
+ * `finally`). Also throws, with the same `phase`, when the lock cannot be made.
  */
 function takeLock(file, waitMs) {
   const lock = lockPath(file)
@@ -320,29 +329,23 @@ function takeLock(file, waitMs) {
       const fd = openSync(lock, 'wx')
       try {
         writeSync(fd, JSON.stringify({ pid: process.pid, at: new Date().toISOString() }))
-      } finally {
+      } catch (error) {
+        // This process made the file, so it removes it; nothing else does.
         closeSync(fd)
-      }
-      return
-    } catch (error) {
-      if (error.code !== 'EEXIST') {
+        rmSync(lock, { force: true })
         error.phase = 'lock'
         throw error
       }
-    }
-    const { stale, text } = staleLock(lock, waitMs)
-    if (stale) {
-      // Removed only if it is still what was judged stale, so that a lock taken since is not.
-      try {
-        if (readFileSync(lock, 'utf8') === text) rmSync(lock, { force: true })
-      } catch {
-        // Gone already, or being replaced: the next attempt sees which.
+      closeSync(fd)
+      return
+    } catch (error) {
+      if (error.code !== 'EEXIST') {
+        error.phase ??= 'lock'
+        throw error
       }
-      continue
     }
     if (Date.now() >= end) {
-      const held = text === null ? '' : ` (${text.trim()})`
-      const error = new Error(`${lock} is held by another process${held} and stayed held for ${waitMs / 1000} seconds, so nothing was changed. If no steward command or coordinator is running, remove that file`)
+      const error = new Error(`${lock} is held, and stayed held for ${waitMs / 1000} seconds, so nothing was changed: ${describeLock(lock)}. If that process is not running, delete the file`)
       error.phase = 'lock'
       throw error
     }
@@ -365,9 +368,10 @@ function takeLock(file, waitMs) {
  * `show`, `status`, selection's checks) take no lock, as a write replaces the file in one rename.
  *
  * The lock serializes the processes of one OS user, the coordinator and the `steward handoff`
- * commands, which are separate processes. A lock whose process is not running is taken over, and
- * one that cannot be read and is older than `waitMs` too. If a live process holds it for `waitMs`,
- * the call refuses and writes nothing.
+ * commands, which are separate processes. A lock is never taken over: if the lock file is still
+ * there after `waitMs`, whoever made it, the call refuses and writes nothing, and the error names
+ * the file and the process and time it records, so that the crew can delete it if that process is
+ * not running. Only the call that made a lock deletes it.
  *
  * Returns `{ ok: true, result }` or `{ ok: false, reason, ... }` (the rest of what `change` gave).
  * Throws what `readHandoffs` or `writeStateFile` throws, or the refusal of the lock, with `phase`
@@ -486,7 +490,7 @@ function stoppedAction(h) {
  * by `steward coordinator status`: `{ id, repo, unit, version, status, state, reason, at, branch,
  * headSha, pr, kept, nextAction }`, each of the last seven null when the record does not know it.
  */
-export function codingReport(h) {
+export function codingReport(h, evidence = []) {
   const none = { reason: null, at: null, branch: null, headSha: null, pr: null, kept: null, nextAction: null }
   const base = { id: h.id, repo: h.repo, unit: describeSource(h.source), version: h.version, status: h.status, state: codingState(h) }
   if (h.status === 'held') {
@@ -494,6 +498,15 @@ export function codingReport(h) {
   }
   if (h.status === 'admitted') {
     const { admission } = h
+    const known = evidence.find((e) => e.admissionId === admission?.id)
+    if (known !== undefined) {
+      // The coordinator could not write how this run ended, and kept what it knew in its own file.
+      return {
+        ...base, ...none, reason: `ended as ${known.outcome}, but the record of it could not be written`, at: known.at,
+        branch: known.branch, headSha: known.headSha, pr: known.pr, kept: known.retained,
+        nextAction: `${stoppedAction({ ...h, stop: known })} \`steward coordinator start\` marks it interrupted, with these facts.`,
+      }
+    }
     return {
       ...base, ...none, reason: admission === undefined ? 'admitted for coding' : `coding under admission ${admission.id}`,
       at: admission?.admittedAt ?? null, branch: admission?.branch ?? null,
@@ -532,7 +545,17 @@ export function reportLines(r) {
 }
 
 /** The lines `list` and `show` give under a handoff the coordinator has taken. */
-const codingLines = (h) => (['admitted', 'completed', 'stopped', 'interrupted'].includes(h.status) ? reportLines(codingReport(h)) : [])
+const codingLines = (h, evidence) => (['admitted', 'completed', 'stopped', 'interrupted'].includes(h.status) ? reportLines(codingReport(h, evidence)) : [])
+
+/** The coordinator's evidence under `homedir`, or `[]` and a note through `out` when unreadable. */
+function evidenceOf(homedir, out) {
+  try {
+    return readEvidence(evidencePath(homedir))
+  } catch (error) {
+    out(`Note: ${error.message}`)
+    return []
+  }
+}
 
 function parseAdd(args) {
   const values = {}
@@ -720,9 +743,10 @@ async function list(ctx) {
     return 0
   }
   out(`Approved handoffs, oldest first (${file}):`)
+  const evidence = evidenceOf(homedir, out)
   for (const h of handoffs) {
     out(line(h))
-    for (const detail of codingLines(h)) out(`    ${detail}`)
+    for (const detail of codingLines(h, evidence)) out(`    ${detail}`)
   }
   // Report only. A pending handoff is read as selection reads it, but no handoff record is written: a changed
   // unit is held by a selection that reaches it, not here, and an unreadable source is never held.
@@ -759,7 +783,7 @@ async function show(id, { homedir, out, err }) {
   out(`  version:   ${h.version} (approved ${h.approvedAt})`)
   out(`  read at:   ${h.source.kind === 'file' ? `main ${h.provenance.commit}` : `Issue #${h.provenance.number}, title ${JSON.stringify(h.provenance.title)}, fingerprint ${h.provenance.fingerprint}`}`)
   out(`  earlier versions: ${h.history.length === 0 ? 'none' : h.history.map((e) => `v${e.version} (${e.approvedAt})`).join(', ')}`)
-  for (const detail of codingLines(h)) out(`  ${detail}`)
+  for (const detail of codingLines(h, evidenceOf(homedir, out))) out(`  ${detail}`)
   out('  approved text:')
   out('--- begin approved text ---')
   out(h.text)

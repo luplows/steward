@@ -14,7 +14,7 @@ const HANDOFF_URL = JSON.stringify(pathToFileURL(path.join(DISPATCH, 'handoff.mj
 const FIXTURE_URL = JSON.stringify(pathToFileURL(path.join(DISPATCH, 'handoff-fixture.mjs')).href)
 
 // Every test has a temporary home of its own: the real `~/.steward/` is never read or written. The
-// second process each test starts is a real `node`, which the test waits for and never kills by name.
+// second process each test starts is a real `node`, which the test waits for, never kills by name.
 let base
 beforeAll(() => { base = mkdtempSync(path.join(tmpdir(), 'steward-lock-')) })
 afterAll(() => { rmSync(base, { recursive: true, force: true }) })
@@ -107,42 +107,66 @@ describe('ST-93: writes to handoffs.json are serialized by a lock file', () => {
     expect(existsSync(lockPath(file))).toBe(false)
   })
 
-  it('ST-93: a lock left by a process that is not running is taken over', () => {
+  /** The write that every refusal test attempts: it must change nothing when it is refused. */
+  const attempt = (file, waitMs = 200) => {
+    let changed = false
+    const started = Date.now()
+    try {
+      updateHandoffs(file, (handoffs) => { changed = true; return { handoffs: handoffs.map((h) => ({ ...h, status: 'withdrawn' })) } }, { waitMs })
+    } catch (error) {
+      return { error, changed, waited: Date.now() - started }
+    }
+    return { error: null, changed, waited: Date.now() - started }
+  }
+
+  it('ST-93: a lock left by a process that is not running is never taken over: the write refuses after the wait, naming the file, the process and the time, and changes nothing', () => {
     const home = freshHome()
     const file = writeHandoffs(home, [pending(1)])
     const { pid } = spawnSync(process.execPath, ['-e', ''])
-    writeFileSync(lockPath(file), JSON.stringify({ pid, at: '2026-11-10T10:00:00.000Z' }))
-    const started = Date.now()
-    let holder
-    const result = updateHandoffs(file, (handoffs) => {
-      holder = JSON.parse(readFileSync(lockPath(file), 'utf8')).pid
-      return { handoffs: handoffs.map((h) => ({ ...h, status: 'withdrawn' })), result: 'done' }
-    }, { waitMs: 3000 })
-    expect(result.ok).toBe(true)
-    expect(holder).toBe(process.pid)
-    expect(Date.now() - started).toBeLessThan(1500)
-    expect(readRaw(home)[0].status).toBe('withdrawn')
-    expect(existsSync(lockPath(file))).toBe(false)
+    const recorded = JSON.stringify({ pid, at: '2026-11-10T10:00:00.000Z' })
+    writeFileSync(lockPath(file), recorded)
+    const before = readFileSync(file, 'utf8')
+    const { error, changed, waited } = attempt(file)
+    expect(error).toMatchObject({ phase: 'lock' })
+    expect(error.message).toContain(lockPath(file))
+    expect(error.message).toContain(`it records process ${pid}, taken 2026-11-10T10:00:00.000Z`)
+    expect(error.message).toContain('If that process is not running, delete the file')
+    expect(waited).toBeGreaterThanOrEqual(150)
+    expect(changed).toBe(false)
+    expect(readFileSync(file, 'utf8')).toBe(before)
+    expect(readFileSync(lockPath(file), 'utf8')).toBe(recorded)
   })
 
-  it('ST-93: a lock that cannot be read is taken over only once it is older than the wait', () => {
+  it('ST-93: a lock whose contents are not a lock is refused in the same way, and left', () => {
     const home = freshHome()
     const file = writeHandoffs(home, [pending(1)])
-    const withdraw = (waitMs) => updateHandoffs(file, (handoffs) => ({ handoffs: handoffs.map((h) => ({ ...h, status: 'withdrawn' })) }), { waitMs })
-    // Fresh: the write waits out the wait before it takes the lock over.
     writeFileSync(lockPath(file), 'not a lock')
-    const started = Date.now()
-    expect(withdraw(300).ok).toBe(true)
-    expect(Date.now() - started).toBeGreaterThanOrEqual(250)
-    // Old: taken over at once.
-    writeHandoffs(home, [pending(1)])
-    writeFileSync(lockPath(file), 'not a lock')
-    const old = new Date(Date.now() - 10_000)
+    const old = new Date(Date.now() - 60_000)
     utimesSync(lockPath(file), old, old)
-    const again = Date.now()
-    expect(withdraw(5000).ok).toBe(true)
-    expect(Date.now() - again).toBeLessThan(1500)
-    expect(readRaw(home)[0].status).toBe('withdrawn')
+    const before = readFileSync(file, 'utf8')
+    const { error, changed } = attempt(file)
+    expect(error).toMatchObject({ phase: 'lock' })
+    expect(error.message).toContain('what it records cannot be read')
+    expect(error.message).toContain('delete the file')
+    expect(changed).toBe(false)
+    expect(readFileSync(file, 'utf8')).toBe(before)
+    expect(readFileSync(lockPath(file), 'utf8')).toBe('not a lock')
+  })
+
+  it('ST-93: a lock that cannot be read at all is refused after the wait and not spun on, and left', () => {
+    const home = freshHome()
+    const file = writeHandoffs(home, [pending(1)])
+    // A folder where the lock file should be: it exists, and reading it fails.
+    mkdirSync(lockPath(file))
+    const before = readFileSync(file, 'utf8')
+    const { error, changed, waited } = attempt(file)
+    expect(error).toMatchObject({ phase: 'lock' })
+    expect(error.message).toContain('what it records cannot be read')
+    expect(waited).toBeGreaterThanOrEqual(150)
+    expect(waited).toBeLessThan(3000)
+    expect(changed).toBe(false)
+    expect(readFileSync(file, 'utf8')).toBe(before)
+    expect(existsSync(lockPath(file))).toBe(true)
   })
 
   it('ST-93: a lock a live process holds past the wait refuses the write, which changes nothing and leaves the lock', async () => {
@@ -160,7 +184,7 @@ describe('ST-93: writes to handoffs.json are serialized by a lock file', () => {
     let changed = false
     const started = Date.now()
     expect(() => updateHandoffs(file, () => { changed = true; return { handoffs: [] } }, { waitMs: 300 })).toThrow(
-      expect.objectContaining({ phase: 'lock', message: expect.stringContaining('is held by another process') }),
+      expect.objectContaining({ phase: 'lock', message: expect.stringContaining('is held, and stayed held') }),
     )
     expect(Date.now() - started).toBeGreaterThanOrEqual(250)
     expect(changed).toBe(false)

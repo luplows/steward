@@ -8,7 +8,8 @@ import path from 'node:path'
 import { codeNextHandoff, admissionIsActive, interruptAdmissions } from './handoff-coding.mjs'
 import { handoffBranch } from './handoff-coder.mjs'
 import { handoffRecord, readRaw, writeHandoffs } from './handoff-fixture.mjs'
-import { handoffsPath, main as handoff, readHandoffs, selectHandoff } from './handoff.mjs'
+import { coordinatorPath, main as coordinatorMain, runCoordinator, stopRequestPath } from './coordinator.mjs'
+import { evidencePath, handoffsPath, main as handoff, readEvidence, readHandoffs, selectHandoff } from './handoff.mjs'
 import { main as project } from './project.mjs'
 import { fixtureSettings } from './settings-fixture.mjs'
 
@@ -813,5 +814,109 @@ describe('ST-93: a write reads the records afresh, after whatever it awaited', (
     })
     expect((await t()).status).toBe('completed')
     expect(records(home).map((h) => [h.id, h.status])).toEqual([['H-1', 'completed'], ['H-2', 'pending'], ['H-3', 'withdrawn'], ['H-4', 'pending']])
+  })
+})
+
+describe('ST-93: what a run left survives a failed ending write, closure and restart', () => {
+  const KEPT = { repoDir: '/owned/acme/gadgets', worktree: '/tmp/steward-handoff-x/tree', branch: 'handoff/H-1-b-md' }
+  const statusOf = async (home) => {
+    const out = []
+    await coordinatorMain(['status', '--json'], { homedir: home, env: {}, out: (l) => out.push(l), err: () => {} })
+    return JSON.parse(out.join('\n'))
+  }
+  const statusText = async (home) => {
+    const out = []
+    await coordinatorMain(['status'], { homedir: home, env: {}, out: (l) => out.push(l), err: () => {} })
+    return out.join('\n')
+  }
+
+  /** A turn whose ending cannot be written, in a coordinator that is then stopped, as a person would. */
+  async function failedThenClosed(home, options) {
+    const coordinator = runCoordinator({ homedir: home, pollMs: 10 })
+    const t = turn(home, { admit: coordinator.admit, ...options })
+    const result = await t()
+    unblockWrites(home)
+    expect(result.status).toBe('blocked')
+    writeFileSync(stopRequestPath(home), 'stop\n')
+    expect(await coordinator.done).toBe(null)
+    expect(existsSync(coordinatorPath(home))).toBe(false)
+    return result
+  }
+
+  it('ST-93/AC-3, ST-93/AC-4, ST-93/AC-6: a failed ending write after a run that kept its worktree, then graceful closure and a restart: status and handoff list show the branch and the worktree throughout, and the interrupted record has them', async () => {
+    const home = await homeWith(APPROVALS)
+    const result = await failedThenClosed(home, {
+      execute: async (args) => {
+        blockWrites(home)
+        return refusal(home, args, 'session-failed', { branch: 'handoff/H-1-b-md', outcome: 'timed-out', reason: 'the session ran out of time', retained: KEPT })
+      },
+    })
+    const admissionId = recordOf(home, 'H-1').admission.id
+    expect(result.reason).toContain(`What it left is kept in ${evidencePath(home)}`)
+    expect(readEvidence(evidencePath(home))).toEqual([expect.objectContaining({ admissionId, handoffId: 'H-1', repo: OTHER, outcome: 'session-failed', branch: 'handoff/H-1-b-md', headSha: null, pr: null, retained: KEPT })])
+
+    // No coordinator is running and the record says admitted: both commands show what is known.
+    const shown = async () => {
+      const json = await statusOf(home)
+      const text = await statusText(home)
+      const listed = (await run(['list'], home)).out
+      return { json, text, listed }
+    }
+    const before = await shown()
+    expect(before.json.status).toBe('stopped')
+    expect(before.json.coding.running).toEqual([expect.objectContaining({ id: 'H-1', branch: 'handoff/H-1-b-md', kept: KEPT, reason: expect.stringContaining('ended as session-failed') })])
+    for (const text of [before.text, before.listed]) {
+      expect(text).toContain('branch: handoff/H-1-b-md')
+      expect(text).toContain('work kept: worktree /tmp/steward-handoff-x/tree (branch handoff/H-1-b-md) in /owned/acme/gadgets')
+    }
+
+    // The next start interrupts it, with those facts, and clears the entry.
+    expect(interruptAdmissions({ homedir: home, now })).toHaveLength(1)
+    expect(recordOf(home, 'H-1')).toMatchObject({
+      status: 'interrupted', stop: { admissionId, outcome: 'interrupted', branch: 'handoff/H-1-b-md', headSha: null, pr: null, retained: KEPT },
+    })
+    expect(recordOf(home, 'H-1').stop.reason).toContain('ended as session-failed')
+    expect(readEvidence(evidencePath(home))).toEqual([])
+    const after = await shown()
+    expect(after.json.coding.stopped).toEqual([expect.objectContaining({ id: 'H-1', status: 'interrupted', branch: 'handoff/H-1-b-md', kept: KEPT })])
+    for (const text of [after.text, after.listed]) {
+      expect(text).toContain('work kept: worktree /tmp/steward-handoff-x/tree (branch handoff/H-1-b-md) in /owned/acme/gadgets')
+    }
+  })
+
+  it('ST-93/AC-3, ST-93/AC-4, ST-93/AC-6: a failed ending write after a published pull request, then closure and a restart: the head and the pull request are in the interrupted record and both commands', async () => {
+    const home = await homeWith(APPROVALS)
+    await failedThenClosed(home, { publish: async () => { blockWrites(home); return published() } })
+    const pr = { number: 12, url: 'https://github.com/acme/widgets/pull/12' }
+    expect((await statusOf(home)).coding.running).toEqual([expect.objectContaining({ id: 'H-1', headSha: HEAD, pr })])
+    expect(interruptAdmissions({ homedir: home, now })).toHaveLength(1)
+    expect(recordOf(home, 'H-1').stop).toMatchObject({ outcome: 'interrupted', branch: 'handoff/H-1-b-md', headSha: HEAD, pr, retained: null })
+    for (const text of [await statusText(home), (await run(['list'], home)).out]) {
+      expect(text).toContain(`head: ${HEAD}`)
+      expect(text).toContain('pull request: #12 https://github.com/acme/widgets/pull/12')
+    }
+  })
+
+  it('ST-93/AC-4: an admission with no evidence is interrupted as before, and evidence for another admission is left', async () => {
+    const home = await homeWith(APPROVALS)
+    const t = turn(home, { execute: () => new Promise(() => {}) })
+    void t()
+    await vi.waitFor(() => expect(recordOf(home, 'H-1').status).toBe('admitted'), { timeout: 30_000 })
+    const other = { admissionId: 'adm-other', handoffId: 'H-9', repo: OTHER, at: '2026-11-10T10:00:00.000Z', outcome: 'x', branch: null, headSha: null, pr: null, retained: null }
+    writeFileSync(evidencePath(home), `${JSON.stringify({ evidence: [other] })}\n`)
+    interruptAdmissions({ homedir: home, now })
+    expect(recordOf(home, 'H-1').stop).toMatchObject({ branch: 'handoff/H-1-b-md', headSha: null, pr: null, retained: null })
+    expect(readEvidence(evidencePath(home))).toEqual([other])
+  })
+
+  it('ST-93/AC-4: evidence that cannot be read refuses the interruption, naming the file, and changes nothing', async () => {
+    const home = await homeWith(APPROVALS)
+    const t = turn(home, { execute: () => new Promise(() => {}) })
+    void t()
+    await vi.waitFor(() => expect(recordOf(home, 'H-1').status).toBe('admitted'), { timeout: 30_000 })
+    writeFileSync(evidencePath(home), '{ not json')
+    const before = bytes(home)
+    expect(() => interruptAdmissions({ homedir: home, now })).toThrow(evidencePath(home))
+    expect(bytes(home)).toBe(before)
   })
 })

@@ -669,26 +669,31 @@ beside them (`handoffs.json.lock`, created atomically, holding its process id an
 them afresh, changes only its own record if that is still as it expected, writes, and releases the
 lock, in one synchronous step after any awaited work; a writer never puts back a snapshot taken
 before an await. A writer that finds the lock held waits up to 5 seconds and then refuses, writing
-nothing, and the coordinator treats that as a failed write. A lock whose process is not running, or
-that is unreadable and older than the wait, is taken over. Reads take no lock. A second coordinator
-is outside the threat model. Only the matching active admission may be passed into execution, and
-execution checks it against that record each time. A confirmed pre-claim, pre-model refusal is
-resolved only after that admission is durably cleared: a retryable one (usage, or a temporary
-condition such as a failed read) returns to pending, and one because the unit's content changed is
-held for explicit reapproval, as at selection. Any other refusal is not retried: the handoff is
-`stopped`. If an admission or its clearing cannot be written, no more coding is admitted until the
-coordinator is restarted, and reviews and landing carry on. An uncertain outcome never authorizes a
-second execution. A stopped or uncertain admitted run is not recoded after restart: a `start` that
-finds a coordinator gone marks each handoff it had `admitted` as `interrupted`, resuming nothing,
-killing nothing and removing nothing. A published pull request completes the handoff; a failure, or
-a pushed branch with no pull request, stops it with the branch, head, pull request and kept work
-known. No command releases a stopped or interrupted handoff; its recoding is the crew's to arrange.
-Surviving evidence and a specific crew action are shown in `coordinator status` and `handoff list`,
-without dedicated notifications, whether or not a coordinator is running. No general concurrent
-scheduler, automatic fixer or exceptional process reconciliation is required for this initial slice;
-ST-85 holds that later boundary. Considered but not chosen for 0.3: automatic selection from the
-ready story queue, reapproval moving to the back of FIFO, mandatory historical-snapshot review,
-active change monitoring, automatic restart retries, and separate alert infrastructure.
+nothing, and the coordinator treats that as a failed write. A lock is never taken over: the error
+names the lock file and the process and time it records, and the crew deletes the file if that
+process is not running; only a writer that made a lock deletes it. Reads take no lock. A second
+coordinator is outside the threat model. When the ending of an admitted run cannot be written to the
+records, the coordinator keeps what the run left (branch, head, pull request, kept work), with the
+admission ID, in `coding-evidence.json` beside them, which `status` and `handoff list` show with or
+without a coordinator and the next `start` merges into the `interrupted` record and clears. Only the
+matching active admission may be passed into execution, and execution checks it against that record
+each time. A confirmed pre-claim, pre-model refusal is resolved only after that admission is durably
+cleared: a retryable one (usage, or a temporary condition such as a failed read) returns to pending,
+and one because the unit's content changed is held for explicit reapproval, as at selection. Any
+other refusal is not retried: the handoff is `stopped`. If an admission or its clearing cannot be
+written, no more coding is admitted until the coordinator is restarted, and reviews and landing
+carry on. An uncertain outcome never authorizes a second execution. A stopped or uncertain admitted
+run is not recoded after restart: a `start` that finds a coordinator gone marks each handoff it had
+`admitted` as `interrupted`, resuming nothing, killing nothing and removing nothing. A published
+pull request completes the handoff; a failure, or a pushed branch with no pull request, stops it
+with the branch, head, pull request and kept work known. No command releases a stopped or
+interrupted handoff; its recoding is the crew's to arrange. Surviving evidence and a specific crew
+action are shown in `coordinator status` and `handoff list`, without dedicated notifications,
+whether or not a coordinator is running. No general concurrent scheduler, automatic fixer or
+exceptional process reconciliation is required for this initial slice; ST-85 holds that later
+boundary. Considered but not chosen for 0.3: automatic selection from the ready story queue,
+reapproval moving to the back of FIFO, mandatory historical-snapshot review, active change
+monitoring, automatic restart retries, and separate alert infrastructure.
 
 (crew, 2026-11-10) The consuming project's applicable agent
 instructions govern attribution for agent-generated commits and proposed pull request text.

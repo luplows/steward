@@ -382,10 +382,12 @@ writes, and releases the lock, all after any source has been read: `add` and `re
 changing nothing, when the records changed while they read the source, and a record the coordinator
 admitted or completed in the meantime is never put back as it was. A write that finds the lock held
 waits, a few milliseconds at a time, for up to 5 seconds (`LOCK_WAIT_MS` in `handoff.mjs`), and then
-refuses and writes nothing; the coordinator treats that as a failed write. A lock whose process is
-not running is taken over, and so is one that cannot be read and is older than that wait. Reading
-(`list`, `show`, `status`, selection) takes no lock. A second coordinator, or a writer that ignores
-the lock, is not guarded against.
+refuses and writes nothing; the coordinator treats that as a failed write. A lock is never taken
+over, whoever made it: if the lock file is still there after the wait, the error names the file and
+the process and time it records, and says to delete the file if that process is not running. Only
+the writer that made a lock deletes it, when it is done. Reading (`list`, `show`, `status`,
+selection) takes no lock. A second coordinator, or a writer that ignores the lock, is not guarded
+against.
 
 Which handoff is coded next is chosen by selection, an operation the coordinator calls
 (`selectHandoff` in `scripts/dispatch/handoff.mjs`; there is no command for it). It takes the oldest
@@ -628,20 +630,24 @@ is written to the handoff's record, with the admission cleared, in one write:
   branch `executeHandoff` kept. Nothing is retried, and the coordinator never codes it again.
 - **A write that fails:** if the admission cannot be written, nothing was started and the handoff
   stays `pending`; if the admission cannot be cleared, or the ending written, the handoff stays
-  `admitted`, and the message and `status` (also as `lastCoding.evidence` in `--json`) keep what the
-  run is known to have left: the branch, head, pull request and any worktree or branch kept, which
-  the file will not have. In either case the coordinator admits no more coding until it is
-  restarted, `status` says why, and reviews and landing carry on. A selection that fails (an
-  unreadable file, for instance) is not this: it is reported, and the next scan selects again.
+  `admitted`, and what the run is known to have left (the branch, head, pull request and any
+  worktree or branch kept) is in the message, in `status` (also as `lastCoding.evidence` in
+  `--json`) while the coordinator runs, and in `~/.steward/state/coding-evidence.json`, which only
+  the coordinator writes, with the admission ID. That file outlasts the coordinator: `status` and
+  `steward handoff list` show it for the admitted handoff whether or not a coordinator is running,
+  and the next `start` puts it into the `interrupted` record and removes its entry. In either case
+  the coordinator admits no more coding until it is restarted, `status` says why, and reviews and
+  landing carry on. A selection that fails (an unreadable file, for instance) is not this: it is
+  reported, and the next scan selects again.
 
 A coordinator that ends during coding leaves its handoff `admitted`. The next `start`, with the
 reviews' interruption below, moves each `admitted` handoff to `interrupted`, with the branch the
-admission named, and says which. That handoff is not coded again automatically. `start` does not
-resume it, run a model, look for or stop a surviving worker, claim its branch again or remove a
-worktree it left: the crew inspects the branch on the remote, any pull request from it, and `git
-worktree list` in the project's owned checkout. A `start` that cannot read or update `handoffs.json`
-names the file and starts nothing. A turn that finds a handoff `admitted` with nothing in the
-running coordinator coding it admits nothing.
+admission named and any evidence the coordinator kept for it, and says which. That handoff is not
+coded again automatically. `start` does not resume it, run a model, look for or stop a surviving
+worker, claim its branch again or remove a worktree it left: the crew inspects the branch on the
+remote, any pull request from it, and `git worktree list` in the project's owned checkout. A `start`
+that cannot read or update `handoffs.json` names the file and starts nothing. A turn that finds a
+handoff `admitted` with nothing in the running coordinator coding it admits nothing.
 
 - A project's failed GitHub discovery, or a failure to bring its owned checkout to `origin`'s
   `main`, starts no review of it and stops no other project; the next scan tries it again.

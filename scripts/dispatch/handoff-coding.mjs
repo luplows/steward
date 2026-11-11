@@ -59,7 +59,8 @@ import { randomUUID } from 'node:crypto'
 import { withoutCredentials } from './coordinator-scheduler.mjs'
 import { PUSHED, REFUSALS, executeHandoff, handoffBranch, isRetryableRefusal } from './handoff-coder.mjs'
 import { publishHandoff } from './handoff-publish.mjs'
-import { handoffsPath, keptWhere, readHandoffs, selectHandoff, updateHandoffs } from './handoff.mjs'
+import { evidencePath, handoffsPath, keptWhere, readEvidence, readHandoffs, selectHandoff, updateHandoffs } from './handoff.mjs'
+import { writeStateFile } from './state-file.mjs'
 
 const SHA_RE = /^[0-9a-f]{40}$/
 const text = (value) => (typeof value === 'string' && value !== '' ? value : null)
@@ -91,32 +92,67 @@ export function admissionIsActive(homedir, id) {
  * `homedir` to `interrupted`, in one write, and returns those handoffs as they were. With none,
  * writes nothing. It runs no model, claims and deletes no branch and looks for no worker or
  * worktree: it records what the file knows, the branch the admission named, and what the crew
- * inspects. Throws when the records cannot be read or written; a write that fails leaves the file
- * as it was.
+ * inspects, and, for an admission whose ending the coordinator could not write, the evidence it
+ * kept in `coding-evidence.json` (`keepEvidence`): the head, pull request and kept work go into
+ * the `stop`, and those entries are then removed from that file. Throws when the records or that
+ * file cannot be read, or the records written; a write that fails leaves the file as it was. A
+ * failure to remove an entry leaves it, matching no admitted handoff, for a later `start` to
+ * find no use for.
  */
 export function interruptAdmissions({ homedir, now = () => new Date() }) {
   const file = handoffsPath(homedir)
   const at = now().toISOString()
-  const interrupted = ({ admission, ...kept }) => ({
+  const interrupted = ({ admission, ...kept }, known) => ({
     ...kept,
     status: 'interrupted',
     stop: {
       admissionId: admission?.id ?? null,
       at,
       outcome: 'interrupted',
-      reason: 'the coordinator that was coding this handoff ended before it recorded how the coding ended, so whether a branch was claimed, a model ran or a pull request was opened is not known',
-      branch: admission?.branch ?? null,
-      headSha: null,
-      pr: null,
-      retained: null,
+      reason: known === undefined
+        ? 'the coordinator that was coding this handoff ended before it recorded how the coding ended, so whether a branch was claimed, a model ran or a pull request was opened is not known'
+        : `the coordinator that was coding this handoff ended after the run ended as ${known.outcome} and before it could record that, so the branch, head, pull request and kept work below are what it knew`,
+      branch: known?.branch ?? admission?.branch ?? null,
+      headSha: known?.headSha ?? null,
+      pr: known?.pr ?? null,
+      retained: known?.retained ?? null,
     },
   })
+  const evidenceFile = evidencePath(homedir)
+  let used = []
   const done = updateHandoffs(file, (handoffs) => {
     const admitted = handoffs.filter((h) => h.status === 'admitted')
     if (admitted.length === 0) return { result: [] }
-    return { handoffs: handoffs.map((h) => (h.status === 'admitted' ? interrupted(h) : h)), result: admitted }
+    const evidence = readEvidence(evidenceFile)
+    used = admitted.map((h) => h.admission?.id).filter((id) => evidence.some((e) => e.admissionId === id))
+    const known = (h) => evidence.find((e) => e.admissionId === h.admission?.id)
+    return { handoffs: handoffs.map((h) => (h.status === 'admitted' ? interrupted(h, known(h)) : h)), result: admitted }
   })
+  if (used.length > 0) {
+    try {
+      writeStateFile(evidenceFile, { evidence: readEvidence(evidenceFile).filter((e) => !used.includes(e.admissionId)) })
+    } catch {
+      // The facts are in the records now; an entry for an admission no longer admitted is unused.
+    }
+  }
   return done.result
+}
+
+/**
+ * Keeps `entry` -- what a run left, with its admission ID -- in `coding-evidence.json`
+ * (`evidencePath`), replacing any entry for the same admission. Only the coordinator writes it, and
+ * only when the ending of an admitted run could not be written to `handoffs.json`. Throws when it
+ * cannot.
+ */
+function keepEvidence(homedir, entry) {
+  const file = evidencePath(homedir)
+  let others = []
+  try {
+    others = readEvidence(file).filter((e) => e.admissionId !== entry.admissionId)
+  } catch {
+    // A file that cannot be read is replaced by one with this entry: the entry is what is at risk.
+  }
+  writeStateFile(file, { evidence: [...others, entry] })
 }
 
 /** What a result that is not a push says, in a line: its status, a session's outcome and reason. */
@@ -282,11 +318,11 @@ export async function codeNextHandoff({
   }
 
   /**
-   * Records how the admitted run ended: `next` replaces the handoff's status, and the admission
-   * is cleared, in one write. Resolves `outcome`, plus the handoff, or `blocked` when the write
-   * cannot be made, in which case the handoff stays `admitted` in the file and the result's
-   * `evidence` keeps what the run is known to have left (`{ outcome, branch, headSha, pr, retained }`),
-   * since the file will not have it.
+   * Records how the admitted run ended: `next` replaces the handoff's status, and the admission is
+   * cleared, in one write. Resolves `outcome`, plus the handoff, or `blocked` when the write cannot
+   * be made, in which case the handoff stays `admitted` in the file and the result's `evidence` has
+   * what the run is known to have left (`{ outcome, branch, headSha, pr, retained }`), which is
+   * also kept in `coding-evidence.json` with the admission ID.
    */
   function finish(admission, next, outcome) {
     const named = { handoffId: admission.handoffId, repo: admission.repo }
@@ -301,14 +337,25 @@ export async function codeNextHandoff({
       })
       if (!done.ok) throw new Error(done.reason)
     } catch (error) {
-      const kept = keptWhere(outcome.retained ?? null)
+      const retained = keptWork(outcome.retained)
+      const kept = keptWhere(retained)
+      const evidence = {
+        outcome: text(outcome.outcome) ?? text(outcome.status) ?? 'unknown', branch: text(outcome.branch) ?? admission.branch,
+        headSha: sha(outcome.headSha), pr: outcome.pr ?? null, retained,
+      }
+      // The file will not have the ending, so what the run left is kept apart, for `status`,
+      // `handoff list` and the next `start` (`interruptAdmissions`), with or without a coordinator.
+      let keptIn
+      try {
+        keepEvidence(homedir, { admissionId: admission.id, handoffId: admission.handoffId, repo: admission.repo, at: now().toISOString(), ...evidence })
+        keptIn = `What it left is kept in ${evidencePath(homedir)}.`
+      } catch (keepError) {
+        keptIn = `What it left could not be kept in ${evidencePath(homedir)}: ${withoutCredentials(keepError.message)}.`
+      }
       return {
         status: 'blocked', ...named,
-        evidence: {
-          outcome: outcome.outcome ?? outcome.status, branch: outcome.branch ?? admission.branch, headSha: outcome.headSha ?? null,
-          pr: outcome.pr ?? null, retained: outcome.retained ?? null,
-        },
-        reason: `${admission.handoffId} ended as ${outcome.status}${outcome.reason ? ` (${outcome.reason})` : ''}${outcome.branch ? `, on branch ${outcome.branch}` : ''}${outcome.pr ? `, pull request #${outcome.pr.number}` : ''}${kept === null ? '' : `, with work kept at ${kept}`}, but the record of it could not be written to ${file}: ${withoutCredentials(error.message)}. It stays admitted, and is marked interrupted when the coordinator is restarted. Nothing is coded until then`,
+        evidence,
+        reason: `${admission.handoffId} ended as ${outcome.status}${outcome.reason ? ` (${outcome.reason})` : ''}${outcome.branch ? `, on branch ${outcome.branch}` : ''}${outcome.pr ? `, pull request #${outcome.pr.number}` : ''}${kept === null ? '' : `, with work kept at ${kept}`}, but the record of it could not be written to ${file}: ${withoutCredentials(error.message)}. It stays admitted, and is marked interrupted when the coordinator is restarted. ${keptIn} Nothing is coded until then`,
       }
     }
     return { ...named, ...outcome }
