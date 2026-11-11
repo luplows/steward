@@ -2160,9 +2160,29 @@ describe('ST-74/AC-4: the installation pull request and the README say how to fo
     expect(body).toContain("`REVIEW.json`, the checklist the project's steward.config.json names, is left out")
   })
 
+  it("ST-74/AC-4: when that checklist is the only file added, the note explains it is left out, and gives no command", async () => {
+    const settings = projectJson(settingsBody(REPO, { land: false, unitLinks: ['file'], rulesFile: 'REVIEW.json', inspectAfterHours: 24 }))
+    const workflow = (file) => fillPin(read(ROOT, `templates/workflows/${file}`), 'v9.8.7')
+    const files = {
+      'steward.config.json': settings,
+      '.github/pull_request_template.md': read(ROOT, 'templates/pull_request_template.md'),
+      ...Object.fromEntries([...GATE_WORKFLOWS, INSPECTION_WORKFLOW].map((file) => [`.github/workflows/${file}`, workflow(file)])),
+    }
+    const { gh, added } = await addedFilesPass(['--yes'], { files, unchecked: ['REVIEW.json'] })
+    expect(added).toEqual(['REVIEW.json'])
+    const body = writes(gh).find((r) => r.rest === '/pulls').body.body
+    expect(body).not.toContain('npx prettier')
+    expect(body).toContain(
+      "- `REVIEW.json`, the checklist the project's steward.config.json names, is the only file this pull request adds, and it is " +
+        "left out of Prettier's default formatting and of any command to format it: its name does not end in `.md`, or a segment " +
+        'of it starts with `-`, so Prettier may not format it as the Markdown it holds.',
+    )
+  })
+
   it('ST-74/AC-4: a path the shell would split is quoted, and with nothing added there is no note', () => {
     expect(formattingNote([])).toEqual([])
-    expect(formattingNote(['REVIEW'], 'REVIEW')).toEqual([])
+    expect(formattingNote(['REVIEW'], 'REVIEW')[0]).toMatch(/^- `REVIEW`, the checklist the project's steward.config.json names, is the only file this pull request adds/)
+    expect(formattingNote(['REVIEW'], 'REVIEW')[0]).not.toContain('npx prettier')
     expect(formattingNote(['REVIEW.md'], 'REVIEW.md')[0]).toContain('`npx prettier --write REVIEW.md`')
     expect(formattingNote(['docs/my rules.md', 'steward.config.json'], 'docs/my rules.md')[0]).toContain("`npx prettier --write 'docs/my rules.md' steward.config.json`")
     const body = pullBody({ version: '9.8.7', pin: 'v9.8.7', added: ['steward.config.json'], left: [], landing: ['x'], template: 'T' })

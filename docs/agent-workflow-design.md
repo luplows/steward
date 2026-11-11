@@ -2939,8 +2939,10 @@ shortened where it is long, so that it can be found there with its date.
   #166), so the checklist is Markdown and a command naming it does not read it as an option.
   `isRulesFilePath` and `readSettings` are unchanged, so an existing project's
   `steward.config.json` validates as before; a checklist `init` adds at a path such a file names,
-  where the answer would refuse that path, is the one file the check does not cover (crew, 2026-11-11, after review 1 of #166), and the
-  pull request's body names it as left out of its command. Considered and not chosen (crew): a
+  where the answer would refuse that path, is the one file the check does not cover (crew,
+  2026-11-11, after review 1 of #166). The pull request's body names it as left out of its
+  formatting command, or, when it is the only file added, gives that explanation with no command
+  (crew, 2026-11-11, after review 3 of #166). Considered and not chosen (crew): a
   longer list of path checks (`.git/`, collisions with installed files, Windows-forbidden names,
   Unicode format characters, `.` segments), and tightening `isRulesFilePath` for existing
   projects. `init` runs no formatter, and a client installs none. Steward starts with its own

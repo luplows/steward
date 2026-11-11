@@ -141,7 +141,8 @@ Each file `init` adds is as Prettier's default options print it, checked by stew
 the one Prettier version steward's `package.json` pins. The one exception is a checklist added at
 the path an existing `steward.config.json` names, when that path does not end in `.md` or has a
 segment starting with `-`: it is not covered, and the pull request's body names it as left out of
-its command. `init` runs no formatter, and the project needs none.
+its formatting command, or, when it is the only file added, says so with no command. `init` runs
+no formatter, and the project needs none.
 
 A project whose own formatting settings differ may format only the newly installed files, on
 the installation's branch before merging it, for example, for the files a `--yes` run adds to a
@@ -153,7 +154,9 @@ npx prettier --write steward.config.json REVIEW.md .github/workflows/review-gate
   .github/pull_request_template.md
 ```
 
-The pull request's body gives the command for the files it added. Not every project needs to.
+The pull request's body gives the command for the files it added other than such a checklist, and
+no command when that checklist is all it adds.
+Not every project needs to.
 `steward upgrade` refuses a managed workflow that differs from steward's template at its pin by
 more than the pin and line endings, so a workflow that this formatting changes is refused by a
 later upgrade.

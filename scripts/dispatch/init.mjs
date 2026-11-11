@@ -748,18 +748,22 @@ const shellPath = (rel) => (/^[\w./-]+$/.test(rel) ? rel : `'${rel.replaceAll("'
  * `.json`, `.yml` or `.md` but the checklist, at `rulesFile`. The answer to the checklist question
  * is always `isInstallableChecklist`, but a `rulesFile` read from a `steward.config.json` the
  * project already has may not be: that checklist, when added, is named as left out of the
- * command and of what the note says follows Prettier's defaults. Nothing when no file was added
- * but that one, or none.
+ * command and of what the note says follows Prettier's defaults. When it is the only file added,
+ * the note is that explanation alone, with no command. Nothing when no file was added.
  */
 export function formattingNote(added, rulesFile = null) {
   const leftOut = added.filter((rel) => rel === rulesFile && !isInstallableChecklist(rel))
   const files = added.filter((rel) => !leftOut.includes(rel))
-  if (files.length === 0) return []
+  const why = "its name does not end in `.md`, or a segment of it starts with `-`, so Prettier may not format it as the Markdown it holds."
+  if (files.length === 0) {
+    if (leftOut.length === 0) return []
+    return [
+      `- \`${leftOut[0]}\`, the checklist the project's steward.config.json names, is the only file this pull request adds, ` +
+        `and it is left out of Prettier's default formatting and of any command to format it: ${why}`,
+    ]
+  }
   const leftOutText =
-    leftOut.length === 0
-      ? ''
-      : ` \`${leftOut[0]}\`, the checklist the project's steward.config.json names, is left out: its name does not end in ` +
-        '`.md`, or a segment of it starts with `-`, so Prettier may not format it as the Markdown it holds.'
+    leftOut.length === 0 ? '' : ` \`${leftOut[0]}\`, the checklist the project's steward.config.json names, is left out: ${why}`
   return [
     `- The files added${leftOut.length === 0 ? '' : ', but the checklist named after the command,'} follow Prettier's default formatting. ` +
       'A project whose own formatting settings differ may format ' +
