@@ -15,6 +15,7 @@ project installs, so that steward uses what it ships. The crew moved this to
 0.2 on 2026-11-04 (`docs/outline.md`, "Release preparation"), and on 2026-11-05
 decided to time it when 0.2 was cut. The crew moved the target to 0.3 on
 2026-11-07; the landing-and-upgrade 0.2 release does not depend on conversion.
+On 2026-11-11 the crew deferred it until after the 0.3 release.
 
 **This is a draft.** Its criteria are provisional until the Open questions are
 answered.
@@ -50,6 +51,7 @@ answered.
   `init`'s run here at `935fb5b`.
 - ST-79: `init` names workflows that are not its own, which is steward's case.
 - Crew decision, 2026-11-07: shift the planned self-conversion to 0.3.
+- Crew decision, 2026-11-11: defer it until after the 0.3 release.
 
 ## Open questions
 
@@ -57,4 +59,4 @@ answered.
   steward's own gate only after a release, or a repin. Is that what the crew
   wants, or should steward pin a commit on `main`?
 - Is steward's gate repinned by ST-69's upgrade, or by hand?
-- When in 0.3 does this run?
+- When after the 0.3 release does this run?

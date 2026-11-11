@@ -3466,8 +3466,9 @@ shortened where it is long, so that it can be found there with its date.
     would fail, and which a test could not shorten.
   - **Planned (ST-82): steward's own gate is converted to the thin workflows**.
     It was kept in 0.2 and timed for that cut on 2026-11-05; the crew moved
-    it to 0.3 on 2026-11-07, with coding. The landing-and-upgrade 0.2 release
-    does not depend on this conversion. Steward's gate cannot review the pull
+    it to 0.3 on 2026-11-07, with coding, and on 2026-11-11 deferred it until
+    after the 0.3 release. The landing-and-upgrade 0.2 release does not depend
+    on this conversion. Steward's gate cannot review the pull
     request that installs it, so the crew merges that one by hand, as in
     tower-workshop-paths.
 
