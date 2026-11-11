@@ -6,19 +6,25 @@ import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rea
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import * as prettier from 'prettier'
 import { BREAKER_OVERRIDE_LABEL, REVIEW_BLOCKED_LABEL } from '../land/runway.mjs'
 import { REVIEW_BLOCKED_LABEL as APPLY_REVIEW_BLOCKED_LABEL } from '../land/apply-review-blocked.mjs'
 import { INSPECTION_LABEL } from './inspect.mjs'
 import {
   assertAllowedRequest,
   DEFAULT_BRANCH,
+  fillPin,
   findOnPath,
+  formattingNote,
   GATE_WORKFLOWS,
   INSPECTION_WORKFLOW,
   LABELS,
   main,
+  projectJson,
+  pullBody,
   QUESTIONS,
   repoFromRemoteUrl,
+  settingsBody,
 } from './init.mjs'
 import { main as projectMain, projectsPath } from './project.mjs'
 import { parseRules, validateRules } from './rules.mjs'
@@ -1903,5 +1909,275 @@ describe('ST-79: init tells its own workflows from a project\'s', () => {
     expect(code).toBe(0)
     expect(opened(gh).body).not.toMatch(/differs from the workflow/)
     expect(out).not.toMatch(/differ from what this version of init writes/)
+  })
+})
+
+// ------------------------------------------------------------------ ST-74: default Prettier formatting
+
+/** The one Prettier version steward pins, exactly. The tests below check with it and nothing else. */
+const PRETTIER = '3.9.10'
+/**
+ * Prettier's default options: only the file's path, from which it picks the parser. Through the
+ * API, Prettier resolves no configuration file unless asked to, so no project's settings, nor
+ * steward's, take part.
+ */
+const passes = (rel, text) => prettier.check(text, { filepath: rel })
+const formatted = (rel, text) => prettier.format(text, { filepath: rel })
+
+/** The commit whose templates are the ones before ST-74 formatted them, for AC-3's comparison. */
+const BEFORE_FORMATTING = 'ff7dd9a86c063683a6fbce3f70947e95ab21379d'
+const PIN_RE = /github:luplows\/steward#\S+/g
+
+/** The files `init` added: those in its clone that the project's `main` did not have. */
+const addedBy = (cwd, before) => tree(installed(cwd)).filter((rel) => !before.includes(rel))
+
+/** Runs `init` in a new project with `files`, checks each file it added, and returns their paths. */
+async function addedFilesPass(args, { files = {} } = {}) {
+  const cwd = makeRepo({ files })
+  const before = tree(cwd)
+  const gh = fakeGitHub()
+  const { code } = await runInit(args, { cwd, gh })
+  expect(code).toBe(0)
+  const added = addedBy(cwd, before)
+  for (const rel of added) expect(await passes(rel, read(installed(cwd), rel)), rel).toBe(true)
+  return { cwd, gh, added }
+}
+
+/**
+ * A workflow's lines, comments and blank lines included, with every single- or double-quoted
+ * scalar that ends a line, after a key or a dash, given as its value. Two texts with the same
+ * lines differ in nothing but how those scalars are quoted.
+ */
+function yamlValues(text) {
+  return text.replace(/\r\n?/g, '\n').split('\n').map((line) => {
+    const m = /^(\s*(?:- )?(?:[\w-]+: )?)(['"])(.*)\2$/.exec(line)
+    if (m === null) return line
+    const value = m[2] === "'" ? m[3].replaceAll("''", "'") : JSON.parse(`"${m[3]}"`)
+    return `${m[1]}${JSON.stringify(value)}`
+  })
+}
+
+/** Each block starting at a line `re` matches, with the lines after it that are blank or indented further. */
+function blocks(lines, re) {
+  const found = []
+  lines.forEach((line, i) => {
+    if (!re.test(line)) return
+    const indent = line.search(/\S/)
+    let end = i + 1
+    while (end < lines.length && (lines[end].trim() === '' || lines[end].search(/\S/) > indent)) end++
+    found.push(lines.slice(i, end))
+  })
+  return found
+}
+
+/** What a workflow does: its triggers, its permissions, its commands and actions, and its pins. */
+function behaviour(text) {
+  const lines = yamlValues(text)
+  return {
+    triggers: blocks(lines, /^on:/),
+    permissions: blocks(lines, /^\s*permissions:/),
+    commands: blocks(lines, /^\s*(?:- )?(?:run|uses):/),
+    pins: text.match(PIN_RE),
+    lines,
+  }
+}
+
+describe('ST-74/AC-1: every file init adds passes the pinned Prettier check with default options', () => {
+  it('ST-74/AC-1: a --yes run, with inspection, adds six files, and each passes', async () => {
+    const { added } = await addedFilesPass(['--yes'])
+    expect(added).toEqual([
+      '.github/pull_request_template.md',
+      '.github/workflows/inspection.yml',
+      '.github/workflows/land-approved.yml',
+      '.github/workflows/review-gate.yml',
+      'REVIEW.md',
+      'steward.config.json',
+    ])
+  })
+
+  it('ST-74/AC-1: with inspection off, the five files it adds pass', async () => {
+    const { added } = await addedFilesPass(['--yes', '--inspection', 'no'])
+    expect(added).toHaveLength(5)
+    expect(added).not.toContain('.github/workflows/inspection.yml')
+  })
+
+  it('ST-74/AC-1: pinned to a commit with --ref, with every question answered and the checklist elsewhere, each file passes', async () => {
+    const { cwd, added } = await addedFilesPass([...ALL_FLAGS, '--ref', SHA])
+    expect(added).toContain('docs/RULES.md')
+    expect(added).toContain('.github/workflows/inspection.yml')
+    expect(read(installed(cwd), '.github/workflows/review-gate.yml')).toContain(`#${SHA} steward`)
+  })
+
+  it('ST-74/AC-1: steward.config.json passes with no unit links, one, and every kind', async () => {
+    for (const links of ['none', 'file', 'file,issue,other']) {
+      const { added } = await addedFilesPass(['--yes', '--unit-links', links])
+      expect(added).toContain('steward.config.json')
+    }
+  })
+
+  it("ST-74/AC-1: a project's own Prettier settings change nothing init writes, and its own files are left as they were, formatted or not", async () => {
+    const own = {
+      '.prettierrc': '{ "useTabs": true, "singleQuote": true, "printWidth": 40 }\n',
+      'docs/pull_request_template.md': 'Unit:\n\n*   not  formatted*\n',
+      '.github/workflows/ci.yml': "on: push\njobs: {test: {runs-on: 'ubuntu-latest'}}\n",
+    }
+    const { cwd, added } = await addedFilesPass(['--yes', '--inspection', 'no'], { files: own })
+    expect(added).toEqual(['.github/workflows/land-approved.yml', '.github/workflows/review-gate.yml', 'REVIEW.md', 'steward.config.json'])
+    for (const [rel, text] of Object.entries(own)) expect(read(installed(cwd), rel)).toBe(text)
+    expect(await passes('.github/workflows/ci.yml', own['.github/workflows/ci.yml'])).toBe(false)
+    const plain = makeRepo()
+    await runInit(['--yes', '--inspection', 'no'], { cwd: plain })
+    for (const rel of added) expect(read(installed(cwd), rel), rel).toBe(read(installed(plain), rel))
+  })
+})
+
+describe('ST-74/AC-2: the check is of the files init produces, and fails when one drifts', () => {
+  it('ST-74/AC-2: the pinned version is the one the check runs, from steward, and the project has no Prettier of its own', async () => {
+    expect(prettier.version).toBe(PRETTIER)
+    const { cwd } = await addedFilesPass(['--yes'])
+    const clone = installed(cwd)
+    expect(tree(clone).filter((rel) => /prettier/i.test(rel))).toEqual([])
+    expect(read(clone, 'package.json')).toBe('{"name":"widgets","version":"1.0.0"}\n')
+  })
+
+  it('ST-74/AC-2: a workflow init wrote, drifted from the formatter, fails the check', async () => {
+    const { cwd } = await addedFilesPass(['--yes'])
+    const rel = '.github/workflows/land-approved.yml'
+    const text = read(installed(cwd), rel)
+    expect(text).toContain('default: "unattended"')
+    expect(await passes(rel, text.replace('default: "unattended"', () => "default: 'unattended'"))).toBe(false)
+    expect(await passes(rel, `${text}\n`)).toBe(false)
+  })
+
+  it('ST-74/AC-2: steward.config.json as init wrote it before, by JSON.stringify, fails the check', async () => {
+    const { cwd } = await addedFilesPass(['--yes'])
+    const written = read(installed(cwd), 'steward.config.json')
+    const before = `${JSON.stringify(JSON.parse(written), null, 2)}\n`
+    expect(before).not.toBe(written)
+    expect(await passes('steward.config.json', before)).toBe(false)
+  })
+
+  it('ST-74/AC-2: projectJson prints what the pinned Prettier prints, either side of the 80-column limit', async () => {
+    for (const key of ['k', 'unitLinks', 'x'.repeat(50)]) {
+      for (let n = 0; n <= 8; n++) {
+        for (const width of [1, 5, 9]) {
+          const items = Array.from({ length: n }, (_, i) => `${i}`.padEnd(width, 'v'))
+          for (const value of [{ a: 1, [key]: items, z: null }, { a: true, [key]: items }, { [key]: { inner: items, b: 'c' } }]) {
+            const expected = await formatted('steward.config.json', `${JSON.stringify(value, null, 2)}\n`)
+            expect(projectJson(value), JSON.stringify(value)).toBe(expected)
+          }
+        }
+      }
+    }
+  })
+})
+
+describe('ST-74/AC-3: formatting changes no behaviour, and the files keep their content', () => {
+  it('ST-74/AC-3: steward.config.json parses to the same settings as before, for each answer', () => {
+    for (const answers of [
+      { land: false, unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', inspectAfterHours: 24 },
+      { land: true, unitLinks: [], rulesFile: 'docs/rules/CHECKLIST.md', inspectAfterHours: 48 },
+      { land: false, unitLinks: ['file', 'issue', 'other'], rulesFile: 'a b/RULES.md', inspectAfterHours: 1 },
+    ]) {
+      const body = settingsBody(REPO, answers)
+      expect(JSON.parse(projectJson(body))).toEqual(JSON.parse(`${JSON.stringify(body, null, 2)}\n`))
+      expect(JSON.parse(projectJson(body))).toEqual(body)
+    }
+  })
+
+  it('ST-74/AC-3: each workflow, before and after formatting, has the same triggers, permissions, commands and pins, for a tag and a commit', async () => {
+    let changed = 0
+    for (const file of [...GATE_WORKFLOWS, INSPECTION_WORKFLOW]) {
+      const original = git(ROOT, 'show', `${BEFORE_FORMATTING}:templates/workflows/${file}`)
+      for (const pin of ['v9.8.7', SHA]) {
+        const before = fillPin(`${original}\n`, pin)
+        const after = await formatted(`.github/workflows/${file}`, before)
+        if (after !== before) changed++
+        const [b, a] = [behaviour(before), behaviour(after)]
+        expect(b.triggers.length, file).toBe(1)
+        expect(b.permissions.length, file).toBeGreaterThan(0)
+        expect(b.commands.length, file).toBeGreaterThan(0)
+        expect(b.pins.length, file).toBeGreaterThan(0)
+        expect(b.pins.every((p) => p === `github:luplows/steward#${pin}`), file).toBe(true)
+        expect(a.triggers, file).toEqual(b.triggers)
+        expect(a.permissions, file).toEqual(b.permissions)
+        expect(a.commands, file).toEqual(b.commands)
+        expect(a.pins, file).toEqual(b.pins)
+        expect(a.lines, file).toEqual(b.lines)
+      }
+    }
+    // inspection.yml and land-approved.yml changed, for each pin; review-gate.yml did not.
+    expect(changed).toBe(4)
+  })
+
+  it('ST-74/AC-3: the files init adds are its templates, the pin filled, and its settings, with nothing else added', async () => {
+    const pkg = makePackage('9.8.7')
+    const cwd = makeRepo()
+    await runInit(['--yes'], { cwd, pkg })
+    const clone = installed(cwd)
+    expect(tree(clone)).toEqual([...NEW_FILES])
+    for (const file of [...GATE_WORKFLOWS, INSPECTION_WORKFLOW]) {
+      expect(read(clone, `.github/workflows/${file}`)).toBe(fillPin(read(ROOT, `templates/workflows/${file}`), 'v9.8.7'))
+    }
+    expect(read(clone, 'REVIEW.md')).toBe(read(ROOT, 'templates/review-checklist.md'))
+    expect(read(clone, '.github/pull_request_template.md')).toBe(read(ROOT, 'templates/pull_request_template.md'))
+    expect(JSON.parse(read(clone, 'steward.config.json'))).toEqual(settingsBody(REPO, { land: false, unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', inspectAfterHours: 24 }))
+  })
+})
+
+describe('ST-74/AC-4: the installation pull request and the README say how to format only the new files', () => {
+  it('ST-74/AC-4: the body gives a command scoped to the files added, says it is optional, and promises nothing of upgrade', async () => {
+    const { gh, added } = await addedFilesPass(['--yes'], { files: { 'docs/pull_request_template.md': 'Unit:\n' } })
+    const body = writes(gh).find((r) => r.rest === '/pulls').body.body
+    const files = ['steward.config.json', 'REVIEW.md', '.github/workflows/review-gate.yml', '.github/workflows/land-approved.yml', '.github/workflows/inspection.yml']
+    expect([...added].sort()).toEqual([...files].sort())
+    expect(body).toContain(`\`npx prettier --write ${files.join(' ')}\``)
+    expect(body).toMatch(/A project whose own formatting settings differ may format only the files this pull request adds, on its branch, before merging it/)
+    expect(body).toContain('Nothing requires it.')
+    expect(body).toMatch(/`steward upgrade` refuses a managed workflow that differs from steward's template at its pin by more than the pin and line endings, a change of formatting included\./)
+    expect(body).not.toMatch(/upgrade (?:will )?accepts?/)
+  })
+
+  it('ST-74/AC-4: a path the shell would split is quoted, and with nothing added there is no note', () => {
+    expect(formattingNote([])).toEqual([])
+    expect(formattingNote(['docs/my rules.md', 'steward.config.json'])[0]).toContain("`npx prettier --write 'docs/my rules.md' steward.config.json`")
+    const body = pullBody({ version: '9.8.7', pin: 'v9.8.7', added: ['steward.config.json'], left: [], landing: ['x'], template: 'T' })
+    expect(body).toContain('`npx prettier --write steward.config.json`')
+  })
+
+  it('ST-74/AC-4: the README explains formatting only the newly installed files, with a scoped command, as optional', () => {
+    const readme = read(ROOT, 'README.md')
+    expect(readme).toMatch(/A project whose own formatting settings differ may format only the newly installed files, on\nthe installation's branch before merging it/)
+    expect(readme).toContain('npx prettier --write steward.config.json REVIEW.md .github/workflows/review-gate.yml \\\n')
+    expect(readme).toContain('Not every project needs to.')
+    expect(readme).not.toMatch(/upgrade (?:will )?accepts? (?:the|those|a) formatt/)
+  })
+})
+
+describe('ST-74/AC-5: the formatter is pinned in steward, and only there', () => {
+  it('ST-74/AC-5: package.json and the lockfile pin one exact Prettier version, as a development dependency', () => {
+    const pkg = JSON.parse(read(ROOT, 'package.json'))
+    expect(pkg.devDependencies.prettier).toBe(PRETTIER)
+    expect(pkg.dependencies?.prettier).toBeUndefined()
+    const lock = JSON.parse(read(ROOT, 'package-lock.json'))
+    expect(lock.packages[''].devDependencies.prettier).toBe(PRETTIER)
+    expect(lock.packages['node_modules/prettier']).toMatchObject({ version: PRETTIER, dev: true })
+  })
+
+  it('ST-74/AC-5: no source of steward but a test imports Prettier, and no script or CI step formats the repository', () => {
+    const sources = (dir) =>
+      readdirSync(path.join(ROOT, dir), { withFileTypes: true, recursive: true })
+        .filter((e) => e.isFile() && e.name.endsWith('.mjs') && !e.name.endsWith('.test.mjs'))
+        .map((e) => path.join(e.parentPath, e.name))
+    for (const file of sources('scripts')) expect(readFileSync(file, 'utf8'), file).not.toMatch(/['"]prettier['"]/)
+    const pkg = JSON.parse(read(ROOT, 'package.json'))
+    expect(Object.values(pkg.scripts).join('\n')).not.toMatch(/prettier/)
+    expect(read(ROOT, '.github/workflows/ci.yml')).not.toMatch(/prettier/i)
+  })
+})
+
+describe('ST-74/AC-6: the design records it as built', () => {
+  it('ST-74/AC-6: no Planned marker names ST-74', () => {
+    expect(read(ROOT, 'docs/agent-workflow-design.md')).not.toMatch(/\*\*Planned \([^)]*\bST-74\b[^)]*\)\*\*/)
   })
 })

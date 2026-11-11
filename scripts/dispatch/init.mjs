@@ -659,7 +659,42 @@ export function landingNotes(settingsResult, answers, flags) {
   return notes
 }
 
+/** The user config, which is the machine's and not the project's, as `JSON.stringify` indents it. */
 const json = (value) => `${JSON.stringify(value, null, 2)}\n`
+
+/** Prettier's default print width, which `projectJson` keeps an array's line within. */
+const PRINT_WIDTH = 80
+
+/**
+ * A JSON file for the project, as the pinned Prettier's defaults print it (ST-74): two-space
+ * indentation, every non-empty object expanded, and an array of plain values on one line when
+ * that line, with its key and trailing comma, fits in 80 columns, and one value to a line
+ * otherwise. It covers the values `settingsBody` holds: objects, arrays of plain values, strings,
+ * numbers, booleans and `null`. The init tests check its output with the pinned Prettier.
+ */
+export function projectJson(value) {
+  const print = (v, indent, lead, tail) => {
+    const inner = `${indent}  `
+    if (Array.isArray(v)) {
+      if (v.length === 0) return '[]'
+      const items = v.map((item) => print(item, inner, inner.length, 1))
+      const flat = `[${items.join(', ')}]`
+      if (!items.some((item) => item.includes('\n')) && lead + flat.length + tail <= PRINT_WIDTH) return flat
+      return `[\n${items.map((item) => `${inner}${item}`).join(',\n')}\n${indent}]`
+    }
+    if (v !== null && typeof v === 'object') {
+      const entries = Object.entries(v)
+      if (entries.length === 0) return '{}'
+      const lines = entries.map(([key, item], i) => {
+        const head = `${inner}${JSON.stringify(key)}: `
+        return `${head}${print(item, inner, head.length, i < entries.length - 1 ? 1 : 0)}`
+      })
+      return `{\n${lines.join(',\n')}\n${indent}}`
+    }
+    return JSON.stringify(v)
+  }
+  return `${print(value, '', 0, 0)}\n`
+}
 
 /**
  * What the person is told when the checklist `main` already has does not parse: the file, each
@@ -684,6 +719,25 @@ export function checklistWarning(rulesFile, problems, { complete = false } = {})
 
 /** What the pull request's list of files left says of a workflow that is not the one this version of `init` writes. */
 const DIFFERS_NOTE = ' (differs from the workflow this version of init writes, apart from the pin)'
+
+/** A path as a POSIX shell takes it: as it is when it holds only safe characters, single-quoted otherwise. */
+const shellPath = (rel) => (/^[\w./-]+$/.test(rel) ? rel : `'${rel.replaceAll("'", "'\\''")}'`)
+
+/**
+ * The pull request body's note on formatting (ST-74): the files added follow Prettier's defaults,
+ * and a project with formatting settings of its own may format only those files, on the
+ * installation's branch, before merging. Nothing when no file was added.
+ */
+export function formattingNote(added) {
+  if (added.length === 0) return []
+  return [
+    "- The files added follow Prettier's default formatting. A project whose own formatting settings differ may format " +
+      'only the files this pull request adds, on its branch, before merging it, for example with ' +
+      `\`npx prettier --write ${added.map(shellPath).join(' ')}\`. Nothing requires it. ` +
+      "`steward upgrade` refuses a managed workflow that differs from steward's template at its pin by more than the pin " +
+      'and line endings, a change of formatting included.',
+  ]
+}
 
 /** The draft pull request's title: steward and its version. */
 export const pullTitle = (version) => `Install steward ${version}`
@@ -726,6 +780,7 @@ export function pullBody({ version, pin, added, left, landing, template, rulesFi
     "- The gate cannot review the pull request that installs it: it runs from `main`, where it is not yet installed. Review and merge this one as the project normally does.",
     '- `steward protect`, if the crew wants GitHub to stop a merge that has not passed review, comes after this pull request merges.',
     "- Fill in the project's template below.",
+    ...formattingNote(added),
     '',
     '---',
     '',
@@ -963,7 +1018,7 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   const templates = findPullRequestTemplates(clone)
   const template = (name) => path.join(packageRoot, 'templates', name)
   const files = [
-    ['steward.config.json', async () => json(settingsBody(repo, answers))],
+    ['steward.config.json', async () => projectJson(settingsBody(repo, answers))],
     [rulesFile, () => readFile(template('review-checklist.md'))],
     ...workflows.map((file) => [`.github/workflows/${file}`, async () => fillPin(await readFile(template(`workflows/${file}`), 'utf8'), pin)]),
     ...(templates.length === 0 ? [['.github/pull_request_template.md', () => readFile(template('pull_request_template.md'))]] : []),

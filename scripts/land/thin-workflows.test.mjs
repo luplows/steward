@@ -21,12 +21,22 @@ const GUARD = /(?: {8}#[^\n]*\n)* {8}if: hashFiles\([^\n]*\n/g
 const OWN_START = 'node scripts/dispatch/cli.mjs '
 const THIN_START = 'npx --yes --package=github:luplows/steward#v{{STEWARD_VERSION}} steward '
 
+// A single-quoted scalar ending a line, holding no quote or backslash, which YAML reads as the same
+// string double-quoted. The thin files are as the pinned Prettier prints them (ST-74), with double
+// quotes, and steward's own files keep single quotes.
+const SINGLE_QUOTED = /: '([^'"\\\n]*)'$/gm
+
 /**
  * Both files with the lines that start steward made the same: the checkout step that steward's
- * own file starts from, and the command prefix that each file puts before a command.
+ * own file starts from, and the command prefix that each file puts before a command. A scalar
+ * quoted as `SINGLE_QUOTED` is given double-quoted in both, since the quotes change nothing.
  */
 function withoutStart(text, start) {
-  return text.replaceAll(CHECKOUT_STEP, () => '').replaceAll(GUARD, () => '').replaceAll(start, () => 'STEWARD ')
+  return text
+    .replaceAll(CHECKOUT_STEP, () => '')
+    .replaceAll(GUARD, () => '')
+    .replaceAll(start, () => 'STEWARD ')
+    .replaceAll(SINGLE_QUOTED, (_, value) => `: "${value}"`)
 }
 
 /** The first line at which the two texts differ, as `{ line, own, thin }`, or null. */
@@ -176,6 +186,16 @@ describe('ST-42/AC-5: steward\'s own files and the thin files differ only in how
     }
   })
 
+  it('ST-74/AC-1: the comparison ignores how a scalar is quoted, never its value', () => {
+    const thin = THIN('land-approved.yml')
+    expect(thin).toContain('default: "unattended"')
+    expect(OWN('land-approved.yml')).toContain("default: 'unattended'")
+    const changed = thin.replace('default: "unattended"', () => 'default: "manual"')
+    expect(firstDifference(OWN('land-approved.yml'), changed)).toMatchObject({ thin: '        default: "manual"' })
+    const unquoted = thin.replace('default: "unattended"', () => 'default: unattended')
+    expect(firstDifference(OWN('land-approved.yml'), unquoted)).not.toBeNull()
+  })
+
   it('ST-42/AC-5: fails on an own file that carries a step the thin file lacks, besides the checkout', () => {
     const extra = OWN('land-approved.yml').replace('        run: node scripts/dispatch/cli.mjs runway', () => '        run: node scripts/dispatch/cli.mjs runway\n      - run: echo hi')
     expect(firstDifference(extra, THIN('land-approved.yml'))).not.toBeNull()
@@ -246,7 +266,7 @@ describe('ST-44/AC-6: the thin inspection workflow the package carries stays in 
     for (const [from, to] of [
       ['issues: write', 'issues: read'],
       ['workflow_dispatch:', 'workflow_dispatch:\n  push:'],
-      ["cron: '17 6 * * *'", "cron: '17 6 * * 1'"],
+      ['cron: "17 6 * * *"', 'cron: "17 6 * * 1"'],
       ['timeout-minutes: 10', 'timeout-minutes: 30'],
     ]) {
       const changed = THIN(FILE).replace(from, () => to)
@@ -291,7 +311,7 @@ describe('ST-54/AC-6: the landing workflows take the mode, the pull request and 
     for (const text of texts()) {
       const inputs = text.slice(text.indexOf('  workflow_dispatch:'), text.indexOf('\npermissions:'))
       expect([...inputs.matchAll(/^ {6}(\w+):$/gm)].map((m) => m[1])).toEqual(['pr', 'mode', 'head'])
-      expect(inputs).toMatch(/ {6}mode:\n(?: {8}[^\n]*\n)*? {8}default: 'unattended'\n/)
+      expect(inputs).toMatch(/ {6}mode:\n(?: {8}[^\n]*\n)*? {8}default: (['"])unattended\1\n/)
       expect(inputs.match(/required: false/g)).toHaveLength(3)
       expect(inputs.match(/type: string/g)).toHaveLength(3)
       expect(inputs).not.toMatch(/\bactor\b/i)

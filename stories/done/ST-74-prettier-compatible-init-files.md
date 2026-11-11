@@ -16,32 +16,32 @@ ordinary formatting checks or force needless corrections to managed files.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — Every file that `steward init` adds in a fresh project passes
+- [x] **AC-1** — Every file that `steward init` adds in a fresh project passes
       `prettier --check` with one exact pinned Prettier version and default options,
       independently of any consuming project's formatting configuration. This includes
       `steward.config.json`, each installed workflow (with optional inspection enabled
       and disabled), the installed checklist and the PR template. Files already owned by
       the project are not reformatted.
-- [ ] **AC-2** — Automated tests apply the pinned formatter to the actual files
+- [x] **AC-2** — Automated tests apply the pinned formatter to the actual files
       produced by `init` (after pin substitution), not just the raw templates.
       They cover the optional workflow, both installation paths, and regression when a
       generated artifact drifts from the formatter. The check runs offline and does not
       require Prettier or a configuration file in the client's repository.
-- [ ] **AC-3** — Compare the generated artifacts' parsed JSON, workflow triggers,
+- [x] **AC-3** — Compare the generated artifacts' parsed JSON, workflow triggers,
       permissions, command values and pin references before and after template formatting
       to establish that formatting changes no behavior. The installed artifacts retain
       their expected content and have no unrelated additions.
-- [ ] **AC-4** — `README.md` and the generated installation PR explain that a project
+- [x] **AC-4** — `README.md` and the generated installation PR explain that a project
       with custom formatting settings may format *only newly installed files* on its
       installation branch before merging, with an example scoped command. Do not claim
       this is required for all projects or promise that a later upgrade will accept
       those formatting changes. ST-96 separately owns support for proven formatting-only
       differences; until it lands, the existing strict comparison applies.
-- [ ] **AC-5** — Keep the pinned formatter version explicit and reproducible in
+- [x] **AC-5** — Keep the pinned formatter version explicit and reproducible in
       Steward's package/lockfile and tests. Do not add a formatter invocation to
       `steward init` or require a client to install one. Do not introduce a
       repository-wide source-formatting requirement as part of this story.
-- [ ] **AC-6** — Resolve `**Planned (ST-74)**` in
+- [x] **AC-6** — Resolve `**Planned (ST-74)**` in
       `docs/agent-workflow-design.md` when implemented.
 
 ## Out of scope
