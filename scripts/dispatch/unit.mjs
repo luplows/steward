@@ -74,6 +74,30 @@ export function findUnitLink(body, unitLinks) {
   return unreadText.length > 0 ? { kind: 'missing', unread: unreadText } : { kind: 'missing' }
 }
 
+/**
+ * The distinct issue numbers the body's closing keywords (`Closes #<n>` and the rest of GitHub's
+ * list) name, in order of first appearance, whatever the project's `unitLinks` says (ST-76). Pure.
+ */
+export function closingIssueNumbers(body) {
+  const numbers = []
+  for (const line of String(body ?? '').split(/\r?\n/)) {
+    for (const m of line.matchAll(CLOSING_RE)) {
+      if (!numbers.includes(Number(m[1]))) numbers.push(Number(m[1]))
+    }
+  }
+  return numbers
+}
+
+/** The text after each non-empty `Unit:` line of the body, trimmed, in order, repeats kept. Pure. */
+export function unitLineTexts(body) {
+  const texts = []
+  for (const line of String(body ?? '').split(/\r?\n/)) {
+    const unit = UNIT_LINE_RE.exec(line)
+    if (unit && unit[1].trim() !== '') texts.push(unit[1].trim())
+  }
+  return texts
+}
+
 function unreadable(reason) {
   return { read: false, reason }
 }

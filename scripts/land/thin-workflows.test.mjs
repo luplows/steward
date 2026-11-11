@@ -318,11 +318,11 @@ describe('ST-54/AC-6: the landing workflows take the mode, the pull request and 
     }
   })
 
-  it('ST-54/AC-6: the job holds the permissions it held, none added for the permission check', () => {
+  it('ST-54/AC-6: the job holds the permissions it held, none added for the permission check; ST-76 added issues: write', () => {
     for (const text of texts()) {
       const permissions = text.slice(text.indexOf('\npermissions:'), text.indexOf('\n# Never two sweeps'))
       expect(permissions.replace(/ +#[^\n]*\n/g, '\n').replace(/\n+/g, '\n')).toBe(
-        '\npermissions:\n  contents: write\n  pull-requests: write\n  statuses: read\n  checks: read\n',
+        '\npermissions:\n  contents: write\n  pull-requests: write\n  statuses: read\n  checks: read\n  issues: write\n',
       )
     }
   })

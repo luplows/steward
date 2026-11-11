@@ -566,14 +566,17 @@ it:
 - Circuit breaker at five `review-blocked` PRs, with exemptions for `breaker-override` and
   workflow-only diffs so a tripped breaker is not a trap.
 
-**Planned (ST-76)** (crew, 2026-11-09): After the runway merges a pull request into `main`,
-Steward explicitly closes a same-repository GitHub Issue through the API only when the PR has
-one authoritative `Unit: #n` and a matching `Closes #n` reference, and Issue links are enabled.
-A bare unit reference, mismatched or ambiguous closing references, a failed merge, or a release-
-branch merge does not close an Issue. The existing workflow `github.token` gains `issues: write`
-for that bounded post-merge action; no other credential or merge identity is introduced. A failed
-Issue update leaves the successful merge intact and reports a manual closure action. Manual and
-unattended runway landings share the behavior. Considered but not chosen: always closing the unit
+**Issue closure after a landing** (crew, 2026-11-09; `scripts/land/close-issue.mjs`): After the
+runway merges a pull request into `main`, Steward explicitly closes a same-repository GitHub Issue
+through the API only when the PR has one authoritative `Unit: #n` and a matching `Closes #n`
+reference, and `issue` is in the project's `unitLinks`. A bare unit reference, mismatched or
+ambiguous closing references, a failed merge, or a release-branch merge does not close an Issue.
+A body with no closing reference closes nothing and says nothing; one with a closing reference
+that does not qualify closes nothing and says why in a `::warning::` line. The existing workflow
+`github.token` gains `issues: write` for that bounded post-merge action; no other credential or
+merge identity is introduced. A failed Issue read or update leaves the successful merge intact and
+warns that the crew must close the Issue by hand; it is not retried. Manual and unattended runway
+landings share the behavior. Considered but not chosen: always closing the unit
 without a closing reference, using another merge token, or broad post-crash reconciliation.
 
 `review-blocked` is applied automatically when a pull request reaches the round bound, by

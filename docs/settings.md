@@ -77,7 +77,8 @@ Each is `null`, or an object with exactly these keys:
 
 ## `unitLinks`
 
-- `"issue"`: `Unit: #<n>`, or a closing keyword, in the body.
+- `"issue"`: `Unit: #<n>`, or a closing keyword, in the body. It also lets the runway close the
+  Issue after a landing; see the README, "Landing: unattended and manual".
 - `"file"`: `Unit: <path>` in the body.
 - `"other"`: `Unit:` and any text, passed to the reviewer unread.
 

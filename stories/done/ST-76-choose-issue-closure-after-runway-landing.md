@@ -16,42 +16,42 @@ issue cleanup to the crew.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — After the runway successfully merges a PR into `main`, it examines that PR's
+- [x] **AC-1** — After the runway successfully merges a PR into `main`, it examines that PR's
       body for one authoritative `Unit: #<n>` in the same repository and an explicit
       `Closes #<n>` referring to that same Issue. With `issue` enabled in the project's
       `unitLinks`, it explicitly closes that Issue through the GitHub API. The same behavior
       applies to manual and unattended runway landings. An already-closed Issue is a successful
       no-op, not an error.
-- [ ] **AC-2** — A PR with no explicit Issue-closing reference results in no Issue
+- [x] **AC-2** — A PR with no explicit Issue-closing reference results in no Issue
       closure and no closure-related warning, even when its `Unit:` is missing,
       file-based, unreadable or ambiguous. A bare `Unit: #<n>` does not close an Issue.
       Only when an explicit closing reference is present but does not qualify
       (missing, file-based, unreadable or ambiguous unit, additional conflicting
       closing references, or a reference to another Issue) does the runway report
       an actionable reason while closing no Issue.
-- [ ] **AC-3** — Refused, skipped and failed merges close no Issue. A runway merge into a release
+- [x] **AC-3** — Refused, skipped and failed merges close no Issue. A runway merge into a release
       branch closes no Issue. Issue closure happens only after the merge has succeeded, and is
       not an additional gate on which PRs may merge.
-- [ ] **AC-4** — Both Steward's own `.github/workflows/land-approved.yml` and the installed
+- [x] **AC-4** — Both Steward's own `.github/workflows/land-approved.yml` and the installed
       `templates/workflows/land-approved.yml` grant `issues: write` to the existing
       GitHub Actions `github.token` for the bounded post-merge Issue update. No new token,
       GitHub App, secret or merge identity is introduced.
-- [ ] **AC-5** — When the post-merge Issue read or update fails, the landing is still reported
+- [x] **AC-5** — When the post-merge Issue read or update fails, the landing is still reported
       as merged. The workflow emits a visible warning identifying the PR and Issue and explaining
       that the crew must close it manually; a closure failure does not retry or undo the merge.
       Repeated cleanup of an Issue already closed is harmless.
-- [ ] **AC-6** — Tests using injected GitHub and merge stand-ins cover a successful default-branch
+- [x] **AC-6** — Tests using injected GitHub and merge stand-ins cover a successful default-branch
       landing (manual and unattended), already-closed Issue, missing or mismatched closing
       reference, extra conflicting reference, file or missing unit (with and without
       a closing reference), disabled Issue links,
       release-branch landing, failed or refused merge, and failed Issue API read/update. Tests
       verify that only the matching same-repository Issue can be updated and that both workflow
       variants grant the required permission, without making real GitHub mutations.
-- [ ] **AC-7** — Validate explicit post-merge closure on an authorized public scratch repository,
+- [x] **AC-7** — Validate explicit post-merge closure on an authorized public scratch repository,
       recording the PR, Issue, workflow run and observed final Issue state. Also record the result
       of a landing with no `Closes #<n>`; do not claim the API remedy works solely from the
       existing controlled merge-token comparison.
-- [ ] **AC-8** — Explain the `Unit: #<n>` plus `Closes #<n>` requirement, main-only behavior
+- [x] **AC-8** — Explain the `Unit: #<n>` plus `Closes #<n>` requirement, main-only behavior
       and manual recovery from API failure in project-facing guidance. Remove the
       `**Planned (ST-76)**` marker from `docs/agent-workflow-design.md` when implemented.
 
