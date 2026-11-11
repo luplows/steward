@@ -784,17 +784,17 @@ credential can send a manual request too.
 
 Closing the Issue a pull request completes is part of the runway's landing, for a project whose
 `unitLinks` includes `issue`. After a merge into `main` succeeds, the runway closes an Issue only
-when the pull request body has exactly one `Unit: #<n>` and every closing reference in it,
-`Closes #<n>` or another of GitHub's closing keywords, names that same Issue of this repository
-(repeating the reference is fine).
-A bare `Unit: #<n>` closes nothing, and neither does a body with no closing reference. A closing
-reference that does not qualify (no `Unit:`, a file or `none` unit, several `Unit:` lines, a
-different Issue, or a closing reference to any other Issue besides) closes nothing and puts a warning, saying why, in
-the workflow log. A merge into a release branch closes no Issue. The runway uses the workflow's
-own `github.token`, which `land-approved.yml` grants `issues: write` for. If reading or closing the
-Issue fails, the pull request is still reported as landed and a warning in the log names the pull
-request and the Issue: close the Issue by hand. A project that installed the workflows earlier gets
-the permission with `steward upgrade`. Closure is never a condition of merging.
+when the pull request body has exactly one `Unit: #<n>` and every closing reference in it, `Closes
+#<n>` or another of GitHub's closing keywords, names that same Issue of this repository (repeating
+the reference is fine). A bare `Unit: #<n>` closes nothing, and neither does a body with no closing
+reference. A closing reference that does not qualify (no `Unit:`, a file or `none` unit, several
+`Unit:` lines, a different Issue, or a closing reference to any other Issue besides) closes nothing
+and puts a warning, saying why, in the workflow log. A merge into a release branch closes no Issue.
+The runway uses the workflow's own `github.token`, which `land-approved.yml` grants `issues: write`
+for. If reading or closing the Issue fails, the pull request is still reported as landed and a
+warning in the log names the pull request and the Issue: close the Issue by hand. A project that
+installed the workflows earlier gets the permission with `steward upgrade`. Closure is never a
+condition of merging.
 
 ### From outside the crew
 
