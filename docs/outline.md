@@ -166,7 +166,8 @@ Durable authorization is a crew decision; execution status remains derived where
 recovery after restart belong in this first slice, not in a later hardening release. The legacy
 tier/id queue is not automatically the authorization or scheduling mechanism for this slice.
 One machine and sequential work suffice for this first coding slice; concurrency is not a
-reason to defer its safety obligations. ST-82's own-gate conversion moves to 0.3.
+reason to defer its safety obligations. Steward's own-gate conversion (ST-82) is post-0.3.0
+maintenance, not a condition of the 0.3.0 release (crew, 2026-11-11).
 ST-95 also gives a newly passing coordinator review the existing bounded gate-lag wait before
 unattended landing, avoiding an otherwise unnecessary next scan. It does not change unattended
 landing authorization or make parallel execution part of 0.3.
@@ -243,7 +244,8 @@ that cut, the crew runs the install through on a scratch repository as a dry run
 `main`. Once it is cut, ST-48 installs in pinpoint and tower-workshop-paths from the new branch's
 commit, and nothing is tagged until ST-48 is done. In steward itself, as the crew decided on
 2026-11-04, `init` runs once at that commit, and converting steward's own gate was then planned for 0.2. The crew moved
-that conversion to 0.3 on 2026-11-07. Steward's own release-review procedure remains specific to this repository; it is not a generic client feature.
+that conversion to 0.3 on 2026-11-07, then to maintenance after v0.3.0 is tagged on
+2026-11-11. Steward's own release-review procedure remains specific to this repository; it is not a generic client feature.
 
 ## Defining steward
 
