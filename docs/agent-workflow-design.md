@@ -2985,7 +2985,8 @@ shortened where it is long, so that it can be found there with its date.
   ST-48's criteria do not cover steward itself. There the crew changed the plan, 2026-11-04, after
   tower-workshop-paths had to remove its old engine before `init` could take over: `init` runs once
   at the release commit, and converting steward's own gate to the thin workflows
-  was then assigned to 0.2 (moved to 0.3 by the crew on 2026-11-07). A defect found after the cut is fixed on `main` and cherry-picked, as for
+  was then assigned to 0.2 (moved to 0.3 by the crew on 2026-11-07, and
+  deferred to post-v0.3.0 maintenance on 2026-11-11). A defect found after the cut is fixed on `main` and cherry-picked, as for
   any release. The rule that a tagged release branch is
   never moved or deleted is unchanged. Considered and not chosen: one pull request bringing `main`'s
   changes outside `stories/` into the old branch, a very large diff for one review; keeping the old
@@ -3469,11 +3470,29 @@ shortened where it is long, so that it can be found there with its date.
     not chosen (crew, 2026-11-05): an exported constant, which the test of `spawn.mjs`'s exports
     would fail, and which a test could not shorten.
   - **Planned (ST-82): steward's own gate is converted to the thin workflows**.
-    It was kept in 0.2 and timed for that cut on 2026-11-05; the crew moved
-    it to 0.3 on 2026-11-07, with coding. The landing-and-upgrade 0.2 release
-    does not depend on this conversion. Steward's gate cannot review the pull
-    request that installs it, so the crew merges that one by hand, as in
-    tower-workshop-paths.
+    The crew originally assigned it to 0.2, then to 0.3 on 2026-11-07.
+    **Revised by the crew, 2026-11-11:** this is maintenance after the
+    `v0.3.0` tag exists, not part of the 0.3.0 release review. The initial
+    conversion is a manual replacement of steward's three checkout-run
+    workflows (`review-gate.yml`, `land-approved.yml`, `inspection.yml`)
+    with the matching `templates/workflows/` files at the published tag,
+    all pinned to `v0.3.0`; `init` will not overwrite existing files,
+    and `upgrade` cannot yet recognize them as installed managed templates.
+    Unlike a new scratch repository without a gate, steward already has a
+    functioning gate, so the conversion PR is reviewed by a rotation like
+    any other and the normal runway may land it. On that PR, GitHub runs
+    the PR's own `review-gate.yml` for `pull_request` (the thin form, whose
+    `mark-pending` needs the `v0.3.0` tag to exist) and `main`'s for
+    `issue_comment` (the checkout-run form, which applies the verdict).
+    There is no hand merge. Subsequent repins use `steward upgrade`, which
+    proposes a separately reviewed draft PR. Verification before landing
+    checks the converted workflows against the published templates; a
+    separate next-PR smoke check records the new gate's operation after
+    conversion lands, rather than being required by ST-82's own PR.
+    Considered and not chosen: requiring a manual merge, converting during
+    release stabilization, pinning an interim `main` commit and repinning
+    again after tagging, or adding a special `init`/`upgrade` case for
+    the legacy workflows.
 
 - **Installation through a reviewable pull request** (crew, 2026-10-26).
   "Have `steward init` create a reviewable installation PR instead of
