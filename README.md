@@ -589,9 +589,17 @@ Just before each it checks that the project is still activated, that its current
 is not sent, and the last landing in `status` says why. It reads activation again once the checkout,
 settings and pull request have been read, and sends nothing if the project was deactivated
 meanwhile. Otherwise it admits one call of the pilot, `landPullRequest`, in unattended `once` mode,
-with the project's `landWhen`. That call waits for no check or process of unknown length: a pull
-request that is not landable yet is returned at once as `not-landable`, with its reason, and one
-that was dispatched is polled for its merge for one sweep run's bound only. Attempts never overlap
+with the project's `landWhen`. That call waits for no check or process of unknown length, with one
+bounded exception: a pull request that is not landable yet is returned at once as `not-landable`,
+with its reason, and one that was dispatched is polled for its merge for one sweep run's bound only.
+The exception is a pull request whose head passed review in the same pass of the scheduler's loop,
+by a review this coordinator recorded as `pass` or `pass-with-observations`: its attempt is given
+that head as `passedAt`, and the pilot reads its `review/agent` status every 15 seconds, for up to
+two minutes, while GitHub has not yet recorded it as `success` (pending, absent, `failure` or
+`error`), and, unless the pull request changes meanwhile, returns `not-landable` with the reason
+`gate-lag` when that bound passes. Nothing else gains a wait, the dispatch names the pull request
+only, with no head, and the pass is kept in memory for that pass alone, so a candidate found without
+a review in the same pass, or after a restart, keeps the one look. Attempts never overlap
 each other or a review, because the coordinator does one piece of admitted work at a time, so a scan
 that falls due during an attempt waits for it (ST-85 is to separate them). The coordinator keeps no
 ledger of attempts: a head whose attempt did not merge is tried again at a later scan, after the

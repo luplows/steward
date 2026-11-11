@@ -16,33 +16,33 @@ GitHub has not yet recorded the gate's `review/agent` status.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — When a coordinator review in the current scheduling cycle returns
+- [x] **AC-1** — When a coordinator review in the current scheduling cycle returns
       `recorded` with a `pass` or `pass-with-observations` verdict for a PR and full head SHA,
       a subsequent unattended landing attempt in that cycle for the same repository, PR number
       and head calls `landPullRequest` with `passedAt` set to that SHA, alongside its existing
       `mode: unattended` and `once: true`. No different PR or head inherits that proof of a
       fresh pass.
-- [ ] **AC-2** — A `block`, non-verdict result, failed or interrupted review, or an
+- [x] **AC-2** — A `block`, non-verdict result, failed or interrupted review, or an
       `already-reviewed` candidate with no pass newly recorded by this coordinator does not
       set `passedAt`. A landing candidate discovered independently, without a matching fresh
       pass in its scheduling cycle, retains the existing one-look behavior. No historical
       review result is promoted into a fresh pass after restart.
-- [ ] **AC-3** — The pilot uses its existing `POLL_INTERVAL_MS` and `GATE_LAG_BOUND_MS`
+- [x] **AC-3** — The pilot uses its existing `POLL_INTERVAL_MS` and `GATE_LAG_BOUND_MS`
       behavior for that matching head: a pending, absent, failing or error `review/agent`
       status that becomes `success` within the bound can proceed to normal checks and request
       the runway in that cycle. If the bound expires, it returns `not-landable` with
       `gate-lag` and triggers nothing. Other pending checks do not gain a new wait.
-- [ ] **AC-4** — Existing activation, project `land: true`, PR/head rechecks, draft and
+- [x] **AC-4** — Existing activation, project `land: true`, PR/head rechecks, draft and
       `review-blocked` refusals, check requirements and runway authority remain intact.
       The coordinator does not send a head authorization in the unattended workflow dispatch:
       `passedAt` is evidence used for a bounded pilot wait, not a manual-mode head pin.
       A changed PR head cannot use another head's freshly recorded pass.
-- [ ] **AC-5** — Deterministic tests using injected coordinator reviews, landing attempts and
+- [x] **AC-5** — Deterministic tests using injected coordinator reviews, landing attempts and
       GitHub statuses demonstrate fresh `pass` and `pass-with-observations`, status success
       after a short gate lag, timeout with no dispatch, blocked/failed/already-reviewed results,
       a mismatched or moved head, and independently discovered landing candidates. No
       real model, wait interval or GitHub mutation is required.
-- [ ] **AC-6** — Update coordinator-facing documentation for the newly supported short gate
+- [x] **AC-6** — Update coordinator-facing documentation for the newly supported short gate
       wait, and remove the `**Planned (ST-95)**` marker from
       `docs/agent-workflow-design.md` when implemented.
 

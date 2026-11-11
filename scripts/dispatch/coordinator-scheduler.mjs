@@ -23,9 +23,14 @@
  * review turns, and each is rechecked just before its attempt: the project is still activated, its
  * current `main` still has `land` exactly `true`, and the pull request is open at the head the scan
  * found. Only then is `landPullRequest` called, as admitted work, with `mode: unattended` and
- * `once: true`, on a context made with `createLandContext` from that `main`'s `landWhen`. The pilot
- * and the runway decide; nothing is merged or dispatched from here. Scans and attempts run one
- * after another, never beside a review or each other: work that runs past a due time delays that
+ * `once: true`, on a context made with `createLandContext` from that `main`'s `landWhen`, and, when
+ * a review turn of the same pass (one pass of the loop below) recorded a `pass` or
+ * `pass-with-observations` for exactly that repository, pull request and head (ST-95), with
+ * `passedAt` set to that head, so that the pilot waits its bounded time for `review/agent` to catch
+ * up. The passes are kept in memory for that pass alone. The dispatch is the same with or without
+ * `passedAt`: it names the pull request only. The pilot and the runway decide; nothing is merged or
+ * dispatched from here. Scans and attempts run one after another, never beside a review or each
+ * other: work that runs past a due time delays that
  * scan, which is also why no pull request and head has two attempts at once. Nothing is recorded
  * of an attempt beyond the fields below, so a later scan, or a restarted coordinator, may try the
  * same head again.
@@ -95,6 +100,7 @@ import { listReviewCandidates, reviewCandidate } from './review-work.mjs'
 import { readSettings as readProjectSettings } from './settings.mjs'
 
 const USAGE_REFUSALS = ['over-usage', 'usage-unknown']
+const PASSING = ['pass', 'pass-with-observations']
 // The longest delay `setTimeout` takes; a longer one would fire at once.
 const MAX_TIMER_MS = 2 ** 31 - 1
 
@@ -291,6 +297,21 @@ export async function scheduleReviews({
     return false
   }
 
+  // The passes this coordinator recorded in the current scheduling cycle (ST-95), as identities:
+  // a `pass` or `pass-with-observations` it has just recorded for a repository, pull request and
+  // head. A cycle is one pass of the scheduler's loop, from its scans to its landing attempts. The
+  // set is emptied at the start of each pass and kept nowhere else, so a restart, or the next pass,
+  // promotes no earlier result.
+  const freshPasses = new Set()
+  const passKey = (repo, number, headSha) => JSON.stringify([repo, number, headSha])
+
+  /** Notes the pass `reviewed` recorded for `candidate`, if it is one for exactly that head. */
+  const notePass = (candidate, reviewed) => {
+    const { repo, number, expectedHeadSha: headSha } = candidate
+    if (reviewed?.status !== 'recorded' || !PASSING.includes(reviewed.verdict) || reviewed.headSha !== headSha) return
+    freshPasses.add(passKey(repo, number, headSha))
+  }
+
   const turns = async () => {
     while (admitting()) {
       const repos = await activated()
@@ -342,8 +363,9 @@ export async function scheduleReviews({
             status: outcome.status, at: now().toISOString(),
           },
         })
-      } else if (!ended(candidate, outcome)) {
-        return
+      } else {
+        notePass(candidate, outcome.reviewed)
+        if (!ended(candidate, outcome)) return
       }
     }
   }
@@ -415,11 +437,15 @@ export async function scheduleReviews({
         continue
       }
 
+      // A pass this coordinator recorded for exactly this head in this pass (ST-95). The recheck
+      // above found the pull request at `headSha`, so `passedAt` is the head the pilot will read
+      // unless it moves, and the pilot ignores a `passedAt` that is not the head it reads.
+      const fresh = freshPasses.has(passKey(repo, number, headSha))
       report({ landingActive: { repo, number, headSha } })
       const outcome = await new Promise((resolve) => {
         const job = async () => {
           try {
-            resolve({ result: await land({ number, ctx, mode: UNATTENDED, once: true }) })
+            resolve({ result: await land({ number, ctx, mode: UNATTENDED, once: true, ...(fresh && { passedAt: headSha }) }) })
           } catch (error) {
             resolve({ error })
           }
@@ -492,6 +518,7 @@ export async function scheduleReviews({
 
   try {
     while (admitting()) {
+      freshPasses.clear()
       const at = now().getTime()
       // A time the clock cannot give counts as past every due time, as the largest interval's does.
       const review = !(at < reviewDue)

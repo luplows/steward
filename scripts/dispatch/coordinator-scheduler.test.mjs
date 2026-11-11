@@ -15,7 +15,7 @@ import { handoffBranch } from './handoff-coder.mjs'
 import { codeNextHandoff } from './handoff-coding.mjs'
 import { handoffRecord, readRaw, writeHandoffs } from './handoff-fixture.mjs'
 import { createInspectContext, inspect, inspectMerges, inspectStalls, main as inspection } from './inspect.mjs'
-import { landPullRequest } from './land.mjs'
+import { createLandContext, GATE_LAG_BOUND_MS, landPullRequest, POLL_INTERVAL_MS } from './land.mjs'
 import { ownedCheckoutPath, projectsPath, updateOwnedCheckout } from './project.mjs'
 import { interruptRunning, readReviews, reviewEnding, reviewsPath } from './review-admission.mjs'
 import { runRotation } from './rotation.mjs'
@@ -1580,6 +1580,195 @@ describe('ST-84: the coordinator requests bounded unattended landing and reports
     expect(recordOf(h).landingCandidates).toHaveLength(1)
     expect(recordOf(h)).not.toHaveProperty('lastLanding')
     expect(recordOf(h)).not.toHaveProperty('landingActive')
+  })
+
+  describe('ST-95: a pass this coordinator just recorded gives the pilot passedAt, for that head alone', () => {
+    const HEAD2 = 'b'.repeat(40)
+    const passed = (verdict = 'pass') => (candidate) => ({ status: 'recorded', verdict, headSha: candidate.expectedHeadSha, commentId: 1, sessions: 1 })
+    const passedAtOf = (h) => h.land.mock.calls.map(([args]) => args.passedAt)
+
+    it.each(['pass', 'pass-with-observations'])('ST-95/AC-1: a "%s" recorded in this pass is followed by a landing attempt with passedAt set to that head, beside mode unattended and once', async (verdict) => {
+      const h = attempt({ repos: [A], settings: landOn('all-checks', A), listings: { [A]: [eligible(A, 7)] }, reply: passed(verdict) })
+      await landed(h)
+      expect(h.reviewed).toEqual([`${A}#7`])
+      expect(h.land).toHaveBeenCalledTimes(1)
+      const [args] = h.land.mock.calls[0]
+      expect(args).toMatchObject({ number: 7, mode: 'unattended', once: true, passedAt: HEAD })
+      expect(Object.keys(args).sort()).toEqual(['ctx', 'mode', 'number', 'once', 'passedAt'])
+    })
+
+    it('ST-95/AC-1: another pull request, or another head of the same one, does not inherit the pass', async () => {
+      const h = attempt({
+        repos: [A], settings: landOn('all-checks', A), listings: { [A]: [eligible(A, 7), reviewed(A, 8), reviewed(A, 7, HEAD2)] }, reply: passed(),
+      })
+      await until(() => lastLanding(h)?.number === 8)
+      // Candidates run in number order: #7 at HEAD has the pass, #7 at HEAD2 is refused by the
+      // recheck, as the pull request is at HEAD, and #8 has none.
+      expect(h.land.mock.calls.map(([args]) => [args.number, args.passedAt])).toEqual([[7, HEAD], [8, undefined]])
+      expect(lastLanding(h)).toMatchObject({ number: 8, headSha: HEAD, status: 'merged' })
+    })
+
+    it('ST-95/AC-1: a pass whose reported head is not the head the candidate was listed at is no pass', async () => {
+      const h = attempt({
+        repos: [A], settings: landOn('all-checks', A), listings: { [A]: [eligible(A, 7)] },
+        reply: () => ({ status: 'recorded', verdict: 'pass', headSha: HEAD2, sessions: 1 }),
+      })
+      await landed(h)
+      expect(passedAtOf(h)).toEqual([undefined])
+    })
+
+    const NOT_FRESH = {
+      block: () => ({ status: 'recorded', verdict: 'block', headSha: HEAD, sessions: 1 }),
+      'a result with no verdict': () => ({ status: 'no-verdict', sessions: 1 }),
+      'a failed review': () => ({ status: 'review-failed', sessions: 1 }),
+      'a review that threw': () => { throw new Error('the reviewer broke') },
+      'a refusal': () => ({ status: 'over-usage', reason: 'over' }),
+    }
+    it.each(Object.keys(NOT_FRESH))('ST-95/AC-2: %s sets no passedAt', async (name) => {
+      const h = attempt({ repos: [A], settings: landOn('all-checks', A), listings: { [A]: [eligible(A, 7)] }, reply: NOT_FRESH[name] })
+      await landed(h)
+      expect(h.reviewed).toEqual([`${A}#7`])
+      expect(Object.keys(h.land.mock.calls[0][0])).not.toContain('passedAt')
+    })
+
+    it('ST-95/AC-2: an already-reviewed candidate, found by a landing scan and not reviewed in this pass, sets no passedAt', async () => {
+      const h = attempt({ repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 7)] }, reply: passed() })
+      await landed(h)
+      expect(h.reviewed).toEqual([])
+      expect(Object.keys(h.land.mock.calls[0][0])).not.toContain('passedAt')
+    })
+
+    it('ST-95/AC-2: a pass is kept for its own pass alone: the next pass lands the same head with no passedAt', async () => {
+      const h = attempt({ repos: [A], settings: landOn('all-checks', A), listings: { [A]: [eligible(A, 7)] }, reply: passed() })
+      await until(() => h.land.mock.calls.length === 1)
+      await idle(h)
+      // The head now has its verdict on the record, so the next scan lists it as already reviewed.
+      h.listings[A] = [reviewed(A, 7)]
+      await nextScan(h, 2)
+      await until(() => h.land.mock.calls.length === 2)
+      expect(h.reviewed).toEqual([`${A}#7`])
+      expect(passedAtOf(h)).toEqual([HEAD, undefined])
+    })
+
+    it('ST-95/AC-2: a landing scan on a cadence of its own, with no review in its pass, sets no passedAt', async () => {
+      const h = attempt({ repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 7)] }, landing: { intervalMinutes: 1 }, reply: passed() })
+      await until(() => h.land.mock.calls.length === 1)
+      await idle(h)
+      h.clock.elapse()
+      await until(() => h.land.mock.calls.length === 2)
+      expect(h.reviewed).toEqual([])
+      expect(passedAtOf(h)).toEqual([undefined, undefined])
+    })
+
+    // The real pilot, on a fake GitHub and a clock its injected sleep moves, so nothing waits.
+    function pilotWorld({ review }) {
+      const w = { t: 0, requests: [], slept: [], dispatches: [], calls: [] }
+      const fetch = async (url, init) => {
+        const request = { method: init.method, url: url.replace('https://api.github.com/repos/', ''), body: init.body === undefined ? undefined : JSON.parse(init.body) }
+        w.requests.push(request)
+        const ok = (json, status = 200) => ({ ok: true, status, json: async () => json, text: async () => '' })
+        if (init.method === 'POST') {
+          w.dispatches.push(request)
+          w.dispatchedAt = w.t
+          return ok(null, 204)
+        }
+        if (url.includes('/check-runs')) return ok({ total_count: 0, check_runs: [] })
+        if (url.endsWith('/status')) {
+          const state = review(w.t)
+          return ok({ statuses: state === 'absent' ? [] : [{ id: 1, context: 'review/agent', state }] })
+        }
+        return ok({ head: { sha: HEAD }, state: 'open', merged: w.dispatchedAt !== undefined, draft: false, labels: [], mergeable_state: 'clean' })
+      }
+      w.options = {
+        land: async (args) => {
+          w.calls.push(args)
+          const { landPullRequest: pilot } = await vi.importActual('./land.mjs')
+          return pilot({ ...args, now: () => w.t, sleep: async (ms) => { w.slept.push(ms); w.t += ms }, latencyLog: path.join(base, 'latency.jsonl') })
+        },
+        createLand: (options) => createLandContext({ ...options, fetch, getToken: async () => 'token' }),
+      }
+      return w
+    }
+    const statusReads = (w) => w.requests.filter((r) => r.url.endsWith('/status')).length
+
+    it.each(['pending', 'absent', 'failure', 'error'])('ST-95/AC-3, ST-95/AC-4: with the status "%s" for a short gate lag after the pass, the real pilot waits, then requests the runway with a dispatch that carries no head', async (state) => {
+      const w = pilotWorld({ review: (t) => (t < 2 * POLL_INTERVAL_MS ? state : 'success') })
+      const h = attempt({
+        repos: [A], settings: landOn('all-checks', A), listings: { [A]: [eligible(A, 7)] }, reply: passed(), attemptOptions: w.options,
+      })
+      await landed(h)
+      expect(lastLanding(h)).toMatchObject({ number: 7, headSha: HEAD, status: 'merged', triggers: 1 })
+      expect(w.slept.slice(0, 2)).toEqual([POLL_INTERVAL_MS, POLL_INTERVAL_MS])
+      expect(w.dispatches).toEqual([{ method: 'POST', url: `${A}/actions/workflows/land-approved.yml/dispatches`, body: { ref: 'main', inputs: { pr: '7' } } }])
+    })
+
+    it('ST-95/AC-3: a status that does not become success within GATE_LAG_BOUND_MS ends not-landable with gate-lag, and nothing is dispatched or retried', async () => {
+      const w = pilotWorld({ review: () => 'pending' })
+      const h = attempt({
+        repos: [A], settings: landOn('all-checks', A), listings: { [A]: [eligible(A, 7)] }, reply: passed(), attemptOptions: w.options,
+      })
+      await landed(h)
+      await idle(h)
+      expect(lastLanding(h)).toMatchObject({ number: 7, headSha: HEAD, status: 'not-landable', reason: 'gate-lag', triggers: 0 })
+      expect(w.t).toBe(GATE_LAG_BOUND_MS)
+      expect(new Set(w.slept)).toEqual(new Set([POLL_INTERVAL_MS]))
+      expect(w.dispatches).toEqual([])
+      expect(w.calls).toHaveLength(1)
+      expect(h.reviewed).toEqual([`${A}#7`])
+    })
+
+    it('ST-95/AC-3: other pending checks gain no wait: a check still missing once the status is success ends not-landable at once', async () => {
+      const w = pilotWorld({ review: (t) => (t < POLL_INTERVAL_MS ? 'pending' : 'success') })
+      const h = attempt({
+        repos: [A], settings: landOn(['test'], A), listings: { [A]: [eligible(A, 7)] }, reply: passed(), attemptOptions: w.options,
+      })
+      await landed(h)
+      expect(lastLanding(h)).toMatchObject({ number: 7, status: 'not-landable', triggers: 0 })
+      expect(lastLanding(h).reason).toMatch(/^checks-pending/)
+      expect(w.slept).toEqual([POLL_INTERVAL_MS])
+      expect(w.dispatches).toEqual([])
+    })
+
+    it('ST-95/AC-2, ST-95/AC-5: with no fresh pass the real pilot keeps its one look: a status not yet success ends at once, having slept and dispatched nothing', async () => {
+      for (const [state, status] of [['pending', 'not-landable'], ['failure', 'review-failed']]) {
+        const w = pilotWorld({ review: () => state })
+        const h = attempt({
+          repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 7)] }, attemptOptions: w.options,
+        })
+        await landed(h)
+        expect(lastLanding(h), state).toMatchObject({ number: 7, status, triggers: 0 })
+        expect(w.slept, state).toEqual([])
+        expect(w.dispatches, state).toEqual([])
+        expect(statusReads(w), state).toBe(1)
+      }
+    })
+
+    it('ST-95/AC-4: a head that moves after the pass is refused by the recheck, and one that moves inside the pilot gets no wait for the old head', async () => {
+      const moved = attempt({
+        repos: [A], settings: landOn('all-checks', A), listings: { [A]: [eligible(A, 7)] }, reply: passed(),
+        pulls: { [`${A}#7`]: { state: 'open', headSha: HEAD2 } },
+      })
+      await landed(moved)
+      expect(moved.land).not.toHaveBeenCalled()
+      expect(lastLanding(moved)).toMatchObject({ status: 'not-attempted', reason: `the head is now ${HEAD2}` })
+
+      // The pilot reads HEAD2 where the pass was for HEAD: its `passedAt` is then not the head it
+      // reads, so a status of failure is final at once and nothing waits.
+      const w = pilotWorld({ review: () => 'failure' })
+      const read = w.options.createLand
+      w.options.createLand = (options) => {
+        const ctx = read(options)
+        return { ...ctx, send: async (request) => { const json = await ctx.send(request); return json?.head ? { ...json, head: { sha: HEAD2 } } : json } }
+      }
+      const inside = attempt({
+        repos: [A], settings: landOn('all-checks', A), listings: { [A]: [eligible(A, 7)] }, reply: passed(), attemptOptions: w.options,
+      })
+      await landed(inside)
+      expect(w.calls.map((args) => args.passedAt)).toEqual([HEAD])
+      expect(lastLanding(inside)).toMatchObject({ status: 'review-failed', triggers: 0 })
+      expect(w.slept).toEqual([])
+      expect(w.dispatches).toEqual([])
+    })
   })
 })
 
