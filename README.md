@@ -600,20 +600,22 @@ and decides.
 
 Each pass ends with one coding turn (`codeNextHandoff`,
 [`scripts/dispatch/handoff-coding.mjs`](scripts/dispatch/handoff-coding.mjs)), unless coding is
-blocked (below), after the scans, review turns and landing attempts that were due. It selects the
-oldest eligible approved handoff (above) and, in one write to `handoffs.json` and before any branch
-is claimed, setup run or model started, makes it `admitted` and gives it an admission: a unique ID,
-the handoff, the approved version, the repository, the branch it will be coded on and the time. The
-record is read again first, so a handoff reapproved or withdrawn since it was selected is not
-admitted. The turn calls `executeHandoff` with that admission, which it confirms against the same
-file each time it checks, and, for a branch that was pushed, `publishHandoff`, once; it waits for
-both before anything else is looked at. So the coordinator runs at most one coder at a time, and **a
-coding session, which can last as long as a coder session does, delays any scan, review or landing
-attempt that falls due meanwhile** until the turn has ended. A graceful stop waits for the turn too.
-After a turn that ended a handoff as `completed`, `stopped` or `held`, the next pass starts at once,
-with a scan if one is due and then another coding turn; after any other turn the coordinator waits
-for the next scan, so a handoff returned to pending is never tried again in a loop. How a turn ends
-is written to the handoff's record, with the admission cleared, in one write:
+blocked (below), after the scans, review turns and landing attempts that were due. If another scan
+came due during those, for example a landing scan on its own interval while a long review ran, it is
+run first, and coding is admitted only when nothing is due. It selects the oldest eligible approved
+handoff (above) and, in one write to `handoffs.json` and before any branch is claimed, setup run or
+model started, makes it `admitted` and gives it an admission: a unique ID, the handoff, the approved
+version, the repository, the branch it will be coded on and the time. The record is read again
+first, so a handoff reapproved or withdrawn since it was selected is not admitted. The turn calls
+`executeHandoff` with that admission, which it confirms against the same file each time it checks,
+and, for a branch that was pushed, `publishHandoff`, once; it waits for both before anything else is
+looked at. So the coordinator runs at most one coder at a time, and **a coding session, which can
+last as long as a coder session does, delays any scan, review or landing attempt that falls due
+meanwhile** until the turn has ended. A graceful stop waits for the turn too. After a turn that
+ended a handoff as `completed`, `stopped` or `held`, the next pass starts at once, with a scan if
+one is due and then another coding turn; after any other turn the coordinator waits for the next
+scan, so a handoff returned to pending is never tried again in a loop. How a turn ends is written to
+the handoff's record, with the admission cleared, in one write:
 
 - **A pull request was opened:** `completed`, with the pull request, branch and head. A later scan
   or a restart does not code it again.

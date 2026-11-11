@@ -6,12 +6,12 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { codeNextHandoff, admissionIsActive, interruptAdmissions } from './handoff-coding.mjs'
-import { handoffBranch } from './handoff-coder.mjs'
+import { executeHandoff, handoffBranch } from './handoff-coder.mjs'
 import { handoffRecord, readRaw, writeHandoffs } from './handoff-fixture.mjs'
 import { coordinatorPath, main as coordinatorMain, runCoordinator, stopRequestPath } from './coordinator.mjs'
 import { evidencePath, handoffsPath, main as handoff, readEvidence, readHandoffs, selectHandoff } from './handoff.mjs'
-import { main as project } from './project.mjs'
-import { fixtureSettings } from './settings-fixture.mjs'
+import { main as project, ownedCheckoutPath } from './project.mjs'
+import { fixtureSettings, fixtureUserConfig } from './settings-fixture.mjs'
 
 const REPO = 'acme/widgets'
 const OTHER = 'acme/gadgets'
@@ -138,6 +138,26 @@ function turn(home, { execute, publish, admit, ...over } = {}) {
     ...over, ...over2,
   })
   return Object.assign(go, { exec, pub, calls })
+}
+
+const UNDER_LIMITS = { ok: true, session: { percent: 10, resetsAt: 't1' }, weekly: { percent: 10, resetsAt: 't2' } }
+const REFUSE_UPDATE_HOOK = [
+  '#!/bin/sh',
+  'read old new ref',
+  'if [ "$old" != "0000000000000000000000000000000000000000" ]; then',
+  '  echo "refused by test hook" >&2',
+  '  exit 1',
+  'fi',
+  'exit 0',
+].join('\n')
+/** A stand-in coder session: commits a file in its worktree and reports a pull request block. */
+async function fakeSession({ cwd }) {
+  writeFileSync(path.join(cwd, 'greeting.txt'), 'hello')
+  git(cwd, 'add', '.')
+  git(cwd, 'commit', '-q', '-m', 'implement')
+  const report = 'Branch committed.\n\n## PR title\nAdd a greeting\n\n## PR body\n### What changed\n\nIt greets.\n\n## Open as\nready'
+  const stdout = JSON.stringify({ type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn', result: report })
+  return { record: { role: 'coder', exitCode: 0, signal: null, stdout, stoppedFor: null }, pid: 1 }
 }
 
 const APPROVALS = [[OTHER, 'b.md', 'bravo\n'], [REPO, 'a.md', 'alpha\n'], [REPO, 'c.md', 'charlie\n']]
@@ -393,38 +413,42 @@ describe('ST-93/AC-3: a pushed branch is published once, and the ending is recor
     })
   })
 
-  it('ST-93/AC-3: a coding run that throws, with the work it kept, stops the handoff with that work named', async () => {
+  it('ST-93/AC-3: the real executeHandoff, with a scratch folder that cannot be removed after a branch was kept, still gives the coordinator the location, which its stopped record keeps', async () => {
+    const home = await homeWith(APPROVALS)
+    // The remote refuses the coder's push, so its commit stays on a local branch: the only copy.
+    writeFileSync(path.join(BARES.get(urlOf(OTHER)), 'hooks', 'pre-receive'), REFUSE_UPDATE_HOOK, { mode: 0o755 })
+    let executed
+    const execute = async (args) => {
+      executed = await executeHandoff({
+        ...args,
+        userConfig: async () => fixtureUserConfig(),
+        usage: async () => UNDER_LIMITS,
+        codexUsage: async () => UNDER_LIMITS,
+        baseEnv: { PATH: '/bin', GH_TOKEN: 'secret', GITHUB_TOKEN: 'secret' },
+        sessionOptions: { executable: 'fake-claude', run: fakeSession },
+        install: async () => {},
+        removeScratch: async () => { throw new Error('EBUSY: resource busy') },
+      })
+      return executed
+    }
+    const t = turn(home, { execute })
+    const result = await t()
+    const owned = ownedCheckoutPath(home, OTHER)
+    expect(executed.status).toBe('push-failed')
+    expect(executed.scratchLeft).toEqual(expect.stringContaining('steward-handoff-'))
+    expect(result).toMatchObject({ status: 'stopped', outcome: 'push-failed', retained: { repoDir: owned, branch: 'handoff/H-1-b-md' } })
+    expect(recordOf(home, 'H-1')).toMatchObject({ status: 'stopped', stop: { outcome: 'push-failed', retained: { repoDir: owned, branch: 'handoff/H-1-b-md' } } })
+    expect(git(owned, 'log', '-1', '--format=%s', 'refs/heads/handoff/H-1-b-md')).toBe('implement')
+    rmSync(executed.scratchLeft, { recursive: true, force: true })
+  })
+
+  it('ST-93/AC-3: a coding run that throws, with the work it kept on the error, stops the handoff with that work named', async () => {
     const home = await homeWith(APPROVALS)
     const kept = { repoDir: '/owned/acme/gadgets', worktree: '/tmp/steward-handoff-x/tree', branch: 'handoff/H-1-b-md' }
     const t = turn(home, { execute: async () => { throw Object.assign(new Error('clean-up failed'), { retained: kept }) } })
     expect(await t()).toMatchObject({ status: 'stopped', outcome: 'threw', retained: kept })
     expect(recordOf(home, 'H-1').stop).toMatchObject({ outcome: 'threw', retained: kept, branch: 'handoff/H-1-b-md', headSha: null, pr: null })
     expect(recordOf(home, 'H-1').stop.reason).toContain('clean-up failed')
-  })
-
-  it('ST-93/AC-3, ST-93/AC-6: when the ending of a run that kept its worktree cannot be written, the blocked result keeps the branch and the kept work', async () => {
-    const home = await homeWith(APPROVALS)
-    const kept = { repoDir: '/owned/acme/gadgets', worktree: '/tmp/steward-handoff-x/tree', branch: 'handoff/H-1-b-md' }
-    const t = turn(home, {
-      execute: async (args) => {
-        blockWrites(home)
-        return refusal(home, args, 'session-failed', { branch: 'handoff/H-1-b-md', outcome: 'timed-out', reason: 'the session ran out of time', retained: kept })
-      },
-    })
-    const result = await t()
-    unblockWrites(home)
-    expect(result.status).toBe('blocked')
-    expect(result.evidence).toEqual({ outcome: 'session-failed', branch: 'handoff/H-1-b-md', headSha: null, pr: null, retained: kept })
-    expect(result.reason).toContain('with work kept at worktree /tmp/steward-handoff-x/tree (branch handoff/H-1-b-md) in /owned/acme/gadgets')
-    expect(recordOf(home, 'H-1').status).toBe('admitted')
-  })
-
-  it('ST-93/AC-3: when the ending of a published run cannot be written, the blocked result keeps the branch, head and pull request', async () => {
-    const home = await homeWith(APPROVALS)
-    const t = turn(home, { publish: async () => { blockWrites(home); return published() } })
-    const result = await t()
-    unblockWrites(home)
-    expect(result.evidence).toEqual({ outcome: 'completed', branch: 'handoff/H-1-b-md', headSha: HEAD, pr: { number: 12, url: 'https://github.com/acme/widgets/pull/12' }, retained: null })
   })
 
   it('ST-93/AC-3: a record of the ending that cannot be written blocks coding and leaves the handoff admitted', async () => {

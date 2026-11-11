@@ -856,6 +856,17 @@ describe('ST-91/AC-6: failures are distinct, keep the coder\'s only copy, and ar
     expect(git(world.bare, 'log', '-1', '--format=%s', `refs/heads/${branchOf(world)}`)).toMatch(/^Claim H-1/)
   })
 
+  it('ST-93: a scratch folder that cannot be removed neither loses what was kept nor replaces the result, and is named', async () => {
+    const world = await makeWorld()
+    const id = await approveFile(world)
+    installHook(world, REFUSE_UPDATE_HOOK)
+    const { result } = await exec(world, id, finish, { options: { removeScratch: async () => { throw new Error('EBUSY: resource busy') } } })
+    expect(result.status).toBe('push-failed')
+    expect(result.retained).toEqual({ repoDir: ownedOf(world), branch: branchOf(world) })
+    expect(result.scratchLeft).toEqual(expect.stringContaining('steward-handoff-'))
+    rmSync(result.scratchLeft, { recursive: true, force: true })
+  })
+
   it('ST-91/AC-6: a coder that changes .claude/prompts is refused, and its commit is kept', async () => {
     const world = await makeWorld()
     const id = await approveFile(world)

@@ -67,10 +67,14 @@
  * uncommitted changes or untracked files, `branch` alone when it holds commits not on the remote.
  * What is named is left where it is.
  *
- * What still throws, and only that: a caller error (an `admission` without `admissionIsActive`), the
- * engine's own prompt file being unreadable, and a failure of the clean-up after the run. A read of
- * the records, the projects, the source, the user config, the usage, `main` or the remote's
- * branches that fails is a refusal; each step from the claim on that fails is a result.
+ * What still throws, and only that: a caller error (an `admission` without `admissionIsActive`),
+ * the engine's own prompt file being unreadable, and a failure of the clean-up of the worktree and
+ * branch after the run, which carries `retained` as it was decided before the clean-up could fail
+ * (the worktree and branch are named when the clean-up threw, as either may remain). Removing the
+ * scratch folder throws nothing: if it fails, the result is the one it would have been, with
+ * `scratchLeft` naming the folder. A read of the records, the projects, the source, the user
+ * config, the usage, `main` or the remote's branches that fails is a refusal; each step from the
+ * claim on that fails is a result.
  */
 import { readFileSync } from 'node:fs'
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
@@ -244,6 +248,8 @@ async function cleanUpKeeping({ repoDir, tree, branch, state, succeeded }) {
 /**
  *   handoffId, version  the handoff to execute and the version approved (`readHandoffs`)
  *   admission, admissionIsActive   see the header; both from ST-93's coordinator
+ *   removeScratch      `(dir)`, removing the run's scratch folder; defaults to `rm`, recursive and
+ *                      forced; for tests
  *   homedir            where `~/.steward/` is; defaults to the OS user's home. The handoff records,
  *                      the project's owned checkout and (by default) the user config are under it
  *   remoteTip          `(repoDir, branch)`, resolving the branch's tip on the remote or `null`; defaults
@@ -263,7 +269,7 @@ export async function executeHandoff({
   handoffId, version, admission, admissionIsActive,
   homedir = osHomedir(), now = () => new Date(), createContext: makeContext = createContext,
   promptTemplate, baseEnv = process.env, sessionOptions = {}, install = installDependencies,
-  usage = readUsage, remoteTip: readRemoteTip = remoteTip, choice: named, codexUsage = readCodexUsage, codexSession = spawnCodexCoder,
+  usage = readUsage, remoteTip: readRemoteTip = remoteTip, removeScratch = (dir) => rm(dir, { recursive: true, force: true }), choice: named, codexUsage = readCodexUsage, codexSession = spawnCodexCoder,
   userConfig = () => readUserConfig({ env: process.env, homedir }),
 }) {
   if (admission !== undefined && typeof admissionIsActive !== 'function') {
@@ -341,7 +347,7 @@ export async function executeHandoff({
   // AC-1: the second check. Nothing is awaited between its last read and the claim.
   const again = await check(base, checkArgs)
   if (again.refusal) {
-    await rm(scratch, { recursive: true, force: true })
+    await removeScratch(scratch).catch(() => {})
     return again.refusal
   }
   const tree = path.join(scratch, 'tree')
@@ -353,13 +359,31 @@ export async function executeHandoff({
   } catch (error) {
     failure = error
   }
-  const retained = await cleanUpKeeping({ repoDir, tree, branch, state, succeeded: outcome?.status === PUSHED })
-  if (retained === null || retained.worktree === undefined) await rm(scratch, { recursive: true, force: true })
-  if (failure !== null) {
-    if (retained !== null) failure.retained = retained
-    throw failure
+  // What was kept is decided here, before any later step can throw, and is attached to whatever
+  // leaves this function: a clean-up that fails leaves the worktree and branch where they may be.
+  let retained = null
+  let cleanupFailure = null
+  try {
+    retained = await cleanUpKeeping({ repoDir, tree, branch, state, succeeded: outcome?.status === PUSHED })
+  } catch (error) {
+    cleanupFailure = error
+    retained = state.worktreeAdded ? { repoDir, worktree: tree, branch } : null
   }
-  return retained === null ? outcome : { ...outcome, retained }
+  // A scratch folder that cannot be removed neither loses `retained` nor replaces the result.
+  let scratchLeft = null
+  if (retained === null || retained.worktree === undefined) {
+    try {
+      await removeScratch(scratch)
+    } catch {
+      scratchLeft = scratch
+    }
+  }
+  const thrown = failure ?? cleanupFailure
+  if (thrown !== null) {
+    if (retained !== null) thrown.retained = retained
+    throw thrown
+  }
+  return { ...outcome, ...(retained !== null && { retained }), ...(scratchLeft !== null && { scratchLeft }) }
 
   async function attempt() {
     // Each step that can throw is named, so a throw is a result of that step's kind (AC-6). What

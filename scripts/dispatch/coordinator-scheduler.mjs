@@ -31,15 +31,16 @@
  * same head again.
  *
  * When `coding` is given (ST-93), each pass ends with one coding turn (unless coding is blocked, as
- * below), `coding.turn` (`codeNextHandoff`, `handoff-coding.mjs`), after the due scans, review
- * turns and landing attempts of that pass: it admits the oldest eligible approved handoff and waits
- * for its bounded coding and publication, so at most one coder runs at a time, and that wait delays
- * any scan that comes due meanwhile, which runs once the turn is over. A turn that took a handoff
- * to an ending (`completed`, `stopped` or `held`) is followed at once by a new pass, which runs a
- * scan if one is due and then another coding turn; any other turn is followed by the wait for the
- * next scan, so a handoff returned to pending, or a failed selection, is looked at again only at a
- * later scan. A turn that cannot write its record (`blocked`) ends all coding until the coordinator
- * is restarted, and reviews and landing carry on.
+ * below, or a scan came due during the pass, which is run first and before any coding),
+ * `coding.turn` (`codeNextHandoff`, `handoff-coding.mjs`), after the due scans, review turns and
+ * landing attempts of that pass: it admits the oldest eligible approved handoff and waits for its
+ * bounded coding and publication, so at most one coder runs at a time, and that wait delays any
+ * scan that comes due meanwhile, which runs once the turn is over. A turn that took a handoff to an
+ * ending (`completed`, `stopped` or `held`) is followed at once by a new pass, which runs a scan if
+ * one is due and then another coding turn; any other turn is followed by the wait for the next
+ * scan, so a handoff returned to pending, or a failed selection, is looked at again only at a later
+ * scan. A turn that cannot write its record (`blocked`) ends all coding until the coordinator is
+ * restarted, and reviews and landing carry on.
  *
  * The threat model is one member of the crew, one coordinator, one automatic review or landing
  * attempt at a time, on one machine. The bounds on usage are these turns, the reviewer's own checks
@@ -503,15 +504,20 @@ export async function scheduleReviews({
         if (!admitting()) return
         if (review) reviewDue = now().getTime() + intervalMinutes * 60_000
       }
-      // The one coding turn of this pass, after what was due: the oldest eligible handoff, coded
+      const nextDue = () => (separateLanding ? Math.min(reviewDue, landingDue) : reviewDue)
+      // A scan that came due while the turns ran is run now, after them, never beside them, and
+      // before any coding is admitted: a long review can leave landing discovery due, and it must
+      // not then wait through a whole coding session.
+      if (nextDue() <= now().getTime()) continue
+      // The one coding turn of this pass, when nothing is due: the oldest eligible handoff, coded
       // and published before anything else is looked at.
       if (coding !== undefined && !codingBlocked) {
         const carried = await codeTurn()
         if (!admitting()) return
         if (carried) continue
       }
-      const next = separateLanding ? Math.min(reviewDue, landingDue) : reviewDue
-      // A scan that came due while the turns ran is run now, after them, never beside them.
+      const next = nextDue()
+      // Anything that came due during the coding turn is run now too.
       if (next <= now().getTime()) continue
       report({ nextScanAt: asDate(next), ...(separateLanding && { nextLandingScanAt: asDate(landingDue) }) })
       await Promise.race([wait(next - now().getTime()), coordinator.done])

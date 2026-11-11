@@ -1612,6 +1612,19 @@ describe('ST-93: the coordinator codes one approved handoff at a time, after wha
     expect(order).toEqual(['review', 'land', 'turn'])
   })
 
+  it('ST-93/AC-1: a landing scan that comes due during a review turn is run before coding is admitted', async () => {
+    const order = []
+    let h
+    h = coded(async () => { order.push('turn'); return { status: 'none' } }, {
+      repos: [A], listings: { [A]: [eligible(A, 1)] },
+      // The review takes longer than the landing interval of 5 minutes.
+      reply: () => { order.push('review'); h.clock.advance(6 * 60_000); return { status: 'recorded', sessions: 1 } },
+      landing: { intervalMinutes: 5, onCandidates: () => { order.push('landing-scan') } },
+    })
+    await idle(h)
+    expect(order).toEqual(['landing-scan', 'review', 'landing-scan', 'turn'])
+  })
+
   it('ST-93/AC-1: a pass has one coding turn, and the next waits for the next scan', async () => {
     const h = coded(async () => ({ status: 'none' }), { repos: [A] })
     await idle(h)
