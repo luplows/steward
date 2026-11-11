@@ -107,10 +107,28 @@ function parseUnitLinks(text) {
   return [...new Set(kinds)]
 }
 
+/** Whether the checklist's path names a Markdown file: its name ends in `.md`, in any case. */
+const isMarkdownName = (rel) => /\.md$/i.test(rel)
+/** Whether a segment of the path starts with `-`, which a command such as Prettier reads as an option. */
+const hasDashSegment = (rel) => rel.split('/').some((segment) => segment.startsWith('-'))
+
+/**
+ * Whether `rel` is a checklist path `init`'s answer accepts, beyond `isRulesFilePath` (ST-74,
+ * crew, 2026-11-11): a Markdown file's name, and no segment starting with `-`. An existing
+ * `steward.config.json` is not held to it, and `readSettings` neither.
+ */
+export const isInstallableChecklist = (rel) => isMarkdownName(rel) && !hasDashSegment(rel)
+
 function parseRulesFile(text) {
   const value = text.trim()
   if (!isRulesFilePath(value)) {
     throw new Refusal(`'${value}' is not a relative path with forward slashes, no '..' segment, and no control character, backtick, '<' or '>'`)
+  }
+  if (!isMarkdownName(value)) {
+    throw new Refusal(`'${value}': the checklist has to be a Markdown file, so its name must end in .md (in any case)`)
+  }
+  if (hasDashSegment(value)) {
+    throw new Refusal(`'${value}': no segment of the path may start with '-', since a command such as prettier would read it as an option`)
   }
   return value
 }
@@ -724,36 +742,29 @@ const DIFFERS_NOTE = ' (differs from the workflow this version of init writes, a
 const shellPath = (rel) => (/^[\w./-]+$/.test(rel) ? rel : `'${rel.replaceAll("'", "'\\''")}'`)
 
 /**
- * The endings of the names of the files `init` writes from which Prettier infers a parser: JSON,
- * YAML and Markdown, in any case. Every file `init` writes ends so but the checklist, whose path
- * is the project's choice; one ending otherwise, such as `REVIEW` with no extension, may give
- * Prettier no parser, and ST-74 leaves it out.
+ * The pull request body's note on formatting (ST-74): the files added follow Prettier's defaults,
+ * and a project with formatting settings of its own may format only those files, on the
+ * installation's branch, before merging. Every file `init` adds has a fixed name ending in
+ * `.json`, `.yml` or `.md` but the checklist, at `rulesFile`. The answer to the checklist question
+ * is always `isInstallableChecklist`, but a `rulesFile` read from a `steward.config.json` the
+ * project already has may not be: that checklist, when added, is named as left out of the
+ * command and of what the note says follows Prettier's defaults. Nothing when no file was added
+ * but that one, or none.
  */
-const FORMATTED_NAME = /\.(?:json|yml|md)$/i
-
-/** Whether `rel` is a file the formatting note's command names: one `FORMATTED_NAME` matches. */
-export const formattable = (rel) => FORMATTED_NAME.test(rel)
-
-/**
- * The pull request body's note on formatting (ST-74): the files added that are `formattable`
- * follow Prettier's defaults, and a project with formatting settings of its own may format only
- * those files, on the installation's branch, before merging. Any other file added is named as
- * left out of the command. Nothing when no file added is formattable.
- */
-export function formattingNote(added) {
-  const files = added.filter(formattable)
+export function formattingNote(added, rulesFile = null) {
+  const leftOut = added.filter((rel) => rel === rulesFile && !isInstallableChecklist(rel))
+  const files = added.filter((rel) => !leftOut.includes(rel))
   if (files.length === 0) return []
-  const others = added.filter((rel) => !formattable(rel))
-  const leftOut =
-    others.length === 0
+  const leftOutText =
+    leftOut.length === 0
       ? ''
-      : ` ${others.map((rel) => `\`${rel}\``).join(', ')} ${others.length === 1 ? 'is' : 'are'} left out, since ` +
-        `${others.length === 1 ? 'its name ends' : 'their names end'} in none of those, so Prettier may infer no parser for ${others.length === 1 ? 'it' : 'them'}.`
+      : ` \`${leftOut[0]}\`, the checklist the project's steward.config.json names, is left out: its name does not end in ` +
+        '`.md`, or a segment of it starts with `-`, so Prettier may not format it as the Markdown it holds.'
   return [
-    "- The files added whose names end in `.json`, `.yml` or `.md` follow Prettier's default formatting. " +
+    `- The files added${leftOut.length === 0 ? '' : ', but the checklist named after the command,'} follow Prettier's default formatting. ` +
       'A project whose own formatting settings differ may format ' +
       'only the files this pull request adds, on its branch, before merging it, for example with ' +
-      `\`npx prettier --write ${files.map(shellPath).join(' ')}\`.${leftOut} Nothing requires it. ` +
+      `\`npx prettier --write ${files.map(shellPath).join(' ')}\`.${leftOutText} Nothing requires it. ` +
       "`steward upgrade` refuses a managed workflow that differs from steward's template at its pin by more than the pin " +
       'and line endings, a change of formatting included.',
   ]
@@ -800,7 +811,7 @@ export function pullBody({ version, pin, added, left, landing, template, rulesFi
     "- The gate cannot review the pull request that installs it: it runs from `main`, where it is not yet installed. Review and merge this one as the project normally does.",
     '- `steward protect`, if the crew wants GitHub to stop a merge that has not passed review, comes after this pull request merges.',
     "- Fill in the project's template below.",
-    ...formattingNote(added),
+    ...formattingNote(added, rulesFile),
     '',
     '---',
     '',

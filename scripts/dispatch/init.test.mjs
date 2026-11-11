@@ -15,10 +15,10 @@ import {
   DEFAULT_BRANCH,
   fillPin,
   findOnPath,
-  formattable,
   formattingNote,
   GATE_WORKFLOWS,
   INSPECTION_WORKFLOW,
+  isInstallableChecklist,
   LABELS,
   main,
   projectJson,
@@ -1933,19 +1933,19 @@ const PIN_RE = /github:luplows\/steward#\S+/g
 const addedBy = (cwd, before) => tree(installed(cwd)).filter((rel) => !before.includes(rel))
 
 /**
- * Runs `init` in a new project with `files`, checks each file it added whose name ends in `.json`,
- * `.yml` or `.md` (`formattable`), and returns their paths. The files added that are not
- * formattable must be exactly `unformattable`: none, unless a test names an excluded checklist.
+ * Runs `init` in a new project with `files`, checks each file it added but those in `unchecked`,
+ * and returns their paths. `unchecked` is empty unless a test's project already has a
+ * `steward.config.json` naming a checklist path the answer would refuse.
  */
-async function addedFilesPass(args, { files = {}, unformattable = [] } = {}) {
+async function addedFilesPass(args, { files = {}, unchecked = [] } = {}) {
   const cwd = makeRepo({ files })
   const before = tree(cwd)
   const gh = fakeGitHub()
   const { code } = await runInit(args, { cwd, gh })
   expect(code).toBe(0)
   const added = addedBy(cwd, before)
-  expect(added.filter((rel) => !formattable(rel))).toEqual(unformattable)
-  for (const rel of added.filter(formattable)) expect(await passes(rel, read(installed(cwd), rel)), rel).toBe(true)
+  for (const rel of unchecked) expect(added).toContain(rel)
+  for (const rel of added.filter((r) => !unchecked.includes(r))) expect(await passes(rel, read(installed(cwd), rel)), rel).toBe(true)
   return { cwd, gh, added }
 }
 
@@ -1988,7 +1988,7 @@ function behaviour(text) {
   }
 }
 
-describe('ST-74/AC-1: every file init adds whose name ends in .json, .yml or .md passes the pinned Prettier check with default options', () => {
+describe('ST-74/AC-1: every file init adds to a project with no steward.config.json passes the pinned Prettier check with default options', () => {
   it('ST-74/AC-1: a --yes run, with inspection, adds six files, and each passes', async () => {
     const { added } = await addedFilesPass(['--yes'])
     expect(added).toEqual([
@@ -2144,39 +2144,27 @@ describe('ST-74/AC-4: the installation pull request and the README say how to fo
     expect(body).not.toMatch(/upgrade (?:will )?accepts?/)
   })
 
-  it('ST-74/AC-4: with a checklist at an extensionless path, the command leaves it out and names only files Prettier has a parser for', async () => {
-    const { gh, added } = await addedFilesPass(['--yes', '--rules-file', 'REVIEW'], { unformattable: ['REVIEW'] })
-    expect(added).toContain('REVIEW')
+  it("ST-74/AC-4: a checklist path from the project's existing steward.config.json that the answer would refuse is left out of the command, and named", async () => {
+    const settings = projectJson(settingsBody(REPO, { land: false, unitLinks: ['file'], rulesFile: 'REVIEW.json', inspectAfterHours: 24 }))
+    const { gh, added } = await addedFilesPass(['--yes'], { files: { 'steward.config.json': settings }, unchecked: ['REVIEW.json'] })
+    expect(added).toContain('REVIEW.json')
     const body = writes(gh).find((r) => r.rest === '/pulls').body.body
     const command = /`npx prettier --write ([^`]*)`/.exec(body)[1].split(' ')
     expect(command).toEqual([
-      'steward.config.json',
       '.github/workflows/review-gate.yml',
       '.github/workflows/land-approved.yml',
       '.github/workflows/inspection.yml',
       '.github/pull_request_template.md',
     ])
-    for (const rel of command) expect((await prettier.getFileInfo(rel, { resolveConfig: false })).inferredParser, rel).not.toBeNull()
-    expect((await prettier.getFileInfo('REVIEW', { resolveConfig: false })).inferredParser).toBeNull()
-    expect(body).toContain('`REVIEW` is left out, since its name ends in none of those, so Prettier may infer no parser for it.')
-  })
-
-  it('ST-74/AC-4: Prettier infers a parser for each name here that formattable accepts, and none for each excluded checklist path here', async () => {
-    const accepted = [...NEW_FILES.filter((rel) => rel !== 'package.json'), 'docs/RULES.md', 'CHECKLIST.MD', 'a b/Rules.Md', 'x.JSON', 'y.YML']
-    for (const rel of accepted) {
-      expect(formattable(rel), rel).toBe(true)
-      expect((await prettier.getFileInfo(rel, { resolveConfig: false })).inferredParser, rel).not.toBeNull()
-    }
-    for (const rel of ['REVIEW', 'docs/rules', 'RULES.txt', 'review.md.bak']) {
-      expect(formattable(rel), rel).toBe(false)
-      expect((await prettier.getFileInfo(rel, { resolveConfig: false })).inferredParser, rel).toBeNull()
-    }
+    expect(body).toContain("- The files added, but the checklist named after the command, follow Prettier's default formatting.")
+    expect(body).toContain("`REVIEW.json`, the checklist the project's steward.config.json names, is left out")
   })
 
   it('ST-74/AC-4: a path the shell would split is quoted, and with nothing added there is no note', () => {
     expect(formattingNote([])).toEqual([])
-    expect(formattingNote(['REVIEW'])).toEqual([])
-    expect(formattingNote(['docs/my rules.md', 'steward.config.json'])[0]).toContain("`npx prettier --write 'docs/my rules.md' steward.config.json`")
+    expect(formattingNote(['REVIEW'], 'REVIEW')).toEqual([])
+    expect(formattingNote(['REVIEW.md'], 'REVIEW.md')[0]).toContain('`npx prettier --write REVIEW.md`')
+    expect(formattingNote(['docs/my rules.md', 'steward.config.json'], 'docs/my rules.md')[0]).toContain("`npx prettier --write 'docs/my rules.md' steward.config.json`")
     const body = pullBody({ version: '9.8.7', pin: 'v9.8.7', added: ['steward.config.json'], left: [], landing: ['x'], template: 'T' })
     expect(body).toContain('`npx prettier --write steward.config.json`')
   })
@@ -2186,9 +2174,69 @@ describe('ST-74/AC-4: the installation pull request and the README say how to fo
     expect(readme).toMatch(/A project whose own formatting settings differ may format only the newly installed files, on\nthe installation's branch before merging it/)
     expect(readme).toContain('npx prettier --write steward.config.json REVIEW.md .github/workflows/review-gate.yml \\\n')
     expect(readme).toContain('Not every project needs to.')
-    expect(readme).toMatch(/whose name ends in `\.json`, `\.yml` or `\.md` is as Prettier's default options print/)
-    expect(readme).toMatch(/such as `--rules-file REVIEW`, from whose\nname Prettier may infer no parser: that one is not covered/)
+    expect(readme).toMatch(/Each file `init` adds is as Prettier's default options print it/)
+    expect(readme).toMatch(/must name a Markdown file, ending in\n`\.md` in any case, and no segment of it may start with `-`; `init` refuses any other answer/)
     expect(readme).not.toMatch(/upgrade (?:will )?accepts? (?:the|those|a) formatt/)
+  })
+})
+
+describe('ST-74/AC-1 and AC-4: the checklist answer is a Markdown file, with no segment starting with -', () => {
+  const MARKDOWN = /the checklist has to be a Markdown file, so its name must end in \.md \(in any case\)/
+  const DASH = /no segment of the path may start with '-', since a command such as prettier would read it as an option/
+
+  it('ST-74/AC-1: --rules-file REVIEW.json and REVIEW are refused, saying it has to be Markdown, and nothing is written', async () => {
+    for (const rules of ['REVIEW.json', 'REVIEW']) {
+      const cwd = makeRepo()
+      const gh = fakeGitHub()
+      const { code, err, clone } = await runInit(['--yes', '--rules-file', rules], { cwd, gh })
+      expect(code, rules).toBe(2)
+      expect(err).toContain(`--rules-file ${rules}: '${rules}'`)
+      expect(err).toMatch(MARKDOWN)
+      expect(gh.requests).toEqual([])
+      expect(clone).toBeUndefined()
+    }
+  })
+
+  it('ST-74/AC-4: --rules-file=--ignore-path=REVIEW.md and docs/-x.md are refused, saying no segment may start with -', async () => {
+    for (const args of [['--rules-file=--ignore-path=REVIEW.md'], ['--rules-file', 'docs/-x.md']]) {
+      const cwd = makeRepo()
+      const gh = fakeGitHub()
+      const { code, err, clone } = await runInit(['--yes', ...args], { cwd, gh })
+      expect(code, args.join(' ')).toBe(2)
+      expect(err).toMatch(DASH)
+      expect(err).not.toMatch(MARKDOWN)
+      expect(gh.requests).toEqual([])
+      expect(clone).toBeUndefined()
+    }
+  })
+
+  it('ST-74/AC-1: REVIEW.MD and docs/review.md are accepted, written there, and pass the check', async () => {
+    for (const rules of ['REVIEW.MD', 'docs/review.md']) {
+      const { cwd, added } = await addedFilesPass(['--yes', '--rules-file', rules])
+      expect(added).toContain(rules)
+      expect((await readSettings(installed(cwd))).rulesFile).toBe(rules)
+    }
+  })
+
+  it('ST-74/AC-1 and AC-4: the same answers at the prompt are refused with the same reasons and asked again, until one is accepted', async () => {
+    const cwd = makeRepo()
+    const terminal = fakeTerminal(['', 'REVIEW.json', 'REVIEW', '--ignore-path=REVIEW.md', 'docs/-x.md', 'REVIEW.MD', '', '', '', '', '', '', ''])
+    const { code } = await runInit([], { cwd, terminal })
+    expect(code).toBe(0)
+    const rulesPrompts = terminal.prompts.filter((p) => p.startsWith("Where is the project's checklist"))
+    expect(rulesPrompts).toHaveLength(5)
+    const said = terminal.written.join('')
+    expect(said.match(new RegExp(MARKDOWN.source, 'g'))).toHaveLength(2)
+    expect(said.match(new RegExp(DASH.source, 'g'))).toHaveLength(2)
+    expect((await readSettings(installed(cwd))).rulesFile).toBe('REVIEW.MD')
+  })
+
+  it("ST-74/AC-1: readSettings still accepts an existing settings file whose rulesFile is REVIEW, and isInstallableChecklist tells the answers apart", async () => {
+    const dir = fresh('settings')
+    writeFileSync(path.join(dir, 'steward.config.json'), projectJson(settingsBody(REPO, { land: false, unitLinks: [], rulesFile: 'REVIEW', inspectAfterHours: 24 })))
+    expect((await readSettings(dir)).rulesFile).toBe('REVIEW')
+    for (const rel of ['REVIEW.md', 'REVIEW.MD', 'docs/review.md', 'a b/x.Md']) expect(isInstallableChecklist(rel), rel).toBe(true)
+    for (const rel of ['REVIEW', 'REVIEW.json', '--ignore-path=REVIEW.md', 'docs/-x.md', 'review.md.bak']) expect(isInstallableChecklist(rel), rel).toBe(false)
   })
 })
 
