@@ -3475,8 +3475,11 @@ shortened where it is long, so that it can be found there with its date.
     all pinned to `v0.3.0`; `init` will not overwrite existing files,
     and `upgrade` cannot yet recognize them as installed managed templates.
     Unlike a new scratch repository without a gate, steward already has a
-    functioning gate: its `review-gate.yml` uses the pull request base SHA
-    and can review the conversion PR, which the normal runway may land.
+    functioning gate, so the conversion PR is reviewed by a rotation like
+    any other and the normal runway may land it. On that PR, GitHub runs
+    the PR's own `review-gate.yml` for `pull_request` (the thin form, whose
+    `mark-pending` needs the `v0.3.0` tag to exist) and `main`'s for
+    `issue_comment` (the checkout-run form, which applies the verdict).
     There is no hand merge. Subsequent repins use `steward upgrade`, which
     proposes a separately reviewed draft PR. Verification before landing
     checks the converted workflows against the published templates; a

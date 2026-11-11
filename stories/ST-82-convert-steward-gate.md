@@ -19,9 +19,11 @@ it ships without putting its 0.3.0 release review at risk.
 - [ ] **AC-1** — After `v0.3.0` is published, replace only steward's
       `.github/workflows/review-gate.yml`, `land-approved.yml` and
       `inspection.yml` with the corresponding `templates/workflows/` files
-      from that exact tag, with every `{{STEWARD_VERSION}}` placeholder
-      filled as `v0.3.0`. The first conversion is a hand edit on ST-82's
-      ordinary implementation branch, not an `init` or `upgrade` run:
+      from that exact tag, each filled as `init` fills it: `fillPin`
+      (`scripts/dispatch/init.mjs`) with the pin `v0.3.0`, which replaces
+      every `v{{STEWARD_VERSION}}` placeholder. The first conversion is a
+      hand edit on ST-82's ordinary implementation branch, not an `init` or
+      `upgrade` run:
       neither command treats steward's existing checkout-run workflows as
       installed managed templates. `ci.yml` remains unchanged.
 
@@ -32,18 +34,22 @@ it ships without putting its 0.3.0 release review at risk.
       references in them name `v0.3.0`, and none invokes the old
       checkout-local `node scripts/dispatch/cli.mjs` path. Record actual
       command results, not an assertion that a future PR has already passed
-      the new gate. The verification identifies the existing base-commit
-      review gate that will review the conversion; no hand merge or
-      post-landing outcome is claimed as pre-landing evidence.
+      the new gate. The verification names which form of `review-gate.yml`
+      runs each of the conversion PR's own gate jobs (see Constraints); no
+      hand merge or post-landing outcome is claimed as pre-landing evidence.
 
 - [ ] **AC-3** — Update current, non-historical passages in
       `docs/agent-workflow-design.md` that describe steward's own GitHub
-      Actions workflows running from its checkout. Check `README.md`,
-      `docs/controller.md`, `docs/settings.md` and `docs/glossary.md`
-      for the same claim, and change only text made inaccurate by this
-      conversion; descriptions of manual `node scripts/dispatch/cli.mjs`
-      commands remain valid. The implementation PR's Docs check identifies
-      which of these files needed changes and which did not.
+      Actions workflows running from its checkout. Check `AGENTS.md`,
+      `README.md`, `docs/controller.md`, `docs/settings.md`,
+      `docs/glossary.md` and `.claude/prompts/` for the same claim, such as
+      `AGENTS.md`'s and the glossary's "`scripts/land/runway.mjs`, which
+      `land-approved.yml` runs", which after the conversion runs from the
+      `v0.3.0` package rather than this checkout, and change only text made
+      inaccurate by this conversion; descriptions of manual
+      `node scripts/dispatch/cli.mjs` commands remain valid. The
+      implementation PR's Docs check identifies which of these files needed
+      changes and which did not.
 
 - [ ] **AC-4** — Resolve the `**Planned (ST-82)**` marker in
       `docs/agent-workflow-design.md` when the conversion is implemented.
@@ -69,12 +75,14 @@ it ships without putting its 0.3.0 release review at risk.
 ## Constraints
 
 The v0.3.0 tag must exist before this story is unblocked or dispatched.
-Its first conversion is an ordinary reviewable PR against `main`. The
-current `review-gate.yml` checks out the PR's base commit, so it can
-review the conversion before it lands; the existing runway remains the
-landing authority. After the conversion, subsequent pin updates use
-`steward upgrade` to propose a draft PR for normal review and landing,
-not direct edits or automatic repinning.
+Its first conversion is an ordinary reviewable PR against `main`,
+reviewed by a rotation like any other; the existing runway remains the
+landing authority. On the conversion PR, GitHub runs the PR's own
+`review-gate.yml` for `pull_request` events, so its `mark-pending` is
+the thin form at `v0.3.0`, and `main`'s for `issue_comment` events, so
+the checkout-run form applies its verdict. After the conversion,
+subsequent pin updates use `steward upgrade` to propose a draft PR for
+normal review and landing, not direct edits or automatic repinning.
 
 ## Context
 
