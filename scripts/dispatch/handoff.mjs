@@ -34,14 +34,16 @@
  * runs the same checks to report, and writes no record. For a handoff the coordinator has taken,
  * `list` and `show` also say what it knows of the result and what the crew does next.
  *
- * The threat model is one member of the crew running one command at a time: no other process and
- * no other writer of the file.
+ * The threat model is one member of the crew, as one OS user, running one command at a time beside
+ * one coordinator, on one machine. Writes to the file take a lock (`updateHandoffs`), so the
+ * commands and the coordinator, which are separate processes, do not overwrite each other. Nothing
+ * guards against a second coordinator or an adversarial writer.
  *
  * Exit code: 0 when the command did what it says; 1 when it did not (a refusal, a failed read or
  * write, a malformed records file, an unknown ID); 2 for a command line it does not take.
  */
 import { createHash } from 'node:crypto'
-import { existsSync, realpathSync } from 'node:fs'
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync, statSync, writeSync } from 'node:fs'
 import { homedir as osHomedir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -254,46 +256,149 @@ export function readHandoffs(file) {
 export const sameRecord = (a, b) => JSON.stringify(a) === JSON.stringify(b)
 
 /**
+ * How long a write waits for the lock on `handoffs.json` (`updateHandoffs`), in milliseconds,
+ * before it refuses; and how long a lock file that cannot be read may be old before it counts as
+ * stale.
+ */
+export const LOCK_WAIT_MS = 5000
+const LOCK_POLL_MS = 5
+
+const sleepSync = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+
+/** The lock file of `file`: beside it, so that it is on the same volume and in the same folder. */
+export const lockPath = (file) => `${file}.lock`
+
+/** Whether a process with id `pid` is running. */
+function isRunning(pid) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return error.code !== 'ESRCH'
+  }
+}
+
+/**
+ * Whether the lock file `lock` is stale, and what it said: `{ stale, text }`. It is stale when it
+ * names a process that is not running, or when it cannot be read as a lock and is older than
+ * `waitMs`. A lock that is gone, or cannot be looked at, is not stale: the next attempt sees it.
+ */
+function staleLock(lock, waitMs) {
+  let text
+  try {
+    text = readFileSync(lock, 'utf8')
+  } catch {
+    return { stale: false, text: null }
+  }
+  let pid
+  try {
+    ;({ pid } = JSON.parse(text))
+  } catch {
+    // Not a lock steward wrote, or one still being written: judged by its age.
+  }
+  if (Number.isSafeInteger(pid) && pid > 0) return { stale: !isRunning(pid), text }
+  try {
+    return { stale: Date.now() - statSync(lock).mtimeMs > waitMs, text }
+  } catch {
+    return { stale: false, text }
+  }
+}
+
+/**
+ * Takes the exclusive lock on `file`: creates `lockPath(file)` with `wx` (which fails when it
+ * exists), holding this process's id and the time. While another holds it, waits, a few
+ * milliseconds at a time and synchronously, for up to `waitMs`. A stale lock (`staleLock`) is
+ * removed, if it is still the file that was judged, and taken again. Throws, with `phase` set to
+ * `lock`, when the bound passes with the lock held by a live process, or when it cannot be made.
+ */
+function takeLock(file, waitMs) {
+  const lock = lockPath(file)
+  mkdirSync(path.dirname(file), { recursive: true })
+  const end = Date.now() + waitMs
+  for (;;) {
+    try {
+      const fd = openSync(lock, 'wx')
+      try {
+        writeSync(fd, JSON.stringify({ pid: process.pid, at: new Date().toISOString() }))
+      } finally {
+        closeSync(fd)
+      }
+      return
+    } catch (error) {
+      if (error.code !== 'EEXIST') {
+        error.phase = 'lock'
+        throw error
+      }
+    }
+    const { stale, text } = staleLock(lock, waitMs)
+    if (stale) {
+      // Removed only if it is still what was judged stale, so that a lock taken since is not.
+      try {
+        if (readFileSync(lock, 'utf8') === text) rmSync(lock, { force: true })
+      } catch {
+        // Gone already, or being replaced: the next attempt sees which.
+      }
+      continue
+    }
+    if (Date.now() >= end) {
+      const held = text === null ? '' : ` (${text.trim()})`
+      const error = new Error(`${lock} is held by another process${held} and stayed held for ${waitMs / 1000} seconds, so nothing was changed. If no steward command or coordinator is running, remove that file`)
+      error.phase = 'lock'
+      throw error
+    }
+    sleepSync(LOCK_POLL_MS)
+  }
+}
+
+/**
  * The one way a command or the coordinator changes `handoffs.json` (ST-93). Whatever is awaited (a
  * source read, a fetch, a coding run) is awaited first. Then, in one step with no await in it, this
- * reads the file afresh and validates it (`readHandoffs`), calls `change(handoffs, nextOrder)` on
- * that fresh copy, and writes what it returns (`writeStateFile`, which is synchronous). `change` is
- * synchronous too, and gives `{ handoffs, nextOrder?, result? }`, the whole new list to write
- * (`nextOrder` is kept unless given), or, to write nothing, `{ result }` or `{ refuse: reason, ... }`.
- * So a change touches only the records it concerns, as they are at
- * the moment of the write, and a record another writer changed during the await is never put back
- * as it was: `change` is where a writer re-checks what its change depends on (that a record is
- * still pending, still holds this admission) and refuses if not.
+ * takes the exclusive lock (`takeLock`: `handoffs.json.lock`, waiting up to `waitMs`), reads the
+ * file afresh and validates it (`readHandoffs`), calls `change(handoffs, nextOrder)` on that fresh
+ * copy, writes what it returns (`writeStateFile`, which is synchronous), and releases the lock in a
+ * `finally`. `change` is synchronous too, and gives `{ handoffs, nextOrder?, result? }`, the whole
+ * new list to write (`nextOrder` is kept unless given), or, to write nothing, `{ result }` or
+ * `{ refuse: reason, ... }`. So a change touches only the records it concerns, as they are at the
+ * moment of the write, and a record another writer changed during the await is never put back as it
+ * was: `change` is where a writer re-checks what its change depends on (that a record is still
+ * pending, still holds this admission) and refuses if not. Readers that write nothing (`list`,
+ * `show`, `status`, selection's checks) take no lock, as a write replaces the file in one rename.
+ *
+ * The lock serializes the processes of one OS user, the coordinator and the `steward handoff`
+ * commands, which are separate processes. A lock whose process is not running is taken over, and
+ * one that cannot be read and is older than `waitMs` too. If a live process holds it for `waitMs`,
+ * the call refuses and writes nothing.
  *
  * Returns `{ ok: true, result }` or `{ ok: false, reason, ... }` (the rest of what `change` gave).
- * Throws what `readHandoffs` or `writeStateFile` throws, with `phase` set to `read` or `write`; a
- * write that fails leaves the file as it was.
- *
- * The step is atomic within one process. Two processes can still interleave within it (one reads,
- * the other writes, the first writes over it); the threat model is one coordinator and one command
- * at a time, so that is outside it.
+ * Throws what `readHandoffs` or `writeStateFile` throws, or the refusal of the lock, with `phase`
+ * set to `read`, `write` or `lock`; a write that fails leaves the file as it was.
  */
-export function updateHandoffs(file, change) {
-  let current
+export function updateHandoffs(file, change, { waitMs = LOCK_WAIT_MS } = {}) {
+  takeLock(file, waitMs)
   try {
-    current = readHandoffs(file)
-  } catch (error) {
-    error.phase = 'read'
-    throw error
+    let current
+    try {
+      current = readHandoffs(file)
+    } catch (error) {
+      error.phase = 'read'
+      throw error
+    }
+    const outcome = change(current.handoffs, current.nextOrder)
+    if (outcome.refuse !== undefined) {
+      const { refuse, ...rest } = outcome
+      return { ok: false, reason: refuse, ...rest }
+    }
+    if (outcome.handoffs === undefined) return { ok: true, result: outcome.result }
+    try {
+      writeStateFile(file, { handoffs: outcome.handoffs, nextOrder: outcome.nextOrder ?? current.nextOrder })
+    } catch (error) {
+      error.phase = 'write'
+      throw error
+    }
+    return { ok: true, result: outcome.result }
+  } finally {
+    rmSync(lockPath(file), { force: true })
   }
-  const outcome = change(current.handoffs, current.nextOrder)
-  if (outcome.refuse !== undefined) {
-    const { refuse, ...rest } = outcome
-    return { ok: false, reason: refuse, ...rest }
-  }
-  if (outcome.handoffs === undefined) return { ok: true, result: outcome.result }
-  try {
-    writeStateFile(file, { handoffs: outcome.handoffs, nextOrder: outcome.nextOrder ?? current.nextOrder })
-  } catch (error) {
-    error.phase = 'write'
-    throw error
-  }
-  return { ok: true, result: outcome.result }
 }
 
 export const describeSource = (source) => (source.kind === 'file' ? `file ${source.path}` : `Issue #${source.number}`)
