@@ -401,6 +401,31 @@ describe('ST-93/AC-3: a pushed branch is published once, and the ending is recor
     expect(recordOf(home, 'H-1').stop.reason).toContain('clean-up failed')
   })
 
+  it('ST-93/AC-3, ST-93/AC-6: when the ending of a run that kept its worktree cannot be written, the blocked result keeps the branch and the kept work', async () => {
+    const home = await homeWith(APPROVALS)
+    const kept = { repoDir: '/owned/acme/gadgets', worktree: '/tmp/steward-handoff-x/tree', branch: 'handoff/H-1-b-md' }
+    const t = turn(home, {
+      execute: async (args) => {
+        blockWrites(home)
+        return refusal(home, args, 'session-failed', { branch: 'handoff/H-1-b-md', outcome: 'timed-out', reason: 'the session ran out of time', retained: kept })
+      },
+    })
+    const result = await t()
+    unblockWrites(home)
+    expect(result.status).toBe('blocked')
+    expect(result.evidence).toEqual({ outcome: 'session-failed', branch: 'handoff/H-1-b-md', headSha: null, pr: null, retained: kept })
+    expect(result.reason).toContain('with work kept at worktree /tmp/steward-handoff-x/tree (branch handoff/H-1-b-md) in /owned/acme/gadgets')
+    expect(recordOf(home, 'H-1').status).toBe('admitted')
+  })
+
+  it('ST-93/AC-3: when the ending of a published run cannot be written, the blocked result keeps the branch, head and pull request', async () => {
+    const home = await homeWith(APPROVALS)
+    const t = turn(home, { publish: async () => { blockWrites(home); return published() } })
+    const result = await t()
+    unblockWrites(home)
+    expect(result.evidence).toEqual({ outcome: 'completed', branch: 'handoff/H-1-b-md', headSha: HEAD, pr: { number: 12, url: 'https://github.com/acme/widgets/pull/12' }, retained: null })
+  })
+
   it('ST-93/AC-3: a record of the ending that cannot be written blocks coding and leaves the handoff admitted', async () => {
     const home = await homeWith(APPROVALS)
     const t = turn(home, { publish: async () => { blockWrites(home); return published() } })

@@ -1692,6 +1692,20 @@ describe('ST-93: the coordinator codes one approved handoff at a time, after wha
     expect(h.reviewed.slice(before)).toEqual([`${A}#2`, `${A}#2`])
   })
 
+  it('ST-93/AC-3, ST-93/AC-6: the evidence of a run whose ending could not be written is in the record and in status, in words and as JSON, while the coordinator runs', async () => {
+    const evidence = {
+      outcome: 'session-failed', branch: 'handoff/H-1-x', headSha: null, pr: null,
+      retained: { repoDir: '/owned/crew/alpha', worktree: '/tmp/steward-handoff-x/tree', branch: 'handoff/H-1-x' },
+    }
+    const h = coded(async () => ({ status: 'blocked', handoffId: 'H-1', repo: A, reason: 'H-1 ended as stopped, but the record of it could not be written', evidence }), { repos: [A] })
+    await idle(h)
+    expect(recordOf(h).lastCoding).toMatchObject({ handoffId: 'H-1', status: 'blocked', evidence })
+    const text = (await command(['status'], h.home)).out
+    expect(text).toContain('Known of it: outcome session-failed, branch handoff/H-1-x, work kept at worktree /tmp/steward-handoff-x/tree (branch handoff/H-1-x) in /owned/crew/alpha.')
+    const json = JSON.parse((await command(['status', '--json'], h.home)).out)
+    expect(json.lastCoding.evidence).toEqual(evidence)
+  })
+
   it('ST-93/AC-1: a turn that throws blocks coding and does not end the coordinator', async () => {
     const h = coded(async () => { throw new Error('boom') }, { repos: [A], listings: { [A]: [eligible(A, 1)] } })
     await idle(h)

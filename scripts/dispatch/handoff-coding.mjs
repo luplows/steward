@@ -32,8 +32,9 @@
  *                    coordinator is to admit no more coding until it is restarted, and the
  *                    reason says what the crew checks. The file is as it was, or, when the
  *                    ending could not be written, shows the handoff `admitted`, which the next
- *                    `start` makes `interrupted` (`interruptAdmissions`). Nothing is coded
- *                    meanwhile.
+ *                    `start` makes `interrupted` (`interruptAdmissions`); then the result's
+ *                    `evidence` keeps the branch, head, pull request and kept work the file
+ *                    lacks. Nothing is coded meanwhile.
  *   retry-later      a retryable refusal (`RETRYABLE_REFUSALS`, `handoff-coder.mjs`) before any
  *                    claim or model: the admission was cleared and the handoff is `pending` again.
  *   held             `executeHandoff` found the unit's text changed (`unit-changed`): the admission
@@ -58,7 +59,7 @@ import { randomUUID } from 'node:crypto'
 import { withoutCredentials } from './coordinator-scheduler.mjs'
 import { PUSHED, REFUSALS, executeHandoff, handoffBranch, isRetryableRefusal } from './handoff-coder.mjs'
 import { publishHandoff } from './handoff-publish.mjs'
-import { handoffsPath, readHandoffs, selectHandoff, updateHandoffs } from './handoff.mjs'
+import { handoffsPath, keptWhere, readHandoffs, selectHandoff, updateHandoffs } from './handoff.mjs'
 
 const SHA_RE = /^[0-9a-f]{40}$/
 const text = (value) => (typeof value === 'string' && value !== '' ? value : null)
@@ -229,7 +230,7 @@ export async function codeNextHandoff({
         admissionId: admission.id, at: stop.at, outcome: text(stop.outcome) ?? 'unknown', reason: text(stop.reason) ?? 'no reason was given',
         branch: text(stop.branch) ?? admission.branch, headSha: sha(stop.headSha), pr: null, retained: keptWork(stop.retained),
       }
-      return finish(admission, { status: 'stopped', stop: full }, { status: 'stopped', reason: full.reason, outcome: full.outcome, branch: full.branch, pr: full.pr, retained: full.retained })
+      return finish(admission, { status: 'stopped', stop: full }, { status: 'stopped', reason: full.reason, outcome: full.outcome, branch: full.branch, headSha: full.headSha, pr: full.pr, retained: full.retained })
     }
     const doneAt = now().toISOString()
 
@@ -277,13 +278,15 @@ export async function codeNextHandoff({
     return finish(admission, {
       status: 'completed',
       completion: { admissionId: admission.id, at: now().toISOString(), branch: pushed.branch, headSha: pushed.headSha, pr: { number: pr.number, url: pr.url }, draft: published.draft === true },
-    }, { status: 'completed', branch: pushed.branch, pr: { number: pr.number, url: pr.url }, draft: published.draft === true })
+    }, { status: 'completed', branch: pushed.branch, headSha: pushed.headSha, pr: { number: pr.number, url: pr.url }, draft: published.draft === true })
   }
 
   /**
    * Records how the admitted run ended: `next` replaces the handoff's status, and the admission
    * is cleared, in one write. Resolves `outcome`, plus the handoff, or `blocked` when the write
-   * cannot be made, in which case the handoff stays `admitted` in the file.
+   * cannot be made, in which case the handoff stays `admitted` in the file and the result's
+   * `evidence` keeps what the run is known to have left (`{ outcome, branch, headSha, pr, retained }`),
+   * since the file will not have it.
    */
   function finish(admission, next, outcome) {
     const named = { handoffId: admission.handoffId, repo: admission.repo }
@@ -298,9 +301,14 @@ export async function codeNextHandoff({
       })
       if (!done.ok) throw new Error(done.reason)
     } catch (error) {
+      const kept = keptWhere(outcome.retained ?? null)
       return {
         status: 'blocked', ...named,
-        reason: `${admission.handoffId} ended as ${outcome.status}${outcome.reason ? ` (${outcome.reason})` : ''}${outcome.branch ? `, on branch ${outcome.branch}` : ''}${outcome.pr ? `, pull request #${outcome.pr.number}` : ''}, but the record of it could not be written to ${file}: ${withoutCredentials(error.message)}. It stays admitted, and is marked interrupted when the coordinator is restarted. Nothing is coded until then`,
+        evidence: {
+          outcome: outcome.outcome ?? outcome.status, branch: outcome.branch ?? admission.branch, headSha: outcome.headSha ?? null,
+          pr: outcome.pr ?? null, retained: outcome.retained ?? null,
+        },
+        reason: `${admission.handoffId} ended as ${outcome.status}${outcome.reason ? ` (${outcome.reason})` : ''}${outcome.branch ? `, on branch ${outcome.branch}` : ''}${outcome.pr ? `, pull request #${outcome.pr.number}` : ''}${kept === null ? '' : `, with work kept at ${kept}`}, but the record of it could not be written to ${file}: ${withoutCredentials(error.message)}. It stays admitted, and is marked interrupted when the coordinator is restarted. Nothing is coded until then`,
       }
     }
     return { ...named, ...outcome }

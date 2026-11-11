@@ -69,7 +69,9 @@
  *                    coded, or null; only with `coding`. While one is, `nextScanAt` is null
  *   lastCoding       { repo, handoffId, status, reason?, branch?, pr?, at } of the latest coding
  *                    turn that took a handoff, `status` being what `codeNextHandoff` resolved
- *                    (`completed`, `stopped`, `held`, `retry-later`, `not-admitted` or `blocked`);
+ *                    (`completed`, `stopped`, `held`, `retry-later`, `not-admitted` or `blocked`),
+ *                    and, for `blocked`, `evidence`, `{ outcome, branch, headSha, pr, retained }`,
+ *                    what the run is known to have left when its ending could not be written;
  *                    only with `coding`
  *   codingProblem    why no handoff is coded: `blocked`'s reason, which lasts until a restart, or a
  *                    selection's failure, which lasts until a later turn selects; or null. Only
@@ -458,7 +460,7 @@ export async function scheduleReviews({
     } catch (error) {
       outcome = { status: 'blocked', reason: `the coding turn failed: ${error.message}` }
     }
-    const { status, handoffId, repo, reason, branch, pr } = outcome
+    const { status, handoffId, repo, reason, branch, pr, evidence } = outcome
     if (status === 'admission-closed') return false
     if (status === 'none') {
       report({ codingProblem: null })
@@ -468,7 +470,7 @@ export async function scheduleReviews({
       report({ codingProblem: withoutCredentials(`no handoff is coded until a later scan: ${reason}`) })
       return false
     }
-    const lastCoding = { ...(repo && { repo, handoffId }), status, ...(reason && { reason: withoutCredentials(reason) }), ...(branch && { branch }), ...(pr && { pr }), at: now().toISOString() }
+    const lastCoding = { ...(repo && { repo, handoffId }), status, ...(reason && { reason: withoutCredentials(reason) }), ...(branch && { branch }), ...(pr && { pr }), ...(evidence && { evidence }), at: now().toISOString() }
     if (status === 'blocked') {
       codingBlocked = true
       report({ lastCoding, codingProblem: withoutCredentials(`no handoff is coded until the coordinator is restarted: ${reason}`) })

@@ -69,7 +69,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { scheduleReviews } from './coordinator-scheduler.mjs'
 import { codeNextHandoff, interruptAdmissions } from './handoff-coding.mjs'
-import { codingReport, codingState, describeSource, handoffsPath, readHandoffs, reportLines } from './handoff.mjs'
+import { codingReport, codingState, describeSource, handoffsPath, keptWhere, readHandoffs, reportLines } from './handoff.mjs'
 import { classifyResult, interruptRunning, readReviews, reviewsPath } from './review-admission.mjs'
 import { readStateFile, writeStateFile } from './state-file.mjs'
 import { readUserConfig, stateDir } from './user-config.mjs'
@@ -357,6 +357,11 @@ function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, 
   if (lastCoding) {
     const { repo, handoffId, status: ended, reason, branch, pr, at } = lastCoding
     lines.push(`Last coding: ${handoffId ? `${handoffId} of ${repo}: ` : ''}${ended}${branch ? `, branch ${branch}` : ''}${pr ? `, pull request #${pr.number}` : ''}, at ${at}${reason ? `: ${reason}` : ''}.`)
+  }
+  if (lastCoding?.evidence) {
+    const known = lastCoding.evidence
+    const kept = known.retained ? keptWhere(known.retained) : null
+    lines.push(`  Known of it: ${[`outcome ${known.outcome}`, known.branch && `branch ${known.branch}`, known.headSha && `head ${known.headSha}`, known.pr && `pull request #${known.pr.number} ${known.pr.url}`, kept && `work kept at ${kept}`].filter(Boolean).join(', ')}.`)
   }
   if (codingProblem) lines.push(`No handoff is coded: ${codingProblem}`)
   if (usage) lines.push(`No more reviews until the next scan: ${usage.status}: ${usage.reason}.`)

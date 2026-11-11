@@ -622,9 +622,11 @@ is written to the handoff's record, with the admission cleared, in one write:
   branch `executeHandoff` kept. Nothing is retried, and the coordinator never codes it again.
 - **A write that fails:** if the admission cannot be written, nothing was started and the handoff
   stays `pending`; if the admission cannot be cleared, or the ending written, the handoff stays
-  `admitted`, with the reason in the message. In either case the coordinator admits no more coding
-  until it is restarted, `status` says why, and reviews and landing carry on. A selection that fails
-  (an unreadable file, for instance) is not this: it is reported, and the next scan selects again.
+  `admitted`, and the message and `status` (also as `lastCoding.evidence` in `--json`) keep what the
+  run is known to have left: the branch, head, pull request and any worktree or branch kept, which
+  the file will not have. In either case the coordinator admits no more coding until it is
+  restarted, `status` says why, and reviews and landing carry on. A selection that fails (an
+  unreadable file, for instance) is not this: it is reported, and the next scan selects again.
 
 A coordinator that ends during coding leaves its handoff `admitted`. The next `start`, with the
 reviews' interruption below, moves each `admitted` handoff to `interrupted`, with the branch the

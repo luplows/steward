@@ -363,7 +363,8 @@ const STATES = { pending: 'queued', admitted: 'running', completed: 'completed',
 export const codingState = (h) => STATES[h.status] ?? null
 
 /** Where the work a stop kept is, in words: a worktree, or a branch, in the owned checkout. */
-const keptWhere = (retained) => (retained === null ? null
+/** Where the work a run kept is, in words, or null when none was kept. */
+export const keptWhere = (retained) => (retained === null ? null
   : `${retained.worktree === undefined ? `branch ${retained.branch}` : `worktree ${retained.worktree}${retained.branch === undefined ? '' : ` (branch ${retained.branch})`}`} in ${retained.repoDir}`)
 
 /** What the crew does next about a stopped or interrupted `h`: inspect what its record knows. */
