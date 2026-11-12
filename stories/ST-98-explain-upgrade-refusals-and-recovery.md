@@ -26,13 +26,13 @@ so that I can repair the issue without guessing or weakening the review gate.
       that the upgrade partially succeeded when it has not.
 - [ ] **AC-2** — For a workflow that is not equivalent to its installed
       template under ST-96, the refusal identifies each affected path
-      and installed pin, distinguishes a workflow whose YAML does not parse
-      from well-formed YAML whose difference is outside ST-96's supported
-      presentation-only transformations, and explains the safe choices:
-      restore the installed version's managed template via a project
-      PR, or reconcile the intended target change by hand. When
-      equivalence cannot be established, say so rather than guessing
-      which YAML permission or command changed.
+      and installed pin, says the file differs by more than the changes
+      ST-96 accepts (the pin, line endings and quotes), and explains the
+      safe choices: restore the installed version's managed template via
+      a project PR, or reconcile the intended target change by hand.
+      Steward compares workflows as text and does not parse YAML, so the
+      refusal says it cannot tell whether the file is valid YAML or which
+      permission or command changed, rather than guessing.
 - [ ] **AC-3** — The failure report explicitly identifies what was and
       was not created (`clone`, local branch, remote branch or PR) using
       the existing progress tracking. It gives a rerun precondition,
@@ -47,8 +47,9 @@ so that I can repair the issue without guessing or weakening the review gate.
       the first. Tests prove failure details are redacted as needed.
 - [ ] **AC-5** — Offline tests cover each AC-1 failure class, at
       least two simultaneous workflow mismatches, formatting-only
-      success from ST-96, a workflow whose YAML does not parse, a
-      well-formed difference outside ST-96's supported set, a failed external read and failures before and after cloning. Assert
+      success from ST-96, a difference outside ST-96's accepted
+      changes, a failed external read and failures before and after
+      cloning. Assert
       the suggested next action and actual remaining artifacts
       for each, with no live GitHub mutation.
 - [ ] **AC-6** — Update the upgrade troubleshooting section in
@@ -87,6 +88,12 @@ uncertain, refuse without claiming the workflow was validated.
   what to do next, without weakening strict validation. Considered
   and deferred: auto-repair, arbitrary YAML semantic analysis and
   additional machine-readable reports.
+- Crew decision, 2026-11-12, before dispatch: AC-2 no longer tells a
+  workflow whose YAML does not parse apart from a well-formed one.
+  ST-96 compares lines of text (`scripts/dispatch/workflow-text.mjs`),
+  and steward has no runtime dependencies (`package.json`), so making
+  that distinction would need a YAML parser. Considered and rejected:
+  a hand-written partial parse check, and a YAML runtime package.
 
 ## Open questions
 
