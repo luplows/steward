@@ -14,6 +14,7 @@ import {
   readCommit,
   readFileAt,
   readTagCommit,
+  TagNotACommit,
 } from './github-read.mjs'
 
 const STEWARD = 'luplows/steward'
@@ -148,6 +149,21 @@ describe('ST-69/AC-2 and AC-4: the readers', () => {
     expect(await readTagCommit(ctx, 'v2.0.0')).toBeNull()
     await expect(readTagCommit(ctx, 'v3.0.0')).rejects.toThrow(/does not name a commit/)
     await expect(readTagCommit(ctx, 'v4.0.0')).rejects.toThrow(/failed with 500: boom/)
+  })
+
+  it('ST-98/AC-1: a tag that does not lead to a commit throws TagNotACommit, and a failed read does not', async () => {
+    const chain = Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`/git/tags/${String(i).repeat(40)}`, [200, { object: { type: 'tag', sha: String(i + 1).repeat(40) } }]]))
+    const ctx = ctxFor({
+      '/git/ref/tags/v3.0.0': [200, { object: { type: 'tree', sha: SHA } }],
+      '/git/ref/tags/v4.0.0': [500, { message: 'boom' }],
+      '/git/ref/tags/v5.0.0': [200, { object: { type: 'tag', sha: '0'.repeat(40) } }],
+      ...chain,
+    })
+    await expect(readTagCommit(ctx, 'v3.0.0')).rejects.toBeInstanceOf(TagNotACommit)
+    await expect(readTagCommit(ctx, 'v5.0.0')).rejects.toThrow(/leads through more than five tag objects/)
+    await expect(readTagCommit(ctx, 'v5.0.0')).rejects.toBeInstanceOf(TagNotACommit)
+    const failed = await readTagCommit(ctx, 'v4.0.0').catch((error) => error)
+    expect(failed).not.toBeInstanceOf(TagNotACommit)
   })
 
   it('ST-69/AC-2: a commit is found, or null for 404 and 422', async () => {

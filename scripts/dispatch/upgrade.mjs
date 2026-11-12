@@ -52,6 +52,7 @@ import {
   readCommit,
   readFileAt,
   readTagCommit,
+  TagNotACommit,
 } from './github-read.mjs'
 import {
   buildCreateDraftPull,
@@ -485,8 +486,11 @@ const notVerified = (stage) =>
     .join('; ')}.`
 const NOTHING_MADE = 'Nothing was cloned, branched or pushed, and no pull request was opened.'
 
-/** `line` with the user name and password of any URL in it shown as `***`, as a remote's URL can carry a token. */
-export const redact = (line) => String(line).replace(/(\/\/)[^\s/@]+@/g, (_, slashes) => `${slashes}***@`)
+/**
+ * `line` with the user name and password of any URL in it shown as `***`, as a remote's URL can
+ * carry a token: everything after `//` up to the last `@` before the next `/` or whitespace.
+ */
+export const redact = (line) => String(line).replace(/(\/\/)[^\s/]+@/g, (_, slashes) => `${slashes}***@`)
 
 /** What exists after `run` stopped, from `progress`: the clone, the branch in it and on GitHub, a pull request. */
 function remainsLines(progress) {
@@ -680,14 +684,35 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
   // Every read of GitHub below is a step: a read that fails is reported as one to retry
   // (`failureReport`), never as a refusal of the project's files.
   const read = (what, fn) => step(`reading ${what} from GitHub`, 'GitHub', fn)
+  // A tag GitHub answered for that does not lead to a commit is an answer about the pin, not a
+  // failed read: `{ notACommit }`, which the caller refuses.
+  const readTag = (what, tag) =>
+    read(what, async () => {
+      try {
+        return await readTagCommit(steward, tag)
+      } catch (error) {
+        if (error instanceof TagNotACommit) return { notACommit: error.message }
+        throw error
+      }
+    })
   const projectRepair = (text) => `Crew repair in the project: ${text}`
   const commandFix = `This is a correction of the command, not a repair of the project.`
 
   // The target: a tag or a commit of steward.
   const targetPin = flags.to ?? flags.ref.toLowerCase()
-  const targetCommit = await read(`the target ${targetPin} in ${STEWARD_REPO}`, () =>
-    flags.to !== undefined ? readTagCommit(steward, flags.to) : readCommit(steward, targetPin),
-  )
+  const targetCommit =
+    flags.to !== undefined
+      ? await readTag(`the target ${targetPin} in ${STEWARD_REPO}`, flags.to)
+      : await read(`the target ${targetPin} in ${STEWARD_REPO}`, () => readCommit(steward, targetPin))
+  if (targetCommit?.notACommit !== undefined) {
+    throw new Refusal(
+      [
+        `--to ${flags.to}: ${targetCommit.notACommit}.`,
+        `What to do next: give a tag that names a commit with --to, or a commit's full SHA with --ref, and run upgrade again. ${commandFix}`,
+        notVerified('target'),
+      ].join('\n'),
+    )
+  }
   if (targetCommit === null) {
     throw new Refusal(
       [
@@ -759,11 +784,16 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
     const kind = pinKind(pin)
     const commit =
       kind === 'tag'
-        ? await read(`the installed pin ${pin} in ${STEWARD_REPO}`, () => readTagCommit(steward, pin))
+        ? await readTag(`the installed pin ${pin} in ${STEWARD_REPO}`, pin)
         : kind === 'commit'
           ? await read(`the installed pin ${pin} in ${STEWARD_REPO}`, () => readCommit(steward, pin))
           : null
-    if (commit === null) {
+    if (commit?.notACommit !== undefined) {
+      find(
+        `the pin ${pin}: ${commit.notACommit}`,
+        `replace the pin ${pin}, in every managed workflow, with the tag or full commit SHA of ${STEWARD_REPO} the workflows were installed from`,
+      )
+    } else if (commit === null) {
       find(
         `the pin ${pin} is not a tag (vX.Y.Z) or a full commit SHA that exists in ${STEWARD_REPO}`,
         `replace the pin ${pin}, in every managed workflow, with the tag or full commit SHA of ${STEWARD_REPO} the workflows were installed from`,

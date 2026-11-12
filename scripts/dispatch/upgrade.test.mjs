@@ -62,7 +62,7 @@ const workflowsAt = (pin, files = [...GATE_WORKFLOWS]) =>
  * A project whose `origin` is a local bare repository holding `main` with `files`, and GitHub's
  * answers for it and for steward, injected as `fetch`. `steward` describes steward's history:
  * `versions` (commit to package.json version), `tags` (tag to commit, `annotated` ones through a tag
- * object), `templates` (commit to files overriding the real templates; `null` removes one),
+ * object, and one with a `type` naming an object of that type instead), `templates` (commit to files overriding the real templates; `null` removes one),
  * `order` (the line of history; any commit outside it is diverged from it). Records every request.
  */
 function world({ pin = 'v0.1.0', files = {}, inspection = false, config = settings(), rules, pullStatus = 201, openPulls = [], steward = {}, withoutDefaults = [] } = {}) {
@@ -104,7 +104,7 @@ function world({ pin = 'v0.1.0', files = {}, inspection = false, config = settin
       if ((m = /^\/git\/ref\/tags\/(.+)$/.exec(rest))) {
         const tag = tags[m[1]]
         if (!tag) return reply(404, { message: 'Not Found' })
-        return reply(200, { object: tag.annotated ? { type: 'tag', sha: `a${tag.sha.slice(1)}` } : { type: 'commit', sha: tag.sha } })
+        return reply(200, { object: tag.annotated ? { type: 'tag', sha: `a${tag.sha.slice(1)}` } : { type: tag.type ?? 'commit', sha: tag.sha } })
       }
       if ((m = /^\/git\/tags\/(.+)$/.exec(rest))) {
         const tag = Object.values(tags).find((t) => `a${t.sha.slice(1)}` === m[1])
@@ -1653,5 +1653,34 @@ describe('ST-98/AC-6: the documents', () => {
 
   it('ST-98/AC-6: the Planned (ST-98) marker is gone from the design document', () => {
     expect(read('docs/agent-workflow-design.md')).not.toMatch(/Planned \(ST-98\)/)
+  })
+})
+
+describe('ST-98: after review 1', () => {
+  it('ST-98/AC-4: a URL whose user information has more than one @ is shown with none of it, as an ordinary one is', async () => {
+    for (const userinfo of ['crew:prefix@secret', 'crew:s3cret']) {
+      const w = world()
+      git(w.dir, 'remote', 'set-url', 'origin', `https://${userinfo}@example.com/acme/widgets.git`)
+      const errs = []
+      expect(await main(['--to', 'v0.2.0'], { cwd: w.dir, fetch: w.fetch, getToken: async () => 't', out() {}, err: (l) => errs.push(l) })).toBe(2)
+      expect(errs.join('\n'), userinfo).toContain('The `origin` remote, https://***@example.com/acme/widgets.git, is not a GitHub repository.')
+      for (const part of userinfo.split(/[:@]/)) expect(errs.join('\n'), userinfo).not.toContain(part)
+    }
+    expect(redact('https://a:b@c@host/x@y')).toBe('https://***@host/x@y')
+  })
+
+  it('ST-98/AC-1: a tag that does not name a commit is refused, as a correction of the command for the target and a crew repair for the installed pin', async () => {
+    const tree = { sha: C_LATER, type: 'tree' }
+    const target = await refusedBefore(['--to', 'v0.2.0'], world({ steward: { tags: { 'v0.2.0': tree } } }))
+    expect(target.err).toContain('--to v0.2.0: the tag v0.2.0 of luplows/steward does not name a commit.')
+    expect(target.err).toContain(COMMAND)
+    expect(target.err).not.toContain(RETRY)
+    const installed = await refusedBefore(['--to', 'v0.2.0'], world({ steward: { tags: { 'v0.1.0': tree } } }))
+    expect(installed.err).toContain('  the pin v0.1.0: the tag v0.1.0 of luplows/steward does not name a commit')
+    expect(installed.err).toContain(`${CREW} Reconcile these by hand, through a pull request of the project: replace the pin v0.1.0, in every managed workflow`)
+    expect(installed.err).not.toContain(RETRY)
+    const failing = await runUpgrade(['--to', 'v0.2.0'], failingAt(world(), /\/git\/ref\/tags\/v0\.1\.0$/))
+    expect(failing.code).toBe(1)
+    expect(failing.err).toContain(RETRY)
   })
 })

@@ -360,10 +360,10 @@ code 1). It repairs nothing itself: it changes no file of the project to get pas
   project's own files (the managed workflows and their pin, `steward.config.json`, the checklist)
   gives a `Crew repair in the project:` line: make that repair through a pull request of the
   project, and run the command again. A target that is not a tag or commit of `luplows/steward`,
-  whose `package.json` gives no version, that is behind the installed pin, or that has no template
-  for a workflow the project has, is a correction of the command: give another target. So is a
-  target template this steward cannot fill: run the command from steward installed at the target
-  pin.
+  a tag that does not name a commit, a target whose `package.json` gives no version, one that is
+  behind the installed pin, or one that has no template for a workflow the project has, is a
+  correction of the command: give another target. So is a target template this steward cannot
+  fill: run the command from steward installed at the target pin.
 - **What a refusal could not verify.** A refusal at one of the checks of the target, the managed
   workflows, `steward.config.json` or the checklist names the checks it had not reached as ones it
   could not verify, and does not call them valid. A refusal of the pins names every finding it
