@@ -981,6 +981,19 @@ describe('ST-97/AC-1: an ordinary template is filled in place', () => {
     })
   }
 
+  it('ST-97/AC-1: a fenced heading that repeats no section is read as real: the template is filled, and What changed\'s text lands before it', async () => {
+    const text = withExample(['```', '## Example', '```'])
+    expect(templateMapping(readTemplate(text).headings).mapped).toBe(true)
+    const r = await runUpgrade(['--to', 'v0.2.0'], world({ files: { [TEMPLATE_PATH]: text } }))
+    expect(r.code).toBe(0)
+    expect(r.opened.body).not.toMatch(/^## Steward upgrade$/m)
+    const body = r.opened.body
+    expect(body.indexOf('`steward upgrade` generated this draft pull request.')).toBeLessThan(body.indexOf('## Example'))
+    expect(body).toContain('## What changed\n\n```\n\n`steward upgrade` generated this draft pull request.')
+    expect(section(body, 'Example')).toBe('```\n')
+    expectKeptInOrder(body, text)
+  })
+
   it('ST-97/AC-1: a CRLF template keeps its line endings, and the headings are matched whatever their case', async () => {
     const text = 'Unit:\r\n\r\n## what changed\r\n\r\n## VERIFICATION\r\n\r\n## Docs Check\r\n'
     const w = world({ files: { [TEMPLATE_PATH]: text } })

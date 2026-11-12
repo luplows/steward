@@ -205,7 +205,8 @@ const sameTitle = (a, b) => a.trim().replace(/\s+/g, ' ').toLowerCase() === b.to
  * starts with one to six `#` and whitespace, wherever it is, fenced code and HTML comments
  * included) and its first line that starts with `Unit:` (`{ index, value }`, or `null`). A
  * template with a heading inside code or a comment that repeats one of steward's sections is
- * therefore not mapped, and goes to the unfilled fallback (`templateMapping`).
+ * therefore not mapped, and goes to the unfilled fallback (`templateMapping`); one that repeats
+ * none is filled as if the heading were real, and the crew corrects the draft.
  */
 export function readTemplate(text) {
   const lines = text.split(/\r?\n/)
