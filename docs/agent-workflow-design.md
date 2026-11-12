@@ -73,12 +73,18 @@ installation cost on all those unrelated runs. Considered and not chosen: runtim
 Prettier, parsed-YAML equivalence that ignores comments or ordering, and unconditional
 whitespace normalization.
 
-**Planned (ST-97)** (crew, 2026-11-09): The upgrade command fills the existing reviewable PR
-sections with what it actually generated and verified, tied to the base and generated head SHA.
-It clearly distinguishes `Verified`, `Crew action required` and `Not checked`, without
-inventing a unit, project CI results or future edits. Custom project templates and requirements
-remain crew decisions. It opens a draft, not a preapproved PR. Considered and deferred: a
-separate report artifact or a general post-edit verification service.
+(crew, 2026-11-09) The upgrade command fills the existing reviewable PR sections with what it
+actually generated and verified, tied to the base and generated head SHA. It clearly
+distinguishes `Verified`, `Crew action required` and `Not checked`, without inventing a unit,
+project CI results or future edits. Custom project templates and requirements remain crew
+decisions: a template without exactly one each of the `What changed`, `Verification` and `Docs
+check` headings, or with more than one `Crew action required`, is kept as it is and left
+unfilled. Its checks read the project's files at the commit `main` names when it starts, by SHA,
+and the branch starts from that commit, so the base the body names is the commit every check was
+made on; if `main` has moved since, the PR starts from that earlier commit (crew, 2026-11-12,
+after review 1 of #167; considered and not chosen: refusing when `main` moved, and qualifying the
+claims). It opens a draft, not a preapproved PR. Considered and deferred: a separate report
+artifact or a general post-edit verification service.
 
 **Planned (ST-98)** (crew, 2026-11-09; refined after PR #151 review, 2026-11-10):
 Upgrade refusals identify affected paths and pins, the failed condition, what remains
