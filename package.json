@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "oxlint": "^1.79.0",
+    "prettier": "3.9.10",
     "vitest": "^5.0.0"
   }
 }

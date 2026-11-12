@@ -15,7 +15,7 @@ name: Inspection
 on:
   workflow_dispatch:
   schedule:
-    - cron: '17 6 * * *'
+    - cron: "17 6 * * *"
 
 permissions:
   # To check out the repository, so the settings (steward.config.json) can be read.

@@ -37,20 +37,20 @@ on:
   workflow_dispatch:
     inputs:
       pr:
-        description: 'Pull request to land, only it. Empty: the oldest landable (unattended only).'
+        description: "Pull request to land, only it. Empty: the oldest landable (unattended only)."
         required: false
         type: string
-        default: ''
+        default: ""
       mode:
-        description: 'unattended (standing permission) or manual (one explicit request).'
+        description: "unattended (standing permission) or manual (one explicit request)."
         required: false
         type: string
-        default: 'unattended'
+        default: "unattended"
       head:
-        description: 'Manual only: the full 40-character head SHA that is authorized.'
+        description: "Manual only: the full 40-character head SHA that is authorized."
         required: false
         type: string
-        default: ''
+        default: ""
 
 permissions:
   contents: write

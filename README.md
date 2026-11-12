@@ -133,6 +133,34 @@ existing `steward.config.json` it reads only `rulesFile`, to find the checklist.
   commit's full SHA instead);
 - a pull request template, only when the project has none.
 
+The checklist's path, at the question or with `--rules-file`, must name a Markdown file, ending in
+`.md` in any case, and no segment of it may start with `-`; `init` refuses any other answer, saying
+why. An existing `steward.config.json` is not held to this: its `rulesFile` is read as before.
+
+Each file `init` adds is as Prettier's default options print it, checked by steward's tests with
+the one Prettier version steward's `package.json` pins. The one exception is a checklist added at
+the path an existing `steward.config.json` names, when that path does not end in `.md` or has a
+segment starting with `-`: it is not covered, and the pull request's body names it as left out of
+its formatting command, or, when it is the only file added, says so with no command. `init` runs
+no formatter, and the project needs none.
+
+A project whose own formatting settings differ may format only the newly installed files, on
+the installation's branch before merging it, for example, for the files a `--yes` run adds to a
+project with no pull request template:
+
+```sh
+npx prettier --write steward.config.json REVIEW.md .github/workflows/review-gate.yml \
+  .github/workflows/land-approved.yml .github/workflows/inspection.yml \
+  .github/pull_request_template.md
+```
+
+The pull request's body gives the command for the files it added other than such a checklist, and
+no command when that checklist is all it adds.
+Not every project needs to.
+`steward upgrade` refuses a managed workflow that differs from steward's template at its pin by
+more than the pin and line endings, so a workflow that this formatting changes is refused by a
+later upgrade.
+
 Outside the pull request it also creates the labels steward reads and applies, `review-blocked`,
 `breaker-override` and `inspection`, and writes the user config (`~/.steward/config.json`), only
 when that file is missing.
