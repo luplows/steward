@@ -17,25 +17,25 @@ or stale claims about what the upgrade checked.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — For a project's ordinary Markdown PR template containing
+- [x] **AC-1** — For a project's ordinary Markdown PR template containing
       `## What changed`, `## Verification` and `## Docs check` sections,
       `upgrade` populates each section with substantive upgrade-specific
       content rather than appending those sections blank. It preserves
       `Unit:` and unrelated project-defined sections and instructions.
       It does not generate duplicate heading sections.
-- [ ] **AC-2** — `What changed` identifies installed and target pins, target
+- [x] **AC-2** — `What changed` identifies installed and target pins, target
       type and version, generated branch, starting `main` commit, generated
       upgrade head and the files the command changed. It says these facts
       describe what `upgrade` *generated*, not what future crew commits may
       add. Any report that it made no project-owned changes is explicitly
       scoped to its generated commit.
-- [ ] **AC-3** — `Verification` records the actual `steward upgrade` arguments
+- [x] **AC-3** — `Verification` records the actual `steward upgrade` arguments
       used and their successful result, and separately reports the actual
       pin/template, settings and checklist validations performed, with
       outcomes and the version of Steward performing them. It does not invent
       `npm test`, client CI, a reviewer check or other commands not run.
       Failed validation never appears as a successful generated PR.
-- [ ] **AC-4** — `Docs check` states accurately that the command did not
+- [x] **AC-4** — `Docs check` states accurately that the command did not
       inspect or edit the project's README or pin-related documentation,
       and asks the crew to confirm whether documentation must change.
       A clear `Crew action required` / `Not checked` section also calls out
@@ -43,19 +43,19 @@ or stale claims about what the upgrade checked.
       preparatory work, CI and post-landing behavior, and any remaining
       configuration decisions. These are suggestions, not claims that every
       project's policy requires every item. The body never invents a unit.
-- [ ] **AC-5** — When no project PR template is found, the generated body still
+- [x] **AC-5** — When no project PR template is found, the generated body still
       contains useful filled-in standard sections. When a custom template
       cannot be mapped to those three headings, preserve its text and explain
       which sections require crew completion; never claim it is automatically
       review-ready. The resulting PR is a draft in every case, and an
       unfilled `Unit:` remains explicitly identified for the crew.
-- [ ] **AC-6** — Tests using the actual generated upgrade commit and PR body
+- [x] **AC-6** — Tests using the actual generated upgrade commit and PR body
       cover a standard template, no template, a custom template, project-owned
       config edits, a pin-only upgrade, optional workflows and generation-time
       `land` state. They verify that generated claims are explicitly scoped
       to the generated base/head, that untouched custom fields are preserved,
       and that the body does not claim to validate subsequent crew edits.
-- [ ] **AC-7** — Update `README.md`'s upgrade guidance with the remaining
+- [x] **AC-7** — Update `README.md`'s upgrade guidance with the remaining
       project-specific responsibilities, particularly links to independently
       complete units and docs affected by pin-form changes; resolve
       `**Planned (ST-97)**` in `docs/agent-workflow-design.md`.

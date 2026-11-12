@@ -147,7 +147,7 @@ const writes = (w) => w.requests.filter((r) => r.method !== 'GET')
 const heads = (w) => git(w.bare, 'for-each-ref', '--format=%(refname) %(objectname)')
 
 /** Runs `upgrade` in the project; resolves `{ code, out, err, clone, tmpRoot, opened, w }`. */
-async function runUpgrade(args, w, { migrations, cloneUrl, getToken = async () => 'token' } = {}) {
+async function runUpgrade(args, w, { migrations, cloneUrl, packageRoot, getToken = async () => 'token' } = {}) {
   const out = []
   const err = []
   const tmpRoot = fresh('tmp')
@@ -161,6 +161,7 @@ async function runUpgrade(args, w, { migrations, cloneUrl, getToken = async () =
       return w.bare
     }),
     ...(migrations ? { migrations } : {}),
+    ...(packageRoot ? { packageRoot } : {}),
     out: (line) => out.push(line),
     err: (line) => err.push(line),
   })
@@ -563,7 +564,7 @@ describe('ST-69/AC-7: the project\'s own configuration', () => {
     expect(r.code).toBe(0)
     expect(onBranch(w, r.opened.head, 'steward.config.json')).toBe(config.trimEnd())
     expect(changedFiles(w, r.opened.head)).not.toContain('steward.config.json')
-    expect(r.opened.body).toMatch(/Project-owned changes:\n- none: `steward\.config\.json` and `docs\/RULES\.md` are left as they are\./)
+    expect(r.opened.body).toMatch(/- Project-owned changes: none in `[0-9a-f]{40}`: `steward\.config\.json`, `docs\/RULES\.md` and every other file not listed above are as they are at `[0-9a-f]{40}`\./)
     expect(r.opened.body).toMatch(/`land` is true\); the upgrade did not change it/)
   })
 
@@ -573,7 +574,7 @@ describe('ST-69/AC-7: the project\'s own configuration', () => {
     const r = await runUpgrade(['--to', 'v0.2.0'], w)
     expect(r.code).toBe(0)
     expect(onBranch(w, r.opened.head, 'steward.config.json')).toBe(config.trimEnd())
-    expect(r.opened.body).toContain('`./REVIEW.md` are left as they are')
+    expect(r.opened.body).toContain('`steward.config.json`, `./REVIEW.md` and every other file not listed above are as they are at')
     expect(w.requests.some((q) => q.rest === '/contents/REVIEW.md')).toBe(true)
     const bad = await runUpgrade(['--to', 'v0.2.0'], world({ config, rules: ['# R', '', '## S', '', 'no item', ''].join('\n') }))
     expect(bad.code).toBe(2)
@@ -590,7 +591,7 @@ describe('ST-69/AC-7: the project\'s own configuration', () => {
     const r = await runUpgrade(['--to', 'v0.2.0'], w, { migrations: [migration] })
     expect(r.code).toBe(0)
     expect(JSON.parse(onBranch(w, r.opened.head, 'steward.config.json'))).toMatchObject({ inspectAfterHours: 48, land: false })
-    expect(r.opened.body).toContain('- `steward.config.json`: renames inspectAfterHours to keep its value (M-example)')
+    expect(r.opened.body).toContain('- Project-owned change: `steward.config.json`: renames inspectAfterHours to keep its value (M-example).')
     expect(changedFiles(w, r.opened.head)).toContain('steward.config.json')
   })
 
@@ -599,7 +600,7 @@ describe('ST-69/AC-7: the project\'s own configuration', () => {
     const w = world()
     const r = await runUpgrade(['--to', 'v0.2.0'], w, { migrations: [migration] })
     expect(r.code).toBe(0)
-    expect(r.opened.body).toMatch(/Unresolved actions:\n- Decide whether landWhen should name the new check\./)
+    expect(r.opened.body).toMatch(/- Configuration decisions left to the project, which `steward upgrade` did not make:\n {2}- Decide whether landWhen should name the new check\./)
     expect(changedFiles(w, r.opened.head)).not.toContain('steward.config.json')
   })
 
@@ -659,8 +660,9 @@ describe('ST-69/AC-8: the proposed result is validated before it is called ready
   it('ST-69/AC-8: a result that validates says what was checked, and that the checks do not run the workflows', async () => {
     const w = world()
     const r = await runUpgrade(['--to', 'v0.2.0'], w)
-    expect(r.opened.body).toMatch(/Validation:\n- `steward\.config\.json` meets the settings requirements of the steward that ran `steward upgrade`/)
-    expect(r.opened.body).toContain("`REVIEW.md` parses with the reviewer's parser")
+    expect(r.opened.body).toMatch(/- Settings: `steward\.config\.json`, as `[0-9a-f]{40}` has it and `[0-9a-f]{40}` leaves it, passes `readSettings`\./)
+    expect(r.opened.body).toMatch(/- Checklist: `REVIEW\.md`, as `[0-9a-f]{40}` has it and `[0-9a-f]{40}` leaves it, passes `validateRules`, the reviewer's checklist parser\./)
+    expect(r.opened.body).toContain('- The workflows: it ran none, the proposed ones included.')
     expect(r.out).toMatch(/run it from steward installed at the target pin/)
   })
 })
@@ -673,10 +675,10 @@ describe('ST-69/AC-9: what the pull request names', () => {
     expect(body).toContain(`from \`${C_935F}\` to \`${C_CAND}\``)
     expect(body).toContain(`- Installed: development commit ${C_935F} (package.json version 0.0.0)`)
     expect(body).toContain(`- Target: commit ${C_CAND}, a candidate of version 0.2.0`)
-    expect(body).toMatch(/Managed files changed:\n- `\.github\/workflows\/land-approved\.yml`\n- `\.github\/workflows\/review-gate\.yml`/)
-    expect(body).toMatch(/Project-owned changes:\n- none/)
-    expect(body).toMatch(/Validation:\n/)
-    expect(body).toMatch(/Unresolved actions:\n- none/)
+    expect(body).toMatch(/- Files the generated commit changes:\n {2}- `\.github\/workflows\/land-approved\.yml`\n {2}- `\.github\/workflows\/review-gate\.yml`/)
+    expect(body).toMatch(/- Project-owned changes: none in /)
+    expect(body).toMatch(/\*\*Verified\*\* by steward /)
+    expect(body).toMatch(/- Configuration: no migration of this upgrade asked the project for a decision\./)
     expect(body).toMatch(/After this pull request merges, by hand:/)
     expect(body).toMatch(/names `c0ffee0000000000000000000000000000000001`/)
     expect(body).toMatch(/stop it, and start it again from steward installed at the target pin/)
@@ -865,5 +867,340 @@ describe('ST-69/AC-11 and AC-12: the documents', () => {
 
   it('ST-69/AC-12: the Planned (ST-69) marker is gone from the design document', () => {
     expect(read('docs/agent-workflow-design.md')).not.toMatch(/Planned \(ST-69\)/)
+  })
+})
+
+// ------------------------------------------------------------------ ST-97: the body's evidence
+
+const STEWARD_PR_TEMPLATE = readFileSync(path.join(TEMPLATES, 'pull_request_template.md'), 'utf8')
+const PROJECT_TEMPLATE = `${STEWARD_PR_TEMPLATE}\n## Screenshots\n\n<!-- The project's own instruction: add screenshots of any UI change. -->\n`
+const TEMPLATE_PATH = '.github/pull_request_template.md'
+
+/** The generated base and head, read from the project's origin, not from the body. */
+const generated = (r) => ({ base: git(r.w.bare, 'rev-parse', 'main'), head: git(r.w.bare, 'rev-parse', `refs/heads/${r.opened.head}`) })
+
+/** The text of the second-level section `title` of `body`, up to the next heading of level one or two. */
+function section(body, title) {
+  const lines = body.split('\n')
+  const start = lines.indexOf(`## ${title}`)
+  if (start === -1) return null
+  const end = lines.findIndex((line, i) => i > start && /^#{1,2} /.test(line))
+  return lines.slice(start + 1, end === -1 ? undefined : end).join('\n')
+}
+const headingCount = (body, title) => body.split('\n').filter((line) => line === `## ${title}`).length
+
+/** Every non-blank line of `template` appears in `body`, in the same order. */
+function expectKeptInOrder(body, template) {
+  const lines = body.split('\n')
+  let at = 0
+  for (const line of template.split('\n').filter((l) => l.trim() !== '')) {
+    const found = lines.indexOf(line, at)
+    expect(found, line).toBeGreaterThanOrEqual(at)
+    at = found + 1
+  }
+}
+
+/** A steward package root whose package.json gives `version`. */
+function packageAt(version) {
+  const dir = fresh('package')
+  writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'steward', version }))
+  return dir
+}
+
+describe('ST-97/AC-1: an ordinary template is filled in place', () => {
+  it('ST-97/AC-1: What changed, Verification and Docs check are filled, once each, and Unit:, other sections and instructions are kept', async () => {
+    const w = world({ files: { [TEMPLATE_PATH]: PROJECT_TEMPLATE } })
+    const r = await runUpgrade(['--to', 'v0.2.0'], w)
+    expect(r.code).toBe(0)
+    const { base, head } = generated(r)
+    const body = r.opened.body
+    for (const title of ['What changed', 'Verification', 'Docs check', 'Crew action required']) expect(headingCount(body, title), title).toBe(1)
+    expect(body).not.toMatch(/^## Steward upgrade$/m)
+    expect(body.startsWith('Unit:\n<!-- Complete this line')).toBe(true)
+    expectKeptInOrder(body, PROJECT_TEMPLATE)
+    expect(section(body, 'What changed')).toContain('<!-- What this PR does and why.')
+    expect(section(body, 'What changed')).toContain(`- Generated head: \`${head}\`, one commit on \`${base}\`.`)
+    expect(section(body, 'Verification')).toContain('**Verified** by steward ')
+    expect(section(body, 'Verification')).toContain('**Not checked** by `steward upgrade`:')
+    expect(section(body, 'Docs check')).toContain('**Not checked**: `steward upgrade` did not inspect or edit `README.md`')
+    expect(section(body, 'Screenshots')).toBe("\n<!-- The project's own instruction: add screenshots of any UI change. -->\n")
+    expect(body.indexOf('## Crew action required')).toBeGreaterThan(body.indexOf('## Screenshots'))
+    expect(section(body, 'Crew action required')).toContain(
+      "with `steward upgrade`'s text added at the end of its What changed, Verification, Docs check sections, and this Crew action required section added at its end",
+    )
+  })
+
+  it("ST-97/AC-1: a template's own Crew action required section is filled in place, not repeated", async () => {
+    const text = `${STEWARD_PR_TEMPLATE}\n## Crew action required\n\n- Our own item.\n\n## Screenshots\n`
+    const w = world({ files: { [TEMPLATE_PATH]: text } })
+    const r = await runUpgrade(['--to', 'v0.2.0'], w)
+    expect(r.code).toBe(0)
+    expect(headingCount(r.opened.body, 'Crew action required')).toBe(1)
+    const crew = section(r.opened.body, 'Crew action required')
+    expect(crew.indexOf('- Our own item.')).toBeLessThan(crew.indexOf('Suggestions, not requirements'))
+    expect(r.opened.body.trimEnd().endsWith('## Screenshots')).toBe(true)
+    expectKeptInOrder(r.opened.body, text)
+  })
+
+  it('ST-97/AC-1: a CRLF template keeps its line endings, and the headings are matched whatever their case', async () => {
+    const text = 'Unit:\r\n\r\n## what changed\r\n\r\n## VERIFICATION\r\n\r\n## Docs Check\r\n'
+    const w = world({ files: { [TEMPLATE_PATH]: text } })
+    const r = await runUpgrade(['--to', 'v0.2.0'], w)
+    expect(r.code).toBe(0)
+    expect(r.opened.body).not.toMatch(/[^\r]\n/)
+    expect(r.opened.body).toContain('## VERIFICATION\r\n\r\n**Verified**')
+    expect(r.opened.body).not.toMatch(/^## Steward upgrade/m)
+  })
+})
+
+describe('ST-97/AC-2: What changed says what upgrade generated, scoped to its base and head', () => {
+  it('ST-97/AC-2: the pins, the target type and version, the branch, the base, the head and the changed files, all of the generated commit', async () => {
+    const w = world({ files: { [TEMPLATE_PATH]: STEWARD_PR_TEMPLATE } })
+    const r = await runUpgrade(['--to', 'v0.2.0'], w)
+    const { base, head } = generated(r)
+    const text = section(r.opened.body, 'What changed')
+    expect(text).toContain('moving the steward this project installs from `v0.1.0` to `v0.2.0`')
+    expect(text).toContain(`- Installed: release v0.1.0 (package.json version 0.1.0); a tag of luplows/steward at commit \`${C_0B1D}\`.`)
+    expect(text).toContain(`- Target: release v0.2.0 (package.json version 0.2.0); a tag of luplows/steward at commit \`${C_LATER}\`.`)
+    expect(text).toContain('- Branch: `steward/upgrade-v0.2.0`.')
+    expect(text).toContain(`- Starting commit: \`main\` at \`${base}\`, as \`steward upgrade\` copied it.`)
+    expect(text).toContain(`What \`steward upgrade\` generated: the commit \`${head}\`, and nothing after it.`)
+    expect(git(w.bare, 'rev-parse', `${head}^`)).toBe(base)
+    const listed = [...text.matchAll(/^ {2}- `([^`]+)`$/gm)].map((m) => m[1])
+    expect(listed).toEqual(changedFiles(w, r.opened.head).sort())
+    expect(text).toContain(
+      `- Project-owned changes: none in \`${head}\`: \`steward.config.json\`, \`REVIEW.md\` and every other file not listed above are as they are at \`${base}\`.`,
+    )
+    expect(text).toContain(`These facts describe what \`steward upgrade\` generated, \`${base}\` to \`${head}\`. Commits added to this branch after \`${head}\``)
+  })
+
+  it('ST-97/AC-2: a commit target is named as a commit with its version, never a release', async () => {
+    const r = await runUpgrade(['--ref', C_CAND], world())
+    expect(section(r.opened.body, 'What changed')).toContain(`- Target: commit ${C_CAND}, a candidate of version 0.2.0; a commit of luplows/steward.`)
+  })
+})
+
+describe('ST-97/AC-3: Verification is what upgrade ran and checked, and what it did not', () => {
+  it('ST-97/AC-3: the arguments, their result, each validation with its outcome and the version of steward that ran them', async () => {
+    const w = world({ files: { [TEMPLATE_PATH]: STEWARD_PR_TEMPLATE } })
+    const r = await runUpgrade(['--to=v0.2.0', '--branch', 'crew/upgrade'], w, { packageRoot: packageAt('7.7.7-test') })
+    expect(r.code).toBe(0)
+    const { base, head } = generated(r)
+    const text = section(r.opened.body, 'Verification')
+    expect(text).toContain('**Verified** by steward 7.7.7-test (the `package.json` version of the steward that ran the command)')
+    expect(text).toContain(
+      `- \`steward upgrade --to=v0.2.0 --branch crew/upgrade\` ran in the project's checkout and completed each of its steps before opening this draft pull request: ` +
+        `it copied \`main\` at \`${base}\`, committed \`${head}\` on the branch \`crew/upgrade\`, and pushed that branch.`,
+    )
+    expect(text).toContain(`- Target pin: GitHub answered that \`v0.2.0\` is a tag of luplows/steward at commit \`${C_LATER}\`, whose \`package.json\` gives version \`0.2.0\`.`)
+    expect(text).toContain('- Installed pin: each managed workflow on `main` (`.github/workflows/review-gate.yml`, `.github/workflows/land-approved.yml`) carries the one pin `v0.1.0`')
+    expect(text).toContain("- Installed workflows: each is steward's template at `v0.1.0` apart from the pin and line endings")
+    expect(text).toContain(`- Direction: GitHub's comparison of \`${C_0B1D}\` with \`${C_LATER}\` gave \`ahead\``)
+    expect(text).toContain(`- Settings: \`steward.config.json\`, as \`${base}\` has it and \`${head}\` leaves it, passes \`readSettings\`.`)
+    expect(text).toContain(`- Checklist: \`REVIEW.md\`, as \`${base}\` has it and \`${head}\` leaves it, passes \`validateRules\``)
+    expect(text).toContain(`are the files at \`${base}\`, and \`.github/workflows/inspection.yml\` is absent there too.`)
+    expect(text).toContain('Each of these checks passed: had any failed, `steward upgrade` would have stopped and opened no pull request.')
+    const verified = text.slice(text.indexOf('**Verified**'), text.indexOf('**Not checked**'))
+    expect(verified).not.toMatch(/npm|\bCI\b|a review/)
+    expect(text.slice(text.indexOf('**Not checked**'))).toMatch(/tests, builds and other commands, and its CI: `steward upgrade` ran none of them/)
+  })
+
+  it('ST-97/AC-3: a validation that fails opens no pull request, so it never appears as a generated one', async () => {
+    for (const w of [world({ config: `${JSON.stringify({ repo: REPO, land: false })}\n` }), world({ rules: '# Rules\n\n## A section\n\nno numbered item\n' })]) {
+      const r = await runUpgrade(['--to', 'v0.2.0'], w)
+      expect(r.code).toBe(2)
+      expect(r.opened).toBeUndefined()
+      expect(writes(w)).toEqual([])
+    }
+  })
+
+  it('ST-97/AC-3: when main on GitHub is not what the checks read, no branch is pushed and no pull request is opened', async () => {
+    const w = world()
+    const fetch = w.fetch
+    let moved = false
+    w.fetch = async (url, init) => {
+      // The last request before the clone is the look for an open pull request from the branch.
+      if (!moved && init.method === 'GET' && /\/repos\/acme\/widgets\/pulls\?/.test(url)) {
+        moved = true
+        writeFileSync(path.join(w.dir, 'steward.config.json'), settings({ inspectAfterHours: 12 }))
+        git(w.dir, 'commit', '-q', '-am', 'crew change')
+        git(w.dir, 'push', '-q', w.bare, 'main')
+      }
+      return fetch(url, init)
+    }
+    const r = await runUpgrade(['--to', 'v0.2.0'], w)
+    expect(moved).toBe(true)
+    expect(r.code).toBe(2)
+    expect(r.err).toMatch(/main changed on GitHub while upgrade ran: at [0-9a-f]{40}, the commit it copied, steward\.config\.json is not what it checked/)
+    expect(r.opened).toBeUndefined()
+    expect(heads(w)).not.toContain('steward/upgrade')
+  })
+})
+
+describe('ST-97/AC-4: Docs check, and what is left to the crew', () => {
+  it('ST-97/AC-4: Docs check says what was not inspected and asks the crew; Crew action required names the unit, preparatory work, CI, after the merge and configuration', async () => {
+    const w = world({ files: { [TEMPLATE_PATH]: STEWARD_PR_TEMPLATE } })
+    const r = await runUpgrade(['--ref', C_CAND], w)
+    const { base } = generated(r)
+    const docs = section(r.opened.body, 'Docs check')
+    expect(docs).toContain(
+      "**Not checked**: `steward upgrade` did not inspect or edit `README.md` or the project's other documentation, apart from validating `REVIEW.md` " +
+        'and reading its pull request template, `.github/pull_request_template.md`, neither of which it changed.',
+    )
+    const none = await runUpgrade(['--to', 'v0.2.0'], world())
+    expect(section(none.opened.body, 'Docs check')).toContain("or the project's other documentation, apart from validating `REVIEW.md`, which it did not change.")
+    expect(docs).toContain("**Crew action required**: confirm whether the project's documentation must change with this upgrade")
+    expect(docs).toContain('(this upgrade changes the pin from a tag to a commit)')
+    const crew = section(r.opened.body, 'Crew action required')
+    expect(crew).toMatch(/^Suggestions, not requirements: the project's own rules decide which apply/m)
+    expect(crew).toContain(
+      `- Unit: the template's \`Unit:\` line is left empty: \`steward upgrade\` names no unit. \`steward.config.json\` at \`${base}\` gives \`unitLinks\` as \`["file","issue"]\`.`,
+    )
+    expect(crew).toMatch(/- Preparatory work: .*a unit and pull request of its own/)
+    expect(crew).toMatch(/- CI: check what the project's CI reports/)
+    expect(crew).toMatch(/- After this pull request merges, by hand:\n {2}- Check the pin in effect/)
+    expect(crew).toMatch(/- Configuration: no migration of this upgrade asked the project for a decision\./)
+    expect(r.opened.body.split('\n')[0]).toBe('Unit:')
+  })
+
+  it('ST-97/AC-4: the same pin form says nothing of a change of form', async () => {
+    const r = await runUpgrade(['--to', 'v0.2.0'], world())
+    expect(section(r.opened.body, 'Docs check')).not.toContain('changes the pin from')
+  })
+})
+
+describe('ST-97/AC-5: no template, an empty one and a custom one', () => {
+  it("ST-97/AC-5: with no template, the body is steward's Unit: line and three sections, filled, and the empty Unit: is named for the crew", async () => {
+    const r = await runUpgrade(['--to', 'v0.2.0'], world())
+    expect(r.opened.draft).toBe(true)
+    const body = r.opened.body
+    expect(body.startsWith('Unit:\n\n## What changed\n\n`steward upgrade` generated this draft pull request.')).toBe(true)
+    for (const title of ['What changed', 'Verification', 'Docs check', 'Crew action required']) expect(section(body, title).trim(), title).not.toBe('')
+    expect(body).toContain("- Template: the project has no pull request template, so this body uses steward's `Unit:` line and its three sections.")
+    expect(body).toContain('- Unit: `steward upgrade` wrote the `Unit:` line empty: it names no unit.')
+  })
+
+  it('ST-97/AC-5: an empty template is said to be empty, and gets the same sections', async () => {
+    const r = await runUpgrade(['--to', 'v0.2.0'], world({ files: { [TEMPLATE_PATH]: '\n' } }))
+    expect(r.opened.draft).toBe(true)
+    expect(r.opened.body.startsWith('Unit:\n\n## What changed\n\n')).toBe(true)
+    expect(r.opened.body).toContain(
+      "- Template: the project's pull request template, `.github/pull_request_template.md`, is empty, so this body uses steward's `Unit:` line and its three sections.",
+    )
+  })
+
+  it('ST-97/AC-5: a custom template is kept as it is, its sections are named for the crew, and it is never called ready', async () => {
+    const custom = 'Unit: \n\n# Notes\n\nOur own text, kept.\n\n## Testing\n\n- [ ] tried it\n'
+    const r = await runUpgrade(['--to', 'v0.2.0'], world({ files: { [TEMPLATE_PATH]: custom } }))
+    expect(r.opened.draft).toBe(true)
+    const body = r.opened.body
+    expect(body.endsWith(`---\n\n${custom}`)).toBe(true)
+    for (const title of ['What changed', 'Verification', 'Docs check']) expect(headingCount(body, title), title).toBe(0)
+    expect(body).toContain('because it has no `## What changed`, `## Verification`, `## Docs check` heading.')
+    expect(body).toContain('The crew completes its sections ("Notes", "Testing"); `steward upgrade` did not, and does not say this pull request is ready for review.')
+    expect(body).toContain("- Unit: the template's `Unit:` line is left empty: `steward upgrade` names no unit.")
+    expect(body).toMatch(/### Upgrade: verification\n\n\*\*Verified\*\*/)
+    expect(body).toMatch(/ready for review/)
+    expect(body).not.toMatch(/(?<!not say (this pull request|it) is )ready for review/)
+  })
+
+  it('ST-97/AC-5: a template with a heading repeated is not filled, and the repeat is named', async () => {
+    const text = `${STEWARD_PR_TEMPLATE}\n## Verification\n`
+    const r = await runUpgrade(['--to', 'v0.2.0'], world({ files: { [TEMPLATE_PATH]: text } }))
+    expect(r.opened.body.endsWith(text)).toBe(true)
+    expect(r.opened.body).toContain('because it has more than one `## Verification` heading.')
+  })
+
+  it('ST-97/AC-5: a template with no Unit: line gets none', async () => {
+    const text = '## What changed\n\n## Verification\n\n## Docs check\n'
+    const r = await runUpgrade(['--to', 'v0.2.0'], world({ files: { [TEMPLATE_PATH]: text } }))
+    expect(r.opened.body).not.toMatch(/^Unit:/m)
+    expect(r.opened.body).toContain('- Unit: the template has no `Unit:` line, and `steward upgrade` added none: it names no unit.')
+  })
+})
+
+describe('ST-97/AC-6: the body against the generated commit, case by case', () => {
+  /** Every full SHA the body names is the base, the head or a commit of steward it read. */
+  function expectOnlyGeneratedShas(r) {
+    const { base, head } = generated(r)
+    const known = new Set([base, head, ...LINE, C_BRANCH])
+    for (const [sha] of r.opened.body.matchAll(/[0-9a-f]{40}/g)) expect(known.has(sha), sha).toBe(true)
+  }
+
+  it('ST-97/AC-6: a standard template: the claims are of the base and head, and a crew commit added later is not described or validated', async () => {
+    const w = world({ files: { [TEMPLATE_PATH]: STEWARD_PR_TEMPLATE } })
+    const r = await runUpgrade(['--to', 'v0.2.0'], w)
+    expectOnlyGeneratedShas(r)
+    const { head } = generated(r)
+    const crew = fresh('crew')
+    git(crew, 'clone', '-q', '--branch', r.opened.head, w.bare, '.')
+    writeFileSync(path.join(crew, 'README.md'), 'widgets, edited by the crew\n')
+    git(crew, 'commit', '-q', '-am', 'crew edit')
+    git(crew, 'push', '-q', 'origin', r.opened.head)
+    const later = git(w.bare, 'rev-parse', `refs/heads/${r.opened.head}`)
+    expect(later).not.toBe(head)
+    expect(r.opened.body).not.toContain(later)
+    expect(section(r.opened.body, 'Verification')).toContain(`- Anything after \`${head}\`: commits added to this branch later, and edits to this description.`)
+  })
+
+  it('ST-97/AC-6: no template and a custom template name only the generated commits too', async () => {
+    expectOnlyGeneratedShas(await runUpgrade(['--to', 'v0.2.0'], world()))
+    expectOnlyGeneratedShas(await runUpgrade(['--to', 'v0.2.0'], world({ files: { [TEMPLATE_PATH]: '# Ours\n' } })))
+  })
+
+  it('ST-97/AC-6: project-owned config edits are listed, and validated as the generated commit writes them', async () => {
+    const migration = { id: 'M-example', explanation: 'sets inspectAfterHours to 48', applies: () => true, migrate: (c) => ({ ...c, inspectAfterHours: 48 }) }
+    const r = await runUpgrade(['--to', 'v0.2.0'], world({ files: { [TEMPLATE_PATH]: STEWARD_PR_TEMPLATE } }), { migrations: [migration] })
+    const { head } = generated(r)
+    const text = section(r.opened.body, 'What changed')
+    expect(text).toContain('  - `steward.config.json`')
+    expect(text).toContain('- Project-owned change: `steward.config.json`: sets inspectAfterHours to 48 (M-example).')
+    expect(text).toContain(`- No other project-owned file changes in \`${head}\`.`)
+    expect(section(r.opened.body, 'Verification')).toContain('- Settings: `steward.config.json`, as the generated commit writes it, passes `readSettings`.')
+  })
+
+  it('ST-97/AC-6: a pin-only upgrade says only the pin changes, that no comparison was made and that no migration ran', async () => {
+    const r = await runUpgrade(['--to', 'v0.2.0'], world({ pin: C_LATER, files: { [TEMPLATE_PATH]: STEWARD_PR_TEMPLATE } }))
+    expect(section(r.opened.body, 'What changed')).toContain(`- Only the pin changes: both pins name the same commit of steward, \`${C_LATER}\``)
+    expect(section(r.opened.body, 'Verification')).toContain(`- Direction: both pins name the commit \`${C_LATER}\`, so no comparison was needed.`)
+    expect(section(r.opened.body, 'Crew action required')).toContain('- Configuration: no migration ran, since both pins name the same commit of steward.')
+    expectOnlyGeneratedShas(r)
+  })
+
+  it('ST-97/AC-6: an optional workflow is named as absent when it is, and among those checked and changed when it is installed', async () => {
+    const without = await runUpgrade(['--to', 'v0.2.0'], world())
+    const { base } = generated(without)
+    expect(section(without.opened.body, 'What changed')).toContain(
+      `- \`.github/workflows/inspection.yml\` is not on \`main\` at \`${base}\`, and \`steward upgrade\` did not add it.`,
+    )
+    const withIt = await runUpgrade(['--to', 'v0.2.0'], world({ inspection: true }))
+    expect(section(withIt.opened.body, 'What changed')).toContain('  - `.github/workflows/inspection.yml`')
+    expect(section(withIt.opened.body, 'What changed')).not.toContain('is not on `main`')
+    expect(section(withIt.opened.body, 'Verification')).toContain('(`.github/workflows/review-gate.yml`, `.github/workflows/land-approved.yml`, `.github/workflows/inspection.yml`)')
+  })
+
+  it('ST-97/AC-6: land is reported as it is at the base, for each value', async () => {
+    for (const land of [false, true]) {
+      const r = await runUpgrade(['--to', 'v0.2.0'], world({ config: settings({ land }) }))
+      const { base } = generated(r)
+      expect(section(r.opened.body, 'What changed')).toContain(`- Landing is as \`steward.config.json\` has it at \`${base}\` (\`land\` is ${land}); the upgrade did not change it.`)
+    }
+  })
+})
+
+describe('ST-97/AC-7: the documents', () => {
+  const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8')
+
+  it('ST-97/AC-7: README names what is left to the crew: the unit, separate units for other work and the docs a pin-form change affects', () => {
+    const readme = read('README.md')
+    const text = readme.slice(readme.indexOf('### Upgrading steward in a project'), readme.indexOf('### When the checklist does not parse'))
+    expect(text).toMatch(/Crew\s+action\s+required/)
+    expect(text).toMatch(/names\s+no\s+unit/)
+    expect(text).toMatch(/unit\s+and\s+pull\s+request\s+of\s+its\s+own,\s+complete\s+without\s+this\s+one/)
+    expect(text).toMatch(/names\s+the\s+old\s+pin,\s+or\s+says\s+whether\s+steward\s+is\s+pinned\s+to\s+a\s+tag\s+or\s+a\s+commit/)
+  })
+
+  it('ST-97/AC-7: the Planned (ST-97) marker is gone from the design document', () => {
+    expect(read('docs/agent-workflow-design.md')).not.toMatch(/Planned \(ST-97\)/)
   })
 })

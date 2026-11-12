@@ -17,20 +17,25 @@
  * yet. It validates the proposed result with the running package's own `readSettings` and
  * `validateRules`, so it must be run from steward installed at the target pin.
  *
- * It then clones the project's `main` into a new temporary directory, writes only the files it
- * changes, commits them on a new branch, pushes it and opens one draft pull request against
- * `main`, as `init` does. It never merges, marks ready, protects a branch, activates a project,
- * touches the user config or any coordinator, or turns unattended landing on. The clone is kept,
- * and the closing message gives its path. It rolls nothing back.
+ * It then clones the project's `main` into a new temporary directory, refuses unless the clone has
+ * the files those checks read, writes only the files it changes, commits them on a new branch,
+ * pushes it and opens one draft pull request against `main`, as `init` does. The body (ST-97,
+ * `pullBody`) says what it generated and checked, of the clone's commit and its own, in the
+ * project's pull request template when `templateMapping` maps it. It never merges, marks
+ * ready, protects a branch, activates a project, touches the user config or any coordinator, or
+ * turns unattended landing on. The clone is kept, and the closing message gives its path. It rolls
+ * nothing back.
  *
  * Exit code: 0 when it finished, a no-op included; 1 when a step failed after the clone, with a
  * report of what is left, or GitHub could not be read; 2 when it refused: before any clone, except
- * the choice of the project's pull request template (--pr-template, or several templates), which
- * needs the clone's files, so that refusal leaves the clone, kept and named.
+ * a clone without the files the checks read (`main` changed meanwhile) and the choice of the
+ * project's pull request template (--pr-template, or several templates), which need the clone's
+ * files, so those refusals leave the clone, kept and named.
  *
  * Usage:
  *   steward upgrade (--to vX.Y.Z | --ref <40-hex commit>) [--branch <name>] [--pr-template <path>]
  */
+import { execFileSync } from 'node:child_process'
 import { existsSync, realpathSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir as osTmpdir } from 'node:os'
@@ -74,6 +79,7 @@ const PIN_REFERENCE_RE = /github:luplows\/steward#(\S+)/g
 const CONFIG_FILE = 'steward.config.json'
 const WORKFLOW_DIR = '.github/workflows'
 const TEMPLATE_DIR = 'templates/workflows'
+const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const MANAGED = [...GATE_WORKFLOWS, INSPECTION_WORKFLOW]
 const REQUIRED = GATE_WORKFLOWS
 const USAGE = [
@@ -184,46 +190,286 @@ const withEndingsOf = (like, text) => {
   return like.includes('\r\n') ? lf.replace(/\n/g, '\r\n') : lf
 }
 
-/** The draft pull request's body: what the upgrade proposes, how it was validated, what is left. */
-export function pullBody({ installed, target, sameCommit, changed, edits, decisions, validation, land, rulesFile, template }) {
-  const pinText = (p) => `\`${p.pin}\``
-  const lines = [
+// ------------------------------------------------------------------ the pull request's body
+
+/** The three sections of steward's pull request template, which the body fills when the project's has them. */
+export const STANDARD_SECTIONS = ['What changed', 'Verification', 'Docs check']
+/** The section the body adds for what is left to the crew, or fills when the template has it. */
+export const CREW_SECTION = 'Crew action required'
+/** steward's own `Unit:` line and three sections: the body's frame when the project has no template, or an empty one. */
+const STANDARD_FRAME = ['Unit:', '', ...STANDARD_SECTIONS.flatMap((title) => [`## ${title}`, ''])].join('\n')
+const HEADING_RE = /^ {0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/
+const FENCE_RE = /^ {0,3}(`{3,}|~{3,})/
+const sameTitle = (a, b) => a.trim().replace(/\s+/g, ' ').toLowerCase() === b.toLowerCase()
+
+/**
+ * A pull request template's lines, its headings (`{ index, level, title }`) and its first `Unit:`
+ * line (`{ index, value }`, or `null`), neither counted inside fenced code or an HTML comment.
+ */
+export function readTemplate(text) {
+  const lines = text.split(/\r?\n/)
+  const headings = []
+  let unit = null
+  let fence = null
+  let inComment = false
+  lines.forEach((line, index) => {
+    if (inComment) {
+      if (line.includes('-->')) inComment = false
+      return
+    }
+    const mark = FENCE_RE.exec(line)
+    if (fence !== null) {
+      if (mark && mark[1][0] === fence[0] && mark[1].length >= fence.length) fence = null
+      return
+    }
+    if (mark) {
+      fence = mark[1]
+      return
+    }
+    const heading = HEADING_RE.exec(line)
+    if (heading) headings.push({ index, level: heading[1].length, title: heading[2] })
+    else if (unit === null && line.startsWith('Unit:')) unit = { index, value: line.slice('Unit:'.length).replace(/<!--.*?(-->|$)/g, '').trim() }
+    const open = line.lastIndexOf('<!--')
+    if (open !== -1 && !line.slice(open).includes('-->')) inComment = true
+  })
+  return { lines, headings, unit }
+}
+
+/**
+ * Whether the body can be written into a template with these headings: exactly one second-level
+ * heading for each of `STANDARD_SECTIONS`, and at most one `CREW_SECTION`. `missing` and `repeated`
+ * name the headings that stop it.
+ */
+export function templateMapping(headings) {
+  const count = (title) => headings.filter((h) => h.level === 2 && sameTitle(h.title, title)).length
+  const missing = STANDARD_SECTIONS.filter((title) => count(title) === 0)
+  const repeated = [...STANDARD_SECTIONS, CREW_SECTION].filter((title) => count(title) > 1)
+  return { mapped: missing.length === 0 && repeated.length === 0, missing, repeated, hasCrew: count(CREW_SECTION) === 1 }
+}
+
+/**
+ * `lines` with each `[title, content]` of `fills` added at the end of the second-level section of
+ * that title, after the text the section already has. A section runs to the next heading of level
+ * one or two. Blank lines at a section's end are replaced by one before and one after the content.
+ */
+function fillSections(lines, headings, fills) {
+  const result = [...lines]
+  const targets = []
+  for (const [title, content] of fills) {
+    const at = headings.findIndex((h) => h.level === 2 && sameTitle(h.title, title))
+    if (at === -1) continue
+    const next = headings.slice(at + 1).find((h) => h.level <= 2)
+    targets.push({ start: headings[at].index, end: next ? next.index : lines.length, content })
+  }
+  targets.sort((a, b) => b.start - a.start)
+  for (const { start, end, content } of targets) {
+    let last = end
+    while (last > start + 1 && result[last - 1].trim() === '') last--
+    result.splice(last, end - last, '', ...content, '')
+  }
+  return result
+}
+
+const code = (text) => `\`${text}\``
+const quoteArg = (arg) => (/^[\w./=:@+-]+$/.test(arg) ? arg : JSON.stringify(arg))
+const kindName = (kind) => (kind === 'tag' ? 'a tag' : 'a commit')
+
+/**
+ * The texts of the body's sections, from what `upgrade` did and checked: `{ whatChanged,
+ * verification, docsCheck, crew }`, each a list of lines. Every fact in them is one `run` collected
+ * (`facts`), and is said of the generated base and head.
+ */
+export function bodySections(facts, frame) {
+  const { installed, target, sameCommit, changed, edits, decisions, land, unitLinks, rulesFile, argv, stewardVersion, branch, base, head, checked, absent, comparison } = facts
+  const pinSource = (p) => (p.kind === 'tag' ? `a tag of ${STEWARD_REPO} at commit ${code(p.commit)}` : `a commit of ${STEWARD_REPO}`)
+  const configEdited = edits.length > 0
+
+  const whatChanged = [
+    `\`steward upgrade\` generated this draft pull request. It proposes moving the steward this project installs from ${code(installed.pin)} to ${code(target.pin)}. ` +
+      'The project is not upgraded until it merges.',
+    '',
+    `What \`steward upgrade\` generated: the commit ${code(head)}, and nothing after it.`,
+    '',
+    `- Installed: ${describePin(installed)}; ${pinSource(installed)}.`,
+    `- Target: ${describePin(target)}; ${pinSource(target)}.`,
+    `- Branch: ${code(branch)}.`,
+    `- Starting commit: \`main\` at ${code(base)}, as \`steward upgrade\` copied it.`,
+    `- Generated head: ${code(head)}, one commit on ${code(base)}.`,
+    '- Files the generated commit changes:',
+    ...changed.map((rel) => `  - ${code(rel)}`),
+    sameCommit
+      ? `- Only the pin changes: both pins name the same commit of steward, ${code(target.commit)}, so each managed workflow differs from before only in its pin.`
+      : `- Each managed workflow it changes is steward's template at ${code(target.commit)}, with ${code(target.pin)} filled in as the pin.`,
+    ...absent.map((rel) => `- ${code(rel)} is not on \`main\` at ${code(base)}, and \`steward upgrade\` did not add it.`),
+    ...(configEdited
+      ? [
+          ...edits.map((e) => `- Project-owned change: ${code(CONFIG_FILE)}: ${e.explanation} (${e.id}).`),
+          `- No other project-owned file changes in ${code(head)}.`,
+        ]
+      : [
+          `- Project-owned changes: none in ${code(head)}: ${code(CONFIG_FILE)}, ${code(rulesFile)} and every other file not listed above are as they are at ${code(base)}.`,
+        ]),
+    `- Landing is as ${code(CONFIG_FILE)} has it at ${code(base)} (\`land\` is ${land}); the upgrade did not change it.`,
+    '',
+    `These facts describe what \`steward upgrade\` generated, ${code(base)} to ${code(head)}. Commits added to this branch after ${code(head)}, ` +
+      'and edits to this description, are not part of them: nothing here describes or checks them.',
+  ]
+
+  const configAt = configEdited
+    ? `${code(CONFIG_FILE)}, as the generated commit writes it`
+    : `${code(CONFIG_FILE)}, as ${code(base)} has it and ${code(head)} leaves it`
+  const verification = [
+    `**Verified** by steward ${stewardVersion === null ? '(package.json version unknown)' : stewardVersion} ` +
+      '(the `package.json` version of the steward that ran the command), before this pull request was opened:',
+    '',
+    `- ${code(['steward upgrade', ...argv.map(quoteArg)].join(' '))} ran in the project's checkout and completed each of its steps before opening this draft pull request: ` +
+      `it copied \`main\` at ${code(base)}, committed ${code(head)} on the branch ${code(branch)}, and pushed that branch.`,
+    target.kind === 'tag'
+      ? `- Target pin: GitHub answered that ${code(target.pin)} is a tag of ${STEWARD_REPO} at commit ${code(target.commit)}, whose \`package.json\` gives version ${code(target.version)}.`
+      : `- Target pin: GitHub answered that ${code(target.pin)} is a commit of ${STEWARD_REPO}, whose \`package.json\` gives version ${code(target.version)}.`,
+    `- Installed pin: each managed workflow on \`main\` (${checked.workflows.map(code).join(', ')}) carries the one pin ${code(installed.pin)}, ` +
+      `which GitHub answered is ${installed.kind === 'tag' ? `${kindName('tag')} of ${STEWARD_REPO} at commit ${code(installed.commit)}` : `${kindName('commit')} of ${STEWARD_REPO}`}.`,
+    `- Installed workflows: each is steward's template at ${code(installed.pin)} apart from the pin and line endings (\`sameWorkflowApartFromPin\`).`,
+    comparison === null
+      ? `- Direction: both pins name the commit ${code(target.commit)}, so no comparison was needed.`
+      : `- Direction: GitHub's comparison of ${code(installed.commit)} with ${code(target.commit)} gave ${code(comparison)}, so the target is not behind the installed commit.`,
+    `- Proposed workflows: steward has a template at ${code(target.commit)} for each of them, which \`fillPin\` filled with ${code(target.pin)}; they are the workflow files the generated commit writes.`,
+    `- Settings: ${configAt}, passes \`readSettings\`.`,
+    ...(checked.rules === null
+      ? []
+      : [`- Checklist: ${code(rulesFile)}, as ${code(base)} has it and ${code(head)} leaves it, passes \`validateRules\`, the reviewer's checklist parser.`]),
+    `- Same files: the files these checks read from the project's \`main\` on GitHub (${checked.files.map(code).join(', ')}) are the files at ${code(base)}` +
+      `${absent.length === 0 ? '' : `, and ${absent.map(code).join(', ')} ${absent.length === 1 ? 'is' : 'are'} absent there too`}.`,
+    `- Generated commit: Git staged exactly the files What changed lists as the files the generated commit changes, before \`steward upgrade\` committed ${code(head)}.`,
+    '',
+    'Each of these checks passed: had any failed, `steward upgrade` would have stopped and opened no pull request.',
+    '',
+    '**Not checked** by `steward upgrade`:',
+    '',
+    `- The project's own tests, builds and other commands, and its CI: \`steward upgrade\` ran none of them on ${code(head)}. ` +
+      'Any check result this pull request shows comes from elsewhere, not from `steward upgrade`.',
+    '- The workflows: it ran none, the proposed ones included.',
+    "- Review: the checks above are `steward upgrade`'s own report, not a review of this pull request.",
+    `- Anything after ${code(head)}: commits added to this branch later, and edits to this description.`,
+  ]
+
+  const formChange = installed.kind === target.kind ? '' : ` (this upgrade changes the pin from ${kindName(installed.kind)} to ${kindName(target.kind)})`
+  const exceptions = [
+    ...(checked.rules === null ? [] : [`validating ${code(rulesFile)}`]),
+    ...(frame.templatePath === null ? [] : [`reading its pull request template, ${code(frame.templatePath)}`]),
+  ]
+  const docsCheck = [
+    `**Not checked**: \`steward upgrade\` did not inspect or edit \`README.md\` or the project's other documentation` +
+      `${exceptions.length === 0 ? '' : `, apart from ${exceptions.join(' and ')}, ${exceptions.length === 1 ? 'which it did not change' : 'neither of which it changed'}`}. ` +
+      `It did not look for text that names the pin ${code(installed.pin)} or says what form the pin takes.`,
+    '',
+    "**Crew action required**: confirm whether the project's documentation must change with this upgrade: for example `README.md`, or other text that " +
+      `names ${code(installed.pin)} or says whether steward is pinned to a tag or a commit${formChange}.`,
+  ]
+
+  const unitText =
+    frame.kind === 'standard'
+      ? '`steward upgrade` wrote the `Unit:` line empty: it names no unit.'
+      : frame.unit === null
+        ? 'the template has no `Unit:` line, and `steward upgrade` added none: it names no unit.'
+        : frame.unit.value === ''
+          ? "the template's `Unit:` line is left empty: `steward upgrade` names no unit."
+          : "the template's `Unit:` line is left as the template has it: `steward upgrade` names no unit."
+  const decisionLines = sameCommit
+    ? ['- Configuration: no migration ran, since both pins name the same commit of steward.']
+    : decisions.length === 0
+      ? ['- Configuration: no migration of this upgrade asked the project for a decision.']
+      : ['- Configuration decisions left to the project, which `steward upgrade` did not make:', ...decisions.map((d) => `  - ${d}`)]
+  const crew = [
+    "Suggestions, not requirements: the project's own rules decide which apply, and `steward upgrade` checked none of them.",
+    '',
+    `- Unit: ${unitText}${Array.isArray(unitLinks) ? ` ${code(CONFIG_FILE)} at ${code(base)} gives \`unitLinks\` as ${code(JSON.stringify(unitLinks))}.` : ''} ` +
+      "If the project's review needs a unit, link one this pull request implements, with the criteria it is to be reviewed against.",
+    '- Preparatory work: work the project needs before this upgrade, such as documentation or CI changes, can be a unit and pull request of its own. ' +
+      `Commits added to this branch are not part of what \`steward upgrade\` generated or checked.`,
+    "- CI: check what the project's CI reports for this pull request; `steward upgrade` ran none of it.",
+    ...decisionLines,
+    "- Landing: turning unattended landing on is the crew's own settings pull request.",
+    `- Template: ${frame.note}`,
+    '- After this pull request merges, by hand:',
+    `  - Check the pin in effect: every reference to \`github:luplows/steward#\` in \`${WORKFLOW_DIR}/\` on \`main\` names ${code(target.pin)}.`,
+    '  - `steward upgrade` changed nothing on any machine. A coordinator running for this project keeps running the steward it was started from: stop it, and start it again from steward installed at the target pin, when the crew wants that machine on it.',
+    '- This pull request is a draft. `steward upgrade` did not mark it ready or merge it, and does not say it is ready for review. ' +
+      'Merge it as the project normally merges, once the crew has reviewed it and completed what the project requires.',
+  ]
+  return { whatChanged, verification, docsCheck, crew }
+}
+
+/**
+ * The draft pull request's body. `template` is the project's pull request template (`{ path, text
+ * }`), or `null` when it has none. A template with the three `STANDARD_SECTIONS` gets `upgrade`'s
+ * text at the end of each, and a `CREW_SECTION` at its end unless it has one; the rest of its text
+ * is kept. With no template, or an empty one, the body is steward's own `Unit:` line and three
+ * sections, filled the same way. Any other template follows `upgrade`'s text, as it is, unfilled.
+ */
+export function pullBody(facts) {
+  const { template } = facts
+  const standard = template === null || template.text.trim() === ''
+  const read = readTemplate(standard ? STANDARD_FRAME : template.text)
+  const mapping = templateMapping(read.headings)
+  const sectionNames = STANDARD_SECTIONS.join(', ')
+  let note
+  if (template === null) note = "the project has no pull request template, so this body uses steward's `Unit:` line and its three sections."
+  else if (standard) note = `the project's pull request template, ${code(template.path)}, is empty, so this body uses steward's \`Unit:\` line and its three sections.`
+  else if (mapping.mapped) {
+    note =
+      `this body is the project's pull request template, ${code(template.path)}, with \`steward upgrade\`'s text added at the end of its ${sectionNames} ` +
+      `${mapping.hasCrew ? `and ${CREW_SECTION} sections` : `sections, and this ${CREW_SECTION} section added at its end`}. The template's own text is kept: ` +
+      'complete what it asks for that `steward upgrade` did not.'
+  } else {
+    const reasons = [
+      ...(mapping.missing.length === 0 ? [] : [`it has no ${mapping.missing.map((t) => code(`## ${t}`)).join(', ')} heading`]),
+      ...(mapping.repeated.length === 0 ? [] : [`it has more than one ${mapping.repeated.map((t) => code(`## ${t}`)).join(', ')} heading`]),
+    ]
+    const headings = read.headings.map((h) => JSON.stringify(h.title))
+    note =
+      `the project's pull request template, ${code(template.path)}, follows below as it is in the project, not filled in, because ${reasons.join(', and ')}. ` +
+      `The crew completes ${headings.length === 0 ? 'it: it has no headings' : `its sections (${headings.join(', ')})`}; ` +
+      '`steward upgrade` did not, and does not say this pull request is ready for review.'
+  }
+  const frame = { kind: standard ? 'standard' : 'project', unit: read.unit, note, templatePath: template?.path ?? null }
+  const parts = bodySections(facts, frame)
+
+  if (standard || mapping.mapped) {
+    const eol = !standard && template.text.includes('\r\n') ? '\r\n' : '\n'
+    const fills = [...STANDARD_SECTIONS.map((title, i) => [title, [parts.whatChanged, parts.verification, parts.docsCheck][i]]), [CREW_SECTION, parts.crew]]
+    const lines = fillSections(read.lines, read.headings, fills)
+    if (!mapping.hasCrew) {
+      while (lines.length > 0 && lines.at(-1).trim() === '') lines.pop()
+      lines.push('', `## ${CREW_SECTION}`, '', ...parts.crew, '')
+    }
+    return lines.join(eol)
+  }
+  return [
     '## Steward upgrade',
     '',
-    `This draft pull request proposes moving the steward this project installs from ${pinText(installed)} to ${pinText(target)}. ` +
-      '`steward upgrade` made it. The project is not upgraded until it merges.',
+    `Template: ${note}`,
     '',
-    `- Installed: ${describePin(installed)}`,
-    `- Target: ${describePin(target)}`,
-    sameCommit
-      ? '- Only the pin changes: both pins name the same commit of steward, so every managed workflow differs from before only in its pin.'
-      : '- Each managed workflow is steward\'s template at the target pin, with the target pin filled in.',
+    '### Upgrade: what changed',
     '',
-    'Managed files changed:',
-    ...changed.map((rel) => `- \`${rel}\``),
+    ...parts.whatChanged,
     '',
-    'Project-owned changes:',
-    ...(edits.length === 0
-      ? [`- none: \`${CONFIG_FILE}\` and \`${rulesFile}\` are left as they are.`]
-      : edits.map((e) => `- \`${CONFIG_FILE}\`: ${e.explanation} (${e.id})`)),
+    '### Upgrade: verification',
     '',
-    'Validation:',
-    ...validation.map((line) => `- ${line}`),
+    ...parts.verification,
     '',
-    'Unresolved actions:',
-    ...(decisions.length === 0 ? ['- none'] : decisions.map((d) => `- ${d}`)),
+    '### Upgrade: docs check',
     '',
-    'After this pull request merges, by hand:',
-    `- Check the pin in effect: every reference to \`github:luplows/steward#\` in \`${WORKFLOW_DIR}/\` on \`main\` names \`${target.pin}\`.`,
-    '- `steward upgrade` changed nothing on any machine. A coordinator running for this project keeps running the steward it was started from: stop it, and start it again from steward installed at the target pin, when the crew wants that machine on it.',
-    `- Landing is as \`${CONFIG_FILE}\` already had it (\`land\` is ${land}); the upgrade did not change it. Turning unattended landing on is the crew's own settings pull request.`,
-    "- Merge this pull request as the project normally merges, once the crew has reviewed it and filled in the project's template below.",
+    ...parts.docsCheck,
+    '',
+    `### Upgrade: ${CREW_SECTION.toLowerCase()}`,
+    '',
+    ...parts.crew,
     '',
     '---',
     '',
-    template,
-  ]
-  return lines.join('\n')
+    template.text,
+  ].join('\n')
 }
 
 // ------------------------------------------------------------------ the command
@@ -268,7 +514,8 @@ export function failureReport(error, progress) {
  * Runs the command and returns its exit code. Everything it reads from outside is injectable:
  * `cwd`, `fetch` and `getToken` (every GitHub answer), `tmpRoot` (where the clone and the folder
  * validation uses are made), `cloneUrl` (the URL Git uses for `origin`'s URL: only tests pass one),
- * `migrations` and the output.
+ * `migrations`, the running steward's root (`packageRoot`, whose `package.json` gives the version
+ * the body names) and the output.
  */
 export async function main(
   argv,
@@ -279,13 +526,14 @@ export async function main(
     tmpRoot = osTmpdir(),
     cloneUrl = (url) => url,
     migrations = MIGRATIONS,
+    packageRoot = PACKAGE_ROOT,
     out = console.log,
     err = console.error,
   } = {},
 ) {
   const progress = { clone: null, branch: null, pushAttempted: false, pushed: false, pullAttempted: false }
   try {
-    return await run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, out }, progress)
+    return await run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, packageRoot, out }, progress)
   } catch (error) {
     if (error instanceof Refusal) {
       err(error.message)
@@ -327,8 +575,28 @@ async function settingsProblems(configText, tmpRoot) {
   }
 }
 
-async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, out }, progress) {
+/** The `version` the running steward's `package.json` gives, or `null` when it gives none. */
+async function runningVersion(packageRoot) {
+  try {
+    const { version } = JSON.parse(await readFile(path.join(packageRoot, 'package.json'), 'utf8'))
+    return typeof version === 'string' ? version : null
+  } catch {
+    return null
+  }
+}
+
+/** The text of `rel` at `HEAD` in `clone`, as Git stores it, or `null` when `HEAD` has no such file. */
+function textAtHead(clone, rel) {
+  try {
+    return execFileSync('git', ['cat-file', 'blob', `HEAD:${rel}`], { cwd: clone, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+  } catch {
+    return null
+  }
+}
+
+async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, packageRoot, out }, progress) {
   const flags = parseFlags(argv)
+  const stewardVersion = await runningVersion(packageRoot)
 
   const root = gitRoot(cwd)
   if (root === null) throw new Refusal(`${cwd} is not in a git repository: run upgrade in the project's checkout`)
@@ -449,8 +717,10 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
     return 0
   }
   const sameCommit = installed.commit === target.commit
+  let comparison = null
   if (!sameCommit) {
     const status = await readComparison(steward, installed.commit, target.commit)
+    comparison = status
     if (status === 'behind') {
       throw new Refusal(
         `${target.pin} is behind the installed ${installed.pin}: that would be a downgrade, and upgrade does not downgrade. Nothing was cloned, branched or pushed.`,
@@ -554,6 +824,20 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
     git(clone, ['clone', '--quiet', '--branch', 'main', '--single-branch', cloneUrl(url), '.']),
   )
   const base = await step("reading main's commit", 'Git', () => git(clone, ['rev-parse', 'HEAD']))
+  // The checks read main from GitHub before the clone: what the body says of them holds at the base
+  // only if the base has the same files.
+  const readFromMain = new Map([
+    ...MANAGED.map((file) => [`${WORKFLOW_DIR}/${file}`, present.get(file)?.text ?? null]),
+    [CONFIG_FILE, configText],
+    ...(rulesPath === null ? [] : [[rulesPath, rulesText]]),
+  ])
+  const moved = [...readFromMain].filter(([rel, text]) => textAtHead(clone, rel) !== text).map(([rel]) => rel)
+  if (moved.length > 0) {
+    throw new Refusal(
+      `main changed on GitHub while upgrade ran: at ${base}, the commit it copied, ${moved.join(', ')} ${moved.length === 1 ? 'is' : 'are'} not what it checked. ` +
+        'Run upgrade again. Nothing was branched or pushed.',
+    )
+  }
   const templates = findPullRequestTemplates(clone).filter((rel) => !rel.endsWith('/'))
   let bodyTemplate = null
   if (flags.prTemplate !== undefined) {
@@ -592,22 +876,26 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
   )
   progress.pushed = true
 
-  const templateText = bodyTemplate === null ? '' : await readFile(path.join(clone, ...bodyTemplate.split('/')), 'utf8')
+  const template = bodyTemplate === null ? null : { path: bodyTemplate, text: await readFile(path.join(clone, ...bodyTemplate.split('/')), 'utf8') }
   const body = pullBody({
     installed,
     target,
     sameCommit,
-    changed: [...changes.keys()].filter((rel) => rel !== CONFIG_FILE).sort(),
+    comparison,
+    changed,
     edits: plan.edits,
     decisions: plan.decisions,
-    validation: [
-      `\`${CONFIG_FILE}\` meets the settings requirements of the steward that ran \`steward upgrade\` (\`readSettings\`).`,
-      `\`${rulesFile}\` parses with the reviewer's parser (\`validateRules\`).`,
-      'Both were checked on the proposed result, before this pull request was opened. Neither check runs the workflows.',
-    ],
     land: plan.config.land,
+    unitLinks: config.unitLinks,
     rulesFile,
-    template: templateText,
+    argv,
+    stewardVersion,
+    branch,
+    base,
+    head: commit,
+    checked: { workflows: [...present.values()].map((w) => w.rel), files: [...readFromMain].filter(([, text]) => text !== null).map(([rel]) => rel), rules: rulesPath },
+    absent: MANAGED.filter((file) => !present.has(file)).map((file) => `${WORKFLOW_DIR}/${file}`),
+    template,
   })
   progress.pullAttempted = true
   const pull = await step('opening the draft pull request', 'GitHub', async () => {
