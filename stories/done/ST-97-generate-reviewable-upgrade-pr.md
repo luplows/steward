@@ -71,6 +71,7 @@ or stale claims about what the upgrade checked.
   read-only upgrade verification capability may address that.
 - Filling `init`'s installation template (ST-65), or changing workflow
   comparison and refusals (ST-96, ST-98).
+- **After review:** a pull request template with a section heading inside fenced code or an HTML comment is read as having that heading, so it goes to the unfilled fallback for the crew to complete (crew, 2026-11-12). Follow-up: none.
 
 ## Constraints
 

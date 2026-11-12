@@ -197,43 +197,24 @@ export const STANDARD_SECTIONS = ['What changed', 'Verification', 'Docs check']
 export const CREW_SECTION = 'Crew action required'
 /** steward's own `Unit:` line and three sections: the body's frame when the project has no template, or an empty one. */
 const STANDARD_FRAME = ['Unit:', '', ...STANDARD_SECTIONS.flatMap((title) => [`## ${title}`, ''])].join('\n')
-const HEADING_RE = /^ {0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/
-const FENCE_RE = /^ {0,3}(`{3,}|~{3,})/
-const CLOSING_FENCE_RE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/
+const HEADING_RE = /^(#{1,6})\s+(.*\S)/
 const sameTitle = (a, b) => a.trim().replace(/\s+/g, ' ').toLowerCase() === b.toLowerCase()
 
 /**
- * A pull request template's lines, its headings (`{ index, level, title }`) and its first `Unit:`
- * line (`{ index, value }`, or `null`), neither counted inside fenced code or an HTML comment.
+ * A pull request template's lines, its headings (`{ index, level, title }`: every line that
+ * starts with one to six `#` and whitespace, wherever it is, fenced code and HTML comments
+ * included) and its first line that starts with `Unit:` (`{ index, value }`, or `null`). A
+ * template with a heading inside code or a comment that repeats one of steward's sections is
+ * therefore not mapped, and goes to the unfilled fallback (`templateMapping`).
  */
 export function readTemplate(text) {
   const lines = text.split(/\r?\n/)
   const headings = []
   let unit = null
-  let fence = null
-  let inComment = false
   lines.forEach((line, index) => {
-    if (inComment) {
-      if (line.includes('-->')) inComment = false
-      return
-    }
-    if (fence !== null) {
-      // A closing fence is the opening fence's character, at least as many of it, and nothing after
-      // but spaces and tabs (CommonMark): `~~~example` inside a `~~~` fence is content.
-      const close = CLOSING_FENCE_RE.exec(line)
-      if (close && close[1][0] === fence[0] && close[1].length >= fence.length) fence = null
-      return
-    }
-    const mark = FENCE_RE.exec(line)
-    if (mark) {
-      fence = mark[1]
-      return
-    }
     const heading = HEADING_RE.exec(line)
     if (heading) headings.push({ index, level: heading[1].length, title: heading[2] })
     else if (unit === null && line.startsWith('Unit:')) unit = { index, value: line.slice('Unit:'.length).replace(/<!--.*?(-->|$)/g, '').trim() }
-    const open = line.lastIndexOf('<!--')
-    if (open !== -1 && !line.slice(open).includes('-->')) inComment = true
   })
   return { lines, headings, unit }
 }

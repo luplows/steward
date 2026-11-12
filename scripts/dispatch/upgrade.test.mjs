@@ -943,32 +943,43 @@ describe('ST-97/AC-1: an ordinary template is filled in place', () => {
     expectKeptInOrder(r.opened.body, text)
   })
 
-  /** A standard template whose What changed section holds the fenced example `fence`. */
-  const withExample = (fence) => ['Unit:', '', '## What changed', '', ...fence, '', '## Verification', '', '## Docs check', ''].join('\n')
-  const fenced = {
-    // The reviewer's example: an info string after a delimiter of the fence's own character is content.
-    'a tilde fence holding a tilde line with text after it': ['~~~text', '~~~example', '## Verification', '~~~'],
-    'a backtick fence holding a tilde line, and a backtick line with text after it': ['```', '~~~', '```text', '## Docs check', '```'],
-    'a tilde fence holding a backtick line, and a tilde line with text after it': ['~~~', '```', '~~~ more', '## What changed', '~~~'],
+  /** A standard template whose What changed section holds the lines `extra`. */
+  const withExample = (extra) => ['Unit:', '', '## What changed', '', ...extra, '', '## Verification', '', '## Docs check', ''].join('\n')
+  // Review 2's examples: inline code that looks like a fence, and `<!--` in inline code.
+  const inline = {
+    'a line of inline code made of three backticks': ['```example```'],
+    'a "<!--" in inline code': ['Use `<!--` for hidden instructions.'],
   }
 
-  for (const [name, fence] of Object.entries(fenced)) {
-    it(`ST-97/AC-1: a fenced example is not a heading: ${name}`, () => {
-      const read = readTemplate(withExample(fence))
-      expect(read.headings.map((h) => h.title)).toEqual(['What changed', 'Verification', 'Docs check'])
-      expect(templateMapping(read.headings).mapped).toBe(true)
+  for (const [name, extra] of Object.entries(inline)) {
+    it(`ST-97/AC-1: a template whose What changed holds ${name} is filled, and the line is kept`, async () => {
+      const text = withExample(extra)
+      expect(templateMapping(readTemplate(text).headings).mapped).toBe(true)
+      const r = await runUpgrade(['--to', 'v0.2.0'], world({ files: { [TEMPLATE_PATH]: text } }))
+      expect(r.code).toBe(0)
+      expect(r.opened.body).not.toMatch(/^## Steward upgrade$/m)
+      expect(r.opened.body).toContain(`${extra[0]}\n\n\`steward upgrade\` generated this draft pull request.`)
+      expect(r.opened.body).toMatch(/^## Verification\n\n\*\*Verified\*\*/m)
+      expect(r.opened.body).toMatch(/^## Docs check\n\n\*\*Not checked\*\*/m)
+      expectKeptInOrder(r.opened.body, text)
     })
   }
 
-  it("ST-97/AC-1: a template with the reviewer's fenced example is filled, and the example is kept as it is", async () => {
-    const text = withExample(fenced['a tilde fence holding a tilde line with text after it'])
-    const r = await runUpgrade(['--to', 'v0.2.0'], world({ files: { [TEMPLATE_PATH]: text } }))
-    expect(r.code).toBe(0)
-    expect(r.opened.body).not.toMatch(/^## Steward upgrade$/m)
-    expect(r.opened.body).toContain('~~~text\n~~~example\n## Verification\n~~~\n\n`steward upgrade` generated this draft pull request.')
-    expect(r.opened.body).toMatch(/^## Verification\n\n\*\*Verified\*\*/m)
-    expectKeptInOrder(r.opened.body, text)
-  })
+  const hidden = {
+    'fenced code': ['```', '## Verification', '```'],
+    'an HTML comment': ['<!--', '## Verification', '-->'],
+  }
+
+  for (const [name, extra] of Object.entries(hidden)) {
+    it(`ST-97/AC-5: a template with a "## Verification" inside ${name}, besides its own, goes to the unfilled fallback naming the repeat`, async () => {
+      const text = withExample(extra)
+      const r = await runUpgrade(['--to', 'v0.2.0'], world({ files: { [TEMPLATE_PATH]: text } }))
+      expect(r.code).toBe(0)
+      expect(r.opened.draft).toBe(true)
+      expect(r.opened.body.endsWith(`---\n\n${text}`)).toBe(true)
+      expect(r.opened.body).toContain('because it has more than one `## Verification` heading.')
+    })
+  }
 
   it('ST-97/AC-1: a CRLF template keeps its line endings, and the headings are matched whatever their case', async () => {
     const text = 'Unit:\r\n\r\n## what changed\r\n\r\n## VERIFICATION\r\n\r\n## Docs Check\r\n'
