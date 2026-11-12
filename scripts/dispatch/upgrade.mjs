@@ -17,25 +17,24 @@
  * yet. It validates the proposed result with the running package's own `readSettings` and
  * `validateRules`, so it must be run from steward installed at the target pin.
  *
- * It then clones the project's `main` into a new temporary directory, refuses unless the clone has
- * the files those checks read, writes only the files it changes, commits them on a new branch,
- * pushes it and opens one draft pull request against `main`, as `init` does. The body (ST-97,
- * `pullBody`) says what it generated and checked, of the clone's commit and its own, in the
- * project's pull request template when `templateMapping` maps it. It never merges, marks
- * ready, protects a branch, activates a project, touches the user config or any coordinator, or
- * turns unattended landing on. The clone is kept, and the closing message gives its path. It rolls
- * nothing back.
+ * It reads the project's files at the commit `main` names when it starts. It then clones the
+ * project's `main` into a new temporary directory, checks out that commit, writes only the files it
+ * changes, commits them on a new branch from that commit, pushes it and opens one draft pull
+ * request against `main`, as `init` does. If `main` has moved meanwhile, the branch still starts
+ * from the commit read. The body (ST-97, `pullBody`) says what it generated and checked, of that
+ * commit and its own, in the project's pull request template when `templateMapping` maps it. It
+ * never merges, marks ready, protects a branch, activates a project, touches the user config or
+ * any coordinator, or turns unattended landing on. The clone is kept, and the closing message
+ * gives its path. It rolls nothing back.
  *
  * Exit code: 0 when it finished, a no-op included; 1 when a step failed after the clone, with a
  * report of what is left, or GitHub could not be read; 2 when it refused: before any clone, except
- * a clone without the files the checks read (`main` changed meanwhile) and the choice of the
- * project's pull request template (--pr-template, or several templates), which need the clone's
- * files, so those refusals leave the clone, kept and named.
+ * the choice of the project's pull request template (--pr-template, or several templates), which
+ * needs the clone's files, so that refusal leaves the clone, kept and named.
  *
  * Usage:
  *   steward upgrade (--to vX.Y.Z | --ref <40-hex commit>) [--branch <name>] [--pr-template <path>]
  */
-import { execFileSync } from 'node:child_process'
 import { existsSync, realpathSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir as osTmpdir } from 'node:os'
@@ -297,14 +296,14 @@ export function bodySections(facts, frame) {
     `- Installed: ${describePin(installed)}; ${pinSource(installed)}.`,
     `- Target: ${describePin(target)}; ${pinSource(target)}.`,
     `- Branch: ${code(branch)}.`,
-    `- Starting commit: \`main\` at ${code(base)}, as \`steward upgrade\` copied it.`,
+    `- Base: ${code(base)}, the commit of \`main\` that \`steward upgrade\` read, from which the branch starts.`,
     `- Generated head: ${code(head)}, one commit on ${code(base)}.`,
     '- Files the generated commit changes:',
     ...changed.map((rel) => `  - ${code(rel)}`),
     sameCommit
       ? `- Only the pin changes: both pins name the same commit of steward, ${code(target.commit)}, so each managed workflow differs from before only in its pin.`
       : `- Each managed workflow it changes is steward's template at ${code(target.commit)}, with ${code(target.pin)} filled in as the pin.`,
-    ...absent.map((rel) => `- ${code(rel)} is not on \`main\` at ${code(base)}, and \`steward upgrade\` did not add it.`),
+    ...absent.map((rel) => `- ${code(rel)} is not at ${code(base)}, and \`steward upgrade\` did not add it.`),
     ...(configEdited
       ? [
           ...edits.map((e) => `- Project-owned change: ${code(CONFIG_FILE)}: ${e.explanation} (${e.id}).`),
@@ -327,11 +326,11 @@ export function bodySections(facts, frame) {
       '(the `package.json` version of the steward that ran the command), before this pull request was opened:',
     '',
     `- ${code(['steward upgrade', ...argv.map(quoteArg)].join(' '))} ran in the project's checkout and completed each of its steps before opening this draft pull request: ` +
-      `it copied \`main\` at ${code(base)}, committed ${code(head)} on the branch ${code(branch)}, and pushed that branch.`,
+      `it read the project's files at ${code(base)}, committed ${code(head)} on that commit on the branch ${code(branch)}, and pushed that branch.`,
     target.kind === 'tag'
       ? `- Target pin: GitHub answered that ${code(target.pin)} is a tag of ${STEWARD_REPO} at commit ${code(target.commit)}, whose \`package.json\` gives version ${code(target.version)}.`
       : `- Target pin: GitHub answered that ${code(target.pin)} is a commit of ${STEWARD_REPO}, whose \`package.json\` gives version ${code(target.version)}.`,
-    `- Installed pin: each managed workflow on \`main\` (${checked.workflows.map(code).join(', ')}) carries the one pin ${code(installed.pin)}, ` +
+    `- Installed pin: each managed workflow at ${code(base)} (${checked.workflows.map(code).join(', ')}) carries the one pin ${code(installed.pin)}, ` +
       `which GitHub answered is ${installed.kind === 'tag' ? `${kindName('tag')} of ${STEWARD_REPO} at commit ${code(installed.commit)}` : `${kindName('commit')} of ${STEWARD_REPO}`}.`,
     `- Installed workflows: each is steward's template at ${code(installed.pin)} apart from the pin and line endings (\`sameWorkflowApartFromPin\`).`,
     comparison === null
@@ -342,8 +341,8 @@ export function bodySections(facts, frame) {
     ...(checked.rules === null
       ? []
       : [`- Checklist: ${code(rulesFile)}, as ${code(base)} has it and ${code(head)} leaves it, passes \`validateRules\`, the reviewer's checklist parser.`]),
-    `- Same files: the files these checks read from the project's \`main\` on GitHub (${checked.files.map(code).join(', ')}) are the files at ${code(base)}` +
-      `${absent.length === 0 ? '' : `, and ${absent.map(code).join(', ')} ${absent.length === 1 ? 'is' : 'are'} absent there too`}.`,
+    `- Read at the base: these checks read the project's files (${checked.files.map(code).join(', ')}) from GitHub at ${code(base)}, by its SHA` +
+      `${absent.length === 0 ? '' : `, and GitHub had no ${absent.map(code).join(' or ')} there`}.`,
     `- Generated commit: Git staged exactly the files What changed lists as the files the generated commit changes, before \`steward upgrade\` committed ${code(head)}.`,
     '',
     'Each of these checks passed: had any failed, `steward upgrade` would have stopped and opened no pull request.',
@@ -589,15 +588,6 @@ async function runningVersion(packageRoot) {
   }
 }
 
-/** The text of `rel` at `HEAD` in `clone`, as Git stores it, or `null` when `HEAD` has no such file. */
-function textAtHead(clone, rel) {
-  try {
-    return execFileSync('git', ['cat-file', 'blob', `HEAD:${rel}`], { cwd: clone, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
-  } catch {
-    return null
-  }
-}
-
 async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, packageRoot, out }, progress) {
   const flags = parseFlags(argv)
   const stewardVersion = await runningVersion(packageRoot)
@@ -617,6 +607,16 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
 
   const ctx = createInitContext({ repo, fetch, getToken })
   await checkCredential(ctx)
+
+  // The commit `main` names now: every read of the project below is at it, and the branch starts
+  // from it, so all the checks are of the branch's base even if `main` moves meanwhile. With no
+  // `main`, the reads are of `main`, find nothing, and refuse as before.
+  const remote = cloneUrl(url)
+  const mainLine = await step("reading the commit of the project's main on GitHub", 'Git', () =>
+    git(root, ['ls-remote', '--heads', remote, 'refs/heads/main']),
+  )
+  const mainCommit = /^([0-9a-f]{40})\s+refs\/heads\/main$/m.exec(mainLine)?.[1] ?? null
+  const readRef = mainCommit ?? 'main'
 
   // GitHub's answers, before anything is cloned, branched or pushed.
   const steward = createReadContext({
@@ -659,12 +659,12 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
     throw new Refusal(`${targetPin}: package.json at ${targetCommit} of ${STEWARD_REPO} gives no version. Nothing was cloned, branched or pushed.`)
   }
 
-  // What is installed: the managed workflows on the project's main, and the one pin they carry.
+  // What is installed: the managed workflows at the commit main names, and the one pin they carry.
   const present = new Map()
   const findings = []
   for (const file of MANAGED) {
     const rel = `${WORKFLOW_DIR}/${file}`
-    const text = await readFileAt(project, rel, 'main')
+    const text = await readFileAt(project, rel, readRef)
     if (text === null) {
       if (REQUIRED.includes(file)) findings.push(`${rel}: missing on main`)
       continue
@@ -758,8 +758,8 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
     )
   }
 
-  // The project's own settings and rules, from main.
-  const configText = await readFileAt(project, CONFIG_FILE, 'main')
+  // The project's own settings and rules, at the same commit.
+  const configText = await readFileAt(project, CONFIG_FILE, readRef)
   if (configText === null) throw new Refusal(`${CONFIG_FILE}: missing on main, so the upgrade cannot be validated. Nothing was cloned, branched or pushed.`)
   let config
   try {
@@ -781,7 +781,7 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
   if (isRulesFilePath(rulesFile)) {
     // Read at the path without its `.` segments (`./REVIEW.md`); the configured value stays as written.
     rulesPath = rulesFile.split('/').filter((s) => s !== '.').join('/')
-    rulesText = await readFileAt(project, rulesPath, 'main')
+    rulesText = await readFileAt(project, rulesPath, readRef)
     if (rulesText === null) problems.push(`${rulesFile}: the review rules file is missing on main`)
     else {
       const rules = validateRules(rulesFile, rulesText)
@@ -806,7 +806,7 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
     throw new Refusal(`--branch ${branch}: upgrade commits on a branch of its own, never on main or a release branch.`)
   }
   const onOrigin = await step(`looking for the branch ${branch} on GitHub`, 'Git', () =>
-    git(root, ['ls-remote', '--heads', cloneUrl(url), `refs/heads/${branch}`]),
+    git(root, ['ls-remote', '--heads', remote, `refs/heads/${branch}`]),
   )
   if (onOrigin !== '') {
     throw new Refusal(`The branch ${branch} is already on GitHub. Delete it there if it is an earlier upgrade's, or choose another name with --branch, and run upgrade again. Nothing was cloned or pushed.`)
@@ -827,21 +827,11 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
   await step("copying the project's main from GitHub", 'Git', () =>
     git(clone, ['clone', '--quiet', '--branch', 'main', '--single-branch', cloneUrl(url), '.']),
   )
-  const base = await step("reading main's commit", 'Git', () => git(clone, ['rev-parse', 'HEAD']))
-  // The checks read main from GitHub before the clone: what the body says of them holds at the base
-  // only if the base has the same files.
-  const readFromMain = new Map([
-    ...MANAGED.map((file) => [`${WORKFLOW_DIR}/${file}`, present.get(file)?.text ?? null]),
-    [CONFIG_FILE, configText],
-    ...(rulesPath === null ? [] : [[rulesPath, rulesText]]),
-  ])
-  const moved = [...readFromMain].filter(([rel, text]) => textAtHead(clone, rel) !== text).map(([rel]) => rel)
-  if (moved.length > 0) {
-    throw new Refusal(
-      `main changed on GitHub while upgrade ran: at ${base}, the commit it copied, ${moved.join(', ')} ${moved.length === 1 ? 'is' : 'are'} not what it checked. ` +
-        'Run upgrade again. Nothing was branched or pushed.',
-    )
-  }
+  // The branch starts from the commit every read was made at, whatever `main` names now.
+  const base = await step(`checking out ${mainCommit ?? 'main'}, the commit upgrade read`, 'Git', () => {
+    git(clone, ['checkout', '--quiet', '--detach', mainCommit ?? 'HEAD'])
+    return git(clone, ['rev-parse', 'HEAD'])
+  })
   const templates = findPullRequestTemplates(clone).filter((rel) => !rel.endsWith('/'))
   let bodyTemplate = null
   if (flags.prTemplate !== undefined) {
@@ -897,7 +887,7 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
     branch,
     base,
     head: commit,
-    checked: { workflows: [...present.values()].map((w) => w.rel), files: [...readFromMain].filter(([, text]) => text !== null).map(([rel]) => rel), rules: rulesPath },
+    checked: { workflows: [...present.values()].map((w) => w.rel), files: [...[...present.values()].map((w) => w.rel), CONFIG_FILE, ...(rulesPath === null ? [] : [rulesPath])], rules: rulesPath },
     absent: MANAGED.filter((file) => !present.has(file)).map((file) => `${WORKFLOW_DIR}/${file}`),
     template,
   })
@@ -913,7 +903,7 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
   out(`  from: ${describePin(installed)}`)
   out(`  to: ${describePin(target)}`)
   out(`  branch: ${branch}`)
-  out(`  base commit: ${base} (main, as upgrade copied it)`)
+  out(`  base commit: ${base} (the commit of main that upgrade read, where the branch starts)`)
   out(`  upgrade commit: ${commit}`)
   out(`  pull request: ${pull?.html_url}`)
   out('Validated with the steward running this command: run it from steward installed at the target pin.')

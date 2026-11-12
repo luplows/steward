@@ -128,7 +128,8 @@ function world({ pin = 'v0.1.0', files = {}, inspection = false, config = settin
     if (rest === '') return reply(200, { full_name: REPO })
     if (rest.startsWith('/contents/') && init.method === 'GET') {
       try {
-        const text = execFileSync('git', ['show', `main:${decodeURIComponent(rest.slice('/contents/'.length))}`], { cwd: bare, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+        const ref = /[?&]ref=([^&]+)/.exec(query)?.[1] ?? 'main'
+        const text = execFileSync('git', ['show', `${ref}:${decodeURIComponent(rest.slice('/contents/'.length))}`], { cwd: bare, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
         return reply(200, encode(text))
       } catch {
         return reply(404, { message: 'Not Found' })
@@ -990,7 +991,7 @@ describe('ST-97/AC-2: What changed says what upgrade generated, scoped to its ba
     expect(text).toContain(`- Installed: release v0.1.0 (package.json version 0.1.0); a tag of luplows/steward at commit \`${C_0B1D}\`.`)
     expect(text).toContain(`- Target: release v0.2.0 (package.json version 0.2.0); a tag of luplows/steward at commit \`${C_LATER}\`.`)
     expect(text).toContain('- Branch: `steward/upgrade-v0.2.0`.')
-    expect(text).toContain(`- Starting commit: \`main\` at \`${base}\`, as \`steward upgrade\` copied it.`)
+    expect(text).toContain(`- Base: \`${base}\`, the commit of \`main\` that \`steward upgrade\` read, from which the branch starts.`)
     expect(text).toContain(`What \`steward upgrade\` generated: the commit \`${head}\`, and nothing after it.`)
     expect(git(w.bare, 'rev-parse', `${head}^`)).toBe(base)
     const listed = [...text.matchAll(/^ {2}- `([^`]+)`$/gm)].map((m) => m[1])
@@ -1017,15 +1018,19 @@ describe('ST-97/AC-3: Verification is what upgrade ran and checked, and what it 
     expect(text).toContain('**Verified** by steward 7.7.7-test (the `package.json` version of the steward that ran the command)')
     expect(text).toContain(
       `- \`steward upgrade --to=v0.2.0 --branch crew/upgrade\` ran in the project's checkout and completed each of its steps before opening this draft pull request: ` +
-        `it copied \`main\` at \`${base}\`, committed \`${head}\` on the branch \`crew/upgrade\`, and pushed that branch.`,
+        `it read the project's files at \`${base}\`, committed \`${head}\` on that commit on the branch \`crew/upgrade\`, and pushed that branch.`,
     )
     expect(text).toContain(`- Target pin: GitHub answered that \`v0.2.0\` is a tag of luplows/steward at commit \`${C_LATER}\`, whose \`package.json\` gives version \`0.2.0\`.`)
-    expect(text).toContain('- Installed pin: each managed workflow on `main` (`.github/workflows/review-gate.yml`, `.github/workflows/land-approved.yml`) carries the one pin `v0.1.0`')
+    expect(text).toContain(`- Installed pin: each managed workflow at \`${base}\` (\`.github/workflows/review-gate.yml\`, \`.github/workflows/land-approved.yml\`) carries the one pin \`v0.1.0\``)
     expect(text).toContain("- Installed workflows: each is steward's template at `v0.1.0` apart from the pin and line endings")
     expect(text).toContain(`- Direction: GitHub's comparison of \`${C_0B1D}\` with \`${C_LATER}\` gave \`ahead\``)
     expect(text).toContain(`- Settings: \`steward.config.json\`, as \`${base}\` has it and \`${head}\` leaves it, passes \`readSettings\`.`)
     expect(text).toContain(`- Checklist: \`REVIEW.md\`, as \`${base}\` has it and \`${head}\` leaves it, passes \`validateRules\``)
-    expect(text).toContain(`are the files at \`${base}\`, and \`.github/workflows/inspection.yml\` is absent there too.`)
+    expect(text).toContain(
+      `- Read at the base: these checks read the project's files (\`.github/workflows/review-gate.yml\`, \`.github/workflows/land-approved.yml\`, \`steward.config.json\`, \`REVIEW.md\`) ` +
+        `from GitHub at \`${base}\`, by its SHA, and GitHub had no \`.github/workflows/inspection.yml\` there.`,
+    )
+    expect(w.requests.filter((q) => q.repo === REPO && q.rest.startsWith('/contents/')).map((q) => q.query)).toEqual(Array(5).fill(`?ref=${base}`))
     expect(text).toContain('Each of these checks passed: had any failed, `steward upgrade` would have stopped and opened no pull request.')
     const verified = text.slice(text.indexOf('**Verified**'), text.indexOf('**Not checked**'))
     expect(verified).not.toMatch(/npm|\bCI\b|a review/)
@@ -1041,8 +1046,9 @@ describe('ST-97/AC-3: Verification is what upgrade ran and checked, and what it 
     }
   })
 
-  it('ST-97/AC-3: when main on GitHub is not what the checks read, no branch is pushed and no pull request is opened', async () => {
-    const w = world()
+  it('ST-97/AC-3: when main gains a commit after the reads and before the clone, the branch starts from the commit read, and the body names that one', async () => {
+    const w = world({ files: { [TEMPLATE_PATH]: STEWARD_PR_TEMPLATE } })
+    const read = git(w.bare, 'rev-parse', 'main')
     const fetch = w.fetch
     let moved = false
     w.fetch = async (url, init) => {
@@ -1057,10 +1063,16 @@ describe('ST-97/AC-3: Verification is what upgrade ran and checked, and what it 
     }
     const r = await runUpgrade(['--to', 'v0.2.0'], w)
     expect(moved).toBe(true)
-    expect(r.code).toBe(2)
-    expect(r.err).toMatch(/main changed on GitHub while upgrade ran: at [0-9a-f]{40}, the commit it copied, steward\.config\.json is not what it checked/)
-    expect(r.opened).toBeUndefined()
-    expect(heads(w)).not.toContain('steward/upgrade')
+    expect(r.code).toBe(0)
+    const later = git(w.bare, 'rev-parse', 'main')
+    expect(later).not.toBe(read)
+    const head = git(w.bare, 'rev-parse', `refs/heads/${r.opened.head}`)
+    expect(git(w.bare, 'rev-parse', `${head}^`)).toBe(read)
+    expect(onBranch(w, r.opened.head, 'steward.config.json')).toBe(git(w.bare, 'show', `${read}:steward.config.json`))
+    expect(section(r.opened.body, 'What changed')).toContain(`- Base: \`${read}\`, the commit of \`main\` that \`steward upgrade\` read, from which the branch starts.`)
+    expect(section(r.opened.body, 'Verification')).toContain(`from GitHub at \`${read}\`, by its SHA`)
+    expect(r.opened.body).not.toContain(later)
+    expect(r.out).toContain(`base commit: ${read}`)
   })
 })
 
@@ -1198,11 +1210,11 @@ describe('ST-97/AC-6: the body against the generated commit, case by case', () =
     const without = await runUpgrade(['--to', 'v0.2.0'], world())
     const { base } = generated(without)
     expect(section(without.opened.body, 'What changed')).toContain(
-      `- \`.github/workflows/inspection.yml\` is not on \`main\` at \`${base}\`, and \`steward upgrade\` did not add it.`,
+      `- \`.github/workflows/inspection.yml\` is not at \`${base}\`, and \`steward upgrade\` did not add it.`,
     )
     const withIt = await runUpgrade(['--to', 'v0.2.0'], world({ inspection: true }))
     expect(section(withIt.opened.body, 'What changed')).toContain('  - `.github/workflows/inspection.yml`')
-    expect(section(withIt.opened.body, 'What changed')).not.toContain('is not on `main`')
+    expect(section(withIt.opened.body, 'What changed')).not.toContain('is not at')
     expect(section(withIt.opened.body, 'Verification')).toContain('(`.github/workflows/review-gate.yml`, `.github/workflows/land-approved.yml`, `.github/workflows/inspection.yml`)')
   })
 

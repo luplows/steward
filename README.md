@@ -277,10 +277,10 @@ Give exactly one of the two: `--to` names a tag of `luplows/steward` of the form
 there). Run it from steward installed at the target pin, because it validates the proposed result
 with the steward it is running (`readSettings` and the reviewer's checklist parser).
 
-It reads the project's `main` and steward from GitHub, and clones nothing until it has decided
-(choosing the project's pull request template, with `--pr-template`, and finding that the clone has
-the files it checked need the clone's files: those refusals, if any, leave the clone, which it
-names).
+It reads steward from GitHub, and the project's files at the commit its `main` names when the
+command starts, and clones nothing until it has decided (choosing the project's pull request
+template, with `--pr-template`, needs the clone's files: that refusal, if any, leaves the clone,
+which it names).
 It reads the pin that the project's managed workflows (`review-gate.yml`, `land-approved.yml`, and
 `inspection.yml` when there is one) carry. It refuses, naming each finding, when a managed
 workflow is missing, when they do not all carry the same pin, when that pin is not a tag or a
@@ -295,18 +295,20 @@ they are, `steward.config.json` and the checklist included, unless a release mak
 unambiguous change to one, which the pull request's body explains. It never changes `land`:
 unattended landing stays as the project set it.
 
-The pull request's body says what the command generated and checked, of the commit it copied from
-`main` (the base) and the one commit it made (the head), and nothing of commits or edits after
-them. When the project's pull request template has one `## What changed`, one `## Verification`
-and one `## Docs check` heading, and at most one `## Crew action required`, the command adds its
-text at the end of each and keeps the rest of the template. With no template, or an empty one, it
-uses steward's `Unit:` line and those three sections. Any other template follows the command's
-text as it is, unfilled, with its headings named for the crew to complete. **What changed** names
-the installed and target pins, whether the target is a release or a commit with the version its
-`package.json` gives, the branch, the base, the head and the files the head changes. **Verification** gives the command's arguments and the version of
-the steward that ran it, each check it made under **Verified**, and under **Not checked** what it
-did not run: the project's tests and CI, the workflows, a review. **Docs check** says that, apart
-from the checklist and the pull request template, it did not inspect `README.md` or other
+The pull request's branch starts from the commit of `main` the command read (the base): if `main`
+has moved since, the pull request starts from that earlier commit. The body says what the command
+generated and checked, of the base and the one commit it made on it (the head), and nothing of
+commits or edits after them. When the project's pull request template has one `## What changed`,
+one `## Verification` and one `## Docs check` heading, and at most one `## Crew action required`,
+the command adds its text at the end of each and keeps the rest of the template. With no
+template, or an empty one, it uses steward's `Unit:` line and those three sections. Any other
+template follows the command's text as it is, unfilled, with its headings named for the crew to
+complete. **What changed** names the installed and target pins, whether the target is a release
+or a commit with the version its `package.json` gives, the branch, the base, the head and the
+files the head changes. **Verification** gives the command's arguments and the version of the
+steward that ran it, each check it made under **Verified**, and under **Not checked** what it did
+not run: the project's tests and CI, the workflows, a review. **Docs check** says that, apart from
+the checklist and the pull request template, it did not inspect `README.md` or other
 documentation. A **Crew action required** section lists suggestions, the project's own rules
 deciding which apply, among them:
 
@@ -319,9 +321,6 @@ deciding which apply, among them:
   which a move from a tag to a commit, or back, makes stale.
 - What the project's CI reports, any decision a migration leaves to the project, and the steps
   after merging.
-
-If the project's `main` on GitHub changes between the command's checks and its copy, so that the
-copy's files are not those it checked, it stops before making a branch, and keeps the copy.
 
 The command does not merge, mark ready, change protection, activate the project, or start or stop
 the coordinator. Once the crew has
