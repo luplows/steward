@@ -102,9 +102,10 @@ artifact or a general post-edit verification service.
 
 **Planned (ST-98)** (crew, 2026-11-09; refined after PR #151 review, 2026-11-10):
 Upgrade refusals identify affected paths and pins, the failed condition, what remains
-and the safe next action. A workflow whose YAML does not parse is told apart from
-well-formed YAML whose difference is outside ST-96's supported transformations, without
-claiming broad YAML semantic equivalence. Missing evidence cannot be reported as success; no
+and the safe next action. A workflow that differs by more than ST-96 accepts is refused with
+that said, and with the statement that steward compares text and does not parse YAML, so it
+cannot tell whether the file is valid YAML or which permission or command changed (crew,
+2026-11-12: steward has no YAML parser and adds no runtime package for one). Missing evidence cannot be reported as success; no
 automatic repair or review bypass is introduced.
 Considered and deferred: automatic project repairs and a machine-readable verification protocol.
 
