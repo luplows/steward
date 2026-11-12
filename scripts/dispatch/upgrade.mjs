@@ -28,10 +28,14 @@
  * any coordinator, or turns unattended landing on. The clone is kept, and the closing message
  * gives its path. It rolls nothing back.
  *
- * Exit code: 0 when it finished, a no-op included; 1 when a step failed after the clone, with a
- * report of what is left, or GitHub could not be read; 2 when it refused: before any clone, except
- * the choice of the project's pull request template (--pr-template, or several templates), which
- * needs the clone's files, so that refusal leaves the clone, kept and named.
+ * Exit code: 0 when it finished, a no-op included; 1 when it stopped on a failure rather than a
+ * refusal, such as a read of GitHub that failed before the clone or a step that failed after it,
+ * with a report of what exists and what to do next (`failureReport`); 2 when it refused: before
+ * any clone, except the choice of the project's pull request template (--pr-template, or several
+ * templates), which needs the clone's files, so that refusal leaves the clone, kept and named.
+ * Each refusal of the project's files names the path or pin, what failed, the crew's repair and
+ * what it could not verify for stopping there. What `main` prints after either says what exists,
+ * from `progress`, and shows no URL's user name or password (`redact`).
  *
  * Usage:
  *   steward upgrade (--to vX.Y.Z | --ref <40-hex commit>) [--branch <name>] [--pr-template <path>]
@@ -48,6 +52,7 @@ import {
   readCommit,
   readFileAt,
   readTagCommit,
+  TagNotACommit,
 } from './github-read.mjs'
 import {
   buildCreateDraftPull,
@@ -461,36 +466,87 @@ export function pullBody(facts) {
 // ------------------------------------------------------------------ the command
 
 const keptLine = (clone) => `upgrade's copy of the project is kept at ${clone}: remove that folder when you are done with it.`
+/**
+ * The checks `run` makes before the clone, in order: a refusal at one of them says it could not
+ * verify those after it (`notVerified`), rather than calling them valid.
+ */
+const CHECKS = [
+  ['target', 'the target pin'],
+  ['installed', "the pin the project's managed workflows carry"],
+  ['workflows', "whether each managed workflow is steward's template at that pin"],
+  ['direction', 'whether the target is behind the installed pin'],
+  ['targetTemplates', "the target pin's templates"],
+  ['settings', `\`${CONFIG_FILE}\``],
+  ['checklist', 'the checklist'],
+  ['branch', 'whether the branch is free on GitHub'],
+]
+const notVerified = (stage) =>
+  `upgrade could not verify these, as it stopped before checking them: ${CHECKS.slice(CHECKS.findIndex(([id]) => id === stage) + 1)
+    .map(([, what]) => what)
+    .join('; ')}.`
+const NOTHING_MADE = 'Nothing was cloned, branched or pushed, and no pull request was opened.'
 
-/** What `main` prints for a failure after the clone: which step, what was said, what is left, what next. */
+/**
+ * `line` with the user name and password of any URL in it shown as `***`, as a remote's URL can
+ * carry a token: everything after `//` up to the last `@` before the next `/` or whitespace.
+ */
+export const redact = (line) => String(line).replace(/(\/\/)[^\s/]+@/g, (_, slashes) => `${slashes}***@`)
+
+/** What exists after `run` stopped, from `progress`: the clone, the branch in it and on GitHub, a pull request. */
+function remainsLines(progress) {
+  if (progress.clone === null) return [NOTHING_MADE]
+  const lines = ['What exists now:', `  upgrade's copy of the project, at ${progress.clone}`]
+  if (progress.branch === null) {
+    lines.push(progress.branchAttempted ? '  perhaps a branch in that copy: making it failed' : '  no branch: none was made')
+    lines.push('  nothing on GitHub from this run: nothing was pushed, and no pull request was opened')
+    return lines
+  }
+  if (progress.pushed) lines.push(`  the branch ${progress.branch} on GitHub`)
+  else if (progress.pushAttempted) {
+    lines.push(`  the branch ${progress.branch} in that copy, and perhaps on GitHub: the push failed, and whether it changed GitHub is not known`)
+  } else lines.push(`  the branch ${progress.branch} in that copy only: nothing was pushed`)
+  if (progress.pullAttempted) {
+    lines.push('  perhaps a pull request: opening it failed, and whether GitHub created it is not known')
+  } else lines.push('  no pull request: none was opened')
+  return lines
+}
+
+/**
+ * What `main` prints for a failure that is not a refusal: which step, what was said, what exists
+ * (`progress`), what to check and what to do before running upgrade again.
+ */
 export function failureReport(error, progress) {
-  const lines =
-    error instanceof StepFailure
-      ? [`upgrade stopped: ${error.step} failed. ${error.who} said: ${error.message}`]
-      : [`upgrade stopped: ${error.message}`]
-  if (progress.clone === null) return lines
-  lines.push('What exists now:')
-  lines.push(`  upgrade's copy of the project, at ${progress.clone}`)
-  if (progress.branch !== null) {
-    if (progress.pushed) lines.push(`  the branch ${progress.branch} on GitHub`)
-    else if (progress.pushAttempted) {
-      lines.push(`  the branch ${progress.branch} in that copy, and perhaps on GitHub: the push failed, and whether it changed GitHub is not known`)
-    } else lines.push(`  the branch ${progress.branch} in that copy only: nothing was pushed`)
-    if (progress.pullAttempted) {
-      lines.push('  perhaps a pull request: opening it failed, and whether GitHub created it is not known')
-    } else lines.push('  no pull request: none was opened')
+  const step = error instanceof StepFailure
+  const lines = step ? [`upgrade stopped: ${error.step} failed. ${error.who} said: ${error.message}`] : [`upgrade stopped: ${error.message}`]
+  lines.push(...remainsLines(progress))
+  if (progress.clone === null) {
+    if (step) {
+      // Every step before the clone is a read, made while the checks are still running.
+      const reach = error.who === 'Git' ? "Git can reach the project's origin from this checkout (`git ls-remote origin`)" : 'this machine can reach GitHub with your credential (`gh auth status`)'
+      lines.push("upgrade could not verify the upgrade: it stopped at that read, before it finished its checks, so it reports none of them as passed.")
+      lines.push(
+        "What to do next: this is a read that failed, not a refusal of the project's files, and nothing needs removing first. " +
+          `Run upgrade again; if it fails the same way, check that ${reach}.`,
+      )
+    } else lines.push('What to do next: fix what upgrade reported, and run upgrade again.')
+    return lines
   }
   lines.push('Nothing was rolled back or removed.')
+  const branch = progress.branch
   if (progress.pushAttempted) {
+    lines.push(`What to check: the branch on GitHub (git ls-remote --heads origin ${branch}) and the open pull requests from ${branch}.`)
     lines.push(
-      `What to check: the branch on GitHub (git ls-remote --heads origin ${progress.branch}) and the open pull requests from ${progress.branch}.`,
+      `What to do next: if a pull request is open from ${branch}, do not delete ${branch}: it is that pull request's head. ` +
+        `If ${branch} is on GitHub and no pull request is open from it, open the pull request from ${branch} on GitHub by hand, or delete that branch on GitHub ` +
+        `(git push origin --delete ${branch}) and run upgrade again.`,
     )
     lines.push(
-      `What to do next: if the branch is there and no pull request is, open the pull request from ${progress.branch} on GitHub by hand, or delete that branch on GitHub ` +
-        `(git push origin --delete ${progress.branch}) and run upgrade again.`,
+      `Before running upgrade again with the same branch name: ${branch} must not be on GitHub, and no pull request may be open from it, as upgrade refuses either. ` +
+        'Or give another name with --branch.',
     )
   } else {
-    lines.push(`What to do next: fix what ${error instanceof StepFailure ? error.who : 'upgrade'} reported, and run upgrade again.`)
+    lines.push(`What to do next: fix what ${step ? error.who : 'upgrade'} reported, and run upgrade again.`)
+    lines.push('upgrade pushed nothing and opened no pull request, so nothing on GitHub needs removing before running upgrade again: a new run makes a new copy.')
   }
   lines.push(`Remove ${progress.clone} when you are done with it.`)
   return lines
@@ -517,16 +573,17 @@ export async function main(
     err = console.error,
   } = {},
 ) {
-  const progress = { clone: null, branch: null, pushAttempted: false, pushed: false, pullAttempted: false }
+  const progress = { clone: null, branchAttempted: false, branch: null, pushAttempted: false, pushed: false, pullAttempted: false }
   try {
     return await run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, packageRoot, out }, progress)
   } catch (error) {
     if (error instanceof Refusal) {
-      err(error.message)
+      err(redact(error.message))
+      for (const line of remainsLines(progress)) err(redact(line))
       if (progress.clone !== null) err(keptLine(progress.clone))
       return 2
     }
-    for (const line of failureReport(error, progress)) err(line)
+    for (const line of failureReport(error, progress)) err(redact(line))
     return 1
   }
 }
@@ -547,7 +604,11 @@ async function checkCredential(ctx) {
   }
 }
 
-/** The project's validation of a proposed `steward.config.json` text by `readSettings`: problems, or none. */
+/**
+ * The project's validation of a proposed `steward.config.json` text by `readSettings`: problems, or
+ * none. The value `readSettings` quotes at the end of a problem (`, got ...`) is not shown, since
+ * it is the project's own and may be a command or anything else.
+ */
 async function settingsProblems(configText, tmpRoot) {
   const dir = await mkdtemp(path.join(tmpRoot, 'steward-upgrade-check-'))
   try {
@@ -555,7 +616,8 @@ async function settingsProblems(configText, tmpRoot) {
     await readSettings(dir)
     return []
   } catch (error) {
-    return [`${CONFIG_FILE}: ${String(error.message).replace(`${path.join(dir, CONFIG_FILE)}: `, '')}`]
+    const problem = String(error.message).replace(`${path.join(dir, CONFIG_FILE)}: `, '').replace(/, got [\s\S]*$/, () => ' (the value is not shown)')
+    return [`${CONFIG_FILE}: ${problem}`]
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
@@ -618,81 +680,176 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
     getToken,
   })
 
+  const atMain = mainCommit === null ? 'main' : `main (${mainCommit})`
+  // Every read of GitHub below is a step: a read that fails is reported as one to retry
+  // (`failureReport`), never as a refusal of the project's files.
+  const read = (what, fn) => step(`reading ${what} from GitHub`, 'GitHub', fn)
+  // A tag GitHub answered for that does not lead to a commit is an answer about the pin, not a
+  // failed read: `{ notACommit }`, which the caller refuses.
+  const readTag = (what, tag) =>
+    read(what, async () => {
+      try {
+        return await readTagCommit(steward, tag)
+      } catch (error) {
+        if (error instanceof TagNotACommit) return { notACommit: error.message }
+        throw error
+      }
+    })
+  const projectRepair = (text) => `Crew repair in the project: ${text}`
+  const commandFix = `This is a correction of the command, not a repair of the project.`
+
   // The target: a tag or a commit of steward.
   const targetPin = flags.to ?? flags.ref.toLowerCase()
-  const targetCommit = flags.to !== undefined ? await readTagCommit(steward, flags.to) : await readCommit(steward, targetPin)
-  if (targetCommit === null) {
+  const targetCommit =
+    flags.to !== undefined
+      ? await readTag(`the target ${targetPin} in ${STEWARD_REPO}`, flags.to)
+      : await read(`the target ${targetPin} in ${STEWARD_REPO}`, () => readCommit(steward, targetPin))
+  if (targetCommit?.notACommit !== undefined) {
     throw new Refusal(
-      flags.to !== undefined
-        ? `--to ${flags.to}: there is no tag ${flags.to} in ${STEWARD_REPO}. Nothing was cloned, branched or pushed.`
-        : `--ref ${flags.ref}: there is no commit ${targetPin} in ${STEWARD_REPO}. Nothing was cloned, branched or pushed.`,
+      [
+        `--to ${flags.to}: ${targetCommit.notACommit}.`,
+        `What to do next: give a tag that names a commit with --to, or a commit's full SHA with --ref, and run upgrade again. ${commandFix}`,
+        notVerified('target'),
+      ].join('\n'),
     )
   }
-  const versionAt = async (commit) => {
-    const text = await readFileAt(steward, 'package.json', commit)
-    try {
-      const { version } = JSON.parse(text)
-      return typeof version === 'string' ? version : null
-    } catch {
-      return null
-    }
+  if (targetCommit === null) {
+    throw new Refusal(
+      [
+        flags.to !== undefined
+          ? `--to ${flags.to}: there is no tag ${flags.to} in ${STEWARD_REPO}: GitHub answered that it has no tag of that name.`
+          : `--ref ${flags.ref}: there is no commit ${targetPin} in ${STEWARD_REPO}: GitHub answered that it has no commit with that SHA.`,
+        `What to do next: give a target that is in ${STEWARD_REPO}, a tag with --to or a commit's full SHA with --ref, and run upgrade again. ${commandFix}`,
+        notVerified('target'),
+      ].join('\n'),
+    )
   }
+  const versionAt = (commit) =>
+    read(`package.json at ${commit} in ${STEWARD_REPO}`, async () => {
+      const text = await readFileAt(steward, 'package.json', commit)
+      try {
+        const { version } = JSON.parse(text)
+        return typeof version === 'string' ? version : null
+      } catch {
+        return null
+      }
+    })
   const target = { kind: flags.to !== undefined ? 'tag' : 'commit', pin: targetPin, commit: targetCommit, version: await versionAt(targetCommit) }
   if (target.version === null) {
-    throw new Refusal(`${targetPin}: package.json at ${targetCommit} of ${STEWARD_REPO} gives no version. Nothing was cloned, branched or pushed.`)
+    throw new Refusal(
+      [
+        `${targetPin}: package.json at ${targetCommit} in ${STEWARD_REPO} gives no version: it is not there, is not JSON, or has no version string, so upgrade cannot say what the target is.`,
+        `What to do next: give another target, whose package.json gives its version, and run upgrade again. ${commandFix}`,
+        notVerified('target'),
+      ].join('\n'),
+    )
   }
 
   // What is installed: the managed workflows at the commit main names, and the one pin they carry.
   const present = new Map()
   const findings = []
+  const repairs = new Set()
+  const find = (finding, repair) => {
+    findings.push(finding)
+    repairs.add(repair)
+  }
   for (const file of MANAGED) {
     const rel = `${WORKFLOW_DIR}/${file}`
-    const text = await readFileAt(project, rel, readRef)
+    const text = await read(`${rel} at ${readRef} in ${repo}`, () => readFileAt(project, rel, readRef))
     if (text === null) {
-      if (REQUIRED.includes(file)) findings.push(`${rel}: missing on main`)
+      if (REQUIRED.includes(file)) {
+        find(`${rel}: missing on main`, "restore each workflow missing on main as steward's template of that name at the pin the project installs, with that pin filled in")
+      }
       continue
     }
     const pins = pinsIn(text)
-    if (pins.length === 0) findings.push(`${rel}: carries no reference to github:luplows/steward#<pin>`)
+    if (pins.length === 0) {
+      find(
+        `${rel}: carries no reference to github:luplows/steward#<pin>`,
+        "put back, in each workflow that carries no reference, the github:luplows/steward#<pin> references steward's template of that name has, with the pin the project installs",
+      )
+    }
     present.set(file, { rel, text, pins })
   }
   const distinct = [...new Set([...present.values()].flatMap((w) => w.pins))]
   if (distinct.length > 1) {
-    findings.push(`the managed workflows carry different pins: ${[...present.values()].map((w) => `${w.rel} has ${[...new Set(w.pins)].join(', ') || 'none'}`).join('; ')}`)
+    find(
+      `the managed workflows carry different pins: ${[...present.values()].map((w) => `${w.rel} has ${[...new Set(w.pins)].join(', ') || 'none'}`).join('; ')}`,
+      'make every managed workflow carry one pin: that of the steward they were installed from',
+    )
   }
   let installed = null
   if (findings.length === 0) {
     const pin = distinct[0]
     const kind = pinKind(pin)
-    const commit = kind === 'tag' ? await readTagCommit(steward, pin) : kind === 'commit' ? await readCommit(steward, pin) : null
-    if (commit === null) {
-      findings.push(`the pin ${pin} is not a tag (vX.Y.Z) or a full commit SHA that exists in ${STEWARD_REPO}`)
+    const commit =
+      kind === 'tag'
+        ? await readTag(`the installed pin ${pin} in ${STEWARD_REPO}`, pin)
+        : kind === 'commit'
+          ? await read(`the installed pin ${pin} in ${STEWARD_REPO}`, () => readCommit(steward, pin))
+          : null
+    if (commit?.notACommit !== undefined) {
+      find(
+        `the pin ${pin}: ${commit.notACommit}`,
+        `replace the pin ${pin}, in every managed workflow, with the tag or full commit SHA of ${STEWARD_REPO} the workflows were installed from`,
+      )
+    } else if (commit === null) {
+      find(
+        `the pin ${pin} is not a tag (vX.Y.Z) or a full commit SHA that exists in ${STEWARD_REPO}`,
+        `replace the pin ${pin}, in every managed workflow, with the tag or full commit SHA of ${STEWARD_REPO} the workflows were installed from`,
+      )
     } else {
       installed = { kind, pin, commit, version: await versionAt(commit) }
     }
   }
   if (findings.length > 0) {
     throw new Refusal(
-      `The steward this project installs cannot be identified from main:\n${findings.map((f) => `  ${f}`).join('\n')}\n` +
-        'Reconcile these by hand, through a pull request of the project. Nothing was cloned, branched or pushed.',
+      [
+        `The steward this project installs cannot be identified from ${atMain}:`,
+        ...findings.map((f) => `  ${f}`),
+        projectRepair(`Reconcile these by hand, through a pull request of the project: ${[...repairs].join('; ')}. Then run upgrade again.`),
+        notVerified('installed'),
+      ].join('\n'),
     )
   }
 
   // The installed workflows are steward's own at the installed pin, apart from the pin, line
   // endings and the quotes `sameWorkflowApartFromPin` accepts. This comes before the no-ops: a
-  // customized workflow is refused, whatever the target.
+  // customized workflow is refused, whatever the target. Every workflow is compared, so that each
+  // one that is not steward's own is named.
   const customized = []
+  const noTemplate = []
   for (const { rel, text } of present.values()) {
-    const template = await readFileAt(steward, `${TEMPLATE_DIR}/${path.posix.basename(rel)}`, installed.commit)
-    if (template === null) customized.push(`${rel}: steward has no template of that name at ${installed.pin}`)
-    else if (!sameWorkflowApartFromPin(text, template)) customized.push(`${rel}: differs from steward's template at ${installed.pin} by more than the pin`)
+    const name = `${TEMPLATE_DIR}/${path.posix.basename(rel)}`
+    const template = await read(`${name} at ${installed.pin} in ${STEWARD_REPO}`, () => readFileAt(steward, name, installed.commit))
+    if (template === null) noTemplate.push(`${rel}: steward has no template of that name at ${installed.pin}`)
+    else if (!sameWorkflowApartFromPin(text, template)) {
+      customized.push(`${rel}: differs from steward's template at ${installed.pin}, the pin it carries, by more than the pin, line endings and quotes`)
+    }
   }
-  if (customized.length > 0) {
-    throw new Refusal(
-      `These managed workflows are not steward's own at the pin they carry, so upgrade will not replace them:\n${customized.map((f) => `  ${f}`).join('\n')}\n` +
-        "Reconcile each by hand: bring it back to steward's template at the installed pin, or make the change in it that the target pin's template has, through a pull request of the project, and run upgrade again. " +
-        'upgrade does not merge them. Nothing was cloned, branched or pushed.',
-    )
+  if (customized.length > 0 || noTemplate.length > 0) {
+    const lines = [`These managed workflows at ${atMain} are not steward's own at the pin they carry, so upgrade will not replace them:`]
+    if (customized.length > 0) {
+      lines.push(
+        ...customized.map((f) => `  ${f}`),
+        "upgrade accepts only these differences from steward's template: the pin, line endings, and single or double quotes around the same value that ends a `key:` line.",
+        'steward compares each workflow with its template as text and does not parse YAML: it cannot tell whether the file is valid YAML, or which permission or command changed.',
+        projectRepair('Reconcile each by hand, through a pull request of the project that the crew reviews, in one of two ways:'),
+        `  restore it to steward's template of that name at ${installed.pin} (${TEMPLATE_DIR}/ in ${STEWARD_REPO}), with ${installed.pin} filled in as the pin, and run upgrade again; or`,
+        "  make in it, by hand, the change the target pin's template makes, keeping what the project changed: upgrade refuses the file while it differs from steward's template at the pin it carries.",
+      )
+    }
+    if (noTemplate.length > 0) {
+      lines.push(
+        ...noTemplate.map((f) => `  ${f}`),
+        projectRepair(
+          `steward at ${installed.pin} has no template to compare ${noTemplate.length === 1 ? 'that workflow' : 'those workflows'} with. Through a pull request of the project, ` +
+            'rename a workflow that is not steward\'s, or set the pin the workflows carry to the steward they were installed from, and run upgrade again.',
+        ),
+      )
+    }
+    lines.push('upgrade does not merge them.', notVerified('workflows'))
+    throw new Refusal(lines.join('\n'))
   }
 
   // No-ops.
@@ -707,15 +864,22 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
   const sameCommit = installed.commit === target.commit
   let comparison = null
   if (!sameCommit) {
-    const status = await readComparison(steward, installed.commit, target.commit)
+    const status = await read(`the comparison of ${installed.commit} with ${target.commit} in ${STEWARD_REPO}`, async () => {
+      const answer = await readComparison(steward, installed.commit, target.commit)
+      if (!['ahead', 'behind', 'diverged', 'identical'].includes(answer)) {
+        throw new Error(`the comparison gave ${JSON.stringify(answer)}, not ahead, behind, diverged or identical`)
+      }
+      return answer
+    })
     comparison = status
     if (status === 'behind') {
       throw new Refusal(
-        `${target.pin} is behind the installed ${installed.pin}: that would be a downgrade, and upgrade does not downgrade. Nothing was cloned, branched or pushed.`,
+        [
+          `${target.pin} (${target.commit}) is behind the installed ${installed.pin} (${installed.commit}): GitHub's comparison of the two gave behind. That would be a downgrade, and upgrade does not downgrade.`,
+          `What to do next: give a target that is not behind ${installed.pin}, and run upgrade again. ${commandFix}`,
+          notVerified('direction'),
+        ].join('\n'),
       )
-    }
-    if (!['ahead', 'diverged', 'identical'].includes(status)) {
-      throw new Error(`GitHub's comparison of ${installed.commit} with ${target.commit} gave ${JSON.stringify(status)}, not ahead, behind, diverged or identical`)
     }
   }
 
@@ -723,7 +887,8 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
   const changes = new Map()
   const missingAtTarget = []
   for (const { rel, text } of present.values()) {
-    const template = await readFileAt(steward, `${TEMPLATE_DIR}/${path.posix.basename(rel)}`, target.commit)
+    const name = `${TEMPLATE_DIR}/${path.posix.basename(rel)}`
+    const template = await read(`${name} at ${target.pin} in ${STEWARD_REPO}`, () => readFileAt(steward, name, target.commit))
     if (template === null) {
       missingAtTarget.push(rel)
       continue
@@ -732,27 +897,41 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
     try {
       filled = fillPin(template, target.pin)
     } catch (error) {
-      throw new Refusal(`${rel}: steward's template at ${target.pin} cannot be filled by this version of upgrade: ${error.message}. Nothing was cloned, branched or pushed.`)
+      throw new Refusal(
+        [
+          `${rel}: steward's template at ${target.pin} cannot be filled by this version of upgrade: ${error.message}.`,
+          `What to do next: run upgrade from steward installed at the target pin (npx --yes --package=github:${STEWARD_REPO}#${target.pin} steward upgrade ...). ${commandFix}`,
+          notVerified('targetTemplates'),
+        ].join('\n'),
+      )
     }
     changes.set(rel, withEndingsOf(text, filled))
   }
   if (missingAtTarget.length > 0) {
     throw new Refusal(
-      `steward has no template at ${target.pin} for ${missingAtTarget.join(', ')}: the target does not carry ${missingAtTarget.length === 1 ? 'that workflow' : 'those workflows'}. Nothing was cloned, branched or pushed.`,
+      [
+        `steward has no template at ${target.pin} for ${missingAtTarget.join(', ')}: the target does not carry ${missingAtTarget.length === 1 ? 'that workflow' : 'those workflows'}.`,
+        `What to do next: give a target that has a template for each managed workflow the project has, and run upgrade again. upgrade does not remove a workflow. ${commandFix}`,
+        notVerified('targetTemplates'),
+      ].join('\n'),
     )
   }
 
   // The project's own settings and rules, at the same commit.
-  const configText = await readFileAt(project, CONFIG_FILE, readRef)
-  if (configText === null) throw new Refusal(`${CONFIG_FILE}: missing on main, so the upgrade cannot be validated. Nothing was cloned, branched or pushed.`)
+  const settingsRepair = projectRepair(`Repair ${CONFIG_FILE} by hand, through a pull request of the project (steward's docs/settings.md lists its keys), and run upgrade again.`)
+  const configText = await read(`${CONFIG_FILE} at ${readRef} in ${repo}`, () => readFileAt(project, CONFIG_FILE, readRef))
+  if (configText === null) {
+    throw new Refusal([`${CONFIG_FILE}: missing on ${atMain}, so the upgrade cannot be validated.`, settingsRepair, notVerified('settings')].join('\n'))
+  }
   let config
   try {
     config = JSON.parse(configText)
-  } catch (error) {
-    throw new Refusal(`${CONFIG_FILE}: not valid JSON (${error.message}); repair it by hand first. Nothing was cloned, branched or pushed.`)
+  } catch {
+    // JSON.parse's message can quote the file, so it is not shown.
+    throw new Refusal([`${CONFIG_FILE}: not valid JSON at ${atMain} (the parser's message is not shown, as it can quote the file).`, settingsRepair, notVerified('settings')].join('\n'))
   }
   if (config === null || typeof config !== 'object' || Array.isArray(config)) {
-    throw new Refusal(`${CONFIG_FILE}: must be a JSON object; repair it by hand first. Nothing was cloned, branched or pushed.`)
+    throw new Refusal([`${CONFIG_FILE}: must be a JSON object, and is not at ${atMain}.`, settingsRepair, notVerified('settings')].join('\n'))
   }
   const plan = sameCommit ? { config, edits: [], decisions: [] } : planConfig(config, migrations)
   const proposedConfigText = plan.edits.length === 0 ? configText : `${JSON.stringify(plan.config, null, 2)}\n`
@@ -765,7 +944,7 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
   if (isRulesFilePath(rulesFile)) {
     // Read at the path without its `.` segments (`./REVIEW.md`); the configured value stays as written.
     rulesPath = rulesFile.split('/').filter((s) => s !== '.').join('/')
-    rulesText = await readFileAt(project, rulesPath, readRef)
+    rulesText = await read(`${rulesPath} at ${readRef} in ${repo}`, () => readFileAt(project, rulesPath, readRef))
     if (rulesText === null) problems.push(`${rulesFile}: the review rules file is missing on main`)
     else {
       const rules = validateRules(rulesFile, rulesText)
@@ -774,8 +953,14 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
   }
   if (problems.length > 0) {
     throw new Refusal(
-      `The proposed upgrade is not valid, so it is not reported as validated and no pull request is opened:\n${problems.map((p) => `  ${p}`).join('\n')}\n` +
-        'Repair the file by hand, through a pull request of the project, and run upgrade again. Nothing was cloned, branched or pushed.',
+      [
+        `The proposed upgrade is not valid, so it is not reported as validated and no pull request is opened. At ${atMain}:`,
+        ...problems.map((p) => `  ${p}`),
+        projectRepair(
+          `Repair each file named above by hand, through a pull request of the project, and run upgrade again (steward's docs/settings.md lists the keys of ${CONFIG_FILE}).`,
+        ),
+        notVerified(rulesText === null ? 'settings' : 'checklist'),
+      ].join('\n'),
     )
   }
 
@@ -793,7 +978,10 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
     git(root, ['ls-remote', '--heads', remote, `refs/heads/${branch}`]),
   )
   if (onOrigin !== '') {
-    throw new Refusal(`The branch ${branch} is already on GitHub. Delete it there if it is an earlier upgrade's, or choose another name with --branch, and run upgrade again. Nothing was cloned or pushed.`)
+    throw new Refusal(
+      `The branch ${branch} is already on GitHub. If it is an earlier upgrade's and no pull request is open from it, delete it there (git push origin --delete ${branch}); ` +
+        'if a pull request is open from it, do not delete it, as it is that pull request\'s head. Or choose another name with --branch. Then run upgrade again.',
+    )
   }
   const open = await step(`looking for an open pull request from ${branch}`, 'GitHub', async () => {
     const response = await ctx.send(buildListOpenPulls(repo, branch))
@@ -801,7 +989,7 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
     return Array.isArray(response.body) ? response.body : []
   })
   if (open.length > 0) {
-    throw new Refusal(`A pull request is already open from ${branch}: ${open[0].html_url}. Close it, or choose another name with --branch, and run upgrade again. Nothing was cloned or pushed.`)
+    throw new Refusal(`A pull request is already open from ${branch}: ${open[0].html_url}. Close it, or choose another name with --branch, and run upgrade again.`)
   }
 
   // The clone: the files changed here, and no others.
@@ -828,6 +1016,7 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
   } else {
     bodyTemplate = templates[0] ?? null
   }
+  progress.branchAttempted = true
   await step(`making the branch ${branch}`, 'Git', () => git(clone, ['checkout', '--quiet', '-b', branch]))
   progress.branch = branch
 

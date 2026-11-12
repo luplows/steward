@@ -100,14 +100,22 @@ after review 1 of #167; considered and not chosen: refusing when `main` moved, a
 claims). It opens a draft, not a preapproved PR. Considered and deferred: a separate report
 artifact or a general post-edit verification service.
 
-**Planned (ST-98)** (crew, 2026-11-09; refined after PR #151 review, 2026-11-10):
-Upgrade refusals identify affected paths and pins, the failed condition, what remains
-and the safe next action. A workflow that differs by more than ST-96 accepts is refused with
-that said, and with the statement that steward compares text and does not parse YAML, so it
-cannot tell whether the file is valid YAML or which permission or command changed (crew,
-2026-11-12: steward has no YAML parser and adds no runtime package for one). Missing evidence cannot be reported as success; no
-automatic repair or review bypass is introduced.
-Considered and deferred: automatic project repairs and a machine-readable verification protocol.
+(crew, 2026-11-09; refined after PR #151 review, 2026-11-10) Upgrade refusals identify affected
+paths and pins, the failed condition, what remains and the safe next action. A refusal of the
+project's files is a repair for the crew, through a pull request of the project; a target that
+cannot be used is a correction of the command; and a read that fails after the credential check
+is a failure to retry, not a refusal. A refusal at a check of the target, the managed workflows,
+`steward.config.json` or the checklist names the checks it had not reached as not verified. A
+workflow that differs by more than ST-96 accepts is refused with that said, and with the
+statement that steward compares text and does not parse YAML, so it cannot tell whether the file
+is valid YAML or which permission or command changed (crew, 2026-11-12: steward has no YAML
+parser and adds no runtime package for one). What exists
+after a refusal or a failure (the clone, the branch in it and on GitHub, a pull request) is said
+from what the command tracked as it went, and a push or a pull request that was tried and failed
+is uncertain. Messages show no workflow's or checklist's text beyond its pins or section names,
+no value `readSettings` quotes and no user name or password of a URL. Missing evidence cannot be
+reported as success; no automatic repair or review bypass is introduced. Considered and deferred:
+automatic project repairs and a machine-readable verification protocol.
 
 **Planned (ST-94)** (crew, 2026-11-09, after the v0.2.0 release review): The installation PR
 `init` opens and the upgrade PR `upgrade` opens, and each command's success output, say that the

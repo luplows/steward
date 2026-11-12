@@ -113,7 +113,17 @@ export function createReadContext({ repo, git, contentPaths, fetch = globalThis.
 const readFailure = (request, response) =>
   new Error(`${request.method} ${request.url} failed with ${response.status}${response.body?.message ? `: ${response.body.message}` : ''}`)
 
-/** The commit the tag `tag` names (an annotated tag is followed to its commit), or `null` when there is no such tag. */
+/**
+ * Thrown by `readTagCommit` when GitHub answered for the tag and it does not lead to a commit:
+ * an answer about the tag, not a failure to read it.
+ */
+export class TagNotACommit extends Error {}
+
+/**
+ * The commit the tag `tag` names (an annotated tag is followed to its commit, through at most five
+ * tag objects), or `null` when there is no such tag. Throws `TagNotACommit` when the tag leads to
+ * something else, or to a longer chain of tag objects.
+ */
 export async function readTagCommit(ctx, tag) {
   const request = buildGetTagRef(ctx.repo, tag)
   const response = await ctx.send(request)
@@ -126,8 +136,11 @@ export async function readTagCommit(ctx, tag) {
     if (answer.status !== 200) throw readFailure(next, answer)
     object = answer.body?.object
   }
+  if (object?.type === 'tag') {
+    throw new TagNotACommit(`the tag ${tag} of ${ctx.repo} leads through more than five tag objects, which steward does not follow to a commit`)
+  }
   if (object?.type !== 'commit' || !FULL_SHA_RE.test(String(object.sha).toLowerCase())) {
-    throw new Error(`the tag ${tag} of ${ctx.repo} does not name a commit`)
+    throw new TagNotACommit(`the tag ${tag} of ${ctx.repo} does not name a commit`)
   }
   return String(object.sha).toLowerCase()
 }
