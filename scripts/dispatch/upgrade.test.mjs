@@ -1362,14 +1362,19 @@ const failingAt = (w, pattern, status = 500) => ({
   fetch: async (url, init) => (pattern.test(url) ? { status, text: async () => JSON.stringify({ message: 'Server Error' }) } : w.fetch(url, init)),
 })
 
+/** Nothing cloned, branched, pushed or opened, and the project's checkout clean. */
+function expectAsItWas(r, refs) {
+  expectUntouched(r, refs)
+  expect(git(r.w.dir, 'status', '--porcelain')).toBe('')
+}
+
 /** Runs upgrade, expecting a refusal before the clone that leaves everything as it was. */
 async function refusedBefore(args, w) {
   const refs = heads(w)
   const r = await runUpgrade(args, w)
   expect(r.code).toBe(2)
   expect(r.err).toContain(NOTHING_MADE)
-  expectUntouched(r, refs)
-  expect(git(w.dir, 'status', '--porcelain')).toBe('')
+  expectAsItWas(r, refs)
   return r
 }
 
@@ -1441,6 +1446,7 @@ describe('ST-98/AC-1: the preflight refusals AC-1 lists name the path or pin, th
     const missing = world({ config: settings({ rulesFile: 'docs/NOPE.md' }) })
     const m = await refusedBefore(['--to', 'v0.2.0'], missing)
     expect(m.err).toContain(`At ${mainAt(missing)}:\n  docs/NOPE.md: the review rules file is missing on main`)
+    expect(m.err).toContain(`${CREW} Repair each file named above by hand, through a pull request of the project, and run upgrade again`)
     const broken = world({ rules: '# Rules\n\n## A section\n\nno numbered item\n' })
     const b = await refusedBefore(['--to', 'v0.2.0'], broken)
     expect(b.err).toContain('  REVIEW.md: section "A section": has no item')
@@ -1458,12 +1464,13 @@ describe('ST-98/AC-1: the preflight refusals AC-1 lists name the path or pin, th
     expect(r.err).toContain('upgrade could not verify the upgrade: it stopped at that read, before it finished its checks, so it reports none of them as passed.')
     expect(r.err).toContain(`What to do next: ${RETRY}. Run upgrade again; if it fails the same way, check that this machine can reach GitHub with your credential (\`gh auth status\`).`)
     expect(r.err).not.toContain(CREW)
-    expectUntouched(r, refs)
+    expectAsItWas(r, refs)
     const down = { ...w, fetch: async (url, init) => (url.includes('/git/ref/tags/') ? Promise.reject(new TypeError('fetch failed')) : w.fetch(url, init)) }
     const d = await runUpgrade(['--to', 'v0.2.0'], down)
     expect(d.code).toBe(1)
     expect(d.err).toContain('upgrade stopped: reading the target v0.2.0 in luplows/steward from GitHub failed. GitHub said: fetch failed')
     expect(d.err).toContain(RETRY)
+    expectAsItWas(d, refs)
   })
 })
 
@@ -1518,9 +1525,11 @@ describe('ST-98/AC-3: what was and was not made, and what a rerun needs', () => 
     expect(r.err).toContain(`  upgrade's copy of the project, at ${r.clone}`)
     expect(r.err).toContain('  no branch: none was made')
     expect(r.err).toContain('  nothing on GitHub from this run: nothing was pushed, and no pull request was opened')
+    expect(r.err).toContain('Choose the one the pull request follows with --pr-template <path>, and run upgrade again.')
     expect(git(r.clone, 'branch', '--list', 'steward/*')).toBe('')
     expect(writes(w)).toEqual([])
     expect(heads(w)).toBe(refs)
+    expect(git(w.dir, 'status', '--porcelain')).toBe('')
   })
 
   it('ST-98/AC-3: a branch already on GitHub is not to be deleted while a pull request is open from it', async () => {
@@ -1538,21 +1547,25 @@ describe('ST-98/AC-4: diagnostics name paths and conditions, and nothing more', 
     expect(notJson.err).toContain("not valid JSON at main (")
     expect(notJson.err).toContain("(the parser's message is not shown, as it can quote the file)")
     expect(notJson.err).not.toContain(secret)
+    expect(notJson.err).toContain(`${CREW} Repair steward.config.json by hand`)
     const value = await refusedBefore(['--to', 'v0.2.0'], world({ config: settings({ landWhen: secret }) }))
     expect(value.err).toContain("steward.config.json: 'landWhen' must be \"all-checks\" or a non-empty array of distinct, non-empty strings (the value is not shown)")
     expect(value.err).not.toContain(secret)
+    expect(value.err).toContain(`${CREW} Repair each file named above by hand`)
     const workflow = await refusedBefore(['--to', 'v0.2.0'], world({ files: { '.github/workflows/review-gate.yml': `${fillPin(template('review-gate.yml'), 'v0.1.0')}# ${secret}\n` } }))
     expect(workflow.err).toContain('.github/workflows/review-gate.yml: differs from')
     expect(workflow.err).not.toContain(secret)
+    expect(workflow.err).toContain(`${CREW} Reconcile each by hand`)
     const rules = await refusedBefore(['--to', 'v0.2.0'], world({ rules: `# Rules\n\n## A section\n\n${secret}\n` }))
     expect(rules.err).toContain('REVIEW.md: section "A section": has no item')
     expect(rules.err).not.toContain(secret)
+    expect(rules.err).toContain(`${CREW} Repair each file named above by hand`)
     const w = world()
     git(w.dir, 'remote', 'set-url', 'origin', `https://crew:${secret}@example.com/acme/widgets.git`)
-    const errs = []
-    expect(await main(['--to', 'v0.2.0'], { cwd: w.dir, fetch: w.fetch, getToken: async () => 't', out() {}, err: (l) => errs.push(l) })).toBe(2)
-    expect(errs.join('\n')).toContain('The `origin` remote, https://***@example.com/acme/widgets.git, is not a GitHub repository.')
-    expect(errs.join('\n')).not.toContain(secret)
+    const url = await refusedBefore(['--to', 'v0.2.0'], w)
+    expect(url.err).toContain('The `origin` remote, https://***@example.com/acme/widgets.git, is not a GitHub repository.')
+    expect(url.err).toContain(`run it in a checkout whose \`origin\` is the project on GitHub`)
+    expect(url.err).not.toContain(secret)
     expect(redact('https://x@github.com/a/b and git@github.com:a/b and https://github.com/a/b@c')).toBe('https://***@github.com/a/b and git@github.com:a/b and https://github.com/a/b@c')
   })
 
@@ -1563,10 +1576,13 @@ describe('ST-98/AC-4: diagnostics name paths and conditions, and nothing more', 
         "whether the target is behind the installed pin; the target pin's templates; `steward.config.json`; the checklist; whether the branch is free on GitHub.",
     )
     expect(target.err).not.toMatch(/valid/)
+    expect(target.err).toContain(COMMAND)
     const settingsOnly = await refusedBefore(['--to', 'v0.2.0'], world({ config: settings({ rulesFile: '../x.md' }) }))
     expect(settingsOnly.err).toContain('upgrade could not verify these, as it stopped before checking them: the checklist; whether the branch is free on GitHub.')
+    expect(settingsOnly.err).toContain(`${CREW} Repair each file named above by hand`)
     const rules = await refusedBefore(['--to', 'v0.2.0'], world({ rules: '# Rules\n\n## A section\n\nno item\n' }))
     expect(rules.err).toContain('upgrade could not verify these, as it stopped before checking them: whether the branch is free on GitHub.')
+    expect(rules.err).toContain(`${CREW} Repair each file named above by hand`)
   })
 
   it('ST-98/AC-4: every managed workflow that is not steward\'s own is reported, not only the first', async () => {
@@ -1583,6 +1599,8 @@ describe('ST-98/AC-4: diagnostics name paths and conditions, and nothing more', 
     expect(r.err).toContain(".github/workflows/inspection.yml: differs from steward's template at v0.1.0, the pin it carries,")
     expect(r.err).toContain('.github/workflows/land-approved.yml: steward has no template of that name at v0.1.0')
     expect(r.err).toContain('has no template to compare that workflow with')
+    expect(r.err).toContain(`${CREW} Reconcile each by hand, through a pull request of the project that the crew reviews, in one of two ways:`)
+    expect(r.err).toContain("rename a workflow that is not steward's, or set the pin the workflows carry to the steward they were installed from, and run upgrade again.")
   })
 })
 
@@ -1609,6 +1627,7 @@ describe('ST-98/AC-5: offline cases, with the next action and what remains', () 
     expect(r.err).toContain(".github/workflows/inspection.yml: differs from steward's template at v0.1.0, the pin it carries,")
     expect(r.err).not.toMatch(/(review-gate|land-approved)\.yml: differs/)
     expect(r.err).toContain('does not parse YAML')
+    expect(r.err).toContain(`${CREW} Reconcile each by hand`)
   })
 
   it('ST-98/AC-5: a failed read before the clone leaves nothing; a failed push after it leaves the clone and the branch in it, and says what a rerun needs', async () => {
@@ -1618,7 +1637,7 @@ describe('ST-98/AC-5: offline cases, with the next action and what remains', () 
     expect(before.code).toBe(1)
     expect(before.err).toContain(NOTHING_MADE)
     expect(before.err).toContain(`What to do next: ${RETRY}. Run upgrade again`)
-    expectUntouched(before, refs)
+    expectAsItWas(before, refs)
 
     const after = world()
     const hook = path.join(after.bare, 'hooks', 'pre-receive')
@@ -1635,6 +1654,7 @@ describe('ST-98/AC-5: offline cases, with the next action and what remains', () 
     expect(r.err).toContain('What to check: the branch on GitHub (git ls-remote --heads origin steward/upgrade-v0.2.0)')
     expect(r.err).toContain('Before running upgrade again with the same branch name: steward/upgrade-v0.2.0 must not be on GitHub, and no pull request may be open from it')
     expect(r.err).toContain(`Remove ${r.clone} when you are done with it.`)
+    expect(git(after.dir, 'status', '--porcelain')).toBe('')
   })
 })
 
@@ -1661,10 +1681,10 @@ describe('ST-98: after review 1', () => {
     for (const userinfo of ['crew:prefix@secret', 'crew:s3cret']) {
       const w = world()
       git(w.dir, 'remote', 'set-url', 'origin', `https://${userinfo}@example.com/acme/widgets.git`)
-      const errs = []
-      expect(await main(['--to', 'v0.2.0'], { cwd: w.dir, fetch: w.fetch, getToken: async () => 't', out() {}, err: (l) => errs.push(l) })).toBe(2)
-      expect(errs.join('\n'), userinfo).toContain('The `origin` remote, https://***@example.com/acme/widgets.git, is not a GitHub repository.')
-      for (const part of userinfo.split(/[:@]/)) expect(errs.join('\n'), userinfo).not.toContain(part)
+      const r = await refusedBefore(['--to', 'v0.2.0'], w)
+      expect(r.err, userinfo).toContain('The `origin` remote, https://***@example.com/acme/widgets.git, is not a GitHub repository.')
+      expect(r.err, userinfo).toContain(`run it in a checkout whose \`origin\` is the project on GitHub`)
+      for (const part of userinfo.split(/[:@]/)) expect(r.err, userinfo).not.toContain(part)
     }
     expect(redact('https://a:b@c@host/x@y')).toBe('https://***@host/x@y')
   })
@@ -1679,8 +1699,11 @@ describe('ST-98: after review 1', () => {
     expect(installed.err).toContain('  the pin v0.1.0: the tag v0.1.0 of luplows/steward does not name a commit')
     expect(installed.err).toContain(`${CREW} Reconcile these by hand, through a pull request of the project: replace the pin v0.1.0, in every managed workflow`)
     expect(installed.err).not.toContain(RETRY)
-    const failing = await runUpgrade(['--to', 'v0.2.0'], failingAt(world(), /\/git\/ref\/tags\/v0\.1\.0$/))
+    const fails = world()
+    const refs = heads(fails)
+    const failing = await runUpgrade(['--to', 'v0.2.0'], failingAt(fails, /\/git\/ref\/tags\/v0\.1\.0$/))
     expect(failing.code).toBe(1)
     expect(failing.err).toContain(RETRY)
+    expectAsItWas(failing, refs)
   })
 })
