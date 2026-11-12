@@ -57,21 +57,35 @@ no-op. The crew approves and lands the PR. Local
 coordinator stop/restart, activation and authorization remain separate and manual.
 General historical migrations and automatic conflict resolution are not promised.
 
-**Planned (ST-96)** (crew, 2026-11-09; refined after PR #151 review, 2026-11-10):
-Installed managed workflows still match when only the pin or line endings differ. A
-runtime comparison written in Steward's own code recognizes only a bounded, documented
-set of presentation-only YAML transformations, preserving scalar values, keys, ordered
-comments, block-scalar content, GitHub expressions, commands and permissions. A difference
-it cannot prove formatting-only refuses, whether from `init` recognition or `upgrade`
-preflight; an accepted upgrade still proposes the target-pin template. Prettier is one
-exact pinned **development dependency only**, used in Steward's own CI to format current
-workflow templates and those at each release tag, and verify the comparison against their outputs.
-Neither client command imports or runs Prettier or reads a project's formatter settings.
-Every client gate, runway and inspection invocation installs Steward using
-`npx --package=github:luplows/steward#...`; a runtime Prettier dependency would impose
-installation cost on all those unrelated runs. Considered and not chosen: runtime
-Prettier, parsed-YAML equivalence that ignores comments or ordering, and unconditional
-whitespace normalization.
+(crew, 2026-11-09; refined after PR #151 review, 2026-11-10) Installed managed workflows still
+match when only the pin or line endings differ. Beyond those, the comparison `init` and `upgrade`
+share, `sameWorkflowApartFromPin` in `scripts/dispatch/workflow-text.mjs`, Steward's own code,
+accepts one presentation-only transformation, the only one Prettier's default options make to the
+managed templates, current and at `v0.1.0` and `v0.2.0` (`workflow-text.test.mjs`): a line
+`key: <scalar>`, after any `- `, whose scalar is quoted and ends the line, written with single
+quotes in one text and double quotes in the other, the double-quoted one holding no backslash,
+with the same value (`''` is the single-quoted escape). Every other line must be the same text, so
+nothing it accepts changes a scalar's value, a key, a comment or the comments' order, block-scalar
+content, a GitHub expression, a command or a permission. It fails closed: any other difference
+refuses, among them indentation, line wrapping, spacing, a trailing comment, a quoted value made
+plain or a plain one quoted, a backslash escape, and quotes changed in a comment or in a block
+scalar's content, which it takes to be every line after a header that is blank or indented more
+than the header. A template with a quote it cannot place, outside full-line comments and block
+scalar content on a line not of that form, or with a block-scalar header that does not start with
+a plain key, lets no line's quotes differ. It compares lines of text and is not a YAML parser.
+This restates the header of `workflow-text.mjs`, which it must not drift from. `init` names a
+workflow that does not match as not its own, and `upgrade` refuses it before it clones anything;
+neither command writes a workflow to compare it, and an accepted upgrade proposes the target pin's
+template, filled with the target pin, in the line endings the project's workflow has and otherwise
+not in the project's formatting. Prettier is one exact pinned **development dependency only**,
+which Steward's own tests use to format the current workflow templates and those at `v0.1.0` and
+`v0.2.0`, and verify the comparison against their outputs. No
+client command imports or runs Prettier or reads a project's formatter settings, so a project's
+`.prettierrc` does not change what the comparison accepts. Every client gate, runway and
+inspection invocation installs Steward using `npx --package=github:luplows/steward#...`; a runtime
+Prettier dependency would impose installation cost on all those unrelated runs. Considered and not
+chosen: runtime Prettier, parsed-YAML equivalence that ignores comments or ordering, and
+unconditional whitespace or quote normalization.
 
 (crew, 2026-11-09) The upgrade command fills the existing reviewable PR sections with what it
 actually generated and verified, tied to the base and generated head SHA. It clearly

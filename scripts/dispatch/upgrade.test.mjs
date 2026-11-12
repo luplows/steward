@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import * as prettier from 'prettier'
 import { fillPin, GATE_WORKFLOWS, INSPECTION_WORKFLOW } from './init.mjs'
 import { describePin, failureReport, main, MIGRATIONS, parseFlags, planConfig, pullTitle, readTemplate, STEWARD_REPO, templateMapping } from './upgrade.mjs'
 
@@ -1046,7 +1047,7 @@ describe('ST-97/AC-3: Verification is what upgrade ran and checked, and what it 
     )
     expect(text).toContain(`- Target pin: GitHub answered that \`v0.2.0\` is a tag of luplows/steward at commit \`${C_LATER}\`, whose \`package.json\` gives version \`0.2.0\`.`)
     expect(text).toContain(`- Installed pin: each managed workflow at \`${base}\` (\`.github/workflows/review-gate.yml\`, \`.github/workflows/land-approved.yml\`) carries the one pin \`v0.1.0\``)
-    expect(text).toContain("- Installed workflows: each is steward's template at `v0.1.0` apart from the pin and line endings")
+    expect(text).toContain("- Installed workflows: each is steward's template at `v0.1.0` apart from the pin, line endings and the quotes `sameWorkflowApartFromPin` accepts.")
     expect(text).toContain(`- Direction: GitHub's comparison of \`${C_0B1D}\` with \`${C_LATER}\` gave \`ahead\``)
     expect(text).toContain(`- Settings: \`steward.config.json\`, as \`${base}\` has it and \`${head}\` leaves it, passes \`readSettings\`.`)
     expect(text).toContain(`- Checklist: \`REVIEW.md\`, as \`${base}\` has it and \`${head}\` leaves it, passes \`validateRules\``)
@@ -1265,5 +1266,84 @@ describe('ST-97/AC-7: the documents', () => {
 
   it('ST-97/AC-7: the Planned (ST-97) marker is gone from the design document', () => {
     expect(read('docs/agent-workflow-design.md')).not.toMatch(/Planned \(ST-97\)/)
+  })
+})
+
+// ------------------------------------------------------------------ ST-96: quotes
+
+describe("ST-96: v0.1.0's workflows as Prettier's defaults format them are steward's own, and any other change is not", () => {
+  const ALL = [...GATE_WORKFLOWS, INSPECTION_WORKFLOW]
+  /** steward's real templates at v0.1.0, which quote values with single quotes. */
+  const released = Object.fromEntries(
+    ALL.map((file) => [file, execFileSync('git', ['show', `v0.1.0:templates/workflows/${file}`], { cwd: ROOT, encoding: 'utf8' })]),
+  )
+  /** The v0.1.0 workflows as installed, formatted with Prettier's defaults, then `edit` applied. */
+  async function formattedInstall(edit = (rel, text) => text, target = {}) {
+    const files = {}
+    let changed = 0
+    for (const file of ALL) {
+      const rel = `.github/workflows/${file}`
+      const installed = fillPin(released[file], 'v0.1.0')
+      files[rel] = edit(rel, await prettier.format(installed, { filepath: rel }))
+      if (files[rel] !== installed) changed++
+    }
+    expect(changed).toBeGreaterThan(0)
+    return world({ files, inspection: true, steward: { templates: { [C_0B1D]: released, [C_LATER]: target } } })
+  }
+
+  it('ST-96/AC-3: an accepted upgrade proposes the target pin\'s templates, not the project\'s formatting', async () => {
+    const w = await formattedInstall()
+    const r = await runUpgrade(['--to', 'v0.2.0'], w)
+    expect(r.code).toBe(0)
+    expect(r.err).toBe('')
+    for (const file of ALL) {
+      const rel = `.github/workflows/${file}`
+      expect(onBranch(w, r.opened.head, rel), rel).toBe(fillPin(template(file), 'v0.2.0').trimEnd())
+    }
+    expect(changedFiles(w, r.opened.head).sort()).toEqual(ALL.map((file) => `.github/workflows/${file}`).sort())
+  })
+
+  it('ST-96/AC-3: a target template quoted as the release was is proposed as it is, its single quotes included', async () => {
+    const w = await formattedInstall(undefined, released)
+    const r = await runUpgrade(['--to', 'v0.2.0'], w)
+    expect(r.code).toBe(0)
+    const rel = '.github/workflows/inspection.yml'
+    expect(git(w.bare, 'show', `main:${rel}`)).toContain('- cron: "17 6 * * *"')
+    expect(onBranch(w, r.opened.head, rel)).toContain("- cron: '17 6 * * *'")
+    for (const file of ALL) {
+      expect(onBranch(w, r.opened.head, `.github/workflows/${file}`), file).toBe(fillPin(released[file], 'v0.2.0').trimEnd())
+    }
+  })
+
+  it('ST-96/AC-2: a formatted workflow with a functional change is refused, naming it, before anything is cloned, branched, pushed or opened', async () => {
+    const edits = [
+      ['.github/workflows/inspection.yml', (text) => text.replace('contents: read', 'contents: write')],
+      ['.github/workflows/inspection.yml', (text) => text.replace('"17 6 * * *"', '"17 7 * * *"')],
+      ['.github/workflows/review-gate.yml', (text) => text.replace("'issue_comment'", '"issue_comment"')],
+      ['.github/workflows/land-approved.yml', (text) => text.replace('# Never two sweeps at once', '# Two sweeps at once')],
+    ]
+    for (const [target, edit] of edits) {
+      const w = await formattedInstall((rel, text) => (rel === target ? edit(text) : text))
+      const refs = heads(w)
+      const r = await runUpgrade(['--to', 'v0.2.0'], w)
+      expect(r.code, target).toBe(2)
+      expect(r.err).toContain(`${target}: differs from steward's template at v0.1.0`)
+      for (const other of ALL.map((file) => `.github/workflows/${file}`).filter((rel) => rel !== target)) {
+        expect(r.err).not.toContain(`${other}: differs`)
+      }
+      expect(r.err).toMatch(/Nothing was cloned, branched or pushed/)
+      expectUntouched(r, refs)
+    }
+  })
+
+  it('ST-96/AC-5: README documents the formatting the comparison accepts, its boundary and Prettier\'s role', () => {
+    const readme = readFileSync(path.join(ROOT, 'README.md'), 'utf8')
+    const section = readme.slice(readme.indexOf('### Upgrading steward in a project'), readme.indexOf('### When the checklist does not parse'))
+    const text = section.replace(/\s+/g, ' ')
+    expect(text).toContain('single quotes in one and double quotes in the other')
+    expect(text).toContain('A double-quoted value with a backslash in it is not accepted')
+    expect(text).toContain('Any other difference is refused')
+    expect(text).toContain('as a development dependency')
+    expect(text).toContain("it reads no formatter's settings and runs no formatter")
   })
 })

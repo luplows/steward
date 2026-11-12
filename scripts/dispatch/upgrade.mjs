@@ -9,8 +9,9 @@
  * Everything it decides, it decides from GitHub's answers before it clones anything: the target pin
  * must be a tag or a commit of `luplows/steward`; the pin each managed workflow on the project's
  * `main` carries must be one and the same, and a tag or a commit of `luplows/steward`; each
- * installed workflow must be the template of that pin apart from the pin (`workflow-text.mjs`); the
- * target pin must have a template for each. The templates are read from GitHub at each pin
+ * installed workflow must be the template of that pin apart from the pin, line endings and the
+ * quotes `sameWorkflowApartFromPin` accepts (`workflow-text.mjs`, ST-96); the target pin must
+ * have a template for each. The templates are read from GitHub at each pin
  * (`github-read.mjs`), so nothing is shipped and any commit can be tried. It proposes the
  * templates at the target pin, filled as `init` fills them (`fillPin`), the project's other files
  * as they are, and the changes of `MIGRATIONS` to `steward.config.json`, of which there are none
@@ -314,7 +315,7 @@ export function bodySections(facts, frame) {
       : `- Target pin: GitHub answered that ${code(target.pin)} is a commit of ${STEWARD_REPO}, whose \`package.json\` gives version ${code(target.version)}.`,
     `- Installed pin: each managed workflow at ${code(base)} (${checked.workflows.map(code).join(', ')}) carries the one pin ${code(installed.pin)}, ` +
       `which GitHub answered is ${installed.kind === 'tag' ? `${kindName('tag')} of ${STEWARD_REPO} at commit ${code(installed.commit)}` : `${kindName('commit')} of ${STEWARD_REPO}`}.`,
-    `- Installed workflows: each is steward's template at ${code(installed.pin)} apart from the pin and line endings (\`sameWorkflowApartFromPin\`).`,
+    `- Installed workflows: each is steward's template at ${code(installed.pin)} apart from the pin, line endings and the quotes \`sameWorkflowApartFromPin\` accepts.`,
     comparison === null
       ? `- Direction: both pins name the commit ${code(target.commit)}, so no comparison was needed.`
       : `- Direction: GitHub's comparison of ${code(installed.commit)} with ${code(target.commit)} gave ${code(comparison)}, so the target is not behind the installed commit.`,
@@ -677,8 +678,9 @@ async function run(argv, { cwd, fetch, getToken, tmpRoot, cloneUrl, migrations, 
     )
   }
 
-  // The installed workflows are steward's own at the installed pin, apart from the pin. This comes
-  // before the no-ops: a customized workflow is refused, whatever the target.
+  // The installed workflows are steward's own at the installed pin, apart from the pin, line
+  // endings and the quotes `sameWorkflowApartFromPin` accepts. This comes before the no-ops: a
+  // customized workflow is refused, whatever the target.
   const customized = []
   for (const { rel, text } of present.values()) {
     const template = await readFileAt(steward, `${TEMPLATE_DIR}/${path.posix.basename(rel)}`, installed.commit)

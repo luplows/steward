@@ -157,9 +157,11 @@ npx prettier --write steward.config.json REVIEW.md .github/workflows/review-gate
 The pull request's body gives the command for the files it added other than such a checklist, and
 no command when that checklist is all it adds.
 Not every project needs to.
-`steward upgrade` refuses a managed workflow that differs from steward's template at its pin by
-more than the pin and line endings, so a workflow that this formatting changes is refused by a
-later upgrade.
+`steward upgrade` refuses a managed workflow that differs from steward's template at its pin in
+anything but the pin, line endings and single or double quotes around a value that ends a `key:`
+line (see [Upgrading steward in a project](#upgrading-steward-in-a-project)), so a workflow whose
+formatting this changes in any other way, such as its indentation or line wrapping, is refused by
+a later upgrade.
 
 Outside the pull request it also creates the labels steward reads and applies, `review-blocked`,
 `breaker-override` and `inspection`, and writes the user config (`~/.steward/config.json`), only
@@ -175,7 +177,9 @@ draft pull request's body, a warning name the file and each problem, such as a s
 numbered item, and say to repair it before merging the installation (see
 [When the checklist does not parse](#when-the-checklist-does-not-parse)). When `main`
 already has every file, `init` compares each workflow it would write with its own template,
-apart from the pin. If all match, it says the installation is already complete and makes no
+by the comparison `steward upgrade` makes (see
+[Upgrading steward in a project](#upgrading-steward-in-a-project)), without changing the
+workflow. If all match, it says the installation is already complete and makes no
 branch, commit, push or pull request. If any does not, it names it, says the installation is not
 this version's and that a project's own workflows with those names must be removed or renamed
 before `init` can install, makes no branch, commit, push or pull request, and exits 1. When some
@@ -285,7 +289,8 @@ It reads the pin that the project's managed workflows (`review-gate.yml`, `land-
 `inspection.yml` when there is one) carry. It refuses, naming each finding, when a managed
 workflow is missing, when they do not all carry the same pin, when that pin is not a tag or a
 commit of `luplows/steward`, when a workflow is not steward's own template at that pin apart from
-the pin (reconcile it by hand, through a pull request of the project), when the target is behind
+the pin, line endings and the quotes described below (reconcile it by hand, through a pull request
+of the project), when the target is behind
 the installed commit (a downgrade), when the target has no template for a workflow the project has,
 or when the proposed `steward.config.json` or checklist is not valid. When the project is already
 on the target it says so and does nothing. Otherwise it opens one draft pull request, from a new
@@ -294,6 +299,21 @@ template at the target pin, filled in as `init` fills it. It leaves the project'
 they are, `steward.config.json` and the checklist included, unless a release makes an explicit,
 unambiguous change to one, which the pull request's body explains. It never changes `land`:
 unattended landing stays as the project set it.
+
+Apart from the pin and line endings, the one difference from the template the comparison accepts
+is on a line `key: <value>`, after any `- `, whose value is quoted and ends the line: single
+quotes in one and double quotes in the other, around the same value, as `'it''s'` and `"it's"`
+are. A double-quoted value with a backslash in it is not accepted. That is the only change
+Prettier's default options make to steward's workflow templates, current and at `v0.1.0` and
+`v0.2.0`, and steward's own tests check that the comparison accepts each of them so formatted,
+with the one Prettier version steward's `package.json` pins as a development dependency. Any
+other difference is refused, though the YAML may mean the same: indentation, line wrapping,
+spacing, a trailing comment, a value quoted or unquoted, a comment changed or moved, quotes
+changed in a comment or in a `|` or `>` block, and anything else. The comparison is steward's own
+code: it reads no formatter's settings and runs no formatter, and the project needs none
+installed. `init` uses the same comparison. An accepted upgrade's pull request proposes the
+target pin's template as steward writes it, in the line endings the project's workflow has, and
+not in the project's formatting otherwise.
 
 The pull request's branch starts from the commit of `main` the command read (the base): if `main`
 has moved since, the pull request starts from that earlier commit. The body says what the command
