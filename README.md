@@ -347,10 +347,51 @@ the coordinator. Once the crew has
 reviewed the pull request and merged it as the project normally merges, check that every
 `github:luplows/steward#` in `.github/workflows/` on `main` names the target pin. A coordinator
 running for the project is stopped and started again by hand, from steward installed at the target
-pin, when the crew wants that machine on it. If a step fails after the clone, its message says
-what exists (the clone, the branch) and what to do next. A push or a pull request that was tried and
-failed is reported as uncertain, with the commands to check it (`git ls-remote`, the open pull
-requests from the branch); it rolls nothing back.
+pin, when the crew wants that machine on it. If the command refuses or stops, the next section
+says how to read its message. It rolls nothing back.
+
+#### When upgrade refuses or stops
+
+When it does not finish, the command either refuses (exit code 2) or stops on a failure (exit
+code 1). It repairs nothing itself: it changes no file of the project to get past a refusal.
+
+- **A refusal before the clone** says what is wrong, naming each path or pin it concerns, and
+  ends `Nothing was cloned, branched or pushed, and no pull request was opened.` A refusal of the
+  project's own files (the managed workflows and their pin, `steward.config.json`, the checklist)
+  gives a `Crew repair in the project:` line: make that repair through a pull request of the
+  project, and run the command again. A target that is not a tag or commit of `luplows/steward`,
+  whose `package.json` gives no version, that is behind the installed pin, or that has no template
+  for a workflow the project has, is a correction of the command: give another target. So is a
+  target template this steward cannot fill: run the command from steward installed at the target
+  pin.
+- **What a refusal could not verify.** A refusal at one of the checks of the target, the managed
+  workflows, `steward.config.json` or the checklist names the checks it had not reached as ones it
+  could not verify, and does not call them valid. A refusal of the pins names every finding it
+  made about them, and a refusal of the workflows names every managed workflow that is not
+  steward's own at its pin.
+- **A workflow that differs by more than the pin, line endings and quotes** is named with the pin
+  it carries. Steward compares it with the template as text and does not parse YAML, so it cannot
+  tell whether the file is valid YAML, or which permission or command changed. The safe choices,
+  each through a pull request of the project: restore steward's template at the installed pin and
+  run the command again, or make the target template's change in the file by hand, which the
+  command will refuse as long as the file differs from steward's template at the pin it carries.
+- **A read that fails** before the clone, after the first read of the repository with your
+  credential, stops the command with what GitHub or Git said. It is not a refusal of the project's
+  files, nothing was made, and the command could not verify the upgrade: run it again, and if it
+  fails the same way, check `gh auth status` (or, for a read by Git, `git ls-remote origin`).
+  That first read is refused instead when it fails: sign in with `gh auth login`.
+- **A step that fails after the clone** lists what exists now: the clone, and whether the branch
+  was made in it, is on GitHub or perhaps is, and whether a pull request was opened or perhaps
+  was. A push or a pull request that was tried and failed is reported as uncertain. Until a push
+  was tried, nothing on GitHub needs removing, and a new run makes a new copy. Once one was tried,
+  check the branch (`git ls-remote --heads origin <branch>`) and the open pull requests from it, and
+  do not delete a branch a pull request is open from. Running the command again with the same
+  branch name needs the branch gone from GitHub and no pull request open from it, since it refuses
+  either; or give another with `--branch`.
+- **What a message does not show**: the text of a workflow apart from the pins it carries, or of
+  the checklist apart from its section names; a value that `readSettings` names in
+  `steward.config.json`; the JSON parser's message, which can quote the file; and a user name or
+  password in a URL.
 
 ### When the checklist does not parse
 

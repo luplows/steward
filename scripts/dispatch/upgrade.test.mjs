@@ -7,8 +7,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as prettier from 'prettier'
-import { fillPin, GATE_WORKFLOWS, INSPECTION_WORKFLOW } from './init.mjs'
-import { describePin, failureReport, main, MIGRATIONS, parseFlags, planConfig, pullTitle, readTemplate, STEWARD_REPO, templateMapping } from './upgrade.mjs'
+import { fillPin, GATE_WORKFLOWS, INSPECTION_WORKFLOW, StepFailure } from './init.mjs'
+import { describePin, failureReport, main, MIGRATIONS, parseFlags, planConfig, pullTitle, readTemplate, redact, STEWARD_REPO, templateMapping } from './upgrade.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const REPO = 'acme/widgets'
@@ -1345,5 +1345,313 @@ describe("ST-96: v0.1.0's workflows as Prettier's defaults format them are stewa
     expect(text).toContain('Any other difference is refused')
     expect(text).toContain('as a development dependency')
     expect(text).toContain("it reads no formatter's settings and runs no formatter")
+  })
+})
+
+// ------------------------------------------------------------------ ST-98: refusals and recovery
+
+const NOTHING_MADE = 'Nothing was cloned, branched or pushed, and no pull request was opened.'
+const RETRY = "this is a read that failed, not a refusal of the project's files, and nothing needs removing first"
+const CREW = 'Crew repair in the project:'
+const COMMAND = 'This is a correction of the command, not a repair of the project.'
+const mainAt = (w) => `main (${git(w.bare, 'rev-parse', 'main')})`
+
+/** `w` with GitHub answering `status` to every request whose URL matches `pattern`. */
+const failingAt = (w, pattern, status = 500) => ({
+  ...w,
+  fetch: async (url, init) => (pattern.test(url) ? { status, text: async () => JSON.stringify({ message: 'Server Error' }) } : w.fetch(url, init)),
+})
+
+/** Runs upgrade, expecting a refusal before the clone that leaves everything as it was. */
+async function refusedBefore(args, w) {
+  const refs = heads(w)
+  const r = await runUpgrade(args, w)
+  expect(r.code).toBe(2)
+  expect(r.err).toContain(NOTHING_MADE)
+  expectUntouched(r, refs)
+  expect(git(w.dir, 'status', '--porcelain')).toBe('')
+  return r
+}
+
+describe('ST-98/AC-1: the preflight refusals AC-1 lists name the path or pin, the failed condition and the next step', () => {
+  it('ST-98/AC-1: absent and inconsistent pins name each path and pin, at the commit read, with the crew\'s repair in the project', async () => {
+    const absent = world({ withoutDefaults: ['.github/workflows/land-approved.yml'], files: { '.github/workflows/review-gate.yml': 'name: gate\n' } })
+    const a = await refusedBefore(['--to', 'v0.2.0'], absent)
+    expect(a.err).toContain(`The steward this project installs cannot be identified from ${mainAt(absent)}:`)
+    expect(a.err).toContain('  .github/workflows/land-approved.yml: missing on main')
+    expect(a.err).toContain('  .github/workflows/review-gate.yml: carries no reference to github:luplows/steward#<pin>')
+    expect(a.err).toContain(`${CREW} Reconcile these by hand, through a pull request of the project: `)
+    expect(a.err).toContain("restore each workflow missing on main as steward's template of that name at the pin the project installs")
+    expect(a.err).toContain('put back, in each workflow that carries no reference, the github:luplows/steward#<pin> references')
+    expect(a.err).not.toContain(RETRY)
+    const mixed = world({ files: { '.github/workflows/land-approved.yml': fillPin(template('land-approved.yml'), C_935F) } })
+    const m = await refusedBefore(['--to', 'v0.2.0'], mixed)
+    expect(m.err).toContain(`the managed workflows carry different pins: .github/workflows/review-gate.yml has v0.1.0; .github/workflows/land-approved.yml has ${C_935F}`)
+    expect(m.err).toContain('make every managed workflow carry one pin: that of the steward they were installed from')
+  })
+
+  it('ST-98/AC-1: an installed pin that does not resolve is the crew\'s repair; a target that does not resolve is a correction of the command', async () => {
+    const pinned = world({ pin: 'v9.9.9' })
+    const p = await refusedBefore(['--to', 'v0.2.0'], pinned)
+    expect(p.err).toContain('the pin v9.9.9 is not a tag (vX.Y.Z) or a full commit SHA that exists in luplows/steward')
+    expect(p.err).toContain(`${CREW} Reconcile these by hand, through a pull request of the project: replace the pin v9.9.9, in every managed workflow, with the tag or full commit SHA of luplows/steward the workflows were installed from.`)
+    const tag = await refusedBefore(['--to', 'v9.9.9'], world())
+    expect(tag.err).toContain('--to v9.9.9: there is no tag v9.9.9 in luplows/steward: GitHub answered that it has no tag of that name.')
+    expect(tag.err).toContain(COMMAND)
+    expect(tag.err).not.toContain(CREW)
+    const missing = 'd'.repeat(40)
+    const commit = await refusedBefore(['--ref', missing], world())
+    expect(commit.err).toContain(`there is no commit ${missing} in luplows/steward: GitHub answered that it has no commit with that SHA.`)
+    expect(commit.err).toContain(COMMAND)
+    const unversioned = world({ steward: { versions: { [C_CAND]: null } } })
+    const v = await refusedBefore(['--ref', C_CAND], unversioned)
+    expect(v.err).toContain(`${C_CAND}: package.json at ${C_CAND} in luplows/steward gives no version`)
+    expect(v.err).toContain('What to do next: give another target, whose package.json gives its version')
+  })
+
+  it('ST-98/AC-1: a template missing at the installed pin, or at the target, names the workflow and the pin', async () => {
+    const installed = world({ steward: { templates: { [C_0B1D]: { 'land-approved.yml': null } } } })
+    const i = await refusedBefore(['--to', 'v0.2.0'], installed)
+    expect(i.err).toContain('  .github/workflows/land-approved.yml: steward has no template of that name at v0.1.0')
+    expect(i.err).toContain(`${CREW} steward at v0.1.0 has no template to compare that workflow with.`)
+    expect(i.err).toContain("rename a workflow that is not steward's, or set the pin the workflows carry to the steward they were installed from")
+    const target = world({ inspection: true, steward: { templates: { [C_LATER]: { 'inspection.yml': null } } } })
+    const t = await refusedBefore(['--to', 'v0.2.0'], target)
+    expect(t.err).toContain('steward has no template at v0.2.0 for .github/workflows/inspection.yml: the target does not carry that workflow.')
+    expect(t.err).toContain('What to do next: give a target that has a template for each managed workflow the project has')
+    expect(t.err).toContain(COMMAND)
+  })
+
+  it('ST-98/AC-1: an invalid settings file is named, with what is wrong, as the crew\'s repair', async () => {
+    const cases = [
+      [world({ withoutDefaults: ['steward.config.json'] }), (w) => `steward.config.json: missing on ${mainAt(w)}, so the upgrade cannot be validated.`],
+      [world({ config: '{ "repo": \n' }), (w) => `steward.config.json: not valid JSON at ${mainAt(w)}`],
+      [world({ config: '[]\n' }), (w) => `steward.config.json: must be a JSON object, and is not at ${mainAt(w)}.`],
+      [world({ config: `${JSON.stringify({ repo: REPO, land: false })}\n` }), () => "  steward.config.json: missing required key 'setup'"],
+    ]
+    for (const [w, said] of cases) {
+      const r = await refusedBefore(['--to', 'v0.2.0'], w)
+      expect(r.err).toContain(said(w))
+      expect(r.err).toMatch(/Crew repair in the project: Repair (steward\.config\.json|each file named above) by hand, through a pull request of the project/)
+      expect(r.err).not.toContain(RETRY)
+    }
+  })
+
+  it('ST-98/AC-1: an invalid configured checklist is named, with each problem, as the crew\'s repair', async () => {
+    const missing = world({ config: settings({ rulesFile: 'docs/NOPE.md' }) })
+    const m = await refusedBefore(['--to', 'v0.2.0'], missing)
+    expect(m.err).toContain(`At ${mainAt(missing)}:\n  docs/NOPE.md: the review rules file is missing on main`)
+    const broken = world({ rules: '# Rules\n\n## A section\n\nno numbered item\n' })
+    const b = await refusedBefore(['--to', 'v0.2.0'], broken)
+    expect(b.err).toContain('  REVIEW.md: section "A section": has no item')
+    expect(b.err).toContain(`${CREW} Repair each file named above by hand, through a pull request of the project, and run upgrade again`)
+  })
+
+  it('ST-98/AC-1: a read of GitHub that fails after the credential check is one to retry, not a repair of the project, and nothing was made', async () => {
+    const w = world()
+    const refs = heads(w)
+    const r = await runUpgrade(['--to', 'v0.2.0'], failingAt(w, /\/contents\/steward\.config\.json\?/))
+    expect(r.code).toBe(1)
+    expect(r.err).toContain(`upgrade stopped: reading steward.config.json at ${git(w.bare, 'rev-parse', 'main')} in acme/widgets from GitHub failed. GitHub said: `)
+    expect(r.err).toContain('failed with 500: Server Error')
+    expect(r.err).toContain(NOTHING_MADE)
+    expect(r.err).toContain('upgrade could not verify the upgrade: it stopped at that read, before it finished its checks, so it reports none of them as passed.')
+    expect(r.err).toContain(`What to do next: ${RETRY}. Run upgrade again; if it fails the same way, check that this machine can reach GitHub with your credential (\`gh auth status\`).`)
+    expect(r.err).not.toContain(CREW)
+    expectUntouched(r, refs)
+    const down = { ...w, fetch: async (url, init) => (url.includes('/git/ref/tags/') ? Promise.reject(new TypeError('fetch failed')) : w.fetch(url, init)) }
+    const d = await runUpgrade(['--to', 'v0.2.0'], down)
+    expect(d.code).toBe(1)
+    expect(d.err).toContain('upgrade stopped: reading the target v0.2.0 in luplows/steward from GitHub failed. GitHub said: fetch failed')
+    expect(d.err).toContain(RETRY)
+  })
+})
+
+describe("ST-98/AC-2: a workflow outside ST-96's changes is refused with the safe choices", () => {
+  it('ST-98/AC-2: each such workflow is named with its installed pin, with what steward cannot tell and the two safe choices', async () => {
+    const w = world({
+      files: {
+        '.github/workflows/review-gate.yml': fillPin(template('review-gate.yml'), 'v0.1.0').replace(/permissions:/, 'permissions:\n  contents: write'),
+        // Not YAML at all: steward cannot tell, and says the same of it.
+        '.github/workflows/land-approved.yml': `${fillPin(template('land-approved.yml'), 'v0.1.0')}key: [unclosed\n`,
+      },
+    })
+    const r = await refusedBefore(['--to', 'v0.2.0'], w)
+    expect(r.err).toContain(`These managed workflows at ${mainAt(w)} are not steward's own at the pin they carry, so upgrade will not replace them:`)
+    for (const rel of ['.github/workflows/review-gate.yml', '.github/workflows/land-approved.yml']) {
+      expect(r.err).toContain(`  ${rel}: differs from steward's template at v0.1.0, the pin it carries, by more than the pin, line endings and quotes`)
+    }
+    expect(r.err).toContain("upgrade accepts only these differences from steward's template: the pin, line endings, and single or double quotes around the same value that ends a `key:` line.")
+    expect(r.err).toContain('steward compares each workflow with its template as text and does not parse YAML: it cannot tell whether the file is valid YAML, or which permission or command changed.')
+    expect(r.err).toContain(`${CREW} Reconcile each by hand, through a pull request of the project that the crew reviews, in one of two ways:`)
+    expect(r.err).toContain("  restore it to steward's template of that name at v0.1.0 (templates/workflows/ in luplows/steward), with v0.1.0 filled in as the pin, and run upgrade again; or")
+    expect(r.err).toContain("  make in it, by hand, the change the target pin's template makes, keeping what the project changed")
+    expect(r.err).not.toMatch(/invalid YAML|is not YAML|permission changed/)
+  })
+})
+
+describe('ST-98/AC-3: what was and was not made, and what a rerun needs', () => {
+  it('ST-98/AC-3: the report says what exists from the progress, at each point, and what a rerun needs', () => {
+    const at = (progress) => failureReport(new StepFailure('a step', 'Git', 'no'), { clone: null, branchAttempted: false, branch: null, pushAttempted: false, pushed: false, pullAttempted: false, ...progress })
+    const before = at({})
+    expect(before).toContain(NOTHING_MADE)
+    expect(before.join('\n')).toContain("check that Git can reach the project's origin from this checkout (`git ls-remote origin`)")
+    const plain = failureReport(new Error('x'), { clone: null, branch: null })
+    expect(plain).toEqual(['upgrade stopped: x', NOTHING_MADE, 'What to do next: fix what upgrade reported, and run upgrade again.'])
+    const cloned = at({ clone: '/c' })
+    expect(cloned).toContain('  no branch: none was made')
+    expect(cloned).toContain('  nothing on GitHub from this run: nothing was pushed, and no pull request was opened')
+    expect(cloned).toContain('upgrade pushed nothing and opened no pull request, so nothing on GitHub needs removing before running upgrade again: a new run makes a new copy.')
+    expect(at({ clone: '/c', branchAttempted: true })).toContain('  perhaps a branch in that copy: making it failed')
+    const pushed = at({ clone: '/c', branchAttempted: true, branch: 'b', pushAttempted: true }).join('\n')
+    expect(pushed).toContain("What to do next: if a pull request is open from b, do not delete b: it is that pull request's head.")
+    expect(pushed).toContain('Before running upgrade again with the same branch name: b must not be on GitHub, and no pull request may be open from it, as upgrade refuses either. Or give another name with --branch.')
+    expect(pushed).not.toContain('a new run makes a new copy')
+  })
+
+  it('ST-98/AC-3: a refusal after the clone keeps it, and says no branch, push or pull request was made', async () => {
+    const files = { '.github/PULL_REQUEST_TEMPLATE/a.md': 'A\n', '.github/PULL_REQUEST_TEMPLATE/b.md': 'B\n' }
+    const w = world({ files })
+    const refs = heads(w)
+    const r = await runUpgrade(['--to', 'v0.2.0'], w)
+    expect(r.code).toBe(2)
+    expect(r.err).toContain(`  upgrade's copy of the project, at ${r.clone}`)
+    expect(r.err).toContain('  no branch: none was made')
+    expect(r.err).toContain('  nothing on GitHub from this run: nothing was pushed, and no pull request was opened')
+    expect(git(r.clone, 'branch', '--list', 'steward/*')).toBe('')
+    expect(writes(w)).toEqual([])
+    expect(heads(w)).toBe(refs)
+  })
+
+  it('ST-98/AC-3: a branch already on GitHub is not to be deleted while a pull request is open from it', async () => {
+    const w = world()
+    git(w.dir, 'push', '-q', w.bare, 'main:refs/heads/steward/upgrade-v0.2.0')
+    const r = await refusedBefore(['--to', 'v0.2.0'], w)
+    expect(r.err).toContain("If it is an earlier upgrade's and no pull request is open from it, delete it there (git push origin --delete steward/upgrade-v0.2.0); if a pull request is open from it, do not delete it")
+  })
+})
+
+describe('ST-98/AC-4: diagnostics name paths and conditions, and nothing more', () => {
+  it("ST-98/AC-4: JSON.parse's message, a value readSettings quotes, a workflow's or checklist's text and a remote's credential are not shown", async () => {
+    const secret = 'ghp_FAKEFAKEFAKEFAKE'
+    const notJson = await refusedBefore(['--to', 'v0.2.0'], world({ config: `{ "token": ${secret} }\n` }))
+    expect(notJson.err).toContain("not valid JSON at main (")
+    expect(notJson.err).toContain("(the parser's message is not shown, as it can quote the file)")
+    expect(notJson.err).not.toContain(secret)
+    const value = await refusedBefore(['--to', 'v0.2.0'], world({ config: settings({ landWhen: secret }) }))
+    expect(value.err).toContain("steward.config.json: 'landWhen' must be \"all-checks\" or a non-empty array of distinct, non-empty strings (the value is not shown)")
+    expect(value.err).not.toContain(secret)
+    const workflow = await refusedBefore(['--to', 'v0.2.0'], world({ files: { '.github/workflows/review-gate.yml': `${fillPin(template('review-gate.yml'), 'v0.1.0')}# ${secret}\n` } }))
+    expect(workflow.err).toContain('.github/workflows/review-gate.yml: differs from')
+    expect(workflow.err).not.toContain(secret)
+    const rules = await refusedBefore(['--to', 'v0.2.0'], world({ rules: `# Rules\n\n## A section\n\n${secret}\n` }))
+    expect(rules.err).toContain('REVIEW.md: section "A section": has no item')
+    expect(rules.err).not.toContain(secret)
+    const w = world()
+    git(w.dir, 'remote', 'set-url', 'origin', `https://crew:${secret}@example.com/acme/widgets.git`)
+    const errs = []
+    expect(await main(['--to', 'v0.2.0'], { cwd: w.dir, fetch: w.fetch, getToken: async () => 't', out() {}, err: (l) => errs.push(l) })).toBe(2)
+    expect(errs.join('\n')).toContain('The `origin` remote, https://***@example.com/acme/widgets.git, is not a GitHub repository.')
+    expect(errs.join('\n')).not.toContain(secret)
+    expect(redact('https://x@github.com/a/b and git@github.com:a/b and https://github.com/a/b@c')).toBe('https://***@github.com/a/b and git@github.com:a/b and https://github.com/a/b@c')
+  })
+
+  it('ST-98/AC-4: the checks a refusal of the target, settings or checklist did not reach are labelled could not verify, never valid', async () => {
+    const target = await refusedBefore(['--to', 'v9.9.9'], world())
+    expect(target.err).toContain(
+      "upgrade could not verify these, as it stopped before checking them: the pin the project's managed workflows carry; whether each managed workflow is steward's template at that pin; " +
+        "whether the target is behind the installed pin; the target pin's templates; `steward.config.json`; the checklist; whether the branch is free on GitHub.",
+    )
+    expect(target.err).not.toMatch(/valid/)
+    const settingsOnly = await refusedBefore(['--to', 'v0.2.0'], world({ config: settings({ rulesFile: '../x.md' }) }))
+    expect(settingsOnly.err).toContain('upgrade could not verify these, as it stopped before checking them: the checklist; whether the branch is free on GitHub.')
+    const rules = await refusedBefore(['--to', 'v0.2.0'], world({ rules: '# Rules\n\n## A section\n\nno item\n' }))
+    expect(rules.err).toContain('upgrade could not verify these, as it stopped before checking them: whether the branch is free on GitHub.')
+  })
+
+  it('ST-98/AC-4: every managed workflow that is not steward\'s own is reported, not only the first', async () => {
+    const w = world({
+      inspection: true,
+      files: {
+        '.github/workflows/review-gate.yml': `${fillPin(template('review-gate.yml'), 'v0.1.0')}# ours\n`,
+        '.github/workflows/inspection.yml': `${fillPin(template('inspection.yml'), 'v0.1.0')}# ours too\n`,
+      },
+      steward: { templates: { [C_0B1D]: { 'land-approved.yml': null } } },
+    })
+    const r = await refusedBefore(['--to', 'v0.2.0'], w)
+    expect(r.err).toContain(".github/workflows/review-gate.yml: differs from steward's template at v0.1.0, the pin it carries,")
+    expect(r.err).toContain(".github/workflows/inspection.yml: differs from steward's template at v0.1.0, the pin it carries,")
+    expect(r.err).toContain('.github/workflows/land-approved.yml: steward has no template of that name at v0.1.0')
+    expect(r.err).toContain('has no template to compare that workflow with')
+  })
+})
+
+describe('ST-98/AC-5: offline cases, with the next action and what remains', () => {
+  const released = Object.fromEntries(
+    [...GATE_WORKFLOWS, INSPECTION_WORKFLOW].map((file) => [file, execFileSync('git', ['show', `v0.1.0:templates/workflows/${file}`], { cwd: ROOT, encoding: 'utf8' })]),
+  )
+  async function formatted(edit = (rel, text) => text) {
+    const files = {}
+    for (const file of Object.keys(released)) {
+      const rel = `.github/workflows/${file}`
+      files[rel] = edit(rel, await prettier.format(fillPin(released[file], 'v0.1.0'), { filepath: rel }))
+    }
+    return world({ files, inspection: true, steward: { templates: { [C_0B1D]: released } } })
+  }
+
+  it("ST-98/AC-5: formatting ST-96 accepts upgrades, and beside it a difference outside ST-96's changes is the only one named", async () => {
+    const w = await formatted()
+    const ok = await runUpgrade(['--to', 'v0.2.0'], w)
+    expect(ok.code).toBe(0)
+    expect(ok.err).toBe('')
+    const changed = await formatted((rel, text) => (rel === '.github/workflows/inspection.yml' ? text.replace('contents: read', 'contents: write') : text))
+    const r = await refusedBefore(['--to', 'v0.2.0'], changed)
+    expect(r.err).toContain(".github/workflows/inspection.yml: differs from steward's template at v0.1.0, the pin it carries,")
+    expect(r.err).not.toMatch(/(review-gate|land-approved)\.yml: differs/)
+    expect(r.err).toContain('does not parse YAML')
+  })
+
+  it('ST-98/AC-5: a failed read before the clone leaves nothing; a failed push after it leaves the clone and the branch in it, and says what a rerun needs', async () => {
+    const w = world()
+    const refs = heads(w)
+    const before = await runUpgrade(['--to', 'v0.2.0'], failingAt(w, /\/contents\/\.github\/workflows\/review-gate\.yml\?/, 502))
+    expect(before.code).toBe(1)
+    expect(before.err).toContain(NOTHING_MADE)
+    expect(before.err).toContain(`What to do next: ${RETRY}. Run upgrade again`)
+    expectUntouched(before, refs)
+
+    const after = world()
+    const hook = path.join(after.bare, 'hooks', 'pre-receive')
+    mkdirSync(path.dirname(hook), { recursive: true })
+    writeFileSync(hook, '#!/bin/sh\nexit 1\n', { mode: 0o755 })
+    const r = await runUpgrade(['--to', 'v0.2.0'], after)
+    expect(r.code).toBe(1)
+    expect(existsSync(r.clone)).toBe(true)
+    expect(git(r.clone, 'branch', '--list', 'steward/upgrade-v0.2.0')).toContain('steward/upgrade-v0.2.0')
+    expect(heads(after)).not.toContain('steward/upgrade')
+    expect(writes(after)).toEqual([])
+    expect(r.err).toContain('  the branch steward/upgrade-v0.2.0 in that copy, and perhaps on GitHub: the push failed, and whether it changed GitHub is not known')
+    expect(r.err).toContain('  no pull request: none was opened')
+    expect(r.err).toContain('What to check: the branch on GitHub (git ls-remote --heads origin steward/upgrade-v0.2.0)')
+    expect(r.err).toContain('Before running upgrade again with the same branch name: steward/upgrade-v0.2.0 must not be on GitHub, and no pull request may be open from it')
+    expect(r.err).toContain(`Remove ${r.clone} when you are done with it.`)
+  })
+})
+
+describe('ST-98/AC-6: the documents', () => {
+  const read = (rel) => readFileSync(path.join(ROOT, rel), 'utf8')
+
+  it('ST-98/AC-6: README says how to read a refusal or a failure of upgrade, and what to do', () => {
+    const readme = read('README.md')
+    const text = readme.slice(readme.indexOf('#### When upgrade refuses or stops'), readme.indexOf('### When the checklist does not parse')).replace(/\s+/g, ' ')
+    expect(text).toContain('Crew repair in the project')
+    expect(text).toContain('a correction of the command')
+    expect(text).toContain('could not verify')
+    expect(text).toContain('does not parse YAML')
+    expect(text).toContain('run it again')
+  })
+
+  it('ST-98/AC-6: the Planned (ST-98) marker is gone from the design document', () => {
+    expect(read('docs/agent-workflow-design.md')).not.toMatch(/Planned \(ST-98\)/)
   })
 })

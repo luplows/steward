@@ -16,7 +16,7 @@ so that I can repair the issue without guessing or weakening the review gate.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — For preflight refusals involving absent or inconsistent
+- [x] **AC-1** — For preflight refusals involving absent or inconsistent
       managed-workflow pins, an unresolvable target or installed pin, a
       missing installed or target template, an invalid project settings
       file, or an invalid configured review checklist, `upgrade` reports
@@ -24,7 +24,7 @@ so that I can repair the issue without guessing or weakening the review gate.
       corrective step. It distinguishes a crew-owned project repair
       from retrying after an external-read failure. It does not claim
       that the upgrade partially succeeded when it has not.
-- [ ] **AC-2** — For a workflow that is not equivalent to its installed
+- [x] **AC-2** — For a workflow that is not equivalent to its installed
       template under ST-96, the refusal identifies each affected path
       and installed pin, says the file differs by more than the changes
       ST-96 accepts (the pin, line endings and quotes), and explains the
@@ -33,26 +33,26 @@ so that I can repair the issue without guessing or weakening the review gate.
       Steward compares workflows as text and does not parse YAML, so the
       refusal says it cannot tell whether the file is valid YAML or which
       permission or command changed, rather than guessing.
-- [ ] **AC-3** — The failure report explicitly identifies what was and
+- [x] **AC-3** — The failure report explicitly identifies what was and
       was not created (`clone`, local branch, remote branch or PR) using
       the existing progress tracking. It gives a rerun precondition,
       and does not advise deleting an open PR's head or an uncertain
       push without checking it. A refused preflight creates no branch,
       push or PR; the command never auto-fixes client files.
-- [ ] **AC-4** — Diagnostics identify paths and conditions without
+- [x] **AC-4** — Diagnostics identify paths and conditions without
       dumping full client workflow or checklist contents, secrets
       or credentials to logs. Missing details are labelled as
       `could not verify` rather than `valid`. Multiple managed
       workflow mismatches are all reported rather than stopping at
       the first. Tests prove failure details are redacted as needed.
-- [ ] **AC-5** — Offline tests cover each AC-1 failure class, at
+- [x] **AC-5** — Offline tests cover each AC-1 failure class, at
       least two simultaneous workflow mismatches, formatting-only
       success from ST-96, a difference outside ST-96's accepted
       changes, a failed external read and failures before and after
       cloning. Assert
       the suggested next action and actual remaining artifacts
       for each, with no live GitHub mutation.
-- [ ] **AC-6** — Update the upgrade troubleshooting section in
+- [x] **AC-6** — Update the upgrade troubleshooting section in
       `README.md` and resolve `**Planned (ST-98)**` in
       `docs/agent-workflow-design.md` when implemented.
 
