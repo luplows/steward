@@ -173,8 +173,9 @@ unattended landing, avoiding an otherwise unnecessary next scan. It does not cha
 landing authorization or make parallel execution part of 0.3.
 
 The v0.2.0 rollout also justifies bounded upgrade improvements in 0.3: generated installation
-files follow pinned default Prettier formatting (ST-74), format-only managed-workflow differences
-no longer prevent upgrades while substantive customization still refuses (ST-96), generated
+files follow pinned default Prettier formatting (ST-74), the quotes default Prettier formatting
+changes in managed workflows no longer prevent upgrades while any other difference still refuses
+(ST-96), generated
 upgrade PRs provide reviewable validation evidence and crew actions (ST-97), and upgrade refusals
 explain the mismatch and safe recovery (ST-98). These stories are separate from, and do not block,
 the first coding handoff slice. Repository-wide formatting, reviewer revalidation and automated

@@ -16,7 +16,7 @@ while still refusing modifications that Steward would otherwise overwrite.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — An installed managed YAML workflow still matches the
+- [x] **AC-1** — An installed managed YAML workflow still matches the
       template at its installed pin when only the pin or line endings differ.
       Otherwise, `upgrade` uses a deterministic comparison in Steward's own
       code, of a *bounded, explicitly documented* set of presentation-only
@@ -26,20 +26,20 @@ while still refusing modifications that Steward would otherwise overwrite.
       example, it may recognize equivalent single- and double-quoted YAML
       scalar values with escaping handled correctly. It does not invoke Prettier
       or read a client's formatting configuration.
-- [ ] **AC-2** — If the fallback comparison cannot prove that a difference
+- [x] **AC-2** — If the fallback comparison cannot prove that a difference
       is among its supported presentation-only transformations, `upgrade`
       refuses to replace the workflow before cloning, pushing or opening a PR
       and identifies the file. Unsupported or malformed YAML, modified triggers,
       permissions, commands, expressions or comments, added or removed entries,
       and changed repositories in pin references cannot be accepted merely
       because their YAML syntax parses.
-- [ ] **AC-3** — The shared workflow identity check used by `init` also recognizes
+- [x] **AC-3** — The shared workflow identity check used by `init` also recognizes
       proven formatting-only differences without losing its existing distinction
       between managed and project-modified workflows. Neither command rewrites
       existing client workflows as a side effect of comparing them. An accepted
       upgrade still proposes the *target-pin* Steward template, not a merge of
       the project's formatting into the target template.
-- [ ] **AC-4** — Steward's own offline CI tests run one exactly pinned
+- [x] **AC-4** — Steward's own offline CI tests run one exactly pinned
       Prettier *development dependency* with default YAML formatting options
       against the current managed workflow templates and the managed templates
       at each release tag (at least `v0.1.0` and `v0.2.0`). The tests prove
@@ -50,7 +50,7 @@ while still refusing modifications that Steward would otherwise overwrite.
       malformed and unsupported differences. Exercise the shared comparator,
       `init` recognition and `upgrade` preflight, and prove refused upgrades
       make no branch, push or PR. These tests never run in a client command.
-- [ ] **AC-5** — Prettier is an exact pinned `devDependency` of Steward
+- [x] **AC-5** — Prettier is an exact pinned `devDependency` of Steward
       only; neither `init` nor `upgrade` nor any other client command imports,
       executes or depends on it, including when installed with
       `npx --package=github:luplows/steward#...`. Implement the comparison
@@ -58,7 +58,7 @@ while still refusing modifications that Steward would otherwise overwrite.
       the supported transformation set, the fail-closed boundary and the
       build/test-only role of Prettier. No client project must configure or
       install a formatter.
-- [ ] **AC-6** — Resolve `**Planned (ST-96)**` in
+- [x] **AC-6** — Resolve `**Planned (ST-96)**` in
       `docs/agent-workflow-design.md` when implemented.
 
 ## Out of scope

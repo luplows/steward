@@ -2140,7 +2140,9 @@ describe('ST-74/AC-4: the installation pull request and the README say how to fo
     expect(body).toContain(`\`npx prettier --write ${files.join(' ')}\``)
     expect(body).toMatch(/A project whose own formatting settings differ may format only the files this pull request adds, on its branch, before merging it/)
     expect(body).toContain('Nothing requires it.')
-    expect(body).toMatch(/`steward upgrade` refuses a managed workflow that differs from steward's template at its pin by more than the pin and line endings, a change of formatting included\./)
+    expect(body).toContain(
+      "`steward upgrade` refuses a managed workflow that differs from steward's template at its pin in anything but the pin, line endings and single or double quotes around a value that ends a `key:` line, so other formatting, such as indentation or line wrapping, is refused.",
+    )
     expect(body).not.toMatch(/upgrade (?:will )?accepts?/)
   })
 
@@ -2285,5 +2287,85 @@ describe('ST-74/AC-5: the formatter is pinned in steward, and only there', () =>
 describe('ST-74/AC-6: the design records it as built', () => {
   it('ST-74/AC-6: no Planned marker names ST-74', () => {
     expect(read(ROOT, 'docs/agent-workflow-design.md')).not.toMatch(/\*\*Planned \([^)]*\bST-74\b[^)]*\)\*\*/)
+  })
+})
+
+// ------------------------------------------------------------------ ST-96: quotes
+
+describe('ST-96/AC-3: init tells its own workflows from a project\'s whatever their quotes', () => {
+  const opened = (gh) => writes(gh).find((r) => r.rest === '/pulls')?.body
+  const WORKFLOWS = [...GATE_WORKFLOWS, INSPECTION_WORKFLOW]
+
+  /** A package whose workflow templates are v0.2.0's, which quote values with single quotes. */
+  function releasePackage() {
+    const pkg = makePackage()
+    for (const file of WORKFLOWS) {
+      writeFileSync(path.join(pkg, 'templates', 'workflows', file), execFileSync('git', ['show', `v0.2.0:templates/workflows/${file}`], { cwd: ROOT, encoding: 'utf8' }))
+    }
+    return pkg
+  }
+
+  /** Each workflow on main formatted with Prettier's defaults, then `edit` applied to it. */
+  async function formattedOnMain(cwd, edit = (rel, text) => text) {
+    const scratch = fresh('scratch')
+    git(scratch, 'clone', '-q', ORIGINS.get(cwd).bare, '.')
+    let changed = 0
+    for (const file of WORKFLOWS) {
+      const rel = `.github/workflows/${file}`
+      const text = edit(rel, await formatted(rel, read(scratch, rel)))
+      if (text !== read(scratch, rel)) changed++
+      put(scratch, { [rel]: text })
+    }
+    expect(changed).toBeGreaterThan(0)
+    git(scratch, 'commit', '-q', '-am', 'format the workflows')
+    git(scratch, 'push', '-q', 'origin', 'main')
+  }
+
+  it('ST-96/AC-3: with every file on main and its workflows formatted, it says the installation is complete, and changes nothing', async () => {
+    const cwd = makeRepo()
+    const pkg = releasePackage()
+    expect((await runInit(['--yes', '--inspection', 'yes'], { cwd, pkg })).code).toBe(0)
+    adopt(cwd)
+    await formattedOnMain(cwd)
+    const refsBefore = originRefs(cwd)
+    const statusBefore = git(cwd, 'status', '--porcelain')
+    const gh = fakeGitHub()
+    const { code, out } = await runInit(['--yes', '--inspection', 'yes'], { cwd, gh, pkg })
+    expect(code).toBe(0)
+    expect(out).toMatch(/the installation is already complete, so init made no branch, commit, push or pull request/)
+    expect(originRefs(cwd)).toBe(refsBefore)
+    expect(git(cwd, 'status', '--porcelain')).toBe(statusBefore)
+    expect(gh.requests.some((r) => r.rest.startsWith('/pulls'))).toBe(false)
+  })
+
+  it('ST-96/AC-3: a formatted workflow with quotes also changed in a block scalar is still the project\'s, and named', async () => {
+    const cwd = makeRepo()
+    const pkg = releasePackage()
+    expect((await runInit(['--yes', '--inspection', 'yes'], { cwd, pkg })).code).toBe(0)
+    adopt(cwd)
+    await formattedOnMain(cwd, (rel, text) => (rel.endsWith('review-gate.yml') ? text.replace("'issue_comment'", '"issue_comment"') : text))
+    const refsBefore = originRefs(cwd)
+    const { code, out } = await runInit(['--yes', '--inspection', 'yes'], { cwd, pkg })
+    expect(code).toBe(1)
+    expect(out).toContain('  .github/workflows/review-gate.yml')
+    expect(out).not.toContain('  .github/workflows/land-approved.yml')
+    expect(out).not.toContain('  .github/workflows/inspection.yml')
+    expect(out).toMatch(/The installation is not this version's/)
+    expect(originRefs(cwd)).toBe(refsBefore)
+  })
+
+  it('ST-96/AC-3: with some files missing, a kept formatted workflow is not named as differing, and is left as main has it', async () => {
+    const pkg = releasePackage()
+    const rel = '.github/workflows/land-approved.yml'
+    const release = readFileSync(path.join(pkg, 'templates', 'workflows', 'land-approved.yml'), 'utf8')
+    const text = await formatted(rel, fillPin(release, 'v0.0.1'))
+    expect(text).not.toBe(fillPin(release, 'v0.0.1'))
+    const cwd = makeRepo({ files: { [rel]: text } })
+    const gh = fakeGitHub()
+    const { code, out } = await runInit(['--yes'], { cwd, gh, pkg })
+    expect(code).toBe(0)
+    expect(opened(gh).body).not.toMatch(/differs from the workflow/)
+    expect(out).not.toMatch(/differ from what this version of init writes/)
+    expect(git(ORIGINS.get(cwd).bare, 'show', `${DEFAULT_BRANCH}:${rel}`)).toBe(text.trimEnd())
   })
 })

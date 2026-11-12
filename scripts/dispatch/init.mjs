@@ -769,8 +769,9 @@ export function formattingNote(added, rulesFile = null) {
       'A project whose own formatting settings differ may format ' +
       'only the files this pull request adds, on its branch, before merging it, for example with ' +
       `\`npx prettier --write ${files.map(shellPath).join(' ')}\`.${leftOutText} Nothing requires it. ` +
-      "`steward upgrade` refuses a managed workflow that differs from steward's template at its pin by more than the pin " +
-      'and line endings, a change of formatting included.',
+      "`steward upgrade` refuses a managed workflow that differs from steward's template at its pin in anything but the pin, " +
+      'line endings and single or double quotes around a value that ends a `key:` line, so other formatting, such as ' +
+      'indentation or line wrapping, is refused.',
   ]
 }
 
@@ -1061,7 +1062,9 @@ async function run(argv, { cwd, env, homedir, fetch, getToken, terminal, findExe
   const added = files.map(([rel]) => rel).filter((rel) => !existsSync(path.join(clone, ...rel.split('/'))))
   const left = files.map(([rel]) => rel).filter((rel) => !added.includes(rel))
   // A checklist main already has is checked as the reviewer reads it, from main, and left as it is.
-  // A workflow main already has is this version's own only if it is the template, apart from the pin.
+  // A workflow main already has is this version's own only if it is the template, apart from the
+  // pin, line endings and the quotes `sameWorkflowApartFromPin` accepts (ST-96). It is read, never
+  // written.
   const differing = []
   for (const file of workflows) {
     const rel = `.github/workflows/${file}`
