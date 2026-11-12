@@ -200,6 +200,7 @@ export const CREW_SECTION = 'Crew action required'
 const STANDARD_FRAME = ['Unit:', '', ...STANDARD_SECTIONS.flatMap((title) => [`## ${title}`, ''])].join('\n')
 const HEADING_RE = /^ {0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/
 const FENCE_RE = /^ {0,3}(`{3,}|~{3,})/
+const CLOSING_FENCE_RE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/
 const sameTitle = (a, b) => a.trim().replace(/\s+/g, ' ').toLowerCase() === b.toLowerCase()
 
 /**
@@ -217,11 +218,14 @@ export function readTemplate(text) {
       if (line.includes('-->')) inComment = false
       return
     }
-    const mark = FENCE_RE.exec(line)
     if (fence !== null) {
-      if (mark && mark[1][0] === fence[0] && mark[1].length >= fence.length) fence = null
+      // A closing fence is the opening fence's character, at least as many of it, and nothing after
+      // but spaces and tabs (CommonMark): `~~~example` inside a `~~~` fence is content.
+      const close = CLOSING_FENCE_RE.exec(line)
+      if (close && close[1][0] === fence[0] && close[1].length >= fence.length) fence = null
       return
     }
+    const mark = FENCE_RE.exec(line)
     if (mark) {
       fence = mark[1]
       return

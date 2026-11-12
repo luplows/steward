@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { fillPin, GATE_WORKFLOWS, INSPECTION_WORKFLOW } from './init.mjs'
-import { describePin, failureReport, main, MIGRATIONS, parseFlags, planConfig, pullTitle, STEWARD_REPO } from './upgrade.mjs'
+import { describePin, failureReport, main, MIGRATIONS, parseFlags, planConfig, pullTitle, readTemplate, STEWARD_REPO, templateMapping } from './upgrade.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const REPO = 'acme/widgets'
@@ -939,6 +939,33 @@ describe('ST-97/AC-1: an ordinary template is filled in place', () => {
     const crew = section(r.opened.body, 'Crew action required')
     expect(crew.indexOf('- Our own item.')).toBeLessThan(crew.indexOf('Suggestions, not requirements'))
     expect(r.opened.body.trimEnd().endsWith('## Screenshots')).toBe(true)
+    expectKeptInOrder(r.opened.body, text)
+  })
+
+  /** A standard template whose What changed section holds the fenced example `fence`. */
+  const withExample = (fence) => ['Unit:', '', '## What changed', '', ...fence, '', '## Verification', '', '## Docs check', ''].join('\n')
+  const fenced = {
+    // The reviewer's example: an info string after a delimiter of the fence's own character is content.
+    'a tilde fence holding a tilde line with text after it': ['~~~text', '~~~example', '## Verification', '~~~'],
+    'a backtick fence holding a tilde line, and a backtick line with text after it': ['```', '~~~', '```text', '## Docs check', '```'],
+    'a tilde fence holding a backtick line, and a tilde line with text after it': ['~~~', '```', '~~~ more', '## What changed', '~~~'],
+  }
+
+  for (const [name, fence] of Object.entries(fenced)) {
+    it(`ST-97/AC-1: a fenced example is not a heading: ${name}`, () => {
+      const read = readTemplate(withExample(fence))
+      expect(read.headings.map((h) => h.title)).toEqual(['What changed', 'Verification', 'Docs check'])
+      expect(templateMapping(read.headings).mapped).toBe(true)
+    })
+  }
+
+  it("ST-97/AC-1: a template with the reviewer's fenced example is filled, and the example is kept as it is", async () => {
+    const text = withExample(fenced['a tilde fence holding a tilde line with text after it'])
+    const r = await runUpgrade(['--to', 'v0.2.0'], world({ files: { [TEMPLATE_PATH]: text } }))
+    expect(r.code).toBe(0)
+    expect(r.opened.body).not.toMatch(/^## Steward upgrade$/m)
+    expect(r.opened.body).toContain('~~~text\n~~~example\n## Verification\n~~~\n\n`steward upgrade` generated this draft pull request.')
+    expect(r.opened.body).toMatch(/^## Verification\n\n\*\*Verified\*\*/m)
     expectKeptInOrder(r.opened.body, text)
   })
 
