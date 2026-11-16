@@ -864,7 +864,7 @@ describe('OQ-70/AC-9: the worktree is removed when the run finishes', () => {
 })
 
 describe('OQ-78/AC-8 and AC-9: dependencies are installed before the coder, or the dispatch stops', () => {
-  it('OQ-78/AC-8: npm ci runs in the new worktree with the coder\'s credential-free environment, before the session', async () => {
+  it('OQ-78/AC-8: npm ci runs in the new worktree with the coder\'s environment, without GitHub API credentials, before the session', async () => {
     const world = makeWorld()
     const order = []
     const installs = []
