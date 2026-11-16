@@ -248,6 +248,18 @@ commit, and nothing is tagged until ST-48 is done. In steward itself, as the cre
 that conversion to 0.3 on 2026-11-07. On 2026-11-11, the crew moved it again,
 to maintenance after v0.3.0 is tagged. Steward's own release-review procedure remains specific to this repository; it is not a generic client feature.
 
+The coder's verification, long term (crew, 2026-11-15). For a release that ships the coding side,
+the release review's walkthrough has the coordinator, started from the release branch's commit,
+code one handoff of a real unit through to its landing (`release-review.md`, "The walkthrough").
+For 0.3.0 that project is tower-workshop-paths (crew, 2026-11-12). After the v0.3.0 tag, ST-82
+and steward being activated on this machine, steward is meant to code its own stories as approved
+handoffs, so that every story it builds exercises the coder: day to day from a coordinator at the
+latest release, and during each release's stabilization from one at the release branch's commit,
+with the planning session's own coding as the fallback while the coder is broken. That depends on
+how one machine's coordinator serves projects pinned at different versions, which the crew left
+for after 0.3.0 (2026-11-12); one answer it named is that the coordinator's version is never tied
+to the workflow versions other projects pin. No story builds this yet.
+
 ## Defining steward
 
 Started 2026-10-09 by the owner with the planning session. The sections above say who steward is
