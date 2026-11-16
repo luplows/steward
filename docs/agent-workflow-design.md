@@ -2421,7 +2421,8 @@ shortened where it is long, so that it can be found there with its date.
     and not chosen: writing down a standing go-ahead before every landing, which the owner had
     been giving.
   - **No `npm ci` in its worktree.** `review.mjs` and `land.mjs` import no npm package, and
-    `review.mjs` installs in the reviewer's own checkout, without credentials (`install.mjs`).
+    `review.mjs` installs in the reviewer's own checkout, without GitHub API credentials
+    (`install.mjs`).
     An install in the controller's worktree would run the package's scripts with the credential
     of whoever runs it, for nothing it uses.
   - **"Rotation", not "sweep", for a run over every open pull request**, since the sweep, now
