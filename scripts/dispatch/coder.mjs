@@ -489,12 +489,12 @@ export async function claimBranch(state, { repoDir, tree, branch, mainSha, unitI
  *   install        `({ cwd, env, setup })`, run in the worktree before the coder starts;
  *                  defaults to `install.mjs`, which runs the project's `setup` setting (read
  *                  from `repoDir`'s `steward.config.json`) within its time limit. It gets the
- *                  coder's own environment, without GitHub API credentials
+ *                  coder's own environment (`coderEnv`)
  *   storyId        run this story instead of the head of the queue. It must
  *                  still be `ready`; this is not a second ordering
  *   promptTemplate coder.md's text; defaults to the copy beside this file
  *   baseEnv        the environment to derive the session's from; defaults to
- *                  `process.env`. `coderEnv` strips its GitHub API credentials
+ *                  `process.env`. `coderEnv` narrows it for the session
  *   sessionOptions extra `spawnSession` options (executable, run, timeouts,
  *                  budget)
  *

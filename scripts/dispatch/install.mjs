@@ -3,7 +3,7 @@
  * given the environment and directory explicitly and reads neither from the process: the command
  * runs the checked-out project's own scripts (for `npm ci`, its `package.json` lifecycle scripts),
  * which are code under review or code the coder is about to write, so it gets the session's
- * environment without GitHub API credentials (`coderEnv`), never the dispatcher's own.
+ * environment (`coderEnv`), never the dispatcher's own.
  *
  * `setup` is the project's setting (`settings.mjs`): `null`, or `{ command, timeoutMinutes }`.
  * `null` runs nothing. The command is run through the platform's shell, as one string with no
