@@ -110,6 +110,24 @@ A release is cut from `main`, or, as a patch release, from the newest release's 
   `steward upgrade --to vX.Y.Z`, run from steward installed at the tag; when the candidate is the
   commit the tag names, that changes only the pin. Report each command and its result. A coordinator
   running on the scratch project's machine is stopped and started again by hand: `upgrade` does not.
+- **Run the coding side as a project would**, for a release that ships it, at the same
+  `<commit>`, before the tag. It runs on a real project the crew names, activated on this machine,
+  with a unit that project actually wants, since what it lands is real work: a small ready file or
+  Issue. On the crew's word, stop the coordinator running on this machine
+  (`steward coordinator stop`). `stop` returns while admitted work is still finishing, and `start`
+  refuses while the old process is alive, so wait until `steward coordinator status` reports
+  `stopped`. Approve the unit from steward installed at `<commit>`
+  (`npx --yes --package=github:luplows/steward#<commit> steward handoff add --repo <owner/name>
+  --file <path>`, or `--issue <n>`). Then start the coordinator from steward installed at the same
+  commit (`npx --yes --package=github:luplows/steward#<commit> steward coordinator start`). The
+  crew says beforehand whether the coordinator's other activated projects stay active while it
+  runs. Follow the handoff until its pull request lands or stops: the coder's branch, the pull
+  request it opens and the unit it links, its review and its landing, and, for an Issue, whether it
+  closed: the runway closes it only in a project whose workflows pin a steward that does, v0.3.0
+  on. Report each command and its result, and what `steward coordinator status` and
+  `steward handoff show <id>` said along the way. Afterwards the crew says which steward the
+  coordinator is started from again, after it is stopped the same way, waiting for `stopped`. Run
+  it again after a fix to the coding side lands into the release branch.
 - Give each capability one verdict: `accepted`, `accepted-with-followup` or `blocks-release`.
 - **A blocker is fixed or deferred.** A fix lands on `main` first, as any `fix` story, written with
   the crew as `planning-session.md` says, and then comes to the release branch as a pull request

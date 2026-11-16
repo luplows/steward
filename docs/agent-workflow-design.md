@@ -1391,7 +1391,8 @@ Everything above prevents bad changes landing. This covers one landing anyway.
 ## The release review
 
 Runs when the crew asks, and its instructions are [`release-review.md`](release-review.md). Run for
-v0.1.0, tagged at `0b1d8b3` on 2026-11-05. No steward story plans it: OQ-46,
+v0.1.0, tagged at `0b1d8b3` on 2026-11-05, and v0.2.0, tagged at `2648c7e` on 2026-11-09. No
+steward story plans it: OQ-46,
 tower-workshop-paths' walkthrough story, stayed there (Part 3, "Decided so far"). It is the only
 thing standing between the crew and a silently degrading mental model of their own app — every
 other guard is a *regression* detector that passes when a change is self-consistent.
@@ -1422,7 +1423,11 @@ none of `init`'s files, since `init` leaves a file that is already there. Betwee
 request, the pull request `init` leaves is merged by hand, since nothing can review it, and
 `steward protect` is run from steward at the same commit, so that the test pull request is
 reviewed and landed with protection set. A scratch repository, reset, which may be the same one,
-then has the previous release installed and upgraded to the same commit.
+then has the previous release installed and upgraded to the same commit. For a release that ships
+the coding side, the coordinator is also started from that commit and codes one handoff of a unit
+a real project wants, through to its landing (crew, 2026-11-15): offline tests alone had covered
+it before 0.3.0. The crew names the project; once steward codes its own stories, steward is
+meant to be it (`outline.md`, "Release preparation").
 
 ### Output
 
@@ -1671,8 +1676,8 @@ document", Part 3, "Decided so far"). Each names the outline's section it belong
   story queue is unchanged. Reconcile ST-2 before implementing that client scheduling contract.
 - **D3. Looking back** ("What steward is for"). Ideally a walkthrough of the product (owner,
   2026-10-10). Open: whether it is steward's. The release review (above) is meant for it, a
-  periodic walkthrough of `main` ending in a release tag, but it has not yet run, so its scope is
-  unknown (owner, 2026-10-10); steward's `origin` has no tags (2026-10-13).
+  periodic walkthrough of `main` ending in a release tag (owner, 2026-10-10). It has since run for
+  v0.1.0 and v0.2.0 (above, "The release review").
 - **D4. Whether and how the `Unit:` line is required** ("Review"). Steward's pull request
   template carries the line, and whether anything more is needed is left open. The planning
   session's options (2026-10-11) were the template carrying it, which it now does; ATC always
