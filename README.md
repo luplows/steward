@@ -578,7 +578,9 @@ remote branch is refused. ATC makes the claim commit on it and pushes it, creati
 the remote and never replacing one, before the project's `setup` (read from the revision the
 worktree is made from) runs or the coder starts. It never pushes to `main` and opens no pull
 request. The coder is the user config's default coder choice (or the one its caller names), with
-the same usage limits, time limits, allowed tools and credential-free environment as for a story,
+the same usage limits, time limits, allowed tools and environment as for a story. That environment
+keeps the usual GitHub tokens away from the coder (`coderEnv`), but it is not isolated from the
+machine's other credentials. That is 0.5's.
 and a Codex choice is committed by ATC, with the coder's own commit message when it supplied one (else the PR title) and, like the claim commit, as the git identity of the owned checkout (read once, before the claim). The machine label of the claim commit is `STEWARD_MACHINE_LABEL`, or `TW_MACHINE_LABEL` when that is unset or empty. It does not read a unit's own choice of model.
 
 When the coder finishes, the result has `status: "pushed"` with the repository, handoff ID and

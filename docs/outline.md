@@ -496,7 +496,7 @@ settles it.
   pre-flight check. `null` is allowed for either, written explicitly: for `setup`, the project
   needs nothing but the worktree; for `check`, there is no check, which suits only a project
   without a coder.
-  - `setup` is run by ATC, in the session's environment without credentials, before a reviewer or
+  - `setup` is run by ATC, in the session's environment (`coderEnv`), before a reviewer or
     a coder session starts, in the checkout that session will use. A failure starts no session.
     The reviewer always gets it, since its narrower commands need what it prepares. **Revised
     2026-10-15 by the owner:** `setup` runs before a coder session only. The reviewer runs no
