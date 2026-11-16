@@ -37,9 +37,11 @@ A section that restates the PR title in other words is also unfilled.
    body. `Unit: none` is accepted only where no unit could exist, such as a
    pull request that writes the unit itself, or one into a release branch
    that reverts a deferred capability and names the pull requests it
-   reverts. The review's note on the unit says which it found: a link read, a
-   link not read and why, `Unit: none`, or no `Unit:` line, and several links
-   are reported as such.
+   reverts. It is also accepted where the only changes to code are to
+   comments and test descriptions, so that documentation can be corrected
+   wherever it is written. The review's note on the unit says which it found:
+   a link read, a link not read and why, `Unit: none`, or no `Unit:` line, and
+   several links are reported as such.
 5. A pull request into a release branch (`release/vX.Y.Z`) changes nothing
    under `stories/`: stories are written and moved on `main`
    (`docs/release-review.md`).

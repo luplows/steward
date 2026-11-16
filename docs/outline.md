@@ -376,7 +376,9 @@ design doc, "The outline's reasoning", under the same headings.
     with;
   - a code change must link its unit, `Unit: none` being accepted only where no unit could
     exist, such as a pull request that writes the unit; added once the reviewer is given the
-    unit note (ST-22).
+    unit note (ST-22). `Unit: none` is also accepted where the only changes to code are to
+    comments and test descriptions (owner, 2026-11-16), so that documentation can be corrected
+    wherever it is written without a unit.
 - **The checklist's shape** (owner, 2026-10-11, from the planning session's proposals):
   - **The reviewer reads the rules from `main`**, put into its prompt by ATC, not from the pull
     request's head, so that a pull request cannot loosen the rules it is judged by. A change to

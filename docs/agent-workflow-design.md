@@ -419,8 +419,10 @@ finds the link in the body and reads the unit with
 found (a link read, a link not read and why, `Unit: none`, no `Unit:` line, or several links),
 and the unit's text when one was read. A pull request whose unit is missing or unreadable is
 still reviewed, and the checklist says what that means (`REVIEW.md`, "Every pull request",
-item 4). It does not receive the coder's session, summary or reasoning, or any commentary from
-ATC.
+item 4). That item also accepts `Unit: none` where the only changes to code are to comments and
+test descriptions (owner, 2026-11-16), so that documentation can be corrected wherever it is
+written without a unit. It does not receive the coder's session, summary or reasoning, or any
+commentary from ATC.
 
 Before each review, ATC fetches every branch on `origin` and prunes those deleted there, so that
 the reviewer, which may have no network, reads `origin`'s branches from its remote-tracking refs
