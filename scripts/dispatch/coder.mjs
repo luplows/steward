@@ -90,6 +90,7 @@ export async function git(cwd, args, { env } = {}) {
     cwd,
     ...(env !== undefined && { env: { ...process.env, ...env } }),
     maxBuffer: 64 * 1024 * 1024,
+    windowsHide: true,
   })
   return stdout
 }
