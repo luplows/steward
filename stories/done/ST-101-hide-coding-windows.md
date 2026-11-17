@@ -16,15 +16,15 @@ unattended review already is (ST-70).
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — The Git helper `git` in `scripts/dispatch/coder.mjs` supplies `windowsHide: true`
+- [x] **AC-1** — The Git helper `git` in `scripts/dispatch/coder.mjs` supplies `windowsHide: true`
       in its Node child-process options. `gitOrNull` and `remoteTip`, and every other caller,
       inherit it through that helper.
-- [ ] **AC-2** — A regression test in `scripts/dispatch/windows-hide.test.mjs`, alongside
+- [x] **AC-2** — A regression test in `scripts/dispatch/windows-hide.test.mjs`, alongside
       ST-70's, calls `coder.mjs`'s `git` with `execFile` replaced, and fails if `windowsHide: true`
       is missing. It asserts the command, the arguments (`-c core.quotepath=off` and then the
       caller's), the working directory and `maxBuffer` as well. It needs no repository, GitHub or
       model session.
-- [ ] **AC-3** — The changed call still runs the same command with the same arguments, working
+- [x] **AC-3** — The changed call still runs the same command with the same arguments, working
       directory, environment (the caller's `env` merged over `process.env`, when one is given),
       `maxBuffer` and output and error handling. The fix changes whether a window is visible, and
       nothing about branches, commits, pushes or credentials.

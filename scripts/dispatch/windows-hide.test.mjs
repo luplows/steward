@@ -1,12 +1,14 @@
 // @vitest-environment node
 
-// The options automatic review's direct child processes are started with (ST-70). `execFile` is
-// replaced, so these start no process and need no repository, GitHub or model session. They show
-// the options passed, not what appears on a Windows desktop.
+// The options automatic review's direct child processes are started with (ST-70), and those of the
+// Git helper the coordinator's handoff coding runs Git through (ST-101). `execFile` is replaced, so
+// these start no process and need no repository, GitHub or model session. They show the options
+// passed, not what appears on a Windows desktop.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import { git } from './coder.mjs'
 import { ghAuthToken } from './github.mjs'
 import { assertReviewableCheckout } from './review.mjs'
 import { readRules } from './rules.mjs'
@@ -81,6 +83,36 @@ describe('ST-70: windowsHide at the direct child processes of automatic review',
     expect(fake.calls).toEqual([
       { file: 'git', args: ['-c', 'core.quotepath=off', 'cat-file', '-t', spec], options },
       { file: 'git', args: ['-c', 'core.quotepath=off', 'show', spec], options },
+    ])
+  })
+})
+
+describe('ST-101: windowsHide at the Git helper of coordinator-run coding', () => {
+  it('ST-101/AC-2, AC-3: the Git helper in coder.mjs is hidden, with the same arguments, directory and output', async () => {
+    fake.stdout = () => 'abc123\n'
+
+    expect(await git(dir, ['rev-parse', 'HEAD'])).toBe('abc123\n')
+
+    expect(fake.calls).toEqual([
+      {
+        file: 'git',
+        args: ['-c', 'core.quotepath=off', 'rev-parse', 'HEAD'],
+        options: { cwd: dir, maxBuffer: MAX_BUFFER, windowsHide: true },
+      },
+    ])
+  })
+
+  it('ST-101/AC-2, AC-3: the Git helper in coder.mjs is hidden when given an env, which it merges over process.env', async () => {
+    const env = { GIT_AUTHOR_NAME: 'Someone' }
+
+    await git(dir, ['commit', '-m', 'A message'], { env })
+
+    expect(fake.calls).toEqual([
+      {
+        file: 'git',
+        args: ['-c', 'core.quotepath=off', 'commit', '-m', 'A message'],
+        options: { cwd: dir, env: { ...process.env, ...env }, maxBuffer: MAX_BUFFER, windowsHide: true },
+      },
     ])
   })
 })
