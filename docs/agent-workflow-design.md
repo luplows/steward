@@ -678,7 +678,11 @@ requiring Steward's own `stories/` schema, and ATC owns the claim, push and PR.
 The authoritative `Unit:` line names the original file path or Issue, not a
 file's destination on the implementation branch. For Issue handoffs, ATC's generated PR
 also carries exactly one matching `Closes #n` reference. File handoffs carry no automatic
-issue-closing reference. Each approved unit is a complete, independently reviewable
+issue-closing reference. **Planned (ST-102):** a `Unit:` line or closing reference the coder
+writes does not stop publication. ATC removes the coder's `Unit:` lines and changes its closing
+keywords to `Refs` before composing the body, says so in the pull request's provenance, and still
+sends the body only when it names exactly ATC's unit (crew, 2026-11-18, after both handoffs of
+the 0.3.0 release review stopped on the `Unit:` line that `init`'s template asks for). Each approved unit is a complete, independently reviewable
 unit of work; the crew splits larger work before handoff instead of authorizing partial
 implementation. Multi-unit feature tracking and grouped handoffs are deferred without a
 release assignment. ATC records the coder's actual
