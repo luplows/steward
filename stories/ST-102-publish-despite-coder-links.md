@@ -52,8 +52,9 @@ gives the project, while the pull request still names only the unit ATC approved
 
 ## Out of scope
 
-- The coder's attribution. ST-99's rule stands; a `Co-Authored-By` trailer the coder session adds
-  although the project's rules are silent is a separate follow-up.
+- The coder's attribution. A `Co-Authored-By` trailer the coder session adds by its tool's
+  default, where the project's rules say nothing about attribution, is accepted (crew,
+  2026-11-18); what must not happen is attribution where a project's rules suppress it.
 - Reopening a handoff that already stopped with `coder-link-conflict` (H-1 and H-2 on this
   machine). A stopped handoff stays stopped, as now; its branch is opened by hand.
 - Any change to how the runway closes an Issue, or to `findUnitLink`.
