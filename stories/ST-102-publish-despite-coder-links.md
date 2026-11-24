@@ -33,9 +33,10 @@ gives the project, while the pull request still names only the unit ATC approved
       none), and the pull request's "Handoff provenance" section says how many lines of the
       coder's body ATC removed or neutralized, or that it changed none.
 - [ ] **AC-4** — `coder-link-conflict` is removed from the outcomes publishing can return, from
-      `README.md`'s list of them and its description of the body, and from every other place that
-      names it (`git grep -n "coder-link-conflict"`). `README.md`'s description of the body says
-      that a coder's `Unit:` lines are removed and its closing keywords changed to `Refs`.
+      `README.md`'s list of them and its description of the body, and from every other place
+      outside `stories/` that names it (`git grep -n "coder-link-conflict" -- ':!stories'`);
+      stories keep the name as their record. `README.md`'s description of the body says that a
+      coder's `Unit:` lines are removed and its closing keywords changed to `Refs`.
 - [ ] **AC-5** — `.claude/prompts/coder-handoff.md` still tells the coder not to write a `Unit:`
       line or a closing reference, and adds that this holds even where the project's pull request
       template or rules ask for one, since ATC writes that line.
@@ -52,9 +53,7 @@ gives the project, while the pull request still names only the unit ATC approved
 
 ## Out of scope
 
-- The coder's attribution. A `Co-Authored-By` trailer the coder session adds by its tool's
-  default, where the project's rules say nothing about attribution, is accepted (crew,
-  2026-11-18); what must not happen is attribution where a project's rules suppress it.
+- The coder's attribution.
 - Reopening a handoff that already stopped with `coder-link-conflict` (H-1 and H-2 on this
   machine). A stopped handoff stays stopped, as now; its branch is opened by hand.
 - Any change to how the runway closes an Issue, or to `findUnitLink`.
