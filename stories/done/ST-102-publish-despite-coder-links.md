@@ -18,37 +18,37 @@ while the pull request still names only the unit ATC approved.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `publishHandoff` in `scripts/dispatch/handoff-publish.mjs` no longer refuses a
+- [x] **AC-1** — `publishHandoff` in `scripts/dispatch/handoff-publish.mjs` no longer refuses a
       coder's body for its `Unit:` lines or closing references (`coder-link-conflict`). Before the
       body is composed, it removes each line of the coder's body that starts `Unit:` (the lines
       `coderLinkLines` finds today), and changes each closing keyword that precedes an issue
       reference in what remains to `Refs`, as `neutralizeClosing` does. The rest of the coder's
       text is kept as before: verification statements, sections and attribution, with its outer
       blank space, line endings and `Coder:` lines handled as today.
-- [ ] **AC-2** — The final body is still checked before it is sent, unchanged: `findUnitLink` under
+- [x] **AC-2** — The final body is still checked before it is sent, unchanged: `findUnitLink` under
       the project's current `unitLinks` must find exactly ATC's unit, and the only closing
       reference must be ATC's own `Closes #<n>` for an Issue handoff and none for a file. A body
       that fails that check is still not sent.
-- [ ] **AC-3** — The result says what was removed or changed, so the crew can see it: a published
+- [x] **AC-3** — The result says what was removed or changed, so the crew can see it: a published
       result carries the coder's original lines that were removed or neutralized (empty when
       none), and the pull request's "Handoff provenance" section says how many lines of the
       coder's body ATC removed or neutralized, or that it changed none.
-- [ ] **AC-4** — `coder-link-conflict` is removed from the outcomes publishing can return, from
+- [x] **AC-4** — `coder-link-conflict` is removed from the outcomes publishing can return, from
       `README.md`'s list of them and its description of the body, and from every other place
       outside `stories/` that names it (`git grep -n "coder-link-conflict" -- ':!stories'`);
       stories keep the name as their record. `README.md`'s description of the body says that a
       coder's `Unit:` lines are removed and its closing keywords changed to `Refs`.
-- [ ] **AC-5** — `.claude/prompts/coder-handoff.md` still tells the coder not to write a `Unit:`
+- [x] **AC-5** — `.claude/prompts/coder-handoff.md` still tells the coder not to write a `Unit:`
       line or a closing reference, and adds that this holds even where the project's pull request
       template or rules ask for one, since ATC writes that line.
-- [ ] **AC-6** — Tests in `scripts/dispatch/handoff-publish.test.mjs` replace those that expect
+- [x] **AC-6** — Tests in `scripts/dispatch/handoff-publish.test.mjs` replace those that expect
       `coder-link-conflict`. They cover a file handoff and an Issue handoff whose coder body has a
       `Unit:` line (as the template's first line, and with text after it, as in the two cases in
       Context); a coder's `Closes #<n>` naming the same Issue and another Issue; a closing
       reference inside a quoted command; and a body with none, which is published unchanged. Each
       asserts the final body, the provenance count and the result's removed lines. No real model
       or GitHub mutation runs.
-- [ ] **AC-7** — This story's id is taken out of the **Planned** marker in
+- [x] **AC-7** — This story's id is taken out of the **Planned** marker in
       `docs/agent-workflow-design.md`, "Approved coding handoffs and sequential execution", and the
       passage is corrected wherever what was built differs.
 
