@@ -12,8 +12,9 @@ blocked: null
 
 As a crew member who approved a handoff for a project steward installed, I want the coordinator to
 open the pull request for the coded work even when the coder's description has its own `Unit:` line
-or closing reference, so that coding does not stop on the template every steward installation
-gives the project, while the pull request still names only the unit ATC approved.
+or closing reference, so that coding does not stop on a `Unit:` line that the project's pull
+request template or rules ask for, as the template `init` adds to a project without one does,
+while the pull request still names only the unit ATC approved.
 
 ## Acceptance criteria
 
@@ -77,10 +78,10 @@ gives the project, while the pull request still names only the unit ATC approved
     ``Unit: stories/OQ-141-share-format-stable-ids.md (moved to `stories/done/`, all 7 ACs ticked)``.
   The crew decided on 2026-11-18 that this blocks the release.
 - The cause is a conflict of instructions. The handoff prompt says not to write a `Unit:` line
-  (`.claude/prompts/coder-handoff.md:87`), but the pull request template `init` installs starts
-  with one (`templates/pull_request_template.md:1`), and a project's rules may require it, as
-  tower-workshop-paths's `REVIEW.md` does ("which starts with a `Unit:` line"). The coder followed
-  the project twice.
+  (`.claude/prompts/coder-handoff.md:87`), but the pull request template `init` adds when a
+  project has none starts with one (`templates/pull_request_template.md:1`), and a project's own
+  template or rules may require it, as tower-workshop-paths's `REVIEW.md` does ("which starts
+  with a `Unit:` line"). The coder followed the project twice.
 - ST-92's AC-3 (`stories/done/ST-92-publish-handoff-pr.md`) allowed either: "Sanitize or reject
   coder-supplied conflicting `Unit:` lines and closing-keyword Issue links". It was built as a
   refusal (`coderLinkLines` and the `coder-link-conflict` check in `publishHandoff`). This story
