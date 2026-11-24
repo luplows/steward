@@ -683,7 +683,8 @@ writes does not stop publication. ATC removes the coder's `Unit:` lines whole an
 closing keywords before an issue reference to `Refs` before composing the body, gives the count in
 the pull request's provenance and the original lines in its result for the crew, and still
 sends the body only when it names exactly ATC's unit (crew, 2026-11-18, after both handoffs of
-the 0.3.0 release review stopped on the `Unit:` line that `init`'s template asks for). Each approved unit is a complete, independently reviewable
+the 0.3.0 release review stopped on the `Unit:` line that tower-workshop-paths's pull request
+template asks for, as the template `init` adds to a project without one does). Each approved unit is a complete, independently reviewable
 unit of work; the crew splits larger work before handoff instead of authorizing partial
 implementation. Multi-unit feature tracking and grouped handoffs are deferred without a
 release assignment. ATC records the coder's actual
