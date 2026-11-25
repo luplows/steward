@@ -606,8 +606,7 @@ only the branch and head SHA that were pushed, and resolves a result, never a th
 It opens a pull request into `main` only when the handoff record names that project, version and
 branch, the remote branch's tip is still the pushed head SHA, the model the session ran can be
 written as one `Coder:` token (letters, digits and `. _ : / @ + [ ] -`, starting with a letter or
-digit), and the coder's body has no line starting `Unit:` and no closing keyword followed by an
-issue reference (`coder-link-conflict`, which names the lines and rewrites nothing). Then it compares
+digit), and the coder's proposed title, body and draft flag are well formed. Then it compares
 the unit's source with the approved text once, just before opening the pull request, and reads the
 project's `unitLinks` from the checkout that comparison refreshed: when they no longer include the
 unit's kind it refuses (`unit-link-refused`), never opening a draft. Nothing watches the source
@@ -624,13 +623,16 @@ stands now on `main`:
 - `Unit:` is ATC's: the original file path on `main` (not where the coder moved the file), or
   `#<number>`. For an Issue, one `Closes #<number>` follows it. A file has no closing reference.
 - The coder's body is kept as written, verification statements included, except for its outer
-  blank space, its line endings (written as `\n`) and that every `Coder:` line is removed, since ATC never trusts a coder-written one. A body with a line starting
-  `Unit:`, or any closing keyword followed by an issue reference (`Closes #9`, `fixes owner/name#9`,
-  also inside a quoted command), is refused rather than rewritten. ATC adds no attribution and
-  removes none the coder wrote.
+  blank space, its line endings (written as `\n`) and that every `Coder:` line is removed, since ATC never trusts a coder-written one, and
+  that only ATC names the unit: each line that starts `Unit:` is removed whole, and each closing
+  keyword followed by an issue reference (`Closes #9`, `fixes owner/name#9`, also inside a quoted
+  command) is changed to `Refs`, keeping the reference. The result's `coderLinkLines` gives the
+  coder's original lines removed or changed, empty when none. ATC adds no attribution and removes
+  none the coder wrote.
 - A "Handoff provenance" section gives the handoff's ID, the approved revision, the original path
   and approved `main` SHA (or the Issue's number and its approved title and body fingerprint) and the
-  tool, choice and model that ran. It says the approved revision is provenance, not the reviewer's
+  tool, choice and model that ran, and how many lines of the coder's body ATC removed or
+  neutralized, or that it changed none. It says the approved revision is provenance, not the reviewer's
   source of truth; `steward handoff show <id>` has the approved text and version history.
 - The last line is `Coder: model=<id>`, the model that actually ran. The reviewer reads a
   `model=` token as that literal model, whatever `roles.coder.available` holds now, and reads a
@@ -641,7 +643,7 @@ only when that names exactly the intended unit and the body has the intended clo
 A failure has `recoverable: true`, the handoff ID, branch and head SHA, and leaves the pushed
 branch alone and re-executes nothing: `not-a-pushed-result`, `handoff-mismatch`,
 `records-unreadable`, `bad-model-id`, `pr-invalid` (no title or body, or a draft flag that is not
-true or false), `coder-link-conflict`, `head-moved` (with the tip found, or `null`), `head-unverified`,
+true or false), `head-moved` (with the tip found, or `null`), `head-unverified`,
 `unit-link-refused`, `unit-link-ambiguous` and `publish-failed` (GitHub's error).
 
 ### The coordinator

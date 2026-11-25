@@ -13,8 +13,7 @@
  *   1. checks the result is a pushed one, that the handoff record exists for the project and
  *      version the result names, that the branch is the one `handoffBranch` gives it, that the
  *      model the session ran can be written as one `Coder:` token (`coderModelToken`, AC-6) and
- *      that the coder's proposed title, body and draft flag are well formed, and that its body
- *      has no `Unit:` line and no closing reference to an Issue (AC-3, below);
+ *      that the coder's proposed title, body and draft flag are well formed;
  *   2. checks that the remote branch's tip is still the head SHA (AC-1);
  *   3. reads the unit's source once more, with `assess` (`handoff.mjs`), to see whether it still
  *      has the approved text (AC-5). `assess` brings the owned checkout to `origin`'s `main`;
@@ -32,21 +31,22 @@
  *
  * The body is ATC's frame around the coder's text. In order: the one `Unit:` line, naming the
  * original file path on `main` or `#<number>`; for an Issue handoff, one `Closes #<number>`; the
- * coder's body, unchanged except for its outer blank space, its line endings (written as `\n`)
- * and that every `Coder:` line is removed (the coder's own is never trusted); the "Handoff
- * provenance" section; the "Handoff discrepancy" section when there is one; and a last
- * line `Coder: model=<id>`. A coder body that has a line starting `Unit:`, or any
- * closing keyword followed by an issue reference (GitHub's keywords, with `#n`, `owner/name#n`,
- * `GH-n` or an issue URL, anywhere in the text, a quoted command included), is refused as
- * `coder-link-conflict`, naming the lines found, and nothing of the coder's text is rewritten.
- * No attribution is added and none the coder wrote is removed (ST-99).
+ * coder's body, unchanged except for its outer blank space, its line endings (written as `\n`),
+ * that every `Coder:` line is removed (the coder's own is never trusted) and that its unit links
+ * are taken out (ST-102): each line starting `Unit:` is removed whole, and each closing keyword
+ * followed by an issue reference (GitHub's keywords, with `#n`, `owner/name#n`, `GH-n` or an
+ * issue URL, anywhere in the text, a quoted command included) is changed to `Refs`, keeping the
+ * reference; the "Handoff provenance" section, which says how many of the coder's lines were
+ * removed or neutralized; the "Handoff discrepancy" section when there is one; and a last line
+ * `Coder: model=<id>`. No attribution is added and none the coder wrote is removed (ST-99).
  * Before it is sent, the body is read with `findUnitLink` under the project's current
  * `unitLinks`, and sent only when that finds the one intended unit and the body has the closing
  * references intended, none for a file and one for an Issue.
  *
  * A result is `{ status, repo, handoffId, version, branch, headSha, ... }`. `status` is
  * `published` (with `pr` as `createPullRequest` returns it, `draft`, `discrepancy` or `null`,
- * `coder` as `{ tool, choice, model }` and `unit`, the `Unit:` text written), or one of
+ * `coder` as `{ tool, choice, model }`, `unit`, the `Unit:` text written, and `coderLinkLines`,
+ * the coder's original lines that were removed or neutralized, empty when none), or one of
  * `PUBLISH_FAILURES`. A failure has `recoverable: true` and a `reason`: the branch is left on the
  * remote as it is, nothing is re-executed, and the coordinator records the handoff as stopped, for
  * the crew to decide what to do (`handoff-coding.mjs`, ST-93). A moved head also carries
@@ -64,7 +64,7 @@ import { findUnitLink } from './unit.mjs'
 
 /** Every failing `status` of `publishHandoff`. */
 export const PUBLISH_FAILURES = [
-  'not-a-pushed-result', 'handoff-mismatch', 'records-unreadable', 'bad-model-id', 'pr-invalid', 'coder-link-conflict',
+  'not-a-pushed-result', 'handoff-mismatch', 'records-unreadable', 'bad-model-id', 'pr-invalid',
   'head-moved', 'head-unverified', 'unit-link-refused', 'unit-link-ambiguous', 'publish-failed',
 ]
 
@@ -82,8 +82,8 @@ const oneLine = (text) => String(text).replace(/\s+/g, ' ').trim()
 
 /**
  * `text` with each closing keyword that precedes an issue reference changed to `Refs`. Used on
- * ATC's own discrepancy reason, which may carry text from GitHub or git, never on the coder's.
- * Pure.
+ * ATC's own discrepancy reason, which may carry text from GitHub or git, and on the coder's body
+ * (`withoutCoderLinks`). Pure.
  */
 export function neutralizeClosing(text) {
   return text.replace(CLOSING_REFERENCE_RE, 'Refs')
@@ -93,21 +93,32 @@ export function neutralizeClosing(text) {
 const closingCount = (body) => [...body.matchAll(CLOSING_REFERENCE_RE)].length
 
 /**
- * The lines of the coder's `body` that would give the pull request a unit or a closing reference
- * of the coder's choosing (AC-3): each line starting `Unit:` and each line with a closing keyword
- * before an issue reference, trimmed and cut at 100 characters. Empty when there are none. Pure.
+ * The coder's `body` without a unit or a closing reference of the coder's choosing (ST-102/AC-1):
+ * each line starting `Unit:` removed whole, and each closing keyword before an issue reference in
+ * the other lines changed to `Refs`. Returns `{ body, coderLinkLines }`, the second being the
+ * original lines removed or changed, in order, empty when there are none. Pure.
  */
-export function coderLinkLines(body) {
-  return body.split(/\r?\n/)
-    .filter((line) => UNIT_LINE_RE.test(line) || closingCount(line) > 0)
-    .map((line) => (line.trim().length > 100 ? `${line.trim().slice(0, 100)}...` : line.trim()))
+export function withoutCoderLinks(body) {
+  const kept = []
+  const coderLinkLines = []
+  for (const line of body.split(/\r?\n/)) {
+    if (UNIT_LINE_RE.test(line)) {
+      coderLinkLines.push(line)
+    } else if (closingCount(line) > 0) {
+      coderLinkLines.push(line)
+      kept.push(neutralizeClosing(line))
+    } else {
+      kept.push(line)
+    }
+  }
+  return { body: kept.join('\n'), coderLinkLines }
 }
 
 /** The `Unit:` text of `handoff`: the original path on `main`, or `#<number>`. */
 const unitText = (handoff) => (handoff.source.kind === 'file' ? handoff.source.path : `#${handoff.source.number}`)
 
 /** The "Handoff provenance" section: what a reader needs to find the approval, in plain words. */
-function provenanceSection(handoff, coder) {
+function provenanceSection(handoff, coder, changed) {
   const approved = handoff.source.kind === 'file'
     ? `${describeSource(handoff.source)}, approved as it stood at \`main\` ${handoff.provenance.commit}`
     : `${describeSource(handoff.source)}, approved with the title and body fingerprint (sha256) ${handoff.provenance.fingerprint}`
@@ -117,6 +128,9 @@ function provenanceSection(handoff, coder) {
     `- Handoff: ${handoff.id}, approved revision ${handoff.version}.`,
     `- Source: ${approved}.`,
     `- Ran as: tool ${coder.tool}, choice ${JSON.stringify(coder.choice)}, model ${coder.model}.`,
+    changed === 0
+      ? '- Coder\'s unit links: ATC changed none of the coder\'s lines, since none named a unit or closed an Issue.'
+      : `- Coder's unit links: ATC removed or neutralized ${changed} line(s) of the coder's body that named a unit or closed an Issue, which only ATC writes.`,
     '',
     `The approved revision is provenance, not the reviewer's source of truth: the reviewer reads the`,
     `unit as it stands now on \`main\`. The approved text and the handoff's version history are in`,
@@ -140,12 +154,13 @@ function discrepancySection(handoff, discrepancy) {
 }
 
 /**
- * The pull request body, in the order the module's header gives. `discrepancy` is `null` or the
- * comparison's. Pure.
+ * The pull request body, in the order the module's header gives. `proposedPr.body` is the coder's
+ * body as `withoutCoderLinks` left it, and `changed` how many lines that removed or changed.
+ * `discrepancy` is `null` or the comparison's. Pure.
  */
-export function composeHandoffBody({ handoff, proposedPr, coder, discrepancy, token }) {
+export function composeHandoffBody({ handoff, proposedPr, coder, discrepancy, token, changed = 0 }) {
   const head = [`Unit: ${unitText(handoff)}`, ...(handoff.source.kind === 'issue' ? [`Closes #${handoff.source.number}`] : [])].join('\n')
-  const parts = [head, proposedPr.body.trim(), provenanceSection(handoff, coder)]
+  const parts = [head, proposedPr.body.trim(), provenanceSection(handoff, coder, changed)]
   if (discrepancy !== null) parts.push(discrepancySection(handoff, discrepancy))
   return withCoderLine(parts.filter((part) => part !== '').join('\n\n'), [token])
 }
@@ -194,10 +209,6 @@ export async function publishHandoff({
       || proposedPr.body.trim() === '' || typeof proposedPr.draft !== 'boolean') {
       return fail('pr-invalid', 'the coder\'s proposed pull request has no title or no body, or its draft flag is not true or false')
     }
-    const conflicts = coderLinkLines(proposedPr.body)
-    if (conflicts.length > 0) {
-      return fail('coder-link-conflict', `the coder's body has ${conflicts.length} line(s) that name a unit or close an Issue, which only ATC writes: ${conflicts.map((l) => JSON.stringify(l)).join('; ')}`, { conflicts })
-    }
 
     // 2. AC-1: the remote branch is the one ST-91 pushed.
     const repoDir = ownedCheckoutPath(homedir, handoff.repo)
@@ -233,9 +244,13 @@ export async function publishHandoff({
       return fail('unit-link-refused', `${handoff.repo}'s unitLinks, ${JSON.stringify(unitLinks)}, no longer include "${handoff.source.kind}"`)
     }
 
-    // 5. AC-2, AC-3, AC-4, AC-6: the body, checked as the reviewer will read it.
+    // 5. AC-2, AC-3, AC-4, AC-6: the body, checked as the reviewer will read it. The coder's own
+    // unit links are taken out first (ST-102); the check below still decides.
     const coder = { tool: choice.tool, choice: choice.name, model: choice.model }
-    const body = composeHandoffBody({ handoff, proposedPr, coder, discrepancy, token })
+    const { body: coderBody, coderLinkLines } = withoutCoderLinks(proposedPr.body)
+    const body = composeHandoffBody({
+      handoff, proposedPr: { ...proposedPr, body: coderBody }, coder, discrepancy, token, changed: coderLinkLines.length,
+    })
     const found = findUnitLink(body, unitLinks)
     const wanted = handoff.source.kind === 'file' ? { type: 'file', target: handoff.source.path } : { type: 'issue', target: handoff.source.number }
     const closing = handoff.source.kind === 'issue' ? 1 : 0
@@ -249,7 +264,7 @@ export async function publishHandoff({
     } catch (error) {
       return fail('publish-failed', `GitHub did not open the pull request: ${error.message}`)
     }
-    return { status: 'published', ...base, pr, draft, discrepancy, coder, unit: unitText(handoff) }
+    return { status: 'published', ...base, pr, draft, discrepancy, coder, unit: unitText(handoff), coderLinkLines }
   } catch (error) {
     return fail('publish-failed', error.message)
   }
