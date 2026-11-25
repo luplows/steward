@@ -5,7 +5,7 @@ tier: later
 kind: workflow
 depends_on: [ST-79]
 model: null
-blocked: "The v0.3.0 release tag is not yet published; this post-release maintenance conversion must pin that tag"
+blocked: null
 ---
 
 ## Intent
