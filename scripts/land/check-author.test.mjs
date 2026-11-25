@@ -90,7 +90,7 @@ describe('OQ-81/AC-3: the same set of associations everywhere', () => {
   })
 
   it('the runway\'s workflow actually runs runway, which calls check-author.mjs', () => {
-    expect(read('.github', 'workflows', 'land-approved.yml')).toContain('node scripts/dispatch/cli.mjs runway')
+    expect(read('.github', 'workflows', 'land-approved.yml')).toContain('--package=github:luplows/steward#v0.3.0 steward runway')
     expect(read('scripts', 'land', 'runway.mjs')).toContain('isHonouredAuthor(association)')
   })
 })

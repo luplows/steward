@@ -37,20 +37,20 @@ on:
   workflow_dispatch:
     inputs:
       pr:
-        description: 'Pull request to land, only it. Empty: the oldest landable (unattended only).'
+        description: "Pull request to land, only it. Empty: the oldest landable (unattended only)."
         required: false
         type: string
-        default: ''
+        default: ""
       mode:
-        description: 'unattended (standing permission) or manual (one explicit request).'
+        description: "unattended (standing permission) or manual (one explicit request)."
         required: false
         type: string
-        default: 'unattended'
+        default: "unattended"
       head:
-        description: 'Manual only: the full 40-character head SHA that is authorized.'
+        description: "Manual only: the full 40-character head SHA that is authorized."
         required: false
         type: string
-        default: ''
+        default: ""
 
 permissions:
   contents: write
@@ -71,9 +71,6 @@ jobs:
   land:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out steward
-        uses: actions/checkout@v4
-
       - name: Set up Node
         # Node 24 ships npm 11; the runner's default npm cannot install steward from GitHub.
         uses: actions/setup-node@v4
@@ -92,7 +89,7 @@ jobs:
           # permission with GitHub.
           EVENT_NAME: ${{ github.event_name }}
           ACTOR: ${{ github.actor }}
-        run: node scripts/dispatch/cli.mjs runway
+        run: npx --yes --package=github:luplows/steward#v0.3.0 steward runway
 
       # Deleting a merged PR's head branch is an explicit act of the sweep. The
       # repository's `delete_branch_on_merge` setting is not relied on, and a branch
@@ -107,4 +104,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-        run: node scripts/dispatch/cli.mjs delete-merged-heads
+        run: npx --yes --package=github:luplows/steward#v0.3.0 steward delete-merged-heads

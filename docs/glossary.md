@@ -63,7 +63,8 @@ Where a file defines the thing, the entry names it, and the file is the authorit
   and "the gate only" for review and landing without a coder.
 - **circuit breaker** — the runway's limit: once five open flights carry `review-blocked`, it lands
   only those labelled `breaker-override` or whose diff is confined to `.github/workflows/`
-  (`scripts/land/runway.mjs`, which `land-approved.yml` runs).
+  (`scripts/land/runway.mjs`, which `land-approved.yml` runs from steward installed at its pinned
+  release tag, not from this checkout).
 - **inspection** — a check that raises, as GitHub issues, any merge to `main` or to a release
   branch without a passing verdict, and any pull request into either left pending or holding too
   long. It checks a release branch as it checks `main`. Run after each rotation, and by a

@@ -898,7 +898,7 @@ describe('OQ-78/AC-3: only the gate\'s author associations make a marker a verdi
     const source = readFileSync(path.join(here, '..', 'land', 'apply-verdict.mjs'), 'utf8')
     expect(source).toMatch(/import\s*\{[^}]*\bisHonouredAuthor\b[^}]*\}\s*from\s*'\.\/check-author\.mjs'/)
     const workflow = readFileSync(path.join(here, '..', '..', '.github', 'workflows', 'review-gate.yml'), 'utf8')
-    expect(workflow).toContain('run: node scripts/dispatch/cli.mjs apply-verdict')
+    expect(workflow).toContain('run: npx --yes --package=github:luplows/steward#v0.3.0 steward apply-verdict')
   })
 
   it('OQ-83/AC-5: writer-prs.mjs reads the same HONOURED_ASSOCIATIONS binding, not a restatement of its own', () => {

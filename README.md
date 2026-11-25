@@ -97,13 +97,14 @@ What the review side reads:
   turns a posted verdict into the `review/agent` status, `land-approved.yml`, the runway, does the
   merge, and `inspection.yml` runs `inspect` once a day (a project keeps it or drops it). Here,
   `main` is protected and requires `test` and `review/agent`, and so is every release branch,
-  `release/*`. `review-gate.yml` and
-  `land-approved.yml` hold only their triggers, permissions and environment, the set-up of Node,
-  and run steward's commands (`mark-pending`, `apply-verdict`, `apply-review-blocked`, `runway` and
-  `delete-merged-heads`) from this checkout. The package carries the same two files in thin form,
-  and `inspection.yml` too, in [`templates/workflows/`](templates/workflows/): they run those
-  commands from steward installed alone at a pinned tag, with a placeholder for the tag, which
-  `init` fills. Inspection's keeps a checkout of the project, for its settings.
+  `release/*`. `review-gate.yml`,
+  `land-approved.yml` and `inspection.yml` are the files in
+  [`templates/workflows/`](templates/workflows/) with the tag filled, `v0.3.0`: they hold only their
+  triggers, permissions and environment, the set-up of Node, and run steward's commands
+  (`mark-pending`, `apply-verdict`, `apply-review-blocked`, `runway`, `delete-merged-heads` and
+  `inspect`) from steward installed alone at that pinned tag, not from this checkout. The package
+  carries them with a placeholder for the tag, which `init` fills. Inspection's keeps a checkout of
+  the project, for its settings.
 
 ## Setting up another project
 

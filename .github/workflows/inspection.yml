@@ -15,7 +15,7 @@ name: Inspection
 on:
   workflow_dispatch:
   schedule:
-    - cron: '17 6 * * *'
+    - cron: "17 6 * * *"
 
 permissions:
   # To check out the repository, so the settings (steward.config.json) can be read.
@@ -45,4 +45,4 @@ jobs:
       - name: Inspect
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/dispatch/cli.mjs inspect
+        run: npx --yes --package=github:luplows/steward#v0.3.0 steward inspect

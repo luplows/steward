@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { COMMANDS } from '../dispatch/cli.mjs'
@@ -11,96 +11,73 @@ const FILES = ['review-gate.yml', 'land-approved.yml']
 const OWN = (file) => read('.github', 'workflows', file)
 const THIN = (file) => read('templates', 'workflows', file)
 
-// A checkout step of steward's own file: optional comment lines, the step (with an optional `with:`
-// block), and the blank line after it.
-const CHECKOUT_STEP =
-  /(?: {6}#[^\n]*\n)*      - name: Check out steward[^\n]*\n        uses: actions\/checkout@v4\n(?: {8}with:\n(?: {10}[^\n]*\n)+)?\n/g
-// The condition on the `pending` job's step running `mark-pending`, with its comment lines: it runs
-// only when the base holds the command's module, which is part of how steward's own file starts it.
-const GUARD = /(?: {8}#[^\n]*\n)* {8}if: hashFiles\([^\n]*\n/g
-const OWN_START = 'node scripts/dispatch/cli.mjs '
+// Steward's own files are the thin files with the tag filled (ST-82), so they carry a release tag where
+// the thin files carry the placeholder.
+const OWN_START = /npx --yes --package=github:luplows\/steward#v\d+\.\d+\.\d+ steward /
 const THIN_START = 'npx --yes --package=github:luplows/steward#v{{STEWARD_VERSION}} steward '
 
-// A single-quoted scalar ending a line, holding no quote or backslash, which YAML reads as the same
-// string double-quoted. The thin files are as the pinned Prettier prints them (ST-74), with double
-// quotes, and steward's own files keep single quotes.
-const SINGLE_QUOTED = /: '([^'"\\\n]*)'$/gm
+/** A file of steward's own with its tag put back as the placeholder, as it is in the package. */
+const unfilled = (text) => text.replace(/(github:luplows\/steward#)v\d+\.\d+\.\d+/g, '$1v{{STEWARD_VERSION}}')
 
-/**
- * Both files with the lines that start steward made the same: the checkout step that steward's
- * own file starts from, and the command prefix that each file puts before a command. A scalar
- * quoted as `SINGLE_QUOTED` is given double-quoted in both, since the quotes change nothing.
- */
-function withoutStart(text, start) {
-  return text
-    .replaceAll(CHECKOUT_STEP, () => '')
-    .replaceAll(GUARD, () => '')
-    .replaceAll(start, () => 'STEWARD ')
-    .replaceAll(SINGLE_QUOTED, (_, value) => `: "${value}"`)
-}
-
-/** The first line at which the two texts differ, as `{ line, own, thin }`, or null. */
+/** The first line at which steward's own file, tag unfilled, and the thin file differ, as `{ line, own, thin }`, or null. */
 function firstDifference(own, thin) {
-  const a = withoutStart(own, OWN_START).split('\n')
-  const b = withoutStart(thin, THIN_START).split('\n')
+  const a = unfilled(own).split('\n')
+  const b = thin.split('\n')
   for (let i = 0; i < Math.max(a.length, b.length); i++) {
     if (a[i] !== b[i]) return { line: i + 1, own: a[i], thin: b[i] }
   }
   return null
 }
 
-const commandsIn = (text, start) => [...text.matchAll(new RegExp(`run: ${start.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\S+)$`, 'gm'))].map((m) => m[1])
+const commandsIn = (text, start) => {
+  const source = start instanceof RegExp ? start.source : start.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return [...text.matchAll(new RegExp(`run: ${source}(\\S+)$`, 'gm'))].map((m) => m[1])
+}
 
-describe('ST-42/AC-3: steward\'s own workflow files run steward\'s commands from its checkout, and hold no other logic', () => {
-  it('ST-42/AC-3: keep their file names and workflow names', () => {
+describe('ST-82/AC-1: steward\'s own workflow files run steward\'s commands from the package at a release tag, and hold no other logic', () => {
+  it('ST-82/AC-1: keep their file names and workflow names', () => {
     expect(OWN('review-gate.yml')).toMatch(/^name: Review gate$/m)
     expect(OWN('land-approved.yml')).toMatch(/^name: Land approved PRs$/m)
   })
 
-  it('ST-42/AC-3: every run: line is `node scripts/dispatch/cli.mjs <command>` for a command in COMMANDS', () => {
+  it('ST-82/AC-1: every run: line is `npx --yes --package=github:luplows/steward#<release tag> steward <command>` for a command in COMMANDS', () => {
     for (const file of FILES) {
       const runs = [...OWN(file).matchAll(/^\s*run:(.*)$/gm)].map((m) => m[1].trim())
       expect(runs.length).toBeGreaterThan(0)
       for (const run of runs) {
-        expect(run.startsWith(OWN_START)).toBe(true)
-        expect(Object.keys(COMMANDS)).toContain(run.slice(OWN_START.length))
+        expect(run).toMatch(new RegExp(`^${OWN_START.source}\\S+$`))
+        expect(Object.keys(COMMANDS)).toContain(run.replace(OWN_START, ''))
       }
     }
   })
 
-  it('ST-42/AC-3: no step is a multi-line script', () => {
+  it('ST-82/AC-1: no step is a multi-line script', () => {
     for (const file of FILES) expect(OWN(file)).not.toMatch(/run: [|>]/)
   })
 
-  it('ST-42/AC-3: the commands are the gate\'s and the runway\'s, in the jobs that ran them before', () => {
+  it('ST-82/AC-1: the commands are the gate\'s and the runway\'s, in the jobs that ran them before', () => {
     expect(commandsIn(OWN('review-gate.yml'), OWN_START)).toEqual(['mark-pending', 'apply-verdict', 'apply-review-blocked'])
     expect(commandsIn(OWN('land-approved.yml'), OWN_START)).toEqual(['runway', 'delete-merged-heads'])
   })
 
-  it('ST-42/AC-3: each job starts steward from a checkout of the repository', () => {
+  it('ST-82/AC-1: no job checks out the repository, runs a checkout-local command or conditions a step on a file of the checkout', () => {
     for (const file of FILES) {
       const text = OWN(file)
-      const jobs = text.slice(text.indexOf('\njobs:\n')).split(/^ {2}(?=[a-z][\w-]*:\s*$)/m).slice(1)
-      expect(jobs.length).toBeGreaterThan(0)
-      for (const job of jobs) expect(job).toContain('uses: actions/checkout@v4')
+      expect(text).not.toContain('actions/checkout')
+      expect(text).not.toContain('node scripts/dispatch/cli.mjs')
+      expect(text).not.toContain('hashFiles')
     }
   })
 
-  it('ST-42/AC-3: the pull_request `pending` job checks out the pull request\'s base, never its merge tree', () => {
-    const text = OWN('review-gate.yml')
-    const pending = text.slice(text.indexOf('\n  pending:\n'), text.indexOf('\n  verdict:\n'))
-    expect(pending).toContain('if: github.event_name == \'pull_request\'')
-    expect(pending).toMatch(/uses: actions\/checkout@v4\n {8}with:\n {10}ref: \$\{\{ github\.event\.pull_request\.base\.sha \}\}\n/)
-    // The step running mark-pending runs only when the base holds the module (the real path).
-    const guard = "if: hashFiles('scripts/land/mark-pending.mjs') != ''"
-    const step = pending.slice(pending.indexOf('- name: Mark review pending'))
-    expect(step).toContain(guard)
-    expect(step.indexOf(guard)).toBeLessThan(step.indexOf('run: node scripts/dispatch/cli.mjs mark-pending'))
-    expect(existsSync(path.join(ROOT, 'scripts', 'land', 'mark-pending.mjs'))).toBe(true)
-    // The thin file has neither the checkout nor the condition.
-    expect(THIN('review-gate.yml')).not.toContain('hashFiles')
-    // No checkout in the file may name the pull request's head or merge ref.
-    expect(text).not.toMatch(/ref: .*(head|merge)/)
+  it('ST-82/AC-1: every steward package reference in the three converted files names the same release tag', () => {
+    const tags = new Set()
+    for (const file of [...FILES, 'inspection.yml']) {
+      const found = [...OWN(file).matchAll(/github:luplows\/steward#(\S+)/g)].map((m) => m[1])
+      expect(found.length).toBeGreaterThan(0)
+      for (const tag of found) tags.add(tag)
+    }
+    expect([...tags]).toHaveLength(1)
+    expect([...tags][0]).toMatch(/^v\d+\.\d+\.\d+$/)
   })
 })
 
@@ -149,7 +126,7 @@ describe('ST-42/AC-4: the package carries the thin files a project uses', () => 
   })
 })
 
-describe('ST-42/AC-5: steward\'s own files and the thin files differ only in how steward is started', () => {
+describe('ST-42/AC-5: steward\'s own files and the thin files differ only in the tag', () => {
   it.each(FILES)('ST-42/AC-5: %s', (file) => {
     expect(firstDifference(OWN(file), THIN(file))).toBeNull()
   })
@@ -186,10 +163,10 @@ describe('ST-42/AC-5: steward\'s own files and the thin files differ only in how
     }
   })
 
-  it('ST-74/AC-1: the comparison ignores how a scalar is quoted, never its value', () => {
+  it('ST-74/AC-1: the comparison reports a changed scalar value, and a changed quoting', () => {
     const thin = THIN('land-approved.yml')
     expect(thin).toContain('default: "unattended"')
-    expect(OWN('land-approved.yml')).toContain("default: 'unattended'")
+    expect(OWN('land-approved.yml')).toContain('default: "unattended"')
     const changed = thin.replace('default: "unattended"', () => 'default: "manual"')
     expect(firstDifference(OWN('land-approved.yml'), changed)).toMatchObject({ thin: '        default: "manual"' })
     const unquoted = thin.replace('default: "unattended"', () => 'default: unattended')
@@ -197,7 +174,8 @@ describe('ST-42/AC-5: steward\'s own files and the thin files differ only in how
   })
 
   it('ST-42/AC-5: fails on an own file that carries a step the thin file lacks, besides the checkout', () => {
-    const extra = OWN('land-approved.yml').replace('        run: node scripts/dispatch/cli.mjs runway', () => '        run: node scripts/dispatch/cli.mjs runway\n      - run: echo hi')
+    const extra = OWN('land-approved.yml').replace(/^( {8}run: npx [^\n]* steward runway)$/m, (line) => `${line}\n      - run: echo hi`)
+    expect(extra).not.toBe(OWN('land-approved.yml'))
     expect(firstDifference(extra, THIN('land-approved.yml'))).not.toBeNull()
   })
 })
@@ -257,7 +235,7 @@ describe('ST-44/AC-6: the thin inspection workflow the package carries stays in 
 
   it('ST-44/AC-6: differs from steward\'s own inspection.yml only in how steward is started', () => {
     expect(firstDifference(OWN(FILE), THIN(FILE))).toBeNull()
-    expect(OWN(FILE)).toContain(`run: ${OWN_START}inspect`)
+    expect(OWN(FILE)).toMatch(new RegExp(`run: ${OWN_START.source}inspect$`, 'm'))
     expect(THIN(FILE)).toContain(`run: ${THIN_START}inspect`)
     expect(OWN(FILE)).not.toBe(THIN(FILE))
   })

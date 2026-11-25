@@ -2828,15 +2828,14 @@ shortened where it is long, so that it can be found there with its date.
     `delete-merged-heads`), and the package carries the thin workflow files a project uses, in
     `templates/workflows/`, which install steward alone, at a pinned tag (`npx --yes
     --package=github:luplows/steward#v{{STEWARD_VERSION}} steward <command>`, `init` filling the
-    placeholder), not the project's dependencies. Steward's own workflows
-    run the same commands from its checkout, so steward runs them on itself, and a test keeps
-    steward's own files and the thin files in step except for how steward is started. Steward's own
-    `pending` job, which runs on a pull request's event with a token that can post statuses, checks
-    out the pull request's base rather than its merge tree, so that it runs no code the pull
-    request changes. Its `mark-pending` step runs only when the base holds that command, and is
-    skipped otherwise, so the pull request that introduced the command got no pending post and no
-    failed check, which `"all-checks"` would never let land (owner, 2026-10-22; not chosen: the
-    merge tree, a `gh api` fallback, and keeping the earlier step until a follow-up). Considered and
+    placeholder), not the project's dependencies. Steward's own
+    `review-gate.yml`, `land-approved.yml` and `inspection.yml` are those files with the tag filled
+    (`v0.3.0`), so steward runs on itself what it ships, and a test keeps them equal to the thin
+    files apart from the tag. Until that conversion they ran the same commands from steward's
+    checkout; their `pending` job checked out the pull request's base rather than its merge tree,
+    so that it ran no code the pull request changed, and ran `mark-pending` only when the base held
+    that command (owner, 2026-10-22). The thin form needs neither, since the code it runs is the
+    tag's, which a pull request cannot change. Considered and
     not chosen: the thin files running the project's `npm ci`, and steward from its `node_modules`.
     Steward alone was chosen for fewer Actions minutes on a private repository, and because it works
     for a project that is not Node. A project's `package.json` does not pin steward: the crew runs
@@ -3531,30 +3530,30 @@ shortened where it is long, so that it can be found there with its date.
     Its default of 5000 is not exported, and `spawnSession` does not pass the option. Considered and
     not chosen (crew, 2026-11-05): an exported constant, which the test of `spawn.mjs`'s exports
     would fail, and which a test could not shorten.
-  - **Planned (ST-82): steward's own gate is converted to the thin workflows**.
-    The crew originally assigned it to 0.2, then to 0.3 on 2026-11-07.
-    **Revised by the crew, 2026-11-11:** this is maintenance after the
-    `v0.3.0` tag exists, not part of the 0.3.0 release review. The initial
-    conversion is a manual replacement of steward's three checkout-run
-    workflows (`review-gate.yml`, `land-approved.yml`, `inspection.yml`)
-    with the matching `templates/workflows/` files at the published tag,
-    all pinned to `v0.3.0`; `init` will not overwrite existing files,
-    and `upgrade` cannot yet recognize them as installed managed templates.
-    Unlike a new scratch repository without a gate, steward already has a
-    functioning gate, so the conversion PR is reviewed by a rotation like
-    any other and the normal runway may land it. On that PR, GitHub runs
-    the PR's own `review-gate.yml` for `pull_request` (the thin form, whose
-    `mark-pending` needs the `v0.3.0` tag to exist) and `main`'s for
-    `issue_comment` (the checkout-run form, which applies the verdict).
-    There is no hand merge. Subsequent repins use `steward upgrade`, which
-    proposes a separately reviewed draft PR. Verification before landing
-    checks the converted workflows against the published templates; a
-    separate next-PR smoke check records the new gate's operation after
-    conversion lands, rather than being required by ST-82's own PR.
-    Considered and not chosen: requiring a manual merge, converting during
-    release stabilization, pinning an interim `main` commit and repinning
-    again after tagging, or adding a special `init`/`upgrade` case for
-    the legacy workflows.
+  - **Steward's own gate runs the thin workflows at the `v0.3.0` tag** (crew, 2026-11-11). The
+    crew had assigned the conversion to 0.2, then to 0.3 on 2026-11-07, and revised it to
+    maintenance after the `v0.3.0` tag exists, not part of the 0.3.0 release review. Steward's
+    `review-gate.yml`, `land-approved.yml` and `inspection.yml` are the matching
+    `templates/workflows/` files at that tag, filled as `init` fills them (`fillPin`), and `ci.yml`
+    is unchanged. The first conversion was a hand edit on an ordinary pull request, because `init`
+    leaves existing workflows in place and `upgrade` accepts only workflows that are already
+    managed, pinned templates, not the checkout-run form. Unlike a new scratch repository without a
+    gate, steward already had a functioning gate, so that pull request is reviewed by a rotation
+    like any other and the runway lands it; there is no hand merge. On it, GitHub runs the pull
+    request's own `review-gate.yml` for `pull_request` events (the thin form, whose `mark-pending`
+    needs the tag to exist) and `main`'s for `issue_comment` events (the checkout-run form, which
+    applies the verdict). Later repins use `steward upgrade`, which proposes a separately reviewed
+    draft pull request; nothing repins automatically. Before that pull request is marked ready, its
+    verification compares the three files with the published templates (each equals `fillPin`'s
+    output for `v0.3.0`, every `github:luplows/steward#` reference names `v0.3.0`, none runs
+    `node scripts/dispatch/cli.mjs`).
+    **Smoke check, after landing and separate from that pull request:** on the next ordinary
+    steward pull request, observe that `review/agent` is posted under the thin workflows and that
+    the runway lands the pull request in the normal way, and record that pull request's number and
+    the runs' links in its Verification. The conversion's own pull request does not claim this
+    check, and its acceptance does not wait for one. Considered and not chosen: requiring a manual
+    merge, converting during release stabilization, pinning an interim `main` commit and repinning
+    again after tagging, or adding a special `init`/`upgrade` case for the legacy workflows.
 
 - **Installation through a reviewable pull request** (crew, 2026-10-26).
   "Have `steward init` create a reviewable installation PR instead of
@@ -3750,12 +3749,14 @@ Checked on 2026-10-07 against `main` at `66c578d`:
   `select-candidates.mjs`, `check-author.mjs` and `checks-green.mjs`) and `delete-merged-heads`.
   `review-gate.yml` runs `mark-pending`, `apply-verdict` and `apply-review-blocked`, which derive
   `review/agent`. Each of these workflows holds only its triggers, permissions, concurrency,
-  environment and the set-up of Node, and runs `node scripts/dispatch/cli.mjs <command>` from
-  steward's checkout. The package carries the same two workflows in thin form, in
-  `templates/workflows/`, which `init` writes with the tag filled, and which start the same commands
-  from steward installed at a pinned tag and check out nothing, so `runway` reads the project's
-  `steward.config.json` `landWhen` from `main` through the API. Inspection's workflow is there in
-  thin form too; it checks out the project, for its settings. Each job of these files, steward's own
+  environment and the set-up of Node, and runs
+  `npx --yes --package=github:luplows/steward#<tag> steward <command>`: steward installed alone at
+  a pinned release tag (`v0.3.0`), not this checkout. They are the files in
+  `templates/workflows/`, which `init` writes with the tag filled, and they check out nothing, so
+  `runway` reads the project's `steward.config.json` `landWhen` from `main` through the API.
+  Inspection's workflow is the same kind of file; it checks out the project, for its settings.
+  The commands a crew member runs by hand (`node scripts/dispatch/cli.mjs <command>`) run from the
+  checkout, and are not affected. Each job of these files, steward's own
   and the thin ones, sets up Node 24 before its first `node` or `npx` step.
 - The rules the gate enforces mix the general with this project's own: `REVIEW.md`, `AGENTS.md`,
   `stories/README.md`, `stories/_TEMPLATE.md` and this document.
