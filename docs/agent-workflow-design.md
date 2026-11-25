@@ -741,7 +741,10 @@ monitoring, automatic restart retries, and separate alert infrastructure.
 instructions govern attribution for agent-generated commits and proposed pull request text.
 The coder interprets those instructions: it supplies attribution when required, omits it when
 forbidden, and defaults to none when silent (both coder prompts say so, and say nothing else on
-it). A Claude coder applies that policy to its commits; a Codex coder, which cannot commit,
+it). **Planned (ST-104):** when a project's instructions say nothing on attribution, the coder
+applies no rule of its own, so its tool's default attribution stays; only attribution a project
+forbids must not appear, and a project that wants none says so (crew, 2026-11-18 and 2026-11-25,
+after every coordinator coder on tower-workshop-paths committed with `Co-Authored-By`). A Claude coder applies that policy to its commits; a Codex coder, which cannot commit,
 supplies the commit message, including any attribution, in an optional `## Commit message`
 section of its closing block, between `## PR body` and `## Open as`, which ATC commits
 unchanged (`commitSessionWork`, `parsePrBlock`); with no such section, or an empty one, the
