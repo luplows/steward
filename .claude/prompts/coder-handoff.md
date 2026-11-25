@@ -85,7 +85,8 @@ file or a `blocked:` field, and do not create any: this project need not use the
   change a file there. When the unit needs such a change, put it in your PR body under a
   `### Proposed prompt edit` heading, as a unified diff in a `diff` code block.
 - **Do not write a `Unit:` line or a closing reference** such as `Closes #7` in your PR body. ATC
-  states which unit the work is for.
+  states which unit the work is for. This holds even where the project's pull request template or
+  rules ask for one, since ATC writes that line.
 
 ## Environment
 
