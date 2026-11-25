@@ -652,7 +652,8 @@ written (owner, 2026-10-11; Part 3, "Decided so far"). What `outline.md` ("The t
 - **A coder claims its work with a claim commit**, as `claimPushArgs` in
   `scripts/dispatch/coder.mjs` does for a story.
 - **The coder session runs the project's pre-flight check** (`check`) before its work is pushed.
-  ATC does not run it again.
+  ATC does not run it again. **Planned (ST-105):** the pre-flight check is what the project's own
+  instructions name, and the `check` setting is retired ("Settings", Part 3).
 - **The coder holds no GitHub credential and does not push.** ATC pushes its branch and opens its
   pull request (**Credential minimalism**, below).
 
@@ -2055,6 +2056,13 @@ shortened where it is long, so that it can be found there with its date.
 - **`setup` and `check`: one command each, run through the platform's shell.** Not chosen: an
   argument list run without a shell. What follows for `check` (the planning session, 2026-10-11):
   its program must be one the coder's allowlist admits, which today means `npm`, `npx` or `node`.
+  **Planned (ST-105):** the `check` setting is retired, since nothing runs it: the coder's
+  pre-flight check is whatever the project's own instructions name. A file with `check` is still
+  accepted and the key ignored, `init` no longer writes it, and `upgrade` removes it, as its first
+  settings change (crew, 2026-11-25, after tower-workshop-paths found that setting `check` changed
+  nothing). Considered and not chosen: ATC running `check` itself after the coder's session, which
+  would reverse "The coder session runs the pre-flight check", above; and passing `check` into the
+  coder's prompt, which keeps a setting only to restate what a project's instructions already say.
 - **Each command is written with its own time limit, as one value.** Considered and not chosen: a
   time limit as a key of its own, required only when its command is not `null`; and one always
   required, even beside `null`. What follows (the planning session, 2026-10-11): the coder runs
