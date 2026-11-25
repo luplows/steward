@@ -729,7 +729,11 @@ run is not recoded after restart: a `start` that finds a coordinator gone marks 
 `admitted` as `interrupted`, resuming nothing, killing nothing and removing nothing. A published
 pull request completes the handoff; a failure, or a pushed branch with no pull request, stops it
 with the branch, head, pull request and kept work known. No command releases a stopped or
-interrupted handoff; its recoding is the crew's to arrange. Surviving evidence and a specific crew
+interrupted handoff; its recoding is the crew's to arrange. **Planned (ST-103):** the crew can dismiss
+a completed, stopped or interrupted handoff, and a pull request's failed reviews, so that
+`coordinator status` no longer lists them; a dismissal hides an entry only, releases no source and
+changes nothing the coordinator selects, admits, reviews or lands (crew, 2026-11-25, after the
+0.3.0 release review's status listed five finished entries). Surviving evidence and a specific crew
 action are shown in `coordinator status` and `handoff list`, without dedicated notifications,
 whether or not a coordinator is running. No general concurrent scheduler, automatic fixer or
 exceptional process reconciliation is required for this initial slice; ST-85 holds that later
