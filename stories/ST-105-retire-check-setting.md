@@ -66,8 +66,9 @@ pre-flight check is whatever my project's own instructions name.
 ## Context
 
 - Found after the 0.3.0 release (TWP Session A for tower-workshop-paths' owner, 2026-11-25). At
-  `v0.3.0` nothing runs `check`: `git grep` of `scripts/` and `.claude/prompts/` finds it only in
-  `settings.mjs` (lines 29 and 165, validated), `settings-fixture.mjs` and `init.mjs:611`
+  `v0.3.0` nothing runs `check`. Leaving out test files (15 lines, in 7 of them) and matches of
+  the plain word "check", `git grep` of `scripts/` and `.claude/prompts/` finds the setting only
+  in `settings.mjs` (lines 29 and 165, validated), `settings-fixture.mjs` and `init.mjs:611`
   (`check: null`). The handoff coder reads `setup` and `rulesFile` only, and its prompt tells the
   coder to run "the project's own checks, as its instructions or its `package.json` or equivalent
   say". `docs/settings.md:25` still calls `check` "the command that checks a change, which the
