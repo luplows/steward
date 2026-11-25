@@ -156,6 +156,13 @@ const publish = (world, pushed, extra = {}) => publishHandoff({
 })
 const prRequests = (world) => world.requests.filter((r) => r.method === 'POST')
 const sentBody = (world) => prRequests(world).at(-1).body
+/** The coder's part of a sent body: what lies between ATC's `head` lines and the provenance section. */
+const coderPart = (body, head) => {
+  expect(body.startsWith(`${head}\n\n`)).toBe(true)
+  return body.slice(head.length + 2, body.indexOf('\n\n## Handoff provenance'))
+}
+/** The provenance line for `n` lines of the coder's body removed or neutralized. */
+const removedLine = (n) => `- Coder's unit links: ATC removed or neutralized ${n} line(s) of the coder's body that named a unit or closed an Issue, which only ATC writes.`
 
 /** A file handoff of `PLAN` with its branch pushed. */
 async function fileCase(options) {
@@ -227,24 +234,61 @@ describe('publishHandoff', () => {
     expect(findUnitLink(sent, ['issue'])).toEqual({ kind: 'link', type: 'issue', target: 7 })
   })
 
-  it('ST-92/AC-3, AC-7, AC-8: a coder body with a Unit: line or a closing reference to an Issue is refused, and nothing is rewritten', async () => {
-    for (const makeCase of [fileCase, issueCase]) {
-      const { world, record, head, pushed } = await makeCase()
-      for (const [line, found] of [
-        ['Unit: #9', 'Unit: #9'], ['  Unit: docs/other.md', 'Unit: docs/other.md'], ['Unit: none', 'Unit: none'],
-        ['Closes #9', 'Closes #9'], ['fixes #7', 'fixes #7'], ['Resolved: #8', 'Resolved: #8'], ['Fixes acme/gadgets#3', 'Fixes acme/gadgets#3'],
-        ['Closes https://github.com/acme/widgets/issues/5', 'Closes https://github.com/acme/widgets/issues/5'], ['closes GH-4', 'closes GH-4'],
-        ['Prefix-closes #5', 'Prefix-closes #5'], ["I ran git log --grep='Fixes #9' and it found nothing.", "I ran git log --grep='Fixes #9' and it found nothing."],
-      ]) {
-        const body = CODER_BODY + '\n\n' + line + '\n\nMore.'
-        const result = await publish(world, { ...pushed, proposedPr: { title: 'T', body, draft: false } })
-        expect(result).toMatchObject({ status: 'coder-link-conflict', recoverable: true, handoffId: record.id, branch: pushed.branch, headSha: head })
-        expect(result.conflicts).toEqual([found.trim()])
-        expect(result.reason).toContain(JSON.stringify(found.trim()))
-      }
-      expect(world.requests.filter((r) => r.method === 'POST')).toHaveLength(0)
-      expect(git(world.bare, 'rev-parse', 'refs/heads/' + pushed.branch)).toBe(head)
-    }
+  it('ST-102/AC-1, AC-3, AC-6: a file handoff whose coder body starts with the template\'s Unit: line is published without it', async () => {
+    const { world, pushed } = await fileCase()
+    const unitLine = 'Unit: stories/done/OQ-139-touch-sticky-hover.md'
+    const result = await publish(world, { ...pushed, proposedPr: { title: 'T', body: `${unitLine}\n\n${CODER_BODY}`, draft: false } })
+    expect(result).toMatchObject({ status: 'published', unit: PLAN, coderLinkLines: [unitLine] })
+    const sent = sentBody(world).body
+    expect(coderPart(sent, `Unit: ${PLAN}`)).toBe(CODER_BODY)
+    expect(findUnitLink(sent, ['file', 'issue'])).toEqual({ kind: 'link', type: 'file', target: PLAN })
+    expect(sent).toContain(removedLine(1))
+  })
+
+  it('ST-102/AC-1, AC-3, AC-6: an Issue handoff whose coder body has a Unit: line with text after it is published without that line', async () => {
+    const { world, pushed } = await issueCase()
+    const unitLine = 'Unit: stories/OQ-141-share-format-stable-ids.md (moved to `stories/done/`, all 7 ACs ticked)'
+    const body = ['### What changed', '', unitLine, 'It greets.', '', '### Verification', '', 'npm test -- 12 passing in 3.1s'].join('\n')
+    const result = await publish(world, { ...pushed, proposedPr: { title: 'T', body, draft: false } })
+    expect(result).toMatchObject({ status: 'published', unit: '#7', coderLinkLines: [unitLine] })
+    const sent = sentBody(world).body
+    expect(coderPart(sent, 'Unit: #7\nCloses #7')).toBe(CODER_BODY)
+    expect(findUnitLink(sent, ['file', 'issue'])).toEqual({ kind: 'link', type: 'issue', target: 7 })
+    expect(sent.match(/^Closes #\d+$/gm)).toEqual(['Closes #7'])
+    expect(sent).toContain(removedLine(1))
+  })
+
+  it('ST-102/AC-1, AC-2, AC-3, AC-6: a coder\'s Closes for the same Issue and for another one become Refs, and only ATC\'s Closes remains', async () => {
+    const { world, pushed } = await issueCase()
+    const lines = ['Closes #7', 'It also fixes acme/gadgets#3 and resolves #9.']
+    const result = await publish(world, { ...pushed, proposedPr: { title: 'T', body: [CODER_BODY, '', ...lines].join('\n'), draft: false } })
+    expect(result).toMatchObject({ status: 'published', coderLinkLines: lines })
+    const sent = sentBody(world).body
+    expect(coderPart(sent, 'Unit: #7\nCloses #7')).toBe(`${CODER_BODY}\n\nRefs #7\nIt also Refs acme/gadgets#3 and Refs #9.`)
+    expect(findUnitLink(sent, ['file', 'issue'])).toEqual({ kind: 'link', type: 'issue', target: 7 })
+    expect(sent.match(/^Closes #\d+$/gm)).toEqual(['Closes #7'])
+    expect(sent).toContain(removedLine(2))
+  })
+
+  it('ST-102/AC-1, AC-3, AC-6: a closing reference inside a quoted command is changed to Refs, keeping the reference', async () => {
+    const { world, pushed } = await fileCase()
+    const line = "I ran git log --grep='Fixes #9' and it found nothing."
+    const result = await publish(world, { ...pushed, proposedPr: { title: 'T', body: `${CODER_BODY}\n\n${line}`, draft: false } })
+    expect(result).toMatchObject({ status: 'published', coderLinkLines: [line] })
+    const sent = sentBody(world).body
+    expect(coderPart(sent, `Unit: ${PLAN}`)).toBe(`${CODER_BODY}\n\nI ran git log --grep='Refs #9' and it found nothing.`)
+    expect(findUnitLink(sent, ['file', 'issue'])).toEqual({ kind: 'link', type: 'file', target: PLAN })
+    expect(sent).not.toMatch(/\b(closes?|fix(es)?)\b/i)
+    expect(sent).toContain(removedLine(1))
+  })
+
+  it('ST-102/AC-1, AC-3, AC-6: a coder body with no Unit: line and no closing reference is published unchanged', async () => {
+    const { world, pushed } = await fileCase()
+    const result = await publish(world, pushed)
+    expect(result).toMatchObject({ status: 'published', coderLinkLines: [] })
+    const sent = sentBody(world).body
+    expect(coderPart(sent, `Unit: ${PLAN}`)).toBe(CODER_BODY)
+    expect(sent).toContain('- Coder\'s unit links: ATC changed none of the coder\'s lines, since none named a unit or closed an Issue.')
   })
 
   it('ST-92/AC-3: only the closing keyword before an issue reference conflicts, not other words', async () => {
