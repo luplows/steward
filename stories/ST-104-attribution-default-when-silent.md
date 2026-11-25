@@ -34,9 +34,9 @@ say so, and the prompts stop asking the coder for something its tool does not do
 - [ ] **AC-4** — `docs/agent-workflow-design.md`'s attribution passage (crew, 2026-11-10) no longer
       says the coder "defaults to none when silent", and this story's **Planned** marker there is
       removed.
-- [ ] **AC-5** — The tests that assert the prompts' wording (`coder.test.mjs`, "ST-99/AC-2 and
-      AC-9") assert the new rule for a silent project in both prompts, in place of "add none when
-      they say nothing".
+- [ ] **AC-5** — The tests that assert the prompts' wording (`coder.test.mjs`, "ST-99/AC-3: the
+      coder prompts leave attribution to the consuming project") assert the new rule for a silent
+      project in both prompts, in place of "add none when they say nothing".
 - [ ] **AC-6** — ATC's code is unchanged: it adds no attribution, removes none the coder wrote,
       and keeps the `Coder:` line.
 
