@@ -99,7 +99,7 @@ describe('OQ-80/AC-2: never removed, and not reapplied to a pull request that ca
   it('the workflow step itself runs unconditionally (if: always()), so a block on the triggering comment still lets the count through', () => {
     const stepAt = GATE.indexOf('name: Apply review-blocked at the round bound')
     expect(stepAt).toBeGreaterThan(-1)
-    const stepText = GATE.slice(stepAt, GATE.indexOf('run: node scripts/dispatch/cli.mjs apply-review-blocked') + 60)
+    const stepText = GATE.slice(stepAt, GATE.indexOf('run: npx --yes --package=github:luplows/steward#v0.3.0 steward apply-review-blocked') + 60)
     expect(stepText).toMatch(/if: always\(\)/)
   })
 
@@ -145,7 +145,7 @@ describe('OQ-80/AC-3: only markers the gate itself honours are counted', () => {
   it('the gate reads a marker with the parser github.mjs defines, in apply-verdict.mjs, which this module counts with', () => {
     const applyVerdict = readFileSync(path.join(ROOT, 'scripts', 'land', 'apply-verdict.mjs'), 'utf8')
     expect(applyVerdict).toMatch(/import\s*\{[^}]*parseMarkerComment[^}]*\}\s*from\s*'\.\.\/dispatch\/github\.mjs'/)
-    expect(GATE).toContain('run: node scripts/dispatch/cli.mjs apply-verdict')
+    expect(GATE).toContain('run: npx --yes --package=github:luplows/steward#v0.3.0 steward apply-verdict')
     expect(countBlockingVerdicts([comment('block')])).toBe(1)
   })
 

@@ -80,7 +80,7 @@ describe('OQ-93/AC-3: the input reaches the module only through env', () => {
 
   it('passes the input as PR_INPUT and the landing step runs runway, which reads PR_INPUT and selects with select-candidates.mjs', () => {
     expect(yml).toMatch(/PR_INPUT: \$\{\{ inputs\.pr \}\}/)
-    expect(runBlocks(yml).some((block) => block.includes('node scripts/dispatch/cli.mjs runway'))).toBe(true)
+    expect(runBlocks(yml).some((block) => block.includes('--package=github:luplows/steward#v0.3.0 steward runway'))).toBe(true)
     const sweep = readFileSync(path.join(ROOT, 'scripts/land/runway.mjs'), 'utf8')
     expect(sweep).toContain("prInput: process.env.PR_INPUT ?? ''")
     expect(sweep).toMatch(/import \{[^}]*\bselectCandidates\b[^}]*\} from '\.\/select-candidates\.mjs'/)

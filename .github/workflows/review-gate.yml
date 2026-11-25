@@ -74,13 +74,6 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      # The base commit, not the default checkout of a pull_request event, which is the pull
-      # request's own unreviewed merge tree: no code from the pull request runs with this token.
-      - name: Check out steward at the pull request's base
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.base.sha }}
-
       - name: Set up Node
         # Node 24 ships npm 11; the runner's default npm cannot install steward from GitHub.
         uses: actions/setup-node@v4
@@ -88,13 +81,11 @@ jobs:
           node-version: 24
 
       - name: Mark review pending
-        # Runs only when the base holds the command, as the base's own code is what runs here.
-        if: hashFiles('scripts/land/mark-pending.mjs') != ''
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.event.pull_request.head.sha }}
-        run: node scripts/dispatch/cli.mjs mark-pending
+        run: npx --yes --package=github:luplows/steward#v0.3.0 steward mark-pending
 
   verdict:
     # issue_comment fires for issues as well as PRs, so the pull_request
@@ -105,9 +96,6 @@ jobs:
       && contains(github.event.comment.body, '<!-- agent-review')
     runs-on: ubuntu-latest
     steps:
-      - name: Check out steward
-        uses: actions/checkout@v4
-
       - name: Set up Node
         # Node 24 ships npm 11; the runner's default npm cannot install steward from GitHub.
         uses: actions/setup-node@v4
@@ -125,7 +113,7 @@ jobs:
           BODY: ${{ github.event.comment.body }}
           ASSOC: ${{ github.event.comment.author_association }}
           COMMENT_URL: ${{ github.event.comment.html_url }}
-        run: node scripts/dispatch/cli.mjs apply-verdict
+        run: npx --yes --package=github:luplows/steward#v0.3.0 steward apply-verdict
 
       # Runs whether or not the step above found a block, and whatever that step did with
       # ASSOC or the marker on *this* comment: the round bound is counted across every
@@ -139,4 +127,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.issue.number }}
-        run: node scripts/dispatch/cli.mjs apply-review-blocked
+        run: npx --yes --package=github:luplows/steward#v0.3.0 steward apply-review-blocked

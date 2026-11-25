@@ -698,15 +698,15 @@ describe('ST-29/AC-8: the workflow', () => {
   it('ST-29/AC-8: is named Inspection and runs the command after checking out the repository', () => {
     expect(text).toMatch(/^name: Inspection$/m)
     expect(text).toMatch(/uses: actions\/checkout@/)
-    expect(text).toMatch(/run: node scripts\/dispatch\/cli\.mjs inspect$/m)
-    expect(text.indexOf('actions/checkout')).toBeLessThan(text.indexOf('cli.mjs inspect'))
+    expect(text).toMatch(/run: npx --yes --package=github:luplows\/steward#v0\.3\.0 steward inspect$/m)
+    expect(text.indexOf('actions/checkout')).toBeLessThan(text.indexOf('steward inspect'))
     expect(text).toMatch(/GH_TOKEN: \$\{\{ github\.token \}\}/)
   })
 
   it('ST-29/AC-8: runs on workflow_dispatch and once a day', () => {
     const on = text.match(/^on:\n([\s\S]*?)\npermissions:/m)[1]
     expect(on).toMatch(/workflow_dispatch:/)
-    const crons = [...on.matchAll(/cron: '([^']+)'/g)].map((m) => m[1])
+    const crons = [...on.matchAll(/cron: ['"]([^'"]+)['"]/g)].map((m) => m[1])
     expect(crons).toHaveLength(1)
     expect(crons[0]).toMatch(/^\d{1,2} \d{1,2} \* \* \*$/)
   })

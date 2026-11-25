@@ -16,7 +16,7 @@ it ships without putting its 0.3.0 release review at risk.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — After `v0.3.0` is published, replace only steward's
+- [x] **AC-1** — After `v0.3.0` is published, replace only steward's
       `.github/workflows/review-gate.yml`, `land-approved.yml` and
       `inspection.yml` with the corresponding `templates/workflows/` files
       from that exact tag, each filled as `init` fills it: `fillPin`
@@ -27,7 +27,7 @@ it ships without putting its 0.3.0 release review at risk.
       neither command treats steward's existing checkout-run workflows as
       installed managed templates. `ci.yml` remains unchanged.
 
-- [ ] **AC-2** — Before the implementation PR is marked ready, its
+- [x] **AC-2** — Before the implementation PR is marked ready, its
       verification records a reproducible, read-only comparison against
       the published `v0.3.0` templates: all three checked-in files match
       `fillPin`'s output exactly, all `github:luplows/steward#` pin
@@ -38,7 +38,7 @@ it ships without putting its 0.3.0 release review at risk.
       runs each of the conversion PR's own gate jobs (see Constraints); no
       hand merge or post-landing outcome is claimed as pre-landing evidence.
 
-- [ ] **AC-3** — Update current, non-historical passages in
+- [x] **AC-3** — Update current, non-historical passages in
       `docs/agent-workflow-design.md` that describe steward's own GitHub
       Actions workflows running from its checkout. Check `AGENTS.md`,
       `README.md`, `docs/controller.md`, `docs/settings.md`,
@@ -51,10 +51,10 @@ it ships without putting its 0.3.0 release review at risk.
       implementation PR's Docs check identifies which of these files needed
       changes and which did not.
 
-- [ ] **AC-4** — Resolve the `**Planned (ST-82)**` marker in
+- [x] **AC-4** — Resolve the `**Planned (ST-82)**` marker in
       `docs/agent-workflow-design.md` when the conversion is implemented.
 
-- [ ] **AC-5** — The implementation PR documents the separate
+- [x] **AC-5** — The implementation PR documents the separate
       post-landing smoke-check procedure: on the next ordinary steward PR,
       observe `review/agent` and normal gated landing under the new thin
       workflows, then record its PR/run evidence. The implementation PR
