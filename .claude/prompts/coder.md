@@ -95,8 +95,9 @@ the diff, and the story file moved to `stories/done/`.
   and any other file they send you to) say whether a commit message, or the pull request text you
   propose, carries attribution for the agent that wrote it, such as a `Co-Authored-By:` trailer
   or a "Generated with" line. Read what applies, and follow it for your commit messages and for
-  `## PR body`: add the attribution when they require it, leave it out when they forbid it, and
-  add none when they say nothing. Apply no other rule on it. ATC copies what you write
+  `## PR body`: add the attribution when they require it, leave it out when they forbid it, and,
+  when they say nothing on it, apply no rule of your own, neither adding attribution nor removing
+  what your tool adds by default. Apply no other rule on it. ATC copies what you write
   unchanged, and adds only the `Coder:` line.
 - **Keep the diff to what the story asks for.** If you find unrelated problems,
   report them rather than fixing them here — scope is `REVIEW.md`, "Integrity",
@@ -179,11 +180,12 @@ The rules above and below are the same for you. These things differ:
 
   Write the whole message as it should be committed, including any attribution this
   repository's agent instructions require for a commit (see "Follow this repository's own
-  rules on attribution", above), and none when they forbid it or say nothing. ATC commits the
-  text unchanged and neither adds attribution nor takes it out. Without a `## Commit message`
-  section, or with an empty one, ATC uses your PR title as the commit's subject and writes no
-  body. The `## PR body` ends where `## Commit message` begins, so no line of it may be that
-  heading. A Claude Code session commits for itself and leaves this section out.
+  rules on attribution", above), none when they forbid it, and, when they say nothing, whatever
+  you would write by default. ATC commits the text unchanged and neither adds attribution nor
+  takes it out. Without a `## Commit message` section, or with an empty one, ATC uses your PR
+  title as the commit's subject and writes no body. The `## PR body` ends where
+  `## Commit message` begins, so no line of it may be that heading. A Claude Code session commits
+  for itself and leaves this section out.
 - **There is no network**, whatever "Environment" says.
 - **Commands run in Windows PowerShell 5.1, where `&&` does not parse**, so run
   them one at a time. Run npm as `npm.cmd`: PowerShell's policy blocks
