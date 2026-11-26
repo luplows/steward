@@ -101,6 +101,10 @@ body and the rules.
 }
 ```
 
+This is the file as `upgrade` leaves it. Steward's own `steward.config.json` still has
+`"check": { "command": "npm run check", "timeoutMinutes": 10 }` until steward upgrades to a release
+with ST-105: its coordinator and workflows run v0.3.0, whose `readSettings` requires the key.
+
 Steward's scripts use `repo`, `rulesFile`, `unitLinks`, `land`, `landWhen` and
 `inspectAfterHours` today: the pilot and the runway land on the checks `landWhen` names, and
 inspection raises a pull request pending or holding longer than `inspectAfterHours`. The other keys
