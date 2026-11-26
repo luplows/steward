@@ -303,9 +303,9 @@ function statusPaths(porcelainZ) {
  * Pushes `branch` from the worktree `cwd`, and only when it holds a commit
  * beyond `baseSha` and nothing else was left uncommitted, whatever paths its commits change
  * (ST-108: a change to a protected path lands only by hand, ST-106). Never commits (a Codex
- * session's work is committed by `commitSessionWork`, which the callers run first; it is the dispatcher's, not `pushBranch`'s) and
- * never forces. `dispatchCoder` and the retry path share it. With `hooksOff` (a Codex session,
- * ST-15/AC-6) the push runs with git's hooks off.
+ * session's work is committed by `commitSessionWork`, which the callers run first; it is the
+ * dispatcher's, not `pushBranch`'s) and never forces. `dispatchCoder` and the retry path share it.
+ * With `hooksOff` (a Codex session, ST-15/AC-6) the push runs with git's hooks off.
  *
  * Resolves `{ status: 'pushed', headSha }`, or a status that means
  * nothing was pushed: `nothing-committed` and `uncommitted-changes` (each with
