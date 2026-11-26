@@ -3062,13 +3062,19 @@ describe('ST-99/AC-3: the coder prompts leave attribution to the consuming proje
       expect(bullet).toMatch(/`## PR body`/)
       expect(bullet).toMatch(/add the attribution when they require it/)
       expect(bullet).toMatch(/leave\s+it out when they forbid it/)
-      expect(bullet).toMatch(/add none when they say nothing/)
+      // ST-104/AC-1: a silent project gets no rule of the coder's own, neither adding nor removing.
+      expect(bullet).toMatch(/say\s+nothing on it/)
+      expect(bullet).toMatch(/apply\s+no\s+rule\s+of\s+your\s+own/)
+      expect(bullet).toMatch(/neither\s+adding\s+attribution\s+nor\s+removing\s+what\s+your\s+tool\s+adds\s+by\s+default/)
+      expect(bullet).not.toMatch(/add\s+none\s+when/)
       expect(bullet).toMatch(/Apply no other\s+rule/)
     })
 
     it(`ST-99/AC-3: ${file} asks a Codex coder for a ## Commit message section, and imposes steward's own rule nowhere`, () => {
       expect(text).toMatch(/Supply the commit message ATC commits your work with/)
       expect(text).toContain('## Commit message')
+      // ST-104/AC-2: for a silent project the commit message is whatever the coder would write by default.
+      expect(text).toMatch(/and,\s+when\s+they\s+say\s+nothing,\s+whatever\s+you\s+would\s+write\s+by\s+default/)
       // Outside the rule's own bullet, which names the trailers as examples, no instruction demands one.
       const rest = text.replace(rule(text), '')
       expect(rest).not.toMatch(/(?:must|always|add|include) (?:a )?`?Co-Authored-By/i)

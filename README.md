@@ -879,7 +879,9 @@ For everyone:
   commits or body carry one (`scripts/dispatch/attribution-check.mjs`), and `.claude/settings.json`
   turns off the attribution Claude Code adds by default. This is steward's own policy. A project
   that uses steward keeps its own: the coder follows that project's instructions, and the pull
-  requests ATC opens there carry the `Coder:` provenance line.
+  requests ATC opens there carry the `Coder:` provenance line. Where a project's instructions say
+  nothing on attribution, the coder's tool default applies, so a project that wants no AI
+  attribution says so in its agent instructions.
 
 ### From the crew
 

@@ -17,27 +17,27 @@ say so, and the prompts stop asking the coder for something its tool does not do
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — The attribution rule in `.claude/prompts/coder.md` and
+- [x] **AC-1** — The attribution rule in `.claude/prompts/coder.md` and
       `.claude/prompts/coder-handoff.md`, "Follow this repository's (project's) own rules on
       attribution", says: add the attribution the agent instructions require, leave out what they
       forbid, and, when they say nothing on it or there are none, apply no rule of your own,
       neither adding attribution nor removing what your tool adds by default. "Apply no other rule
       on it" and "ATC copies what you write unchanged" stay.
-- [ ] **AC-2** — The `## Commit message` passage of both prompts says the same for a Codex coder's
+- [x] **AC-2** — The `## Commit message` passage of both prompts says the same for a Codex coder's
       commit message: the attribution the instructions require, none when they forbid it, and,
       when they say nothing, whatever the coder would write by default. ATC still commits the text
       unchanged.
-- [ ] **AC-3** — `README.md`, "Contributing", where it says a project that uses steward keeps its
+- [x] **AC-3** — `README.md`, "Contributing", where it says a project that uses steward keeps its
       own attribution policy, adds that where a project's instructions say nothing, the coder's
       tool default applies, so a project that wants no AI attribution says so in its agent
       instructions.
-- [ ] **AC-4** — `docs/agent-workflow-design.md`'s attribution passage (crew, 2026-11-10) no longer
+- [x] **AC-4** — `docs/agent-workflow-design.md`'s attribution passage (crew, 2026-11-10) no longer
       says the coder "defaults to none when silent", and this story's **Planned** marker there is
       removed.
-- [ ] **AC-5** — The tests that assert the prompts' wording (`coder.test.mjs`, "ST-99/AC-3: the
+- [x] **AC-5** — The tests that assert the prompts' wording (`coder.test.mjs`, "ST-99/AC-3: the
       coder prompts leave attribution to the consuming project") assert the new rule for a silent
       project in both prompts, in place of "add none when they say nothing".
-- [ ] **AC-6** — ATC's code is unchanged: it adds no attribution, removes none the coder wrote,
+- [x] **AC-6** — ATC's code is unchanged: it adds no attribution, removes none the coder wrote,
       and keeps the `Coder:` line.
 
 ## Out of scope
