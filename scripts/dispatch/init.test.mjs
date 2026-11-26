@@ -380,9 +380,10 @@ describe('ST-44/AC-3: steward.config.json', () => {
     const cwd = makeRepo()
     await runInit(['--yes'], { cwd })
     const text = JSON.parse(read(installed(cwd), 'steward.config.json'))
-    expect(Object.keys(text).sort()).toEqual(['check', 'inspectAfterHours', 'land', 'landWhen', 'repo', 'rulesFile', 'setup', 'unitLinks'])
+    expect(Object.keys(text).sort()).toEqual(['inspectAfterHours', 'land', 'landWhen', 'repo', 'rulesFile', 'setup', 'unitLinks'])
+    expect(text).not.toHaveProperty('check')
     expect(await readSettings(installed(cwd))).toEqual({
-      repo: REPO, setup: null, check: null, landWhen: 'all-checks', land: false, unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', inspectAfterHours: 24,
+      repo: REPO, setup: null, landWhen: 'all-checks', land: false, unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', inspectAfterHours: 24,
     })
   })
 
@@ -413,10 +414,10 @@ describe('ST-44/AC-3: steward.config.json', () => {
     }
   })
 
-  it('ST-44/AC-3: unitLinks none is written as an empty array, and setup, check and landWhen are fixed', async () => {
+  it('ST-44/AC-3: unitLinks none is written as an empty array, and setup and landWhen are fixed', async () => {
     const cwd = makeRepo()
     await runInit(['--yes', '--unit-links', 'none'], { cwd })
-    expect(await readSettings(installed(cwd))).toMatchObject({ unitLinks: [], setup: null, check: null, landWhen: 'all-checks' })
+    expect(await readSettings(installed(cwd))).toMatchObject({ unitLinks: [], setup: null, landWhen: 'all-checks' })
   })
 
   it('ST-44/AC-3: the question about unitLinks says what other covers', () => {
@@ -971,7 +972,7 @@ describe('ST-55/AC-1: the land question defaults to no, and an explicit yes writ
     expect(code).toBe(0)
     expect(terminal.prompts[2]).toContain('[no]')
     expect(await readSettings(installed(cwd))).toEqual({
-      repo: REPO, setup: null, check: null, landWhen: 'all-checks', land: false, unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', inspectAfterHours: 24,
+      repo: REPO, setup: null, landWhen: 'all-checks', land: false, unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', inspectAfterHours: 24,
     })
   })
 
@@ -979,7 +980,7 @@ describe('ST-55/AC-1: the land question defaults to no, and an explicit yes writ
     const cwd = makeRepo()
     expect((await runInit(['--yes'], { cwd })).code).toBe(0)
     expect(JSON.parse(read(installed(cwd), 'steward.config.json'))).toEqual({
-      repo: REPO, setup: null, check: null, landWhen: 'all-checks', land: false, unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', inspectAfterHours: 24,
+      repo: REPO, setup: null, landWhen: 'all-checks', land: false, unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', inspectAfterHours: 24,
     })
   })
 

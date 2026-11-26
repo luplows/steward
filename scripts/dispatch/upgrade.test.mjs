@@ -54,7 +54,7 @@ const fresh = (name) => {
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim()
 const template = (file) => readFileSync(path.join(TEMPLATES, 'workflows', file), 'utf8')
 const settings = (overrides = {}) =>
-  `${JSON.stringify({ repo: REPO, setup: null, check: null, landWhen: 'all-checks', land: false, unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', inspectAfterHours: 24, ...overrides }, null, 2)}\n`
+  `${JSON.stringify({ repo: REPO, setup: null, landWhen: 'all-checks', land: false, unitLinks: ['file', 'issue'], rulesFile: 'REVIEW.md', inspectAfterHours: 24, ...overrides }, null, 2)}\n`
 const workflowsAt = (pin, files = [...GATE_WORKFLOWS]) =>
   Object.fromEntries(files.map((file) => [`.github/workflows/${file}`, fillPin(template(file), pin)]))
 
@@ -583,8 +583,31 @@ describe('ST-69/AC-7: the project\'s own configuration', () => {
     expect(bad.err).toContain('./REVIEW.md: ')
   })
 
-  it('ST-69/AC-7: no migration is registered yet, so a real upgrade proposes no project-owned change', () => {
-    expect(MIGRATIONS).toEqual([])
+  it('ST-69/AC-7: the one migration registered is ST-105\'s', () => {
+    expect(MIGRATIONS.map((m) => m.id)).toEqual(['ST-105-remove-check'])
+  })
+
+  it('ST-105/AC-3: an upgrade removes check with its explanation and leaves every other key, land included', async () => {
+    const config = settings({ check: { command: 'npm run check', timeoutMinutes: 10 }, land: true, landWhen: ['ci'], setup: { command: 'npm ci', timeoutMinutes: 3 } })
+    const w = world({ config })
+    const r = await runUpgrade(['--to', 'v0.2.0'], w)
+    expect(r.code).toBe(0)
+    const expected = JSON.parse(config)
+    delete expected.check
+    expect(JSON.parse(onBranch(w, r.opened.head, 'steward.config.json'))).toEqual(expected)
+    expect(changedFiles(w, r.opened.head)).toContain('steward.config.json')
+    const body = r.opened.body.replace(/\s+/g, ' ')
+    expect(body).toContain('steward no longer reads `check`')
+    expect(body).toMatch(/project.s own instructions/)
+    expect(body).toContain('(ST-105-remove-check)')
+  })
+
+  it('ST-105/AC-3: an upgrade of a project whose file has no check makes no settings change', async () => {
+    const w = world()
+    const r = await runUpgrade(['--to', 'v0.2.0'], w)
+    expect(r.code).toBe(0)
+    expect(changedFiles(w, r.opened.head)).not.toContain('steward.config.json')
+    expect(r.opened.body).not.toContain('ST-105-remove-check')
   })
 
   it('ST-69/AC-7: a migration applies, is explained in the body, and the file is rewritten for it alone', async () => {

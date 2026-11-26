@@ -8,10 +8,14 @@ decisions behind the keys are in [`outline.md`](outline.md), "Defining steward",
 
 - Every key is required. Steward's code holds no default for any of them.
 - A missing key, an unknown key, or a value of the wrong form is an error that names the file and
-  the key with all its parents, for a key inside `setup` or `check` (for example
+  the key with all its parents, for a key inside `setup` (for example
   `setup.timeoutMinutes`).
+- A file with a `check` key is still accepted, with any value, and the key is ignored: steward no
+  longer reads it. `steward upgrade` removes it from a project's file. The coder's pre-flight check
+  is what the project's own instructions name (its `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`,
+  `README.md` or `package.json`).
 - A key that becomes required breaks a project until it adds the key.
-- The file is flat apart from `setup` and `check`.
+- The file is flat apart from `setup`.
 - What depends on the OS user rather than the project, the usage limits and each role's tool,
   model and effort, is not in this file. It is in the user config, described in
   [`user-config.md`](user-config.md). A `usageLimits` key here is an unknown key.
@@ -22,7 +26,6 @@ decisions behind the keys are in [`outline.md`](outline.md), "Defining steward",
 |---|---|---|---|
 | `repo` | `owner/name` | The project's GitHub repository. | The `origin` remote's repository, from an `https` or an `ssh` URL. With no `origin` that reads as a GitHub repository, `init` refuses and writes nothing. |
 | `setup` | `null`, or an object (below) | The command that prepares a worktree for a coder session. Nothing is run before a review. | `null`. |
-| `check` | `null`, or an object (below) | The command that checks a change, which the coder runs. | `null`. |
 | `landWhen` | `"all-checks"`, or a non-empty array of distinct, non-empty check names | Which checks must be green before steward lands a pull request. | `"all-checks"`. |
 | `land` | `true` or `false` | Standing permission for unattended landing: the rotation's landing, and a workflow dispatch that names no mode. The runway reads it from `main`. It does not stop `steward land <pr-number>`, a manual request ([below](#land)). | Asked; default `false` (`--yes` takes it too), so a new installation reviews and does not land unattended. A yes at the question, or `--land yes`, writes `true`. A file already there is left as it is. |
 | `unitLinks` | An array, possibly empty, of distinct values from `"issue"`, `"file"` and `"other"` | The kinds of link steward reads from a pull request's body to find its unit. | Asked; default `["file", "issue"]`. |
@@ -63,17 +66,16 @@ against a supported base, an honoured author, no `review-blocked`, the circuit b
 exemptions, `review/agent` `success` on the head, the checks `landWhen` names, a `mergeable_state`
 GitHub would merge in, and the runway's `--match-head-commit` merge.
 
-## `setup` and `check`
+## `setup`
 
-Each is `null`, or an object with exactly these keys:
+It is `null`, or an object with exactly these keys:
 
 - `command`: a non-empty string, run through the platform's shell. Point it at a script of the
   project's own (such as `npm run check`) rather than chaining commands, since only simple forms
   behave alike in Windows' `cmd` and in `sh`.
 - `timeoutMinutes`: a positive integer, the command's time limit.
 
-`null` is written explicitly. For `setup` it means the project needs nothing but the worktree. For
-`check` it means the project has no check, which suits only a project without a coder.
+`null` is written explicitly. It means the project needs nothing but the worktree.
 
 ## `unitLinks`
 
@@ -91,7 +93,6 @@ body and the rules.
 {
   "repo": "luplows/steward",
   "setup": { "command": "npm ci", "timeoutMinutes": 5 },
-  "check": { "command": "npm run check", "timeoutMinutes": 10 },
   "landWhen": "all-checks",
   "land": true,
   "unitLinks": ["file"],

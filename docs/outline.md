@@ -490,20 +490,18 @@ settles it.
   make the groups clear.
 - **`storyPrefix` leaves steward's settings** (owner, 2026-10-11): the core does not depend on how
   a project formats its units.
-- **`setup` and `check`: one command each, run through the platform's shell**, with a project
-  encouraged to point each at a script of its own (such as `npm run check`) rather than chain
-  commands, since only simple forms behave alike in Windows' `cmd` and in `sh`. `check` is the
-  pre-flight check. `null` is allowed for either, written explicitly: for `setup`, the project
-  needs nothing but the worktree; for `check`, there is no check, which suits only a project
-  without a coder.
+- **`setup`: one command, run through the platform's shell**, with a project encouraged to point it
+  at a script of its own (such as `npm run setup`) rather than chain commands, since only simple
+  forms behave alike in Windows' `cmd` and in `sh`. `null` is allowed, written explicitly: the
+  project needs nothing but the worktree. **Revised 2026-11-25 by the crew (ST-105):** there is no
+  `check` setting. The pre-flight check is what the project's own instructions name, which the
+  coder already follows; a file with `check` is still accepted, and `upgrade` removes it.
   - `setup` is run by ATC, in the session's environment (`coderEnv`), before a reviewer or
     a coder session starts, in the checkout that session will use. A failure starts no session.
     The reviewer always gets it, since its narrower commands need what it prepares. **Revised
     2026-10-15 by the owner:** `setup` runs before a coder session only. The reviewer runs no
     checks, so nothing is installed before a review (`agent-workflow-design.md`, Part 3, "Decided
     so far", "The reviewer runs no checks").
-  - `check` is run by the coder session itself (Land, above), so it is in effect a line of the
-    coder's prompt.
   - **Each command is written with its own time limit, as one value**, so that `null` leaves no
     time limit behind with nothing to time, and every command added later takes the same shape:
     `"setup": { "command": "npm ci", "timeoutMinutes": 5 }`, or `"setup": null`. Given a
@@ -511,7 +509,8 @@ settles it.
     from the planning session's proposal, after the owner noted that a required time limit beside a
     `null` command would be strange). What `init` writes, the planning session's suggestion
     accepted by the owner: 5 minutes for `setup`, and 10 minutes for `check`. **Revised
-    2026-10-19 by the owner:** `init` writes `null` for both, since only a coder uses them.
+    2026-10-19 by the owner:** `init` writes `null` for both, since only a coder uses them (`check`
+    is since retired, above).
 - **`landWhen`: which checks must be green before steward lands a pull request**, either every
   check on the head (what `init` writes, as decided on 2026-10-10) or a list of check names.
   - **When GitHub reports a pull request `blocked` though the checks `landWhen` names are green,

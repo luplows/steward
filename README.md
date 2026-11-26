@@ -84,7 +84,7 @@ crew types.
 
 What the review side reads:
 
-- **`steward.config.json`**, the project's settings: its repository, its setup and check commands,
+- **`steward.config.json`**, the project's settings: its repository, its setup command,
   when to land, and which checklist to use. Each key is described in
   [`docs/settings.md`](docs/settings.md). What depends on the user rather than the project is
   in the user config, [`docs/user-config.md`](docs/user-config.md).

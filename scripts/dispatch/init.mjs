@@ -608,7 +608,6 @@ export function settingsBody(repo, answers) {
   return {
     repo,
     setup: null,
-    check: null,
     landWhen: 'all-checks',
     land: answers.land,
     unitLinks: answers.unitLinks,
