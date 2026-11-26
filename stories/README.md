@@ -115,7 +115,7 @@ the status is derived from. Anything else in the section, including a single
 line alongside the placeholder, makes the story `draft`.
 
 **From git and GitHub.** These refine `ready` once work has started, and need
-refs and pull requests rather than files, so they belong to ATC rather than to
+refs and pull requests rather than files, so they belong to steward's scripts rather than to
 the queue reader:
 
 | Status | Derived from |
@@ -197,8 +197,8 @@ decided.
 
 1. The planning session writes the story here, with the crew. **Open
    questions** must be empty before a coder can take it.
-2. A coder takes it: ATC claims the branch `story/ST-49-<slug>`, the coder
-   implements and commits, and ATC pushes the work and opens the pull request.
+2. A coder takes it: steward claims the branch `story/ST-49-<slug>`, the coder
+   implements and commits, and steward pushes the work and opens the pull request.
 3. The pull request, into `main`, **ticks each AC it delivered** — see above —
    and **moves the story file to `stories/done/`** (`REVIEW.md`, "Conformance
    to the unit").

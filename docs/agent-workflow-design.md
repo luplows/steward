@@ -612,6 +612,37 @@ warns that the crew must close the Issue by hand; it is not retried. Manual and 
 landings share the behavior. Considered but not chosen: always closing the unit
 without a closing reference, using another merge token, or broad post-crash reconciliation.
 
+**Planned (ST-106, ST-107)** **Protected paths land only by hand** (crew, 2026-11-25). A pull
+request that changes a **protected path** in its diff against its base, by adding, changing,
+deleting or moving it (either side of a move), is reviewed automatically exactly as any other, and
+is never landed unattended: only a person's manual request, `steward land <pr-number>` or the
+runway's manual mode, lands it. The protected paths are everything under `.github/workflows/`, the
+project's checklist (its `rulesFile`), `steward.config.json`, and everything under `.claude/`: the
+files that define how a project is reviewed and landed, and the instructions of the sessions
+steward starts. `AGENTS.md` and `CLAUDE.md` are not on the list. The runway enforces it in
+unattended mode, reading the list from the steward release it runs and `rulesFile` from `main`, as
+it reads `land`, so nothing on the pull request's side or the caller's can lift it. The pilot and
+the coordinator skip such a pull request in unattended landing too, so that nothing is dispatched
+for it, and say why: the coordinator's `status` lists it as waiting for a manual landing, with the
+protected paths it changes, and every refusal names them. `steward upgrade`'s pull request changes
+`.github/workflows/`, so it lands by hand. The threat model is a change to these files, most likely
+written by a coder, landing without a person's explicit request. A crew member's manual landing, a
+file outside the list that still affects the checks (such as a `package.json` script CI runs), a
+push that bypasses the gate, and what the reviewer does are not covered. ST-107 then moves the list
+into the project's settings as a required key, `protectedPaths`, which `init` writes and `upgrade`
+adds with the list above, and which the runway reads from `main`, so that a pull request changing
+the list is judged by `main`'s. The runway and the coordinator run a pinned release (steward's
+own at v0.3.0), so the restriction takes effect for a project when it upgrades to the release that
+holds it; ST-108's removal of the coder's push refusal ships in the same release, never without it.
+
+Considered and not chosen: keeping a coder from changing protected paths at all, as steward keeps
+it from `.claude/prompts/` today, which leaves a unit that needs such a change to be finished by
+hand behind a restriction the coder works around (ST-108 removes that restriction); a list the
+project adjusts from the start, left to ST-107 so that the safeguard comes first; and skipping
+review of such a pull request, which would take the change out of the one place it is read. The
+crew's reason: a transparent review and a person's landing, rather than restrictions the coder
+works around.
+
 `review-blocked` is applied automatically when a pull request reaches the round bound, by
 `review-gate.yml`, with the bound derived from the PR's own `block` verdicts rather than
 remembered (OQ-80). Removing the label by hand means "I have seen the cost, proceed", so after a
@@ -1050,6 +1081,20 @@ before the check. A reviewer reads the usage of the tool its choice runs on, aft
 made and before its checkout: a Codex reviewer's is read with no model call, through
 `codex app-server`'s `account/rateLimits/read` (`readCodexUsage`, `codex.mjs`), against the same
 reviewer limits.
+
+**Planned (ST-109)** **ATC is the coordinator, and the controller retires** (crew, 2026-11-25).
+"ATC" stops meaning steward's scripts, `scripts/dispatch/`, and becomes the coordinator's other
+name: the process running on the machine, started with `steward coordinator start`, which
+handoffs go to and which coordinates coding, review and landing. `steward atc start`, `status`
+and `stop` are an alias of the `coordinator` commands, which keep their name. Where text used
+"ATC" for the scripts, it says "steward" or names the command that does the work; it keeps "ATC"
+only where the coordinator alone does what it says. The controller retires as a role, and
+`docs/controller.md` with it: manual work is a member of the crew, or a session they ask, running
+`steward` commands, such as `steward review`, `steward land` and `steward rotation`, and the
+coordinator reviews and lands a ready pull request, where the project's `land` is `true`. Dated
+records keep their words. Considered and not chosen: keeping "ATC" as the name of the scripts;
+renaming the coordinator's commands to `atc`, in place of an alias; and keeping the controller
+role.
 
 ### The controller
 
@@ -1574,6 +1619,30 @@ check come from the same untrusted patch. So a story that changes a prompt stays
 permanently: whoever runs the coder applies the diff by hand, in a separate, attributed commit
 (OQ-70, AC-7b).
 
+**Planned (ST-108)** **The coder is not restricted by path** (crew, 2026-11-25). Tested on
+2026-11-25 in a scratch repository: a spawned `claude -p` session, run with steward's coder flags
+(`--permission-mode acceptEdits`), is refused `Edit` anywhere under `.claude/` (`prompts/`,
+`skills/`, `agents/` and `settings.json`) as a sensitive path; an explicit `Edit(.claude/**)` allow
+rule does not lift the refusal; and `CLAUDE.md` at the repository's root is editable. So the guard
+is wider than the observation above, and no supported setting lets a Claude coder write there.
+Handoff H-8 (ST-104) stopped with nothing committed, having changed every file its story names
+except the two prompts; no log of its session was kept, so the refusal is the likely cause, not a
+shown one. The crew's decision: steward
+places no path restriction on the coder, and no longer refuses to push a branch that changes
+`.claude/prompts/`, for any coder tool; a coder changes any file its tool lets it. The safeguard is
+at landing, not coding: a change to a protected path is reviewed as any other and lands only by a
+person's request (**Protected paths land only by hand**, "Merging", above). The diff route stays
+only where a tool refuses an edit: the coder puts that change in its PR body under
+`### Proposed edit`, as a unified diff `git apply` accepts, commits the rest, and leaves the
+acceptance criterion that depends on it unticked. This ships in the same release as the landing
+restriction, never before it: on a project, steward's own included, the coordinator and the
+runway run a pinned release, so both take effect when the project upgrades to it. A person still
+applies such a diff by hand, in a separate commit: OQ-70's decision against applying it
+automatically stands. Considered and not chosen: keeping the refusal, which stops even a Codex
+coder, whose sandbox lets it write the prompts, from delivering a unit that needs them, for the
+reason given under **Protected paths land only by hand**: a transparent review and a person's
+landing, rather than restrictions the coder works around.
+
 ### `GH_TOKEN=""` does not remove a credential
 
 `gh` resolves an **empty** `GH_TOKEN` by falling back to the keyring, and overrides the keyring only
@@ -2045,6 +2114,18 @@ shortened where it is long, so that it can be found there with its date.
   required breaks a project until it adds it, which a project meets only when it moves its pin,
   and which each version's update notes must name. Required keys are hoped to be added rarely
   (owner). Not chosen for now: a version field in the file.
+- **Planned (ST-110): An unknown key is ignored** (crew, 2026-11-25), not refused as the owner
+  decided on 2026-10-11. Why: one coordinator serves every project on the machine at one release,
+  and reads each project's settings from `main` before it reviews or lands. A release that adds a
+  required key would otherwise be read by no coordinator, since an older one refuses the new key
+  and a newer one refuses a project that lacks it, that project's upgrade pull request included.
+  With an older release that ignores the key, each project upgrades first and the coordinator
+  after. What is lost: a key left over or put in the wrong file, such as `usageLimits`, is no
+  longer pointed out; a misspelled key still is, since every key is required and the file then
+  lacks it. Considered and not chosen: a key optional for one release and required in the next,
+  a stop-gap rule; and accepting the outage for each new key, upgrading each project by hand
+  with the older release before the coordinator moves. The step from `v0.3.0`, whose reader
+  refuses an unknown key, is not helped, so this lands in a release before any that adds a key.
 - **`storyPrefix` leaves steward's settings.** What follows (the planning session, 2026-10-11):
   `review.mjs`'s `resolveStory` goes with the unit link; steward's own story lint and story
   containment are its own convention ("Decided so far", 2026-10-10, below), so they keep the

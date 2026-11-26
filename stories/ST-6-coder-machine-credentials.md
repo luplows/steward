@@ -60,14 +60,14 @@ session, by hand, not dispatched.
         `~/.ssh` be used, so that `git push` to `origin` over SSH succeeds?
         Each check asserts only whether a value came back, or whether the
         push was refused for want of authorisation.
-      - **Q6, ATC:** with the session run through the mechanism, does
+      - **Q6, steward's scripts:** with the session run through the mechanism, does
         `spawn.mjs` still see its streamed output (the stall check, OQ-76),
         and does a timeout or kill stop it? Is anything left running
         afterwards?
       - **Q7, the reviewer's checkout:** can the reviewer be given its
         checkout read-only, and still run the project's tests?
       - **Q8, local files:** for each role, from a `node -e` child, can the
-        session create a new empty file in the controller's worktree, beside
+        session create a new empty file in the worktree a rotation runs from, beside
         `~/.claude/settings.json`, and beside `~/.gitconfig`? Each check
         creates only a new empty file, and deletes it when it was created.
 
@@ -111,9 +111,8 @@ session, by hand, not dispatched.
   reachable instead of pursuing it.
 - **macOS and Linux hosts.** The trials run on the owner's Windows machine.
   The findings say what was not tried.
-- **Detecting a change to the controller's worktree** during a rotation. That
-  is ST-25's AC-5b, and `docs/controller.md`, "Reporting and stopping", until
-  ST-25 is built.
+- **Detecting a change to a rotation's worktree** during the rotation. That
+  is ST-25's AC-5b.
 
 ## Constraints
 
@@ -156,7 +155,7 @@ Formerly tower-workshop-paths OQ-73.
 - **A spawned session can reach local files today.** The reviewer's allowlist
   grants `Bash(node:*)` (`reviewerAllowedTools`,
   `scripts/dispatch/invocation.mjs`), so `node -e` can write anywhere the
-  crew member can, the controller's worktree included, from which the pilot
+  crew member can, the worktree a rotation runs from included, from which the pilot
   runs next.
 - **The coder's guarantee checks the build must pass**: the pre-rewrite
   story's AC-1 to AC-5, kept as the proof.
@@ -166,7 +165,7 @@ Formerly tower-workshop-paths OQ-73.
   - `git -c credential.helper=manager credential fill` for
     `https://github.com`, run from that session, returns no password.
   - The coder still commits on its branch and runs `npm test`, `npm run lint`
-    and `npm run build`; ATC's push through OQ-84's push function still works.
+    and `npm run build`; steward's push through OQ-84's push function still works.
   - The owner's own `gh` still authenticates.
   - Every copy of the claim that a coder holds no reachable credential says
     what is then true. The pre-rewrite AC-5 lists them, in the design doc,
