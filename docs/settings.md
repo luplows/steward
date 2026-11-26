@@ -51,7 +51,9 @@ supplies no default: a file without `land` is refused.
   `mode: unattended`, with or without a pull request). The runway reads `land` from `main`, and
   merges nothing unattended unless it is `true`. A caller's own copy of the setting changes nothing
   there, and a `land` or `landWhen` that is missing, malformed or unreadable on `main` refuses
-  the merge.
+  the merge, as does a `rulesFile` that is. Unattended landing does not land a pull request that
+  changes a protected path (`scripts/land/protected-paths.mjs`: `.github/workflows/`, `.claude/`,
+  `steward.config.json` and the `rulesFile`); `steward land <pr-number>` does.
 - Manual: `steward land <pr-number>`, one explicit request for one pull request at the head the
   command first reads, valid whether `land` is `true` or `false`. It does not change `land`. A
   dispatch of the workflow with `mode: manual`, `pr` and the full 40-character `head` is the same

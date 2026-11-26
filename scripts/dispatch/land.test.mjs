@@ -23,6 +23,7 @@ import {
   buildGetCheckRuns,
   buildGetCommitStatus,
   buildGetPullRequest,
+  buildGetPullRequestFiles,
   createLandContext,
   landPullRequest,
   main as landCommand,
@@ -59,7 +60,7 @@ const run = (name, conclusion, id = 1) => ({
  * of `t` ms after the start and the number of dispatches so far; `reviewAt`
  * likewise the `review/agent` state.
  */
-function world({ pullAt, reviewAt = () => 'success', checksAt = () => [], statusesAt = () => [], landWhen = 'all-checks', landing = true }) {
+function world({ pullAt, reviewAt = () => 'success', checksAt = () => [], statusesAt = () => [], filesAt = () => [], landWhen = 'all-checks', rulesFile = 'REVIEW.md', landing = true }) {
   const w = { t: 0, requests: [], dispatches: [], dispatchTimes: [] }
   const dir = mkdtempSync(path.join(tmpdir(), 'land-test-'))
   w.log = path.join(dir, 'latency.jsonl')
@@ -73,6 +74,11 @@ function world({ pullAt, reviewAt = () => 'success', checksAt = () => [], status
       w.dispatchTimes.push(w.t)
       return ok(null, 204)
     }
+    if (url.includes('/files?')) {
+      // As GitHub pages them: `page` is 1-based, 100 files to a page.
+      const page = Number(new URL(url).searchParams.get('page'))
+      return ok(filesAt(w.t).slice((page - 1) * 100, page * 100))
+    }
     if (url.includes('/check-runs')) {
       const check_runs = checksAt(w.t)
       return ok({ total_count: check_runs.length, check_runs })
@@ -80,7 +86,7 @@ function world({ pullAt, reviewAt = () => 'success', checksAt = () => [], status
     if (url.includes('/commits/')) return ok(status(reviewAt(w.t), statusesAt(w.t)))
     return ok(pullAt(w.t, w.dispatches.length))
   }
-  const ctx = createLandContext({ repo: REPO, landing, landWhen, fetch, getToken: async () => 't' })
+  const ctx = createLandContext({ repo: REPO, landing, landWhen, rulesFile, fetch, getToken: async () => 't' })
   w.fetch = fetch
   w.ctx = ctx
   w.run = (opts = {}) =>
@@ -294,7 +300,7 @@ describe('OQ-50/AC-4: land.mjs sends only the sweep dispatch', () => {
 
   it('refuses any other workflow, any other ref or inputs, and any other write, before the network', async () => {
     let calls = 0
-    const ctx = createLandContext({ repo: REPO, landing: true, landWhen: 'all-checks', fetch: async () => { calls++; return { ok: true, status: 204 } }, getToken: async () => 't' })
+    const ctx = createLandContext({ repo: REPO, landing: true, landWhen: 'all-checks', rulesFile: 'REVIEW.md', fetch: async () => { calls++; return { ok: true, status: 204 } }, getToken: async () => 't' })
     const refused = [
       { method: 'POST', url: dispatchUrl('ci.yml'), body: { ref: 'main' } },
       { method: 'POST', url: dispatchUrl('review-gate.yml'), body: { ref: 'main' } },
@@ -325,7 +331,7 @@ describe('OQ-50/AC-4: land.mjs sends only the sweep dispatch', () => {
 
   it('permits the four requests it builds', async () => {
     let calls = 0
-    const ctx = createLandContext({ repo: REPO, landing: true, landWhen: 'all-checks', fetch: async () => { calls++; return { ok: true, status: 204, json: async () => ({}) } }, getToken: async () => 't' })
+    const ctx = createLandContext({ repo: REPO, landing: true, landWhen: 'all-checks', rulesFile: 'REVIEW.md', fetch: async () => { calls++; return { ok: true, status: 204, json: async () => ({}) } }, getToken: async () => 't' })
     await ctx.send(buildGetPullRequest(REPO, 7))
     await ctx.send(buildGetCommitStatus(REPO, SHA))
     await ctx.send(buildGetCheckRuns(REPO, SHA))
@@ -579,14 +585,14 @@ describe('ST-23: land without waiting for anything of unknown length, and not at
   it('ST-23/AC-3: createLandContext requires landing to be a boolean', () => {
     expect(() => createLandContext({ repo: REPO })).toThrow(/landing must be true or false/)
     expect(() => createLandContext({ repo: REPO, landing: 'yes' })).toThrow(/landing must be true or false/)
-    expect(createLandContext({ repo: REPO, landing: false, landWhen: 'all-checks' }).landing).toBe(false)
+    expect(createLandContext({ repo: REPO, landing: false, landWhen: 'all-checks', rulesFile: 'REVIEW.md' }).landing).toBe(false)
   })
 
   it('ST-23/AC-3: with landing false, either mode returns landing-off and sends nothing', async () => {
     for (const once of [false, true]) {
       const w = world({ pullAt: () => pull() })
       let sent = 0
-      const ctx = createLandContext({ repo: REPO, landing: false, landWhen: 'all-checks', fetch: async () => { sent++; return { ok: true, status: 200, json: async () => pull() } }, getToken: async () => { sent++; return 't' } })
+      const ctx = createLandContext({ repo: REPO, landing: false, landWhen: 'all-checks', rulesFile: 'REVIEW.md', fetch: async () => { sent++; return { ok: true, status: 200, json: async () => pull() } }, getToken: async () => { sent++; return 't' } })
       const result = await w.run({ ctx, once })
       expect(result).toMatchObject({ status: 'landing-off', pr: 7, triggers: 0 })
       expect(sent).toBe(0)
@@ -622,6 +628,118 @@ describe('ST-23: land without waiting for anything of unknown length, and not at
   })
 })
 
+describe('ST-106: an unattended landing does not dispatch a pull request that changes a protected path', () => {
+  const file = (filename, previous_filename = null) => ({ filename, previous_filename })
+  const plain = (count) => Array.from({ length: count }, (_, i) => file(`src/f${i}.js`))
+  const urls = (w) => w.requests.map((request) => request.url.replace(BASE, ''))
+
+  it.each([{ once: true }, { once: false }])('ST-106/AC-6: returns protected-paths with the paths, dispatching nothing (%o)', async (options) => {
+    const w = world({ pullAt: () => pull(), filesAt: () => [file('src/a.js'), file('.github/workflows/ci.yml'), file('steward.config.json')] })
+    const result = await w.run({ ...options, passedAt: SHA })
+    expect(result).toMatchObject({ status: 'protected-paths', pr: 7, headSha: SHA, mode: 'unattended', triggers: 0, paths: ['.github/workflows/ci.yml', 'steward.config.json'] })
+    expect(w.dispatches).toEqual([])
+    w.cleanup()
+  })
+
+  it('ST-106/AC-6: the files are read after the pull request and before the head\'s status and checks', async () => {
+    const w = world({ pullAt: () => pull(), filesAt: () => [file('.claude/x.md')] })
+    await w.run({ once: true })
+    expect(urls(w)).toEqual(['/pulls/7', '/pulls/7/files?per_page=100&page=1'])
+    w.cleanup()
+    const clean = world({ pullAt: (t, d) => pull({ merged: d > 0 }), filesAt: () => [file('src/a.js')] })
+    await clean.run({ once: true })
+    expect(urls(clean).slice(0, 3)).toEqual(['/pulls/7', '/pulls/7/files?per_page=100&page=1', `/commits/${SHA}/status`])
+    clean.cleanup()
+  })
+
+  it('ST-106/AC-6: every page of the files is read, so a protected path on a later page is found', async () => {
+    const w = world({ pullAt: () => pull(), filesAt: () => [...plain(100), ...plain(100), file('x', 'REVIEW.md'), ...plain(10)] })
+    const result = await w.run({ once: true })
+    expect(result).toMatchObject({ status: 'protected-paths', paths: ['REVIEW.md'] })
+    expect(urls(w).filter((url) => url.includes('/files?'))).toEqual([1, 2, 3].map((page) => `/pulls/7/files?per_page=100&page=${page}`))
+    w.cleanup()
+  })
+
+  it('ST-106/AC-6: a full last page is followed by one more read, which ends the list', async () => {
+    const w = world({ pullAt: (t, d) => pull({ merged: d > 0 }), filesAt: () => plain(100) })
+    await w.run({ once: true })
+    expect(urls(w).filter((url) => url.includes('/files?'))).toEqual([1, 2].map((page) => `/pulls/7/files?per_page=100&page=${page}`))
+    w.cleanup()
+  })
+
+  it('ST-106/AC-6: the rulesFile of the context is the checklist, and a file moved out of a protected folder counts', async () => {
+    const named = world({ pullAt: () => pull(), rulesFile: 'docs/checklist.md', filesAt: () => [file('docs/checklist.md')] })
+    expect(await named.run({ once: true })).toMatchObject({ status: 'protected-paths', paths: ['docs/checklist.md'] })
+    named.cleanup()
+    const moved = world({ pullAt: () => pull(), filesAt: () => [file('docs/x.md', '.claude/x.md')] })
+    expect(await moved.run({ once: true })).toMatchObject({ status: 'protected-paths', paths: ['.claude/x.md'] })
+    moved.cleanup()
+  })
+
+  it('ST-106/AC-6: a pull request that changes no protected path goes on to the dispatch as before', async () => {
+    const w = world({ pullAt: (t, d) => pull({ merged: d > 0 }), filesAt: () => [file('AGENTS.md'), file('CLAUDE.md')] })
+    expect(await w.run({ once: true })).toMatchObject({ status: 'merged', triggers: 1 })
+    w.cleanup()
+  })
+
+  it('ST-106/AC-6: without once, the files are read once for a head, however long the wait', async () => {
+    const w = world({ pullAt: () => pull(), reviewAt: (t) => (t >= 3 * POLL_INTERVAL_MS ? 'success' : 'pending'), filesAt: () => [file('src/a.js')] })
+    await w.run().catch(() => {})
+    expect(urls(w).filter((url) => url.includes('/files?'))).toHaveLength(1)
+    w.cleanup()
+  })
+
+  it('ST-106/AC-6: in manual mode the pilot reads no files and lands a protected pull request, with land true or false', async () => {
+    for (const landing of [false, true]) {
+      const w = world({ landing, pullAt: (t, d) => pull({ merged: d > 0 }), filesAt: () => [file('.github/workflows/ci.yml')] })
+      expect(await w.run({ mode: 'manual', once: true })).toMatchObject({ status: 'merged', mode: 'manual', triggers: 1 })
+      expect(urls(w).some((url) => url.includes('/files'))).toBe(false)
+      w.cleanup()
+    }
+  })
+
+  it('ST-106/AC-6: with landing off nothing is sent, the files included', async () => {
+    const w = world({ landing: false, pullAt: () => pull(), filesAt: () => [file('.claude/x.md')] })
+    expect(await w.run({ once: true })).toMatchObject({ status: 'landing-off' })
+    expect(w.requests).toEqual([])
+    w.cleanup()
+  })
+
+  it('ST-106/AC-6: the allowlist accepts the files request and still refuses any other', () => {
+    expect(buildGetPullRequestFiles(REPO, 7, 2)).toEqual({ method: 'GET', url: `${BASE}/pulls/7/files?per_page=100&page=2` })
+    expect(() => assertAllowedRequest(REPO, buildGetPullRequestFiles(REPO, 7, 1))).not.toThrow()
+    expect(() => buildGetPullRequestFiles(REPO, 7, 0)).toThrow(/page/)
+    expect(() => buildGetPullRequestFiles(REPO, 0, 1)).toThrow(/pull request number/)
+    for (const request of [
+      { method: 'GET', url: `${BASE}/pulls/7/files` },
+      { method: 'GET', url: `${BASE}/pulls/7/files?per_page=30&page=1` },
+      { method: 'GET', url: `${BASE}/pulls/7/files?per_page=100` },
+      { method: 'GET', url: `${BASE}/pulls/7/files?per_page=100&page=0` },
+      { method: 'GET', url: `${BASE}/pulls/7/files?per_page=100&page=1&x=1` },
+      { method: 'GET', url: `${BASE}/pulls/0/files?per_page=100&page=1` },
+      { method: 'GET', url: `${BASE}/pulls/7/comments?per_page=100&page=1` },
+      { method: 'GET', url: `${BASE}/pulls/7/merge` },
+      { method: 'POST', url: `${BASE}/pulls/7/files?per_page=100&page=1` },
+      { method: 'PUT', url: `${BASE}/pulls/7/files?per_page=100&page=1` },
+    ]) {
+      expect(() => assertAllowedRequest(REPO, request), `${request.method} ${request.url}`).toThrow(/refusing/)
+    }
+  })
+
+  it('ST-106/AC-6: createLandContext requires a valid rulesFile, and every caller passes it', async () => {
+    for (const rulesFile of [undefined, '', '/REVIEW.md', '../REVIEW.md', 'a\\b']) {
+      expect(() => createLandContext({ repo: REPO, landing: true, landWhen: 'all-checks', rulesFile })).toThrow(/rulesFile must be/)
+    }
+    expect(createLandContext({ repo: REPO, landing: true, landWhen: 'all-checks', rulesFile: 'docs/checklist.md' }).rulesFile).toBe('docs/checklist.md')
+    for (const name of ['land.mjs', 'loop.mjs', 'story.mjs', 'rotation.mjs', 'coordinator-scheduler.mjs']) {
+      const source = await readFile(path.join(here, name), 'utf8')
+      const calls = source.match(/(?:createLandContext|createLand)\(\{[^}]*\}\)/g) ?? []
+      expect(calls.length, name).toBeGreaterThan(0)
+      for (const call of calls) expect(call, name).toMatch(/\brulesFile\b/)
+    }
+  })
+})
+
 describe('ST-24: land when the checks landWhen names are green', () => {
   const CASES = ['clean', 'unstable', 'has_hooks', 'blocked', 'dirty', 'unknown', 'behind']
 
@@ -642,7 +760,7 @@ describe('ST-24: land when the checks landWhen names are green', () => {
   it('ST-24/AC-2: createLandContext requires landWhen', () => {
     expect(() => createLandContext({ repo: REPO, landing: true })).toThrow(/landWhen must be/)
     expect(() => createLandContext({ repo: REPO, landing: true, landWhen: [] })).toThrow(/landWhen must be/)
-    expect(createLandContext({ repo: REPO, landing: true, landWhen: ['test'] }).landWhen).toEqual(['test'])
+    expect(createLandContext({ repo: REPO, landing: true, landWhen: ['test'], rulesFile: 'REVIEW.md' }).landWhen).toEqual(['test'])
   })
 
   it('ST-24/AC-4: with the checks green, each mergeable_state lands, is a conflict, is github-blocked, or is waited for', async () => {
@@ -750,11 +868,13 @@ describe('ST-24: land when the checks landWhen names are green', () => {
       repo: REPO,
       landing: true,
       landWhen: 'all-checks',
+      rulesFile: 'REVIEW.md',
       getToken: async () => 't',
       fetch: async (url) => ({
         ok: true,
         status: 200,
         json: async () => {
+          if (url.includes('/files?')) return []
           if (url.includes('/check-runs')) return { total_count: 150, check_runs: [run('a', 'success')] }
           return url.includes('/commits/') ? status('success') : pull()
         },
@@ -771,11 +891,13 @@ describe('ST-24: land when the checks landWhen names are green', () => {
       repo: REPO,
       landing: true,
       landWhen: 'all-checks',
+      rulesFile: 'REVIEW.md',
       getToken: async () => 't',
       fetch: async (url) => ({
         ok: true,
         status: 200,
         json: async () => {
+          if (url.includes('/files?')) return []
           if (url.includes('/check-runs')) return { total_count: 0, check_runs: [] }
           if (url.includes('/commits/')) return { total_count: 45, statuses: [{ id: 99, context: 'review/agent', state: 'success' }, ...page] }
           return pull()
@@ -809,7 +931,7 @@ describe('ST-54: a manual landing is one explicit request, valid with land true 
     const w = world({ landing, pullAt: (t, d) => pull({ merged: d > 0 }) })
     const lines = []
     const result = await landCommand(['7'], {
-      readSettings: async () => ({ repo: REPO, land: landing, landWhen: 'all-checks' }),
+      readSettings: async () => ({ repo: REPO, land: landing, landWhen: 'all-checks', rulesFile: 'REVIEW.md' }),
       fetch: w.fetch,
       getToken: async () => 't',
       sleep: async (ms) => { w.t += ms },
@@ -1016,7 +1138,7 @@ describe('ST-54/AC-1: every result of a manual request carries the head it read,
   const LINE = `manual landing requested: project ${REPO}, PR #7, head ${SHA}`
   const commandOver = (w, landing, out) =>
     landCommand(['7'], {
-      readSettings: async () => ({ repo: REPO, land: landing, landWhen: 'all-checks' }),
+      readSettings: async () => ({ repo: REPO, land: landing, landWhen: 'all-checks', rulesFile: 'REVIEW.md' }),
       fetch: w.fetch,
       getToken: async () => 't',
       sleep: async (ms) => { w.t += ms },

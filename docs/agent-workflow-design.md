@@ -612,7 +612,7 @@ warns that the crew must close the Issue by hand; it is not retried. Manual and 
 landings share the behavior. Considered but not chosen: always closing the unit
 without a closing reference, using another merge token, or broad post-crash reconciliation.
 
-**Planned (ST-106, ST-107)** **Protected paths land only by hand** (crew, 2026-11-25). A pull
+**Protected paths land only by hand** (crew, 2026-11-25; built by ST-106). A pull
 request that changes a **protected path** in its diff against its base, by adding, changing,
 deleting or moving it (either side of a move), is reviewed automatically exactly as any other, and
 is never landed unattended: only a person's manual request, `steward land <pr-number>` or the
@@ -621,14 +621,19 @@ project's checklist (its `rulesFile`), `steward.config.json`, and everything und
 files that define how a project is reviewed and landed, and the instructions of the sessions
 steward starts. `AGENTS.md` and `CLAUDE.md` are not on the list. The runway enforces it in
 unattended mode, reading the list from the steward release it runs and `rulesFile` from `main`, as
-it reads `land`, so nothing on the pull request's side or the caller's can lift it. The pilot and
-the coordinator skip such a pull request in unattended landing too, so that nothing is dispatched
-for it, and say why: the coordinator's `status` lists it as waiting for a manual landing, with the
-protected paths it changes, and every refusal names them. `steward upgrade`'s pull request changes
+it reads `land`, so nothing on the pull request's side or the caller's can lift it; an unattended
+landing whose `rulesFile` on `main` is missing or invalid is refused. The pilot, which the rotation
+and the coordinator call, skips such a pull request in unattended landing too, so that nothing is
+dispatched for it, and says why: it returns `protected-paths` with the paths, and reads no files in
+a manual request. The rotation's line for it names the paths, and the coordinator's `status` lists
+it as waiting for a manual landing, with the protected paths it changes, until the next landing
+scan's attempts replace the list. The runway's log names them too. A tripped circuit breaker's
+workflow-only exemption does not lift the skip. `steward upgrade`'s pull request changes
 `.github/workflows/`, so it lands by hand. The threat model is a change to these files, most likely
 written by a coder, landing without a person's explicit request. A crew member's manual landing, a
 file outside the list that still affects the checks (such as a `package.json` script CI runs), a
-push that bypasses the gate, and what the reviewer does are not covered. ST-107 then moves the list
+push that bypasses the gate, and what the reviewer does are not covered. The list is fixed in
+`scripts/land/protected-paths.mjs`. **Planned (ST-107):** ST-107 then moves the list
 into the project's settings as a required key, `protectedPaths`, which `init` writes and `upgrade`
 adds with the list above, and which the runway reads from `main`, so that a pull request changing
 the list is judged by `main`'s. The runway and the coordinator run a pinned release (steward's

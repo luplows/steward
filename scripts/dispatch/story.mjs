@@ -425,7 +425,7 @@ async function main(argv) {
     const at = args.indexOf(name)
     return at === -1 ? undefined : args.splice(at, 2)[1]
   }
-  const { repo: settingsRepo, land: landing, landWhen } = await readSettings(process.cwd())
+  const { repo: settingsRepo, land: landing, landWhen, rulesFile } =await readSettings(process.cwd())
   // Stopgap: the coder reads the story prefix from stories/stories.json. The coder's stories own
   // this and will rework it with the coder's readiness setting.
   const storyPrefix = await readStoryPrefix(process.cwd())
@@ -442,7 +442,7 @@ async function main(argv) {
     prNumber: pr === undefined ? undefined : Number(pr),
     ctx: createContext({ repo }),
     ciCtx: createCiContext({ repo }),
-    landCtx: createLandContext({ repo, landing, landWhen }),
+    landCtx: createLandContext({ repo, landing, landWhen, rulesFile }),
   })
   console.log(JSON.stringify(result, null, 2))
   if (result.status !== 'merged') process.exitCode = 1

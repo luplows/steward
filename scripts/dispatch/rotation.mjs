@@ -146,6 +146,7 @@ function describeLanding(result) {
   if (result.waiting !== undefined) details.push(`waiting: ${[result.waiting].flat().join(', ')}`)
   if (result.failing !== undefined) details.push(`failing: ${[result.failing].flat().join(', ')}`)
   if (result.newHeadSha !== undefined) details.push(`new head: ${result.newHeadSha}`)
+  if (result.paths !== undefined) details.push(`protected paths: ${[result.paths].flat().join(', ')}; lands only by steward land ${result.pr}`)
   return details.length === 0 ? result.status : `${result.status} (${details.join('; ')})`
 }
 
@@ -220,7 +221,7 @@ export async function runRotation({ repoDir, maxReviews = DEFAULT_MAX_REVIEWS, r
   }
   const slug = repo ?? settings.repo
   const ctx = d.createContext({ repo: slug })
-  const landCtx = d.createLandContext({ repo: slug, landing: settings.land, landWhen: settings.landWhen })
+  const landCtx = d.createLandContext({ repo: slug, landing: settings.land, landWhen: settings.landWhen, rulesFile: settings.rulesFile })
   const inspectCtx = d.createInspectContext({ repo: slug })
 
   // Step 2.

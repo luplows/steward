@@ -14,6 +14,11 @@
  * green is `github-blocked`, and `unknown` (or any state not named) is waited for. The sweep
  * re-checks the same itself with the same function; this only decides when to ask it to.
  *
+ * Unattended (ST-106), a pull request that changes a protected path (`scripts/land/protected-paths.mjs`)
+ * is not landable either: it is returned as `protected-paths`, with `paths`, and nothing is
+ * dispatched, as the runway would skip it. A manual request (`steward land <pr-number>`) reads no
+ * files and lands it.
+ *
  * Every reason a pull request cannot become landable is a distinct `status` on
  * the result rather than an indefinite wait. `unknown` is the exception: GitHub
  * recomputes `mergeable_state` after a merge, and the sweep skips `unknown`, so
@@ -56,9 +61,12 @@ import { fileURLToPath } from 'node:url'
 import { ghAuthToken } from './github.mjs'
 import { readSettings } from './settings.mjs'
 import { assertLandWhen, checksGreen, mergeableOutcome } from '../land/checks-green.mjs'
+import { protectedPathsChanged } from '../land/protected-paths.mjs'
+import { isRulesFilePath } from './rules-file-path.mjs'
 
 const API = 'https://api.github.com'
 const CHECK_RUNS_PAGE = 100
+const FILES_PAGE = 100
 const WORKFLOW = 'land-approved.yml'
 const SHA_PATTERN = /^[0-9a-f]{40}$/
 export const MANUAL = 'manual'
@@ -115,6 +123,15 @@ export function buildGetCheckRuns(repo, sha) {
   return { method: 'GET', url: `${repoPath(repo)}/commits/${sha}/check-runs?per_page=${CHECK_RUNS_PAGE}` }
 }
 
+/**
+ * One page of the pull request's files (ST-106), 100 to a page, for the protected paths check. The
+ * caller reads every page.
+ */
+export function buildGetPullRequestFiles(repo, number, page) {
+  if (!Number.isInteger(page) || page <= 0) throw new Error(`page must be a positive integer, got: ${page}`)
+  return { method: 'GET', url: `${repoPath(repo)}/pulls/${requirePrNumber(number)}/files?per_page=${FILES_PAGE}&page=${page}` }
+}
+
 export function buildGetCommitStatus(repo, sha) {
   if (!/^[0-9a-f]{40}$/.test(sha ?? '')) throw new Error(`sha must be a full 40-character SHA, got: ${sha}`)
   return { method: 'GET', url: `${repoPath(repo)}/commits/${sha}/status` }
@@ -148,13 +165,14 @@ export function buildDispatchManualLanding(repo, number, head) {
 
 const ALLOWED = [
   ['GET', /^\/pulls\/[1-9][0-9]*$/],
+  ['GET', new RegExp(`^/pulls/[1-9][0-9]*/files\\?per_page=${FILES_PAGE}&page=[1-9][0-9]*$`)],
   ['GET', /^\/commits\/[0-9a-f]{40}\/status$/],
   ['GET', new RegExp(`^/commits/[0-9a-f]{40}/check-runs\\?per_page=${CHECK_RUNS_PAGE}$`)],
   ['POST', new RegExp(`^/actions/workflows/${WORKFLOW.replace('.', '\\.')}/dispatches$`)],
 ]
 
 /**
- * Throws unless `request` is one of the four this module builds, a dispatch in either form. Runs
+ * Throws unless `request` is one of the five this module builds, a dispatch in either form. Runs
  * before any network call.
  */
 export function assertAllowedRequest(repo, request) {
@@ -185,18 +203,21 @@ export function assertAllowedRequest(repo, request) {
 /**
  * `landing` is the settings' `land` value, required with no default: `false` makes
  * `landPullRequest` return `landing-off` without sending any request (ST-23). `landWhen` is the
- * settings' value of that name, likewise required (ST-24).
+ * settings' value of that name, likewise required (ST-24), as is `rulesFile` (ST-106), which names
+ * the checklist that is a protected path.
  * `fetch` and `getToken` are injectable; the token is read once, on first use.
  */
-export function createLandContext({ repo, landing, landWhen, fetch = globalThis.fetch, getToken = ghAuthToken }) {
+export function createLandContext({ repo, landing, landWhen, rulesFile, fetch = globalThis.fetch, getToken = ghAuthToken }) {
   repoPath(repo)
   if (typeof landing !== 'boolean') throw new Error(`landing must be true or false, got: ${JSON.stringify(landing)}`)
   assertLandWhen(landWhen)
+  if (!isRulesFilePath(rulesFile)) throw new Error(`rulesFile must be a valid relative path, got: ${JSON.stringify(rulesFile)}`)
   let token
   return {
     repo,
     landing,
     landWhen,
+    rulesFile,
     async send(request) {
       assertAllowedRequest(repo, request)
       token ??= await getToken()
@@ -251,6 +272,20 @@ function readChecks(statusJson, checkRunsJson, landWhen) {
     throw new Error(`the head has ${checkRunsJson.total_count} check runs and only ${checkRuns.length} were returned`)
   }
   return checksGreen({ checkRuns, statuses, landWhen })
+}
+
+/**
+ * The protected paths the pull request changes (ST-106), reading every page of its files. A page
+ * that holds fewer than a full page is the last.
+ */
+async function readProtectedPaths(ctx, number) {
+  const files = []
+  for (let page = 1; ; page += 1) {
+    const batch = await ctx.send(buildGetPullRequestFiles(ctx.repo, number, page))
+    files.push(...batch)
+    if (batch.length < FILES_PAGE) break
+  }
+  return protectedPathsChanged(files, ctx.rulesFile)
 }
 
 /**
@@ -347,6 +382,8 @@ export async function landPullRequest({
   let headSha = null
   let waiting = null // { reason, since }
   let gateLagSince = null // `once` only: when the gate's status was first read as not `success`
+  let protectedFor = null // the head whose files were read, and the protected paths it changes
+  let protectedPaths = []
 
   const finish = async (status, extra = {}) => {
     const result = { status, pr: number, headSha, mode, triggers, ...extra }
@@ -400,6 +437,14 @@ export async function landPullRequest({
     if (pr.state !== 'open') return finish('closed')
     if (headSha !== null && pr.headSha !== headSha) return headChanged(pr)
     headSha = pr.headSha
+
+    // Unattended, a pull request that changes a protected path is not dispatched (ST-106): the
+    // runway would skip it, so this saves the dispatch and says why. Read once for each head.
+    if (!manual && protectedFor !== headSha) {
+      protectedPaths = await readProtectedPaths(ctx, number)
+      protectedFor = headSha
+    }
+    if (!manual && protectedPaths.length > 0) return finish('protected-paths', { paths: protectedPaths })
 
     // Not asked for at all when the pull request is a draft or blocked: the answer changes nothing.
     const early = assess(pr, 'success', false)
@@ -509,8 +554,8 @@ export async function main(argv, deps = {}) {
   if (args.length !== 1 || !Number.isInteger(number) || number <= 0) {
     throw new Error('usage: node scripts/dispatch/land.mjs <pr-number> [--repo owner/name]')
   }
-  const { land: landing, landWhen } = await settingsOf(cwd)
-  const ctx = createLandContext({ repo, landing, landWhen, fetch: deps.fetch, getToken: deps.getToken })
+  const { land: landing, landWhen, rulesFile } = await settingsOf(cwd)
+  const ctx = createLandContext({ repo, landing, landWhen, rulesFile, fetch: deps.fetch, getToken: deps.getToken })
   // The one place that asks for a manual landing (ST-54).
   const result = await landPullRequest({
     number,

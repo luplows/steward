@@ -44,7 +44,7 @@ function harness({
     readSettings: async () => {
       calls.push('readSettings')
       if (settings.throws) throw new Error(settings.throws)
-      return { repo: 'o/n', land: true, landWhen: 'all', ...settings }
+      return { repo: 'o/n', land: true, landWhen: 'all', rulesFile: 'REVIEW.md', ...settings }
     },
     createContext: ({ repo }) => ({ repo, kind: 'github' }),
     createLandContext: ({ repo, landing }) => ({ repo, landing, kind: 'land' }),
@@ -348,7 +348,7 @@ describe('ST-25/AC-4: step 4, landing', () => {
       return args
     }
     await h.run()
-    expect(seen).toEqual([{ repo: 'o/n', landing: true, landWhen: ['test'] }])
+    expect(seen).toEqual([{ repo: 'o/n', landing: true, landWhen: ['test'], rulesFile: 'REVIEW.md' }])
   })
 })
 
@@ -587,6 +587,8 @@ describe('ST-25/AC-5e: every result of the pilot is printed, and landing goes on
     [{ status: 'checks-failed', failing: ['test', 'lint'] }, 'checks-failed (failing: test, lint)'],
     [{ status: 'github-blocked' }, 'github-blocked'],
     [{ status: 'not-landable', reason: 'checks-pending', waiting: ['test'] }, 'not-landable (reason: checks-pending; waiting: test)'],
+    // ST-106/AC-7: the line names the protected paths, and that only a manual landing lands it.
+    [{ status: 'protected-paths', pr: 1, paths: ['.github/workflows/ci.yml', 'steward.config.json'] }, 'protected-paths (protected paths: .github/workflows/ci.yml, steward.config.json; lands only by steward land 1)'],
   ]
   for (const [result, printed] of results) {
     it(`ST-25/AC-5e: ${result.status} on the first pull request is printed with its fields, and the second is still landed`, async () => {

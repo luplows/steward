@@ -1230,6 +1230,7 @@ describe('ST-55/AC-4: the gate is installed, and review-only installation does n
       requests.push({ method: init.method, url })
       const ok = (json, code = 200) => ({ ok: true, status: code, json: async () => json })
       if (init.method === 'POST') return ok(null, 204)
+      if (url.includes('/files?')) return ok([])
       if (url.includes('/check-runs')) return ok({ total_count: 1, check_runs: [{ id: 1, name: 'test', status: 'completed', conclusion: 'success' }] })
       if (url.includes('/commits/')) return ok({ statuses: [{ id: 1, context: 'review/agent', state: 'success' }] })
       const dispatched = requests.some((r) => r.method === 'POST')
@@ -1238,7 +1239,7 @@ describe('ST-55/AC-4: the gate is installed, and review-only installation does n
     return { requests, fetch }
   }
   const land = async (settings, g, mode) => {
-    const ctx = createLandContext({ repo: REPO, landing: settings.land, landWhen: settings.landWhen, fetch: g.fetch, getToken: async () => 't' })
+    const ctx = createLandContext({ repo: REPO, landing: settings.land, landWhen: settings.landWhen, rulesFile: settings.rulesFile, fetch: g.fetch, getToken: async () => 't' })
     return landPullRequest({ number: 7, ctx, mode, once: true, sleep: async () => {}, latencyLog: path.join(fresh('log'), 'latency.jsonl') })
   }
 

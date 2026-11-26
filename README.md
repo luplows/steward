@@ -301,6 +301,10 @@ they are, `steward.config.json` and the checklist included, unless a release mak
 unambiguous change to one, which the pull request's body explains. It never changes `land`:
 unattended landing stays as the project set it.
 
+The upgrade's pull request changes `.github/workflows/`, which is a protected path
+([above](#landing-unattended-and-manual)), so it lands only by hand, with `steward land
+<pr-number>`, once it has passed review.
+
 Apart from the pin and line endings, the one difference from the template the comparison accepts
 is on a line `key: <value>`, after any `- `, whose value is quoted and ends the line: single
 quotes in one and double quotes in the other, around the same value, as `'it''s'` and `"it's"`
@@ -902,6 +906,13 @@ changes no setting, label or standing permission, and it goes through the same g
 the runway still requires every condition it requires of an unattended one, and merges with
 `--match-head-commit`. If the head changes, or the pull request is merged or closed at another
 head, the request ends (`head-changed`) and the crew must ask again.
+
+Unattended landing does not land a pull request that changes a protected path: anything under
+`.github/workflows/` or `.claude/`, `steward.config.json`, or the checklist, the path the
+`rulesFile` setting names. Such a pull request is reviewed as any other, and lands only when a
+person asks, with `steward land <pr-number>`. The rotation and `steward coordinator status` say
+which pull requests wait for that, and which paths they change. The list is fixed in
+`scripts/land/protected-paths.mjs`; `AGENTS.md` and `CLAUDE.md` are not on it.
 
 `land-approved.yml` takes the same two paths when dispatched directly. Its inputs are `pr`, `mode`
 (`unattended`, the default, or `manual`) and `head`. A dispatch with no mode, or with only a pull

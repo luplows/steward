@@ -18,7 +18,9 @@
 // never an input) whom GitHub says has write, maintain or admin permission on the repository. It
 // is valid with either value of `land`, authorizes only that pull request at that head, and never
 // falls back to another. It changes only the `land` restriction: every condition below holds in
-// both. A missing, malformed or unreadable `land` or `landWhen`, an unknown mode, missing scope, a
+// both, except that an unattended landing does not land a pull request that changes a protected
+// path (ST-106), and needs a valid `rulesFile` on `main` to know the list. A missing, malformed or
+// unreadable `land` or `landWhen`, an unknown mode, missing scope, a
 // head that is not 40 hex characters or is not the pull request's head, an unqualified actor and an
 // unreadable permission each refuse the merge, with the reason in the log and a failed run.
 //
@@ -32,7 +34,9 @@
 //     fails having merged nothing.
 //  3. For each candidate, in order: its author's association (`check-author.mjs`, before the
 //     breaker's exemptions, so an outside pull request carrying `breaker-override` is still
-//     skipped); `review-blocked`; the breaker; the checks the project's `landWhen` names
+//     skipped); `review-blocked`; unattended only, a change to a protected path
+//     (`protected-paths.mjs`, ST-106), which lands only by a manual request and which no breaker
+//     exemption lifts; the breaker; the checks the project's `landWhen` names
 //     (`checks-green.mjs`, the function the pilot, `scripts/dispatch/land.mjs`, uses); a direct
 //     re-check that `review/agent` is `success` on the head, for the day branch protection lapses
 //     (it once silently went missing); then `gh pr merge --squash --match-head-commit`, which
@@ -56,6 +60,8 @@ import { assertLandWhen, runwayDecision } from './checks-green.mjs'
 import { closeLinkedIssue } from './close-issue.mjs'
 import { gh, ghApi, parseNdjson } from './gh.mjs'
 import { REVIEW_CONTEXT } from './mark-pending.mjs'
+import { protectedPathsChanged } from './protected-paths.mjs'
+import { isRulesFilePath } from '../dispatch/rules-file-path.mjs'
 import { PR_INPUT_PATTERN, selectCandidates } from './select-candidates.mjs'
 
 export const BREAKER_LIMIT = 5
@@ -84,9 +90,14 @@ export function touchesOnlyWorkflows(changedFiles) {
   return changedFiles.length > 0 && changedFiles.every((name) => name.startsWith(WORKFLOWS_DIR))
 }
 
+/** The pull request's files as GitHub lists them, every page: `{ filename, previous_filename }`. */
+function readChangedFiles(api, repo, pr) {
+  return parseNdjson(api([`repos/${repo}/pulls/${pr}/files?${PAGE}`, '--paginate', '--jq', '.[] | {filename, previous_filename} | tojson']))
+}
+
 /**
- * Reads `steward.config.json` on `main` and returns `{ land, landWhen, unitLinks }` with `land`
- * checked to be a boolean; `landWhen` and `unitLinks` are returned as read, for the caller to check.
+ * Reads `steward.config.json` on `main` and returns `{ land, landWhen, unitLinks, rulesFile }` with
+ * `land` checked to be a boolean; the rest are returned as read, for the caller to check.
  * Throws, saying why, when the file cannot be read or parsed, is not an object, or has no boolean
  * `land`.
  */
@@ -103,7 +114,7 @@ function readAuthorization(api, repo) {
   if (typeof settings.land !== 'boolean') {
     throw new Error(`${SETTINGS_PATH} on ${BASE_BRANCH}: land must be true or false, got ${JSON.stringify(settings.land)}`)
   }
-  return { land: settings.land, landWhen: settings.landWhen, unitLinks: settings.unitLinks }
+  return { land: settings.land, landWhen: settings.landWhen, unitLinks: settings.unitLinks, rulesFile: settings.rulesFile }
 }
 
 /**
@@ -135,8 +146,12 @@ function authorize({ repo, modeInput, prInput, headInput, eventName, actor }, ap
 
   if (mode === MODE_UNATTENDED) {
     if (!settings.land) return { refusal: `standing authorization absent: land is false in ${SETTINGS_PATH} on ${BASE_BRANCH}` }
+    // The protected paths (ST-106) name the project's checklist, so an unattended landing needs it.
+    if (!isRulesFilePath(settings.rulesFile)) {
+      return { refusal: `${SETTINGS_PATH} on ${BASE_BRANCH}: rulesFile must be a valid relative path, got ${JSON.stringify(settings.rulesFile)}` }
+    }
     log(`Standing authorization: land is true in ${SETTINGS_PATH} on ${BASE_BRANCH}.`)
-    return { mode, landWhen: settings.landWhen, unitLinks: settings.unitLinks }
+    return { mode, landWhen: settings.landWhen, unitLinks: settings.unitLinks, rulesFile: settings.rulesFile }
   }
 
   let permission
@@ -173,7 +188,7 @@ export function runRunway({ repo, prInput = '', modeInput = '', headInput = '', 
   }
   const authorization = authorize({ repo, modeInput, prInput, headInput, eventName, actor }, api, log)
   if (authorization.refusal) return refuse(authorization.refusal)
-  const { mode, landWhen, unitLinks } = authorization
+  const { mode, landWhen, unitLinks, rulesFile } = authorization
   const manual = mode === MODE_MANUAL
   log(`Landing authorized: ${who}`)
 
@@ -224,11 +239,21 @@ export function runRunway({ repo, prInput = '', modeInput = '', headInput = '', 
       continue
     }
 
+    // A pull request that changes a protected path lands only by a manual request (ST-106). No
+    // exemption below lifts it. The list is this release's, and `rulesFile` is `main`'s.
+    if (!manual) {
+      const protectedPaths = protectedPathsChanged(readChangedFiles(api, repo, pr), rulesFile)
+      if (protectedPaths.length > 0) {
+        log(`PR #${pr}: changes protected path${protectedPaths.length === 1 ? '' : 's'} ${protectedPaths.join(', ')}; it lands only by a manual request (steward land ${pr}), skipping`)
+        continue
+      }
+    }
+
     if (breakerTripped) {
       if (labelNames(pull).includes(BREAKER_OVERRIDE_LABEL)) {
         log(`PR #${pr}: breaker tripped, but carries ${BREAKER_OVERRIDE_LABEL}`)
       } else {
-        const changed = parseNdjson(api([`repos/${repo}/pulls/${pr}/files?${PAGE}`, '--paginate', '--jq', '.[].filename | tojson']))
+        const changed = readChangedFiles(api, repo, pr).map(({ filename }) => filename)
         if (touchesOnlyWorkflows(changed)) {
           log(`PR #${pr}: breaker tripped, but touches only ${WORKFLOWS_DIR}`)
         } else {

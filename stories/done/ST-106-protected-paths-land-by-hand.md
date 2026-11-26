@@ -17,31 +17,31 @@ never lands unattended.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — The **protected paths** are a fixed list in one module of steward's code, used by
+- [x] **AC-1** — The **protected paths** are a fixed list in one module of steward's code, used by
       the runway and the pilot alike: everything under `.github/workflows/`, everything under
       `.claude/`, `steward.config.json`, and the project's checklist, the path its `rulesFile`
       setting names. A path is protected when it starts with `.github/workflows/` or `.claude/`, or
       is exactly `steward.config.json` or exactly the `rulesFile` value, compared case-sensitively.
       `AGENTS.md` and `CLAUDE.md` are not on the list.
-- [ ] **AC-2** — A pull request **changes a protected path** when any file in its diff against its
+- [x] **AC-2** — A pull request **changes a protected path** when any file in its diff against its
       base, as GitHub lists the pull request's files, is protected: one added, changed or deleted,
       and, for a moved file, either its old path (`previous_filename`) or its new one. The function
       that decides it returns the protected paths it found, each once.
-- [ ] **AC-3** — The runway (`scripts/land/runway.mjs`), in unattended mode, reads `rulesFile` from
+- [x] **AC-3** — The runway (`scripts/land/runway.mjs`), in unattended mode, reads `rulesFile` from
       `steward.config.json` on `main`, as it reads `land` and `landWhen`, and takes the list from
       the steward release it runs, never from the pull request or a caller. An unattended landing
       whose `rulesFile` on `main` is missing or is not a valid path (`isRulesFilePath`,
       `scripts/dispatch/rules-file-path.mjs`) is refused, with the reason, as a malformed
       `landWhen` is.
-- [ ] **AC-4** — In unattended mode the runway skips a candidate that changes a protected path,
+- [x] **AC-4** — In unattended mode the runway skips a candidate that changes a protected path,
       merging nothing for it, with a log line that names the pull request, every protected path it
       changes, and that it lands only by a manual request. A run given that pull request (`pr`)
       lands nothing; a run given none goes on to the next candidate. A tripped circuit breaker's
       workflow-only exemption does not lift this skip.
-- [ ] **AC-5** — In manual mode the runway does not apply AC-4: a manual request that meets every
+- [x] **AC-5** — In manual mode the runway does not apply AC-4: a manual request that meets every
       other condition lands a pull request that changes a protected path. Everything else the
       runway checks is unchanged in both modes.
-- [ ] **AC-6** — The pilot (`landPullRequest`, `scripts/dispatch/land.mjs`), in unattended mode,
+- [x] **AC-6** — The pilot (`landPullRequest`, `scripts/dispatch/land.mjs`), in unattended mode,
       with or without `once`, reads the pull request's files once it has read the pull request
       open at its head, before it reads that head's status or checks. When the pull request changes
       a protected path it returns the new status `protected-paths`, with `paths`, the protected
@@ -50,14 +50,14 @@ never lands unattended.
       page, every page read. `createLandContext` takes the settings' `rulesFile`, and every caller
       passes it. In manual mode (`steward land <pr-number>`) the pilot reads no files and AC-6
       does not apply.
-- [ ] **AC-7** — A rotation's line for such a pull request (`describeLanding`,
+- [x] **AC-7** — A rotation's line for such a pull request (`describeLanding`,
       `scripts/dispatch/rotation.mjs`) shows `protected-paths` and names the paths.
-- [ ] **AC-8** — `steward coordinator status` shows, in text and in `--json`, the pull requests
+- [x] **AC-8** — `steward coordinator status` shows, in text and in `--json`, the pull requests
       waiting for a manual landing: each of the latest landing scan's candidates whose attempt
       returned `protected-paths`, with its project, number, head and the protected paths it
       changes, and that it lands only by `steward land <pr-number>`. A new landing scan's attempts
       replace the list. The last landing attempt is shown as now.
-- [ ] **AC-9** — The docs describe protected paths:
+- [x] **AC-9** — The docs describe protected paths:
       - `docs/glossary.md` gains a **protected path** entry, naming the list's module, and its
         **landable** entry says that, for unattended landing, the pull request also changes no
         protected path;
@@ -67,10 +67,10 @@ never lands unattended.
       - `README.md`, "Upgrading steward in a project", says that the upgrade's pull request changes
         `.github/workflows/`, so it lands only by hand, with `steward land <pr-number>`, once it
         has passed review.
-- [ ] **AC-10** — This story's **Planned** marker in `docs/agent-workflow-design.md`, "Merging"
+- [x] **AC-10** — This story's **Planned** marker in `docs/agent-workflow-design.md`, "Merging"
       ("Protected paths land only by hand"), is removed, and the passage is corrected wherever what
       was built differs.
-- [ ] **AC-11** — Tests, in the existing test files of `runway.mjs`, `land.mjs`, `rotation.mjs`
+- [x] **AC-11** — Tests, in the existing test files of `runway.mjs`, `land.mjs`, `rotation.mjs`
       and `coordinator.mjs` or `coordinator-scheduler.mjs`, and beside the new module, cover:
       - each kind of protected path (a workflow, a file under `.claude/`, `steward.config.json`,
         the `rulesFile` value, a checklist named by a `rulesFile` other than `REVIEW.md`), and

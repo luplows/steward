@@ -107,9 +107,11 @@ describe('ST-42/AC-1: the circuit breaker, with its limit of five and its two ex
     expect(merges).toEqual([mergeArgs(1)])
   })
 
-  it('ST-42/AC-1: a diff confined to .github/workflows/ exempts a pull request', () => {
-    const { deps, logs, merges } = fakeGitHub({ pulls: [pull(1, { files: ['.github/workflows/review-gate.yml'] })], blockedCount: 5 })
-    runRunway({ repo: REPO }, deps)
+  // Since ST-106 an unattended landing skips every pull request that changes `.github/workflows/`,
+  // so the exemption is exercised by a manual request, the only landing it can still help.
+  it('ST-42/AC-1: a diff confined to .github/workflows/ exempts a pull request, in a manual request', () => {
+    const { deps, logs, merges } = fakeGitHub({ pulls: [pull(1, { files: ['.github/workflows/review-gate.yml'] })], blockedCount: 5, permissions: { alice: 'write' } })
+    runRunway({ repo: REPO, prInput: '1', modeInput: 'manual', headInput: SHA_OF(1), eventName: 'workflow_dispatch', actor: 'alice' }, deps)
     expect(logs).toContain('PR #1: breaker tripped, but touches only .github/workflows/')
     expect(merges).toEqual([mergeArgs(1)])
   })
@@ -141,6 +143,104 @@ describe('ST-42/AC-1: the circuit breaker, with its limit of five and its two ex
   it('ST-42/AC-1: a pull request carrying review-blocked is skipped even with breaker-override', () => {
     const { deps, merges } = fakeGitHub({ pulls: [pull(1, { labels: ['review-blocked', 'breaker-override'] })], blockedCount: 5 })
     runRunway({ repo: REPO }, deps)
+    expect(merges).toEqual([])
+  })
+})
+
+describe('ST-106: a pull request that changes a protected path lands only by a manual request', () => {
+  const WORKFLOW = '.github/workflows/ci.yml'
+  const manual = (number) => ({ repo: REPO, prInput: String(number), modeInput: 'manual', headInput: SHA_OF(number), eventName: 'workflow_dispatch', actor: 'alice' })
+  const permissions = { alice: 'write' }
+
+  it('ST-106/AC-4: unattended, a run given the pull request lands nothing, and the log names it, every path and the manual request', () => {
+    const { deps, logs, merges } = fakeGitHub({ pulls: [pull(1, { files: ['src/a.js', WORKFLOW, '.claude/x.md', WORKFLOW] })] })
+    expect(runRunway({ repo: REPO, prInput: '1' }, deps)).toEqual({ landed: null })
+    expect(merges).toEqual([])
+    expect(logs).toContain(`PR #1: changes protected paths ${WORKFLOW}, .claude/x.md; it lands only by a manual request (steward land 1), skipping`)
+  })
+
+  it('ST-106/AC-4: unattended, a run given none goes on to land an older or a newer unprotected pull request', () => {
+    const older = fakeGitHub({ pulls: [pull(1), pull(2, { files: ['steward.config.json'] })] })
+    expect(runRunway({ repo: REPO }, older.deps)).toEqual({ landed: 1 })
+    const newer = fakeGitHub({ pulls: [pull(1, { files: ['steward.config.json'] }), pull(2)] })
+    expect(runRunway({ repo: REPO }, newer.deps)).toEqual({ landed: 2 })
+    expect(newer.merges).toEqual([mergeArgs(2)])
+    expect(newer.logs.some((line) => line.startsWith('PR #1: changes protected path steward.config.json;'))).toBe(true)
+  })
+
+  it('ST-106/AC-1: the checklist is the rulesFile on main, and a move is read by both its paths', () => {
+    const named = fakeGitHub({ pulls: [pull(1, { files: ['docs/checklist.md'] })], rulesFile: 'docs/checklist.md' })
+    expect(runRunway({ repo: REPO, prInput: '1' }, named.deps)).toEqual({ landed: null })
+    const review = fakeGitHub({ pulls: [pull(1, { files: ['REVIEW.md'] })], rulesFile: 'docs/checklist.md' })
+    expect(runRunway({ repo: REPO, prInput: '1' }, review.deps)).toEqual({ landed: 1 })
+    const out = fakeGitHub({ pulls: [pull(1, { files: [{ filename: 'docs/x.md', previous_filename: '.claude/x.md' }] })] })
+    expect(runRunway({ repo: REPO, prInput: '1' }, out.deps)).toEqual({ landed: null })
+    expect(out.logs).toContain('PR #1: changes protected path .claude/x.md; it lands only by a manual request (steward land 1), skipping')
+  })
+
+  it('ST-106/AC-1: AGENTS.md and CLAUDE.md are not protected', () => {
+    const { deps, merges } = fakeGitHub({ pulls: [pull(1, { files: ['AGENTS.md', 'CLAUDE.md', 'docs/.github/workflows/x.yml'] })] })
+    expect(runRunway({ repo: REPO, prInput: '1' }, deps)).toEqual({ landed: 1 })
+    expect(merges).toEqual([mergeArgs(1)])
+  })
+
+  it('ST-106/AC-5: a manual request lands a pull request that changes a protected path, with land true or false', () => {
+    for (const land of [true, false]) {
+      const { deps, merges } = fakeGitHub({ pulls: [pull(1, { files: [WORKFLOW, 'steward.config.json'] })], land, permissions })
+      expect(runRunway(manual(1), deps)).toEqual({ landed: 1 })
+      expect(merges).toEqual([mergeArgs(1)])
+    }
+  })
+
+  it('ST-106/AC-5: a manual request reads no list of files, and needs no valid rulesFile', () => {
+    const { deps, calls, merges } = fakeGitHub({ pulls: [pull(1)], rulesFile: '../x', permissions })
+    expect(runRunway(manual(1), deps)).toEqual({ landed: 1 })
+    expect(merges).toEqual([mergeArgs(1)])
+    expect(calls.some((args) => args.some((arg) => arg.includes('/files')))).toBe(false)
+  })
+
+  it.each([
+    ['missing', undefined],
+    ['null', null],
+    ['not a string', 7],
+    ['empty', ''],
+    ['absolute', '/REVIEW.md'],
+    ['with a ..', '../REVIEW.md'],
+    ['with a backslash', 'docs\\REVIEW.md'],
+  ])('ST-106/AC-3: an unattended landing whose rulesFile on main is %s is refused, with the reason, and merges nothing', (_name, rulesFile) => {
+    const text = JSON.stringify({ land: true, landWhen: 'all-checks', ...(rulesFile === undefined ? {} : { rulesFile }) })
+    const { deps, merges, logs, calls } = fakeGitHub({ pulls: [pull(1)], settingsText: text })
+    const result = runRunway({ repo: REPO, prInput: '1' }, deps)
+    expect(result).toMatchObject({ landed: null })
+    expect(result.refused).toMatch(/rulesFile must be a valid relative path/)
+    expect(logs.some((line) => line.startsWith('::error title=Landing refused::') && line.includes('rulesFile'))).toBe(true)
+    expect(merges).toEqual([])
+    expect(calls.some((args) => args.some((arg) => arg.includes('/files')))).toBe(false)
+  })
+
+  it('ST-106/AC-3: rulesFile is read from steward.config.json on main, not from the pull request', () => {
+    const { deps, calls } = fakeGitHub({ pulls: [pull(1, { files: ['steward.config.json', 'REVIEW.md'] })], rulesFile: 'REVIEW.md' })
+    expect(runRunway({ repo: REPO, prInput: '1' }, deps)).toEqual({ landed: null })
+    expect(calls.some((args) => args.some((arg) => arg.includes('/contents/steward.config.json?ref=main')))).toBe(true)
+  })
+
+  it("ST-106/AC-4: a tripped breaker's workflow-only exemption does not lift the skip, and breaker-override does not either", () => {
+    const workflowOnly = fakeGitHub({ pulls: [pull(1, { files: [WORKFLOW] })], blockedCount: 5 })
+    expect(runRunway({ repo: REPO, prInput: '1' }, workflowOnly.deps)).toEqual({ landed: null })
+    expect(workflowOnly.merges).toEqual([])
+    expect(workflowOnly.logs.some((line) => line.includes('lands only by a manual request'))).toBe(true)
+    expect(workflowOnly.logs.some((line) => line.includes('touches only'))).toBe(false)
+    const overridden = fakeGitHub({ pulls: [pull(1, { files: [WORKFLOW], labels: ['breaker-override'] })], blockedCount: 5 })
+    expect(runRunway({ repo: REPO, prInput: '1' }, overridden.deps)).toEqual({ landed: null })
+    expect(overridden.merges).toEqual([])
+  })
+
+  it('ST-106/AC-5: everything else the runway checks holds for a protected pull request, manual too', () => {
+    const { deps, merges } = fakeGitHub({
+      pulls: [pull(1, { files: [WORKFLOW], statuses: [{ context: 'review/agent', state: 'pending', id: 1 }] })],
+      permissions,
+    })
+    expect(runRunway(manual(1), deps)).toEqual({ landed: null })
     expect(merges).toEqual([])
   })
 })
