@@ -8,6 +8,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { createHash } from 'node:crypto'
 import { fixtureSettings } from './settings-fixture.mjs'
+import { handoffRecord, writeHandoffs } from './handoff-fixture.mjs'
 import { handoffsPath, isSafeRelativePath, main as handoff, selectHandoff } from './handoff.mjs'
 import { main as project, projectsPath } from './project.mjs'
 
@@ -1067,5 +1068,77 @@ describe('ST-90: selection of eligible handoffs', () => {
     expect(records(home).handoffs[0]).toMatchObject({ status: 'withdrawn', hold: { reason: expect.stringContaining('no longer has the text') } })
     expect((await run(['list'], home)).code).toBe(0)
     expect(await select(home)).toEqual({ result: 'no-eligible-handoffs', skipped: [] })
+  })
+})
+
+describe('ST-103: dismiss leaves a finished handoff out of the coordinator\'s status', () => {
+  const COMPLETION = { admissionId: 'adm-1', at: '2026-11-10T14:00:00.000Z', branch: 'handoff/H-1-x', headSha: 'd'.repeat(40), pr: { number: 31, url: 'https://github.com/acme/widgets/pull/31' }, draft: false }
+  const STOP = { admissionId: 'adm-1', at: '2026-11-10T13:00:00.000Z', outcome: 'head-moved', reason: 'the pull request was not opened (head-moved)', branch: 'handoff/H-1-x', headSha: 'd'.repeat(40), pr: null, retained: null }
+  const ADMISSION = { id: 'adm-1', handoffId: 'H-1', version: 1, repo: REPO, branch: 'handoff/H-1-x', admittedAt: '2026-11-10T12:00:00.000Z' }
+  const HOLD = { reason: 'its unit changed', heldAt: '2026-11-10T12:00:00.000Z' }
+  const EXTRAS = { completed: { completion: COMPLETION }, stopped: { stop: STOP }, interrupted: { stop: STOP }, admitted: { admission: ADMISSION }, held: { hold: HOLD }, withdrawn: {}, pending: {} }
+  const seed = (status) => {
+    const home = fresh('home')
+    writeHandoffs(home, [handoffRecord({ order: 1, repo: REPO, status, ...EXTRAS[status] })])
+    return home
+  }
+
+  it.each(['completed', 'stopped', 'interrupted'])('ST-103/AC-1, AC-3: a %s handoff is dismissed with the time, and nothing else on its record changes; list and show still show it, marked', async (status) => {
+    const home = seed(status)
+    const before = records(home).handoffs[0]
+    const result = await run(['dismiss', 'H-1'], home)
+    expect(result.code).toBe(0)
+    expect(result.out).toContain(`Dismissed H-1 (${status})`)
+    const { dismissedAt, ...rest } = records(home).handoffs[0]
+    expect(rest).toEqual(before)
+    expect(Number.isNaN(Date.parse(dismissedAt))).toBe(false)
+    const listed = await run(['list'], home)
+    expect(listed.out).toContain(`H-1  ${status}  v1  ${REPO}  file docs/unit-1.md  dismissed ${dismissedAt}`)
+    const shown = await run(['show', 'H-1'], home)
+    expect(shown.code).toBe(0)
+    expect(shown.out).toContain(`dismissed: ${dismissedAt}`)
+  })
+
+  it.each(['pending', 'held', 'admitted', 'withdrawn'])('ST-103/AC-2: a %s handoff is not dismissed, and the reason names its state', async (status) => {
+    const home = seed(status)
+    const before = bytes(home)
+    const result = await run(['dismiss', 'H-1'], home)
+    expect(result.code).toBe(1)
+    expect(result.err).toContain(`H-1 is ${status}`)
+    if (status === 'pending' || status === 'held') expect(result.err).toContain('steward handoff withdraw H-1')
+    expect(bytes(home)).toBe(before)
+  })
+
+  it('ST-103/AC-2: a handoff already dismissed, and an unknown ID, are refused, changing nothing', async () => {
+    const home = seed('completed')
+    await run(['dismiss', 'H-1'], home)
+    const before = bytes(home)
+    const again = await run(['dismiss', 'H-1'], home)
+    expect(again.code).toBe(1)
+    expect(again.err).toContain('H-1 is already dismissed')
+    const unknownId = await run(['dismiss', 'H-9'], home)
+    expect(unknownId.code).toBe(1)
+    expect(unknownId.err).toContain('H-9 is not a handoff')
+    expect(bytes(home)).toBe(before)
+  })
+
+  it('ST-103/AC-4: a dismissed stopped handoff still holds its source: add, reapprove and withdraw refuse it, and no GitHub request is made', async () => {
+    const home = seed('stopped')
+    await run(['dismiss', 'H-1'], home)
+    const before = bytes(home)
+    const requested = requests.length
+    const added = await run(['add', '--repo', REPO, '--file', 'docs/unit-1.md'], home)
+    expect(added.code).toBe(1)
+    expect(added.err).toContain('is already stopped as H-1')
+    expect((await run(['reapprove', 'H-1'], home)).err).toContain('H-1 is stopped and is not reapproved')
+    expect((await run(['withdraw', 'H-1'], home)).err).toContain('H-1 is stopped')
+    expect(bytes(home)).toBe(before)
+    expect(requests).toHaveLength(requested)
+  })
+
+  it('ST-103/AC-7: the usage text lists dismiss', async () => {
+    const result = await run([], fresh('home'))
+    expect(result.code).toBe(2)
+    expect(result.err).toContain('steward handoff dismiss <id>')
   })
 })

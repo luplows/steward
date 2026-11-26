@@ -8,6 +8,12 @@
  *   steward coordinator status [--json]  whether it is running, stopping or stopped, and what it is
  *                                        doing
  *   steward coordinator stop             ask it to admit no more work, and to exit once idle
+ *   steward coordinator dismiss <owner/name> <number>
+ *                                        leave that pull request's failed reviews out of `status`
+ *
+ * `dismiss` (ST-103) records the time of the dismissal on each failed review `status` lists for the
+ * pull request, in `reviews.json`, and reads no GitHub. It only hides them: what is reviewed is
+ * unchanged. `steward handoff dismiss` does the same for a finished handoff.
  *
  * The coordinator is a detached process, `coordinator.mjs run <home> <minutes> [<landing-minutes>]`,
  * which `start` launches; `run` is not for people. Its record is
@@ -71,6 +77,7 @@ import { scheduleReviews } from './coordinator-scheduler.mjs'
 import { codeNextHandoff, interruptAdmissions } from './handoff-coding.mjs'
 import { codingReport, codingState, describeSource, evidencePath, handoffsPath, keptWhere, readEvidence, readHandoffs, reportLines } from './handoff.mjs'
 import { classifyResult, interruptRunning, readReviews, reviewsPath } from './review-admission.mjs'
+import { REPO_RE } from './settings.mjs'
 import { readStateFile, writeStateFile } from './state-file.mjs'
 import { readUserConfig, stateDir } from './user-config.mjs'
 
@@ -82,12 +89,14 @@ const USAGE = [
   'usage: steward coordinator start',
   '       steward coordinator status [--json]',
   '       steward coordinator stop',
+  '       steward coordinator dismiss <owner/name> <number>',
   '',
   'start   starts this OS user\'s coordinator in the background; it keeps running after this',
   '        terminal closes',
   'status  says whether it is running, stopping or stopped, and what it is doing; --json gives the',
   '        same as JSON',
   'stop    asks it to admit no more work and to exit once the work it admitted has finished',
+  'dismiss leaves a pull request\'s failed reviews out of `status`; what is reviewed does not change',
 ].join('\n')
 
 /** Where the coordinator's record, and a stop request for it, are under `homedir`. */
@@ -222,10 +231,13 @@ function describe(homedir) {
   return { status: state === 'stopping' ? 'stopping' : 'running', pid, startedAt, ...fields }
 }
 
+/** Whether `entry` of the record of reviews is a model-consuming failure, not reviewed again automatically. */
+const isFailedReview = (entry) => entry.state === 'ended' && classifyResult(entry.result) === 'model-consuming-failure'
+
 /**
  * The heads the record of reviews counts as model-consuming failures, which are not reviewed again
- * automatically: `{ failedHeads }`, or `{ reviewsProblem }` when it cannot be read, or nothing when
- * there are none. Reads only.
+ * automatically, and the crew has not dismissed (ST-103): `{ failedHeads }`, or `{ reviewsProblem }`
+ * when it cannot be read, or nothing when there are none. Reads only.
  */
 function failedHeads(homedir) {
   let reviews
@@ -234,7 +246,7 @@ function failedHeads(homedir) {
   } catch (error) {
     return { reviewsProblem: error.message }
   }
-  const failed = reviews.filter((entry) => entry.state === 'ended' && classifyResult(entry.result) === 'model-consuming-failure')
+  const failed = reviews.filter((entry) => isFailedReview(entry) && entry.dismissedAt === undefined)
     .map(({ repo, number, headSha, endedAt, result }) => ({ repo, number, headSha, status: result.status, endedAt }))
   return failed.length > 0 ? { failedHeads: failed } : {}
 }
@@ -255,6 +267,7 @@ function codingWork(homedir) {
   }
   const coding = { queued: [], running: [], completed: [], stopped: [], held: [] }
   for (const h of handoffs) {
+    if (h.dismissedAt !== undefined) continue
     const state = codingState(h)
     if (state !== null) coding[state].push(codingReport(h, evidence))
   }
@@ -407,6 +420,29 @@ function status(json, { homedir, out }) {
   return 0
 }
 
+/**
+ * Dismisses (ST-103) every failed review `status` lists for `repo` pull request `number`, by
+ * recording the time on each entry in `reviews.json`. Reads and writes only that file.
+ */
+function dismissReviews(repo, numberText, { homedir, now, out, err }) {
+  const number = Number(numberText)
+  if (!REPO_RE.test(repo) || !/^[1-9][0-9]*$/.test(numberText) || !Number.isSafeInteger(number)) {
+    err(`${repo} ${numberText}: give the repository as owner/name and the pull request as its number. Nothing was changed.`)
+    return 1
+  }
+  const file = reviewsPath(homedir)
+  const reviews = readReviews(file)
+  const listed = reviews.filter((entry) => entry.repo === repo && entry.number === number && isFailedReview(entry) && entry.dismissedAt === undefined)
+  if (listed.length === 0) {
+    err(`\`steward coordinator status\` lists no failed review of ${repo} pull request #${number}, so there is nothing to dismiss. Nothing was changed.`)
+    return 1
+  }
+  const at = now().toISOString()
+  writeStateFile(file, { reviews: reviews.map((entry) => (listed.includes(entry) ? { ...entry, dismissedAt: at } : entry)) })
+  out(`Dismissed ${listed.length} failed review${listed.length === 1 ? '' : 's'} of ${repo} pull request #${number}. \`steward coordinator status\` no longer lists ${listed.length === 1 ? 'it' : 'them'}; what is reviewed is unchanged.`)
+  return 0
+}
+
 async function stop({ homedir, pollMs, waitMs, out, err }) {
   const before = describe(homedir)
   if (before.status === 'stopped') {
@@ -457,14 +493,15 @@ async function run(homedir, intervalMinutes, landingMinutes) {
  * config's path is read from), `spawnFn` (`spawn` from `node:child_process`), the polling interval,
  * how long to wait for an acknowledgment, and the output are injectable.
  */
-export async function main(argv, { homedir = osHomedir(), env = process.env, spawnFn = spawn, pollMs = 100, waitMs = WAIT_MS, out = console.log, err = console.error } = {}) {
+export async function main(argv, { homedir = osHomedir(), env = process.env, spawnFn = spawn, pollMs = 100, waitMs = WAIT_MS, out = console.log, err = console.error, now = () => new Date() } = {}) {
   const [command, ...rest] = argv
-  const ctx = { homedir, env, spawnFn, pollMs, waitMs, out, err }
+  const ctx = { homedir, env, spawnFn, pollMs, waitMs, out, err, now }
   try {
     if (command === 'start' && rest.length === 0) return await start(ctx)
     if (command === 'status' && rest.length === 0) return status(false, ctx)
     if (command === 'status' && rest.length === 1 && rest[0] === '--json') return status(true, ctx)
     if (command === 'stop' && rest.length === 0) return await stop(ctx)
+    if (command === 'dismiss' && rest.length === 2) return dismissReviews(rest[0], rest[1], ctx)
     if (command === 'run' && (rest.length === 2 || rest.length === 3)) return await run(rest[0], Number(rest[1]), rest.length === 3 ? Number(rest[2]) : undefined)
   } catch (error) {
     err(error.message)

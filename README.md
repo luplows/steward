@@ -467,6 +467,7 @@ steward handoff list                                              # the approval
 steward handoff show <id>                                         # one approval, with its text
 steward handoff reapprove <id>                                    # read the source again
 steward handoff withdraw <id>                                     # stop it being selected
+steward handoff dismiss <id>                                      # leave a finished one out of coordinator status
 ```
 
 `add` brings the project's owned checkout to `origin`'s `main` and refuses, recording nothing,
@@ -493,7 +494,12 @@ withdrawn, and a source whose handoff is admitted or completed is not added agai
 can be, as a new handoff. The coordinator moves a handoff on from `pending`: it is `admitted` while
 it is being coded, then `completed`, or `stopped` or `interrupted` (see "The coordinator", below);
 no command releases a stopped or interrupted one, and `add`, `reapprove` and `withdraw` refuse it as
-they refuse an admitted one. A records file that is not valid refuses every command, and is never
+they refuse an admitted one. `dismiss` takes a completed, stopped or interrupted handoff out of
+`steward coordinator status`, recording the time of the dismissal on it and changing nothing else; it
+refuses a pending or held one (pointing to `withdraw`), an admitted or withdrawn one, one already
+dismissed, and an unknown ID. `list` and `show` still show a dismissed handoff, marked with that time,
+and a dismissed handoff still holds its source: `add`, `reapprove` and `withdraw` treat it as before,
+and the coordinator never selects it. A dismissal is not undone, and no record is deleted. A records file that is not valid refuses every command, and is never
 read as an approval. The write goes to a temporary file renamed over the old one, so a write that
 fails leaves the file as it was. Every write, by a command or by the coordinator, which are separate
 processes, takes a lock (`handoffs.json.lock`, beside the file, made with exclusive creation and
@@ -665,7 +671,15 @@ nothing itself. Verdicts go through the existing gate.
 steward coordinator start            # start it in the background
 steward coordinator status [--json]  # running, stopping or stopped, and what it is doing
 steward coordinator stop             # admit no more work; exit once admitted work has finished
+steward coordinator dismiss <owner/name> <number>   # leave a pull request's failed reviews out of status
 ```
+
+`dismiss` records the time of the dismissal on every failed review that `status` lists for that pull
+request ("Not reviewed again automatically"), in `~/.steward/state/reviews.json`, says how many it
+dismissed, and refuses, changing nothing, when none is listed. It reads only the local records and
+makes no GitHub call. It hides entries from `status` and nothing more: a new head of the pull request
+is reviewed as before, and a head whose review failed is still not reviewed again automatically.
+`status` likewise leaves out a handoff dismissed with `steward handoff dismiss`.
 
 `start` launches the coordinator detached, so it keeps running after the terminal that started it
 closes, and reports `started` only once the new process has written its record,

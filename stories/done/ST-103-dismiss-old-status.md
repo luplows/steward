@@ -16,35 +16,35 @@ failed reviews whose pull requests were long since landed or settled by hand.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `steward handoff dismiss <id>` dismisses a handoff that is `completed`, `stopped`
+- [x] **AC-1** — `steward handoff dismiss <id>` dismisses a handoff that is `completed`, `stopped`
       or `interrupted`. It records the time of the dismissal on the handoff, with the same
       locked write the other `handoff` commands use, and says what it dismissed. It changes nothing
       else on the record: status, version, history, stop details and evidence stay as they are.
-- [ ] **AC-2** — `handoff dismiss` refuses, changing nothing, a handoff that is `pending`, `held`,
+- [x] **AC-2** — `handoff dismiss` refuses, changing nothing, a handoff that is `pending`, `held`,
       `admitted` or `withdrawn`, one already dismissed, and an unknown ID, each with a reason that
       names the handoff's state. For `pending` and `held` it points to `withdraw`.
-- [ ] **AC-3** — `steward coordinator status` leaves dismissed handoffs out of its coding lists, in
+- [x] **AC-3** — `steward coordinator status` leaves dismissed handoffs out of its coding lists, in
       text and in `--json`. `steward handoff list` and `steward handoff show <id>` still show a
       dismissed handoff, marked as dismissed with its time.
-- [ ] **AC-4** — Dismissing a handoff does not release its source: `handoff add`, `reapprove` and
+- [x] **AC-4** — Dismissing a handoff does not release its source: `handoff add`, `reapprove` and
       `withdraw` treat a dismissed handoff as they treat it undismissed, and the coordinator never
       selects it.
-- [ ] **AC-5** — `steward coordinator dismiss <owner/name> <number>` dismisses every failed review
+- [x] **AC-5** — `steward coordinator dismiss <owner/name> <number>` dismisses every failed review
       that `status` lists for that pull request ("Not reviewed again automatically"), recording the
       time on each of those entries in `reviews.json`, with the write `reviews.json` already uses. It
       says how many it dismissed, and refuses, changing nothing, when there is none. It reads only
       the local records: no GitHub read or write.
-- [ ] **AC-6** — `status` leaves dismissed failed reviews out of that list, in text and in `--json`.
+- [x] **AC-6** — `status` leaves dismissed failed reviews out of that list, in text and in `--json`.
       A dismissal changes nothing about what is reviewed: a new head of that pull request is
       reviewed as now, and a head whose review failed is still not reviewed again automatically.
-- [ ] **AC-7** — `README.md` documents both commands where it describes `handoff` and the
+- [x] **AC-7** — `README.md` documents both commands where it describes `handoff` and the
       coordinator's `status`, and `handoff`'s and `coordinator`'s usage text lists them.
-- [ ] **AC-8** — Tests, in the existing test files of `handoff.mjs` and `coordinator.mjs`, cover:
+- [x] **AC-8** — Tests, in the existing test files of `handoff.mjs` and `coordinator.mjs`, cover:
       dismissing a completed and a stopped handoff, and its absence from `status` and presence in
       `list` and `show`; each refusal in AC-2; AC-4's `add` refusal for a dismissed stopped
       handoff's source; dismissing a pull request's failed reviews, and its absence from `status`;
       and the refusal when none is listed. No GitHub call runs.
-- [ ] **AC-9** — This story's id is taken out of the **Planned** marker in
+- [x] **AC-9** — This story's id is taken out of the **Planned** marker in
       `docs/agent-workflow-design.md`, "Approved coding handoffs and sequential execution", and the
       passage is corrected wherever what was built differs.
 

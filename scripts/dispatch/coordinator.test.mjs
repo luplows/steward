@@ -8,7 +8,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { coordinatorPath, isRunning, main, readRecord, runCoordinator, stopRequestPath } from './coordinator.mjs'
 import { handoffRecord, writeHandoffs } from './handoff-fixture.mjs'
-import { handoffsPath, readHandoffs } from './handoff.mjs'
+import { handoffsPath, main as handoffMain, readHandoffs } from './handoff.mjs'
 import { projectsPath } from './project.mjs'
 import { admitReview, readReviews, reviewEnding, reviewsPath } from './review-admission.mjs'
 import { fixtureUserConfig } from './settings-fixture.mjs'
@@ -845,5 +845,84 @@ describe('ST-93/AC-6: status shows the coding work, with or without a coordinato
     const status = await statusOf(home)
     expect(status.handoffsProblem).toContain('is malformed')
     expect((await run(['status'], home)).out).toContain('The approved handoffs cannot be read: ')
+  })
+})
+
+describe('ST-103: dismissing finished handoffs and failed reviews leaves them out of status', () => {
+  const record = (order, status, extra = {}) => handoffRecord({ order, repo: 'acme/widgets', status, ...extra })
+  const completion = { admissionId: 'adm-1', at: '2026-11-10T14:00:00.000Z', branch: 'handoff/H-1-x', headSha: 'd'.repeat(40), pr: { number: 31, url: 'https://github.com/acme/widgets/pull/31' }, draft: false }
+  const stop = { admissionId: 'adm-2', at: '2026-11-10T13:00:00.000Z', outcome: 'head-moved', reason: 'the pull request was not opened (head-moved)', branch: 'handoff/H-2-x', headSha: 'd'.repeat(40), pr: null, retained: null }
+  const handoffCli = (argv, home) => handoffMain(argv, { homedir: home, out: () => {}, err: () => {}, createContext: () => { throw new Error('no GitHub call is expected') } })
+  const failed = (over = {}) => endedEntry({ number: 7, result: { status: 'threw', message: 'boom' }, ...over })
+
+  it('ST-103/AC-3, AC-8: a dismissed completed and a dismissed stopped handoff leave status, in text and in --json, and stay in list and show', async () => {
+    const home = freshHome()
+    writeHandoffs(home, [record(1, 'completed', { completion }), record(2, 'stopped', { stop }), record(3, 'pending')])
+    expect(await handoffCli(['dismiss', 'H-1'], home)).toBe(0)
+    expect(await handoffCli(['dismiss', 'H-2'], home)).toBe(0)
+    const json = await statusOf(home)
+    expect(json.coding.queued.map((h) => h.id)).toEqual(['H-3'])
+    expect(json.coding.completed).toEqual([])
+    expect(json.coding.stopped).toEqual([])
+    const text = (await run(['status'], home)).out
+    expect(text).toContain('Coding queued: H-3')
+    expect(text).not.toMatch(/H-1|H-2/)
+    const lines = []
+    expect(await handoffMain(['list'], { homedir: home, out: (l) => lines.push(l), err: () => {} })).toBe(0)
+    expect(lines.join('\n')).toMatch(/H-1 {2}completed .* dismissed 20/)
+    expect(lines.join('\n')).toMatch(/H-2 {2}stopped .* dismissed 20/)
+  })
+
+  it('ST-103/AC-3: once every handoff is dismissed, status has no coding section', async () => {
+    const home = freshHome()
+    writeHandoffs(home, [record(1, 'completed', { completion })])
+    await handoffCli(['dismiss', 'H-1'], home)
+    expect(await statusOf(home)).toEqual({ status: 'stopped' })
+  })
+
+  it('ST-103/AC-5, AC-6, AC-8: dismiss records the time on every failed review of that pull request, says how many, and status leaves them out', async () => {
+    const home = freshHome()
+    const other = failed({ number: 8 })
+    seedReviews(home, { reviews: [failed(), failed({ headSha: 'b'.repeat(40) }), other, endedEntry({ number: 7, headSha: 'c'.repeat(40) })] })
+    expect((await statusOf(home)).failedHeads).toHaveLength(3)
+    const result = await run(['dismiss', 'crew/client', '7'], home, { now: () => new Date('2026-11-26T10:00:00.000Z') })
+    expect(result.code).toBe(0)
+    expect(result.out).toContain('Dismissed 2 failed reviews of crew/client pull request #7')
+    const entries = readReviews(reviewsPath(home))
+    expect(entries.filter((e) => e.dismissedAt === '2026-11-26T10:00:00.000Z').map((e) => [e.number, e.headSha[0]])).toEqual([[7, 'a'], [7, 'b']])
+    expect(entries.find((e) => e.number === 8)).toEqual(other)
+    expect(entries.find((e) => e.headSha === 'c'.repeat(40))).not.toHaveProperty('dismissedAt')
+    expect((await statusOf(home)).failedHeads.map((h) => h.number)).toEqual([8])
+    expect((await run(['status'], home)).out).not.toContain('pull request #7,')
+    // A dismissal changes nothing about what is reviewed: the failed head still counts as failed.
+    expect(reviewEnding({ homedir: home, ...identity })).toBe('model-consuming-failure')
+    expect(reviewEnding({ homedir: home, ...identity, headSha: 'd'.repeat(40) })).toBeNull()
+  })
+
+  it('ST-103/AC-5, AC-8: with no failed review listed for the pull request, dismiss refuses and changes nothing', async () => {
+    const home = freshHome()
+    seedReviews(home, { reviews: [failed(), endedEntry({ number: 9 })] })
+    const before = readFileSync(reviewsPath(home), 'utf8')
+    for (const argv of [['dismiss', 'crew/client', '9'], ['dismiss', 'crew/client', '99'], ['dismiss', 'other/repo', '7']]) {
+      const result = await run(argv, home)
+      expect(result.code).toBe(1)
+      expect(result.err).toContain('lists no failed review of')
+    }
+    await run(['dismiss', 'crew/client', '7'], home)
+    const dismissed = readFileSync(reviewsPath(home), 'utf8')
+    const again = await run(['dismiss', 'crew/client', '7'], home)
+    expect(again.code).toBe(1)
+    expect(readFileSync(reviewsPath(home), 'utf8')).toBe(dismissed)
+    expect(before).not.toBe(dismissed)
+  })
+
+  it('ST-103/AC-5: a repository or number that is not one is a refusal, and dismiss with other arguments is a usage error', async () => {
+    const home = freshHome()
+    seedReviews(home, { reviews: [failed()] })
+    expect((await run(['dismiss', 'crew/client', 'seven'], home)).code).toBe(1)
+    expect((await run(['dismiss', 'client', '7'], home)).code).toBe(1)
+    const usage = await run(['dismiss', 'crew/client'], home)
+    expect(usage.code).toBe(2)
+    expect(usage.err).toContain('steward coordinator dismiss <owner/name> <number>')
   })
 })
