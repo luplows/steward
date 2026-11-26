@@ -34,12 +34,13 @@ const lines = (items) => items.map((item) => JSON.stringify(item)).join('\n')
  * `land` and `landWhen` are the project's settings on `main`; `settingsText`, when given, is
  * served as the file's text instead. `permissions` maps a login to its collaborator permission; a
  * login not in it is a request GitHub fails. `calls` records each argument list given to `api`.
- * `unitLinks` is the project's setting on `main`. `issues` maps an Issue number to `{ state }` (and
+ * `unitLinks` and `rulesFile` are the project's settings on `main`. A pull request's `files` are
+ * bare names, or `{ filename, previous_filename }` for a moved file. `issues` maps an Issue number to `{ state }` (and
  * `pull_request`, for a number that is a pull request); `failIssue` is `'read'` or `'update'` to
  * make that request fail. A PATCH of `state=closed` sets the Issue's state; `patches` records each
  * path patched.
  */
-export function fakeGitHub({ pulls = [], blockedCount = null, landWhen = 'all-checks', land = true, settingsText = null, permissions = {}, unitLinks = ['file', 'issue'], issues = {}, failIssue = null } = {}) {
+export function fakeGitHub({ pulls = [], blockedCount = null, landWhen = 'all-checks', land = true, settingsText = null, permissions = {}, unitLinks = ['file', 'issue'], rulesFile = 'REVIEW.md', issues = {}, failIssue = null } = {}) {
   const calls = []
   const logs = []
   const merges = []
@@ -51,7 +52,7 @@ export function fakeGitHub({ pulls = [], blockedCount = null, landWhen = 'all-ch
     calls.push(args)
     const url = args.find((a) => a.startsWith('repos/')) ?? ''
     const path = url.replace(`repos/${REPO}/`, '').split('?')[0]
-    if (url.includes('/contents/')) return settingsText ?? JSON.stringify({ land, landWhen, unitLinks })
+    if (url.includes('/contents/')) return settingsText ?? JSON.stringify({ land, landWhen, unitLinks, rulesFile })
     const collaborator = path.match(/^collaborators\/([^/]+)\/permission$/)
     if (collaborator) {
       const permission = permissions[collaborator[1]]
@@ -77,7 +78,11 @@ export function fakeGitHub({ pulls = [], blockedCount = null, landWhen = 'all-ch
       return JSON.stringify(issue)
     }
     let match = path.match(/^pulls\/(\d+)\/files$/)
-    if (match) return lines(byNumber(match[1]).files)
+    // As the runway's `--jq` makes them: `{ filename, previous_filename }`, the latter null unless
+    // the file was moved. A file given as a bare name is one that was not.
+    if (match) {
+      return lines(byNumber(match[1]).files.map((file) => (typeof file === 'string' ? { filename: file, previous_filename: null } : { previous_filename: null, ...file })))
+    }
     match = path.match(/^pulls\/(\d+)$/)
     if (match) {
       const p = byNumber(match[1])

@@ -97,6 +97,12 @@ Where a file defines the thing, the entry names it, and the file is the authorit
 - **landable** — what the pilot waits for before requesting landing: not a draft, no
   `review-blocked`, `review/agent` `success` on the head, and the checks the project's `landWhen`
   names green on the head, and a `mergeable_state` GitHub would merge in (`land.mjs`'s header).
+  For unattended landing, the pull request also changes no **protected path**.
+- **protected path** — a path whose change lands only when a person asks (`steward land
+  <pr-number>`): everything under `.github/workflows/` or `.claude/`, `steward.config.json`, and
+  the project's checklist, the path its `rulesFile` setting names. The list is fixed in
+  `scripts/land/protected-paths.mjs`; the runway enforces it for unattended landing. `AGENTS.md`
+  and `CLAUDE.md` are not on it.
 - **turnaround** — tidying up after landings and rotations: merged heads, leftover worktrees and
   scratch checkouts.
 - **release branch** — `release/vX.Y.Z`, cut by the release review for one release, from `main`

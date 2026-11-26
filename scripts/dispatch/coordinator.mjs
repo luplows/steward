@@ -331,7 +331,7 @@ async function start({ homedir, env, spawnFn, pollMs, waitMs, out, err }) {
 }
 
 /** The lines `status` adds to its first, for the fields in `result`. */
-function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, nextLandingScanAt, landingCandidates, active, landingActive, lastLanding, lastOutcome, usage, recordsProblem, projectProblems, landingProblems, failedHeads: failed, reviewsProblem, codingActive, lastCoding, codingProblem, coding, handoffsProblem }) {
+function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, nextLandingScanAt, landingCandidates, awaitingManualLanding, active, landingActive, lastLanding, lastOutcome, usage, recordsProblem, projectProblems, landingProblems, failedHeads: failed, reviewsProblem, codingActive, lastCoding, codingProblem, coding, handoffsProblem }) {
   const pull = ({ repo, number, headSha }) => `${repo} pull request #${number}, head ${headSha ?? 'unknown'}`
   const lines = []
   if (intervalMinutes !== undefined) lines.push(`Scan interval: ${intervalMinutes} minutes.`)
@@ -344,6 +344,10 @@ function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, 
   if (landingCandidates?.length > 0) {
     lines.push('Landing candidates found by the latest landing scan:')
     for (const candidate of landingCandidates) lines.push(`  ${pull(candidate)}`)
+  }
+  if (awaitingManualLanding?.length > 0) {
+    lines.push('Pull requests waiting for a manual landing, as they change protected paths:')
+    for (const waiting of awaitingManualLanding) lines.push(`  ${pull(waiting)}: ${waiting.paths.join(', ')}; lands only by ${waiting.landCommand}`)
   }
   if (lastLanding) {
     const { status: ended, triggers, reason, at, discoveredHeadSha } = lastLanding

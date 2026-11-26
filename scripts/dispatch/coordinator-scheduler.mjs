@@ -60,6 +60,11 @@
  *   nextLandingScanAt  when the landing scan is next due; only with a cadence of its own
  *   landingCandidates  [{ repo, number, headSha }] the latest landing scan found; only with
  *                    discovery
+ *   awaitingManualLanding  [{ repo, number, headSha, paths, landCommand }] the latest landing
+ *                    scan's candidates whose attempt returned `protected-paths`: each changes the
+ *                    protected paths `paths` names, and lands only by `landCommand`,
+ *                    `steward land <pr-number>` (ST-106). A new
+ *                    landing scan's attempts replace it. Only with `landing.attempt`
  *   lastOutcome      { repo, number, headSha, status, counted?, reason?, at } of the latest review
  *   landingActive    { repo, number, headSha } of the landing attempt under way, or null; only
  *                    with `landing.attempt`
@@ -208,12 +213,16 @@ export async function scheduleReviews({
 
   // The candidates of the latest landing scan that no attempt has taken yet (ST-84).
   let landQueue = []
+  // The pull requests of the latest landing scan whose attempt found a protected path changed
+  // (ST-106): they land only by a manual request. A new scan's attempts replace the list.
+  let awaitingManual = []
 
   /** Records `found` as the latest landing scan's candidates and hands them on. */
   const deliver = async (found) => {
     if (!admitting()) return
     const candidates = [...found].sort((a, b) => (a.repo < b.repo ? -1 : a.repo > b.repo ? 1 : a.number - b.number))
-    report({ landingCandidates: candidates })
+    awaitingManual = []
+    report({ landingCandidates: candidates, ...(landing.attempt !== undefined && { awaitingManualLanding: [] }) })
     landQueue = [...candidates]
     await (landing.onCandidates ?? (() => {}))(candidates)
   }
@@ -419,7 +428,7 @@ export async function scheduleReviews({
           refuse(`the head is now ${pull.headSha}`)
           continue
         }
-        ctx = createLand({ repo, landing: true, landWhen: settings.landWhen })
+        ctx = createLand({ repo, landing: true, landWhen: settings.landWhen, rulesFile: settings.rulesFile })
       } catch (error) {
         refuse(`could not recheck the pull request: ${error.message}`)
         continue
@@ -464,6 +473,10 @@ export async function scheduleReviews({
       // It reports none when its first read found the pull request merged or closed, and then the
       // head is unknown (null), never the scan's.
       const pilotHead = typeof result.headSha === 'string' && result.headSha !== '' ? result.headSha : null
+      if (result.status === 'protected-paths') {
+        awaitingManual = [...awaitingManual, { repo, number, headSha: pilotHead ?? headSha, paths: result.paths, landCommand: `steward land ${number}` }]
+        report({ awaitingManualLanding: awaitingManual })
+      }
       lastLanding({
         ...(pilotHead !== headSha && { headSha: pilotHead, discoveredHeadSha: headSha }),
         status: result.status, triggers: result.triggers, ...(reason && { reason: withoutCredentials(reason) }),

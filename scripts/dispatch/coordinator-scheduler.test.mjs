@@ -1309,7 +1309,7 @@ describe('ST-84: the coordinator requests bounded unattended landing and reports
     const [args] = h.land.mock.calls[0]
     expect(args).toMatchObject({ number: 7, mode: 'unattended', once: true })
     expect(Object.keys(args).sort()).toEqual(['ctx', 'mode', 'number', 'once'])
-    expect(args.ctx).toMatchObject({ repo: A, landing: true, landWhen: ['test'] })
+    expect(args.ctx).toMatchObject({ repo: A, landing: true, landWhen: ['test'], rulesFile: 'REVIEW.md' })
     // The checkout and settings are read once by the scan and once again for the attempt, and the
     // pull request just before the call.
     expect(h.readPull).toHaveBeenCalledWith(A, 7)
@@ -1405,6 +1405,40 @@ describe('ST-84: the coordinator requests bounded unattended landing and reports
     expect(lastLanding(h).headSha).toBe(HEAD)
   })
 
+  it('ST-106/AC-8: a candidate whose attempt returned protected-paths is listed as waiting for a manual landing, in the record, text and --json', async () => {
+    const paths = ['.github/workflows/ci.yml', 'steward.config.json']
+    const h = attempt({
+      repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 1), reviewed(A, 2)] },
+      land: async ({ number }) => (number === 1 ? { status: 'protected-paths', pr: 1, headSha: HEAD, paths, triggers: 0 } : MERGED(2)),
+    })
+    await until(() => lastLanding(h)?.number === 2)
+    // --json says how it lands, as the text does (AC-8).
+    const waiting = [{ repo: A, number: 1, headSha: HEAD, paths, landCommand: 'steward land 1' }]
+    expect(recordOf(h).awaitingManualLanding).toEqual(waiting)
+    // The last landing attempt is shown as it was.
+    expect(lastLanding(h)).toMatchObject({ number: 2, status: 'merged' })
+    expect(JSON.parse((await command(['status', '--json'], h.home)).out).awaitingManualLanding).toEqual(waiting)
+    const text = (await command(['status'], h.home)).out
+    expect(text).toContain('Pull requests waiting for a manual landing, as they change protected paths:')
+    expect(text).toContain(`  ${A} pull request #1, head ${HEAD}: .github/workflows/ci.yml, steward.config.json; lands only by steward land 1`)
+    expect(text).toContain(`Last landing: ${A} pull request #2, head ${HEAD}: merged`)
+  })
+
+  it('ST-106/AC-8: a new landing scan replaces the list, and a scan whose attempts find none leaves it empty', async () => {
+    let protectedNow = true
+    const h = attempt({
+      repos: [A], settings: landOn('all-checks', A), listings: { [A]: [reviewed(A, 1)] },
+      land: async () => (protectedNow ? { status: 'protected-paths', pr: 1, headSha: HEAD, paths: ['.claude/x.md'], triggers: 0 } : MERGED(1)),
+    })
+    await until(() => recordOf(h).awaitingManualLanding?.length === 1)
+    await idle(h)
+    protectedNow = false
+    await nextScan(h, 2)
+    await until(() => lastLanding(h)?.status === 'merged')
+    expect(recordOf(h).awaitingManualLanding).toEqual([])
+    expect((await command(['status'], h.home)).out).not.toContain('waiting for a manual landing')
+  })
+
   it("ST-84/AC-2, ST-84/AC-3: the pilot's results are reported as it gave them, with its reasons, and a dispatched workflow that has not merged is not reported as a merge", async () => {
     const results = [
       { status: 'not-landable', reason: 'checks-pending', waiting: ['test'], triggers: 0, headSha: HEAD },
@@ -1429,7 +1463,7 @@ describe('ST-84: the coordinator requests bounded unattended landing and reports
     const requests = []
     const fetch = async (url, init) => {
       requests.push(`${init.method} ${url.replace('https://api.github.com/repos/', '')}`)
-      const body = url.endsWith('/status') ? { statuses: [], total_count: 0 } : { head: { sha: HEAD }, state: 'open', draft: false, labels: [], mergeable_state: 'clean' }
+      const body = url.includes('/files?') ? [] : url.endsWith('/status') ? { statuses: [], total_count: 0 } : { head: { sha: HEAD }, state: 'open', draft: false, labels: [], mergeable_state: 'clean' }
       return { ok: true, status: 200, json: async () => body, text: async () => '' }
     }
     const h = attempt({
@@ -1441,7 +1475,7 @@ describe('ST-84: the coordinator requests bounded unattended landing and reports
     })
     await landed(h)
     expect(lastLanding(h)).toMatchObject({ number: 7, status: 'not-landable', reason: 'review-pending', triggers: 0 })
-    expect(requests).toEqual([`GET ${A}/pulls/7`, `GET ${A}/commits/${HEAD}/status`])
+    expect(requests).toEqual([`GET ${A}/pulls/7`, `GET ${A}/pulls/7/files?per_page=100&page=1`, `GET ${A}/commits/${HEAD}/status`])
   })
 
   it('ST-84/AC-4: a candidate listed twice is attempted once, no scan starts a second attempt while one runs, and a later scan tries a head whose attempt did not merge again after fresh checks', async () => {
@@ -1672,6 +1706,7 @@ describe('ST-84: the coordinator requests bounded unattended landing and reports
           w.dispatchedAt = w.t
           return ok(null, 204)
         }
+        if (url.includes('/files?')) return ok([])
         if (url.includes('/check-runs')) return ok({ total_count: 0, check_runs: [] })
         if (url.endsWith('/status')) {
           const state = review(w.t)
