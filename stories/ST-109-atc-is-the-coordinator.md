@@ -3,7 +3,7 @@ id: ST-109
 title: Make ATC the coordinator's other name, and retire the controller
 tier: normal
 kind: product
-depends_on: []
+depends_on: [ST-104]
 model: null
 blocked: null
 ---
@@ -129,9 +129,11 @@ work is a crew member, or a session they ask, running `steward` commands.
   coordinator and by `steward review` and `steward rotation`. Only the coordinator calls
   `executeHandoff` and `publishHandoff` (`README.md`, "Executing an approved handoff" and
   "Publishing a handoff's pull request").
-- `stories/ST-104-attribution-default-when-silent.md`, not yet built, quotes "ATC copies what you
-  write unchanged", which is in both coder prompts, as staying. If this story lands first,
-  `coder.md`'s copy says "steward" instead.
+- ST-104 (`stories/ST-104-attribution-default-when-silent.md`) keeps "ATC copies what you write
+  unchanged" in both coder prompts (its AC-1). This story waits on it, so the two are built in
+  turn: after ST-104, this story rewords `coder.md`'s copy to "steward", by AC-6, and
+  `coder-handoff.md`'s copy stays. ST-104's file is not changed here, since its own pull request
+  moves it to `stories/done/`, where it keeps the words it was built with.
 - This story touches the same documents as ST-106 and ST-108 (`docs/glossary.md`, `README.md`,
   `docs/agent-workflow-design.md`), so which lands first is the planning session's call.
 - The crew's decision, 2026-11-25, recorded in `docs/agent-workflow-design.md`, "ATC is scripts".
