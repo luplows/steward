@@ -593,7 +593,7 @@ version, the branch, the pushed `headSha`, the session's outcome, the choice tha
 tool and model) and `proposedPr`, the title, body and draft flag the coder wrote. Opening the pull
 request is `publishHandoff`'s, below. A run that stops short has its own `status`: `claim-failed`,
 `install-failed`, `session-failed`, `nothing-committed`, `uncommitted-changes`,
-`prompt-change-refused`, `commit-failed`, `push-failed` or `pr-block-invalid` (the branch is pushed, with no description).
+`commit-failed`, `push-failed` or `pr-block-invalid` (the branch is pushed, with no description).
 A step that throws once the claim begins (the claim, the setup, starting the session, ATC's commit
 or push) is the result of that step's kind, not a throw. A call starts at most one session, and no
 failure starts another. After any failure that started the session, `pr-block-invalid` included,

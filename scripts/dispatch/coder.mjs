@@ -22,8 +22,8 @@
  * `review/agent` pending when the pull request opens, and opening it is
  * therefore sufficient.
  *
- * A change to `.claude/prompts/` that the coder emitted as a diff is reported,
- * never applied (AC-7b). This module reads the prompt template from the
+ * An edit the coder's tool refused, which the coder emitted as a diff, is reported,
+ * never applied (OQ-70/AC-7b, ST-108). This module reads the prompt template from the
  * dispatcher's own checkout and writes nothing outside its scratch directory
  * and the git worktree machinery.
  *
@@ -83,7 +83,6 @@ export const BASE = 'main'
 // ST-15/AC-6: git's hooks off for one command. The null device is a folder with no hooks in it.
 const NULL_DEVICE = process.platform === 'win32' ? 'NUL' : '/dev/null'
 const HOOKS_OFF = ['-c', `core.hooksPath=${NULL_DEVICE}`]
-const PROMPTS_DIR = '.claude/prompts/'
 
 export async function git(cwd, args, { env } = {}) {
   const { stdout } = await execFileAsync('git', ['-c', 'core.quotepath=off', ...args], {
@@ -135,19 +134,18 @@ export async function remoteTip(repoDir, branch) {
 }
 
 /**
- * Finds a prompt change the coder emitted in its PR body (coder.md's
- * `### Proposed prompt edit` heading) and names the `.claude/prompts/` files
- * its diff touches. Reads text only; the paths come from the coder's own
- * output and are reported, never used.
+ * Finds an edit the coder proposed in its PR body because its tool refused it (coder.md's
+ * `### Proposed edit` heading, ST-108) and names every file its diff touches, whatever its
+ * path. Reads text only; the paths come from the coder's own output and are reported, never used.
  */
-export function findPromptChange(body) {
+export function findProposedEdit(body) {
   const lines = body.split(/\r?\n/)
-  const at = lines.findIndex((line) => /^#{2,4}\s+Proposed prompt edit\s*$/i.test(line))
+  const at = lines.findIndex((line) => /^#{2,4}\s+Proposed edit\s*$/i.test(line))
   if (at === -1) return null
   const files = new Set()
   for (const line of lines.slice(at + 1)) {
     if (/^#{1,3}\s/.test(line)) break
-    const m = line.match(/^(?:diff --git a\/|\+\+\+ b\/|--- a\/)(\.claude\/prompts\/\S+)/)
+    const m = line.match(/^(?:diff --git a\/|\+\+\+ b\/|--- a\/)(\S+)/)
     if (m) files.add(m[1])
   }
   return { pending: true, files: [...files] }
@@ -303,32 +301,21 @@ function statusPaths(porcelainZ) {
 
 /**
  * Pushes `branch` from the worktree `cwd`, and only when it holds a commit
- * beyond `baseSha`, nothing else was left uncommitted, and no commit beyond `baseSha` touches
- * `.claude/prompts/` (ST-15/AC-7). Never commits (a Codex session's work is committed by
- * `commitSessionWork`, which the callers run first; it is the dispatcher's, not `pushBranch`'s) and
+ * beyond `baseSha` and nothing else was left uncommitted, whatever paths its commits change
+ * (ST-108: a change to a protected path lands only by hand, ST-106). Never commits (a Codex
+ * session's work is committed by `commitSessionWork`, which the callers run first; it is the dispatcher's, not `pushBranch`'s) and
  * never forces. `dispatchCoder` and the retry path share it. With `hooksOff` (a Codex session,
  * ST-15/AC-6) the push runs with git's hooks off.
  *
  * Resolves `{ status: 'pushed', headSha }`, or a status that means
  * nothing was pushed: `nothing-committed` and `uncommitted-changes` (each with
- * `paths`, the uncommitted changes, empty when there are none),
- * `prompt-change-refused` (with `paths`, the prompt files the commits touch, and a `reason`
- * naming them), `push-failed` (with git's error as `reason`).
+ * `paths`, the uncommitted changes, empty when there are none), `push-failed` (with git's error
+ * as `reason`).
  */
 export async function pushBranch({ cwd, branch, baseSha, hooksOff = false }) {
   const args = pushArgs(branch)
   const ahead = Number((await git(cwd, ['rev-list', '--count', `${baseSha}..refs/heads/${branch}`])).trim())
   const changes = statusPaths(await git(cwd, ['status', '--porcelain', '-z', '--untracked-files=all']))
-  if (ahead > 0) {
-    const prompts = await promptPathsTouched(cwd, baseSha, branch)
-    if (prompts.length > 0) {
-      return {
-        status: 'prompt-change-refused',
-        paths: prompts,
-        reason: `the commits beyond ${baseSha} change ${PROMPTS_DIR}, which is the crew's to change: ${prompts.join(', ')}`,
-      }
-    }
-  }
   if (ahead === 0) {
     // No commit wins over uncommitted changes, but the paths are still named:
     // the worktree is removed after this, so the result is their only record.
@@ -350,26 +337,6 @@ export async function pushBranch({ cwd, branch, baseSha, hooksOff = false }) {
   }
   const headSha = (await git(cwd, ['rev-parse', `refs/heads/${branch}`])).trim()
   return { status: 'pushed', headSha }
-}
-
-/**
- * The paths under `.claude/prompts/` that the commits of `branch` beyond `baseSha` add, change,
- * delete or move (ST-15/AC-7), each once. A move counts as the deletion of the old path and the
- * addition of the new one (`--no-renames`), so either side under the folder is named. Every commit
- * beyond `baseSha` is inspected (`--full-history`, so no history simplification hides one). A merge
- * commit counts for its own changes only, those that differ from every parent (`--cc`), so a prompt
- * change made in a conflict resolution is named. A commit that is on `origin/main` does not count,
- * since it is at the base, so merging `main` into the branch names no prompt change that came from
- * `main`, and neither does a path touched only by commits already at `baseSha`.
- */
-async function promptPathsTouched(cwd, baseSha, branch) {
-  const main = `refs/remotes/${REMOTE}/${BASE}`
-  const hasMain = (await gitOrNull(cwd, ['rev-parse', '--verify', '--quiet', main])) !== null
-  const out = await git(cwd, [
-    'log', '--full-history', '--cc', '--no-renames', '--name-only', '--format=', '-z',
-    `${baseSha}..refs/heads/${branch}`, ...(hasMain ? ['--not', main] : []), '--', PROMPTS_DIR,
-  ])
-  return [...new Set(out.split('\0').map((p) => p.trim()).filter((p) => p !== ''))]
 }
 
 /**
@@ -702,8 +669,8 @@ export async function dispatchCoder({
     })
 
     const result = { status: 'opened', ...context, pr, draft, blocked: isBlocked ? blocked : null }
-    const promptChange = findPromptChange(block.body)
-    if (promptChange) result.promptChange = promptChange
+    const proposedEdit = findProposedEdit(block.body)
+    if (proposedEdit) result.proposedEdit = proposedEdit
     return result
   } finally {
     await cleanUp({ repoDir, tree, branch, baseSha: claim.baseSha, worktreeAdded: claim.worktreeAdded })
@@ -832,8 +799,7 @@ async function hasStoryFile(repoDir, ref, filename, storyId) {
  * `pr-not-open`, `no-git-identity` (ST-99/AC-1, with `missing`), `choice-unavailable` (ST-34/AC-4), `wrong-branch` (the head is not `branchFor` of a story file
  * with this id at its tip on `origin`), `branch-missing`, `local-branch-exists`
  * (refusals, before anything is spawned), `install-failed`, `session-failed`,
- * `nothing-committed`, `uncommitted-changes` (with `paths`), `prompt-change-refused` (with
- * `paths` and `reason`: ST-15/AC-7), `push-failed`, `pr-block-invalid`, `story-unreadable`,
+ * `nothing-committed`, `uncommitted-changes` (with `paths`), `push-failed`, `pr-block-invalid`, `story-unreadable`,
  * `replace-failed`. Every result after a
  * session carries `session`, and every one where the session completed carries
  * `draft` (the coder's choice, or null with no valid block) and `blocked`.
@@ -975,8 +941,8 @@ export async function retryStory({
       return { status: 'replace-failed', ...context, reason: error.message }
     }
     const result = { status: nothingToPush ? 'body-replaced' : 'retried', ...context }
-    const promptChange = findPromptChange(block.body)
-    if (promptChange) result.promptChange = promptChange
+    const proposedEdit = findProposedEdit(block.body)
+    if (proposedEdit) result.proposedEdit = proposedEdit
     return result
   } finally {
     await cleanUp({ repoDir, tree, branch, baseSha, worktreeAdded })
@@ -1051,9 +1017,9 @@ async function main(argv) {
   }
   const result = await dispatchCoder({ ctx: createContext({ repo }), storyId, choice })
   console.log(JSON.stringify(result, null, 2))
-  if (result.promptChange) {
-    const named = result.promptChange.files.length > 0 ? result.promptChange.files.join(', ') : 'files not named in the diff'
-    console.log(`\nA prompt change is pending manual application (${named}); it is in the pull request body under "Proposed prompt edit".`)
+  if (result.proposedEdit) {
+    const named = result.proposedEdit.files.length > 0 ? result.proposedEdit.files.join(', ') : 'files not named in the diff'
+    console.log(`\nA proposed edit is pending manual application (${named}); it is in the pull request body under "Proposed edit".`)
   }
   if (!NON_FAILURES.includes(result.status)) process.exitCode = 1
 }

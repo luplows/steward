@@ -52,7 +52,7 @@
  *   failed in the model: session-failed (with `outcome`; `not-started` when the session could not be
  *       started, for example its executable could not be run)
  *   failed after a completed session, with the branch not pushed: nothing-committed,
- *       uncommitted-changes, prompt-change-refused, push-failed, commit-failed (ATC's commit of a
+ *       uncommitted-changes, push-failed, commit-failed (ATC's commit of a
  *       Codex session's work threw)
  *   failed after the push: pr-block-invalid (the branch is pushed, with no description)
  *   pushed: the branch is on the remote at `headSha`, with `proposedPr`, the coder's parsed

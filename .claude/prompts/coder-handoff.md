@@ -82,9 +82,12 @@ file or a `blocked:` field, and do not create any: this project need not use the
 - Never skip, disable, weaken or delete an existing test to get green.
 - Run the project's own checks, as its instructions or its `package.json` or equivalent say, before
   you finish, and report their real results.
-- **You cannot edit anything under `.claude/prompts/`.** ATC refuses to push a branch whose commits
-  change a file there. When the unit needs such a change, put it in your PR body under a
-  `### Proposed prompt edit` heading, as a unified diff in a `diff` code block.
+- **If your tool refuses an edit the unit needs**, that is expected and is not a reason to block.
+  Put the change in your PR body under a `### Proposed edit` heading, as a unified diff against the
+  file as it is on your branch, in a `diff` code block, which `git apply` will accept. Commit the
+  rest. Leave unticked any acceptance criterion that depends on it, and say so; a member of the crew
+  applies the diff by hand in a separate commit. A pending proposed edit is not work left undone:
+  if the rest is finished, say `ready`.
 - **Do not write a `Unit:` line or a closing reference** such as `Closes #7` in your PR body. ATC
   states which unit the work is for. This holds even where the project's pull request template or
   rules ask for one, since ATC writes that line.
@@ -139,8 +142,6 @@ The rules above and below are the same for you. These things differ:
   end it is stopped, and you are not told.
 - **A test that fails only under the sandbox** is reported in **Verification** with its output. Do
   not change the test or the code to get past it.
-- **Writes under `.claude/prompts/` are not refused by your sandbox**, but the rule is the same: you
-  cannot edit anything there.
 
 ## Background commands end silently
 

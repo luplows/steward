@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { coderAllowedTools } from './coder-env.mjs'
 import {
-  STUCK_AFTER_MS, branchFor, claimAgeMs, claimBranch, claimPushArgs, commitSessionWork, dispatchCoder as dispatchCoderWith, findPromptChange,
+  STUCK_AFTER_MS, branchFor, claimAgeMs, claimBranch, claimPushArgs, commitSessionWork, dispatchCoder as dispatchCoderWith, findProposedEdit,
   machineLabel, pushArgs, pushBranch, readGitIdentity, retryStory as retryStoryWith,
 } from './coder.mjs'
 import { spawnCodexCoder } from './codex.mjs'
@@ -696,10 +696,10 @@ describe('OQ-70/AC-7: no commit status', () => {
   })
 })
 
-describe('OQ-70/AC-7b: a prompt diff is reported, not applied', () => {
+describe('OQ-70/AC-7b, ST-108/AC-3: a proposed edit is reported, not applied', () => {
   const promptBody = [
     '### What changed', '', 'Everything.', '',
-    '### Proposed prompt edit', '',
+    '### Proposed edit', '',
     '```diff',
     'diff --git a/.claude/prompts/coder.md b/.claude/prompts/coder.md',
     '--- a/.claude/prompts/coder.md',
@@ -708,13 +708,14 @@ describe('OQ-70/AC-7b: a prompt diff is reported, not applied', () => {
     '```',
   ].join('\n')
 
-  it('OQ-70/AC-7b: the run finishes, the PR opens, and the result names the pending prompt change', async () => {
+  it('OQ-70/AC-7b, ST-108/AC-3: the run finishes, the PR opens, and the result names the pending proposed edit', async () => {
     const world = makeWorld()
     const before = git(world.repoDir, 'status', '--porcelain')
     const { result, gh } = await dispatch(world, ({ cwd }) => { finishStory(cwd); return block('T', 'ready', promptBody) })
 
     expect(result.status).toBe('opened')
-    expect(result.promptChange).toEqual({ pending: true, files: ['.claude/prompts/coder.md'] })
+    expect(result.proposedEdit).toEqual({ pending: true, files: ['.claude/prompts/coder.md'] })
+    expect(result).not.toHaveProperty('promptChange')
     expect(pulls(gh)[0].body.body).toBe(`${promptBody}\n\nCoder: sonnet`) // the coder's text, untouched, then ATC's line
 
     // Nothing was written to the dispatcher's checkout, `.claude/` included.
@@ -723,8 +724,19 @@ describe('OQ-70/AC-7b: a prompt diff is reported, not applied', () => {
     expect(git(world.origin, 'log', '--all', '--format=%H', '--', '.claude')).toBe('')
   })
 
-  it('OQ-70/AC-7b: a body with no prompt edit reports none', () => {
-    expect(findPromptChange('### What changed\n\nNothing about prompts.')).toBeNull()
+  it('ST-108/AC-3: a body with no proposed edit reports none', () => {
+    expect(findProposedEdit('### What changed\n\nNothing about prompts.')).toBeNull()
+  })
+
+  it('ST-108/AC-3: a proposed edit of a file outside .claude/ names it, at heading levels 2 to 4', () => {
+    const diff = ['```diff', 'diff --git a/src/a.js b/src/a.js', '--- a/src/a.js', '+++ b/src/a.js', '@@ -1 +1 @@', '-a', '+b', '```']
+    for (const heading of ['## Proposed edit', '### Proposed edit', '#### Proposed edit']) {
+      expect(findProposedEdit(['### What changed', '', 'It.', '', heading, '', ...diff].join('\n'))).toEqual({ pending: true, files: ['src/a.js'] })
+    }
+  })
+
+  it('ST-108/AC-3: the old "Proposed prompt edit" heading is not read', () => {
+    expect(findProposedEdit(promptBody.replace('### Proposed edit', '### Proposed prompt edit'))).toBeNull()
   })
 
   it('OQ-70/AC-7b: no code path in the module writes to .claude/ or invokes git apply', () => {
@@ -2621,53 +2633,28 @@ describe('ST-15/AC-6: the commit and the push of a Codex session run with git ho
   })
 })
 
-describe('ST-15/AC-7: nothing under .claude/prompts/ is pushed', () => {
+describe('ST-108/AC-1: a branch that changes .claude/prompts/ is pushed as any other', () => {
   const commitAll = (repo, message) => {
     git(repo.work, 'add', '-A')
     git(repo.work, '-c', 'core.hooksPath=NUL', 'commit', '-q', '-m', message)
   }
 
   it.each([
-    ['adds', (work) => writeFileSync(path.join(work, '.claude', 'prompts', 'new.md'), 'new'), ['.claude/prompts/new.md']],
-    ['changes', (work) => writeFileSync(path.join(work, '.claude', 'prompts', 'coder.md'), 'changed\n'), ['.claude/prompts/coder.md']],
-    ['deletes', (work) => unlinkSync(path.join(work, '.claude', 'prompts', 'coder.md')), ['.claude/prompts/coder.md']],
-    ['renames out of', (work) => renameSync(path.join(work, '.claude', 'prompts', 'coder.md'), path.join(work, 'coder.md')), ['.claude/prompts/coder.md']],
-    ['renames into', (work) => renameSync(path.join(work, 'a.txt'), path.join(work, '.claude', 'prompts', 'a.txt')), ['.claude/prompts/a.txt']],
-  ])('ST-15/AC-7: pushBranch refuses a branch whose commits %s a prompt, and pushes nothing', async (_what, change, expected) => {
+    ['adds', (work) => writeFileSync(path.join(work, '.claude', 'prompts', 'new.md'), 'new')],
+    ['changes', (work) => writeFileSync(path.join(work, '.claude', 'prompts', 'coder.md'), 'changed\n')],
+    ['deletes', (work) => unlinkSync(path.join(work, '.claude', 'prompts', 'coder.md'))],
+    ['moves out of', (work) => renameSync(path.join(work, '.claude', 'prompts', 'coder.md'), path.join(work, 'coder.md'))],
+    ['moves into', (work) => renameSync(path.join(work, 'a.txt'), path.join(work, '.claude', 'prompts', 'a.txt'))],
+  ])('ST-108/AC-1: pushBranch pushes a branch whose commits %s a prompt', async (_what, change) => {
     const repo = makeHookRepo({ prompts: true })
     change(repo.work)
     commitAll(repo, 'touch')
     const push = await pushBranch({ cwd: repo.work, branch: GPT_BRANCH, baseSha: repo.base, hooksOff: true })
-    expect(push.status).toBe('prompt-change-refused')
-    expect(push.paths).toEqual(expected)
-    for (const p of expected) expect(push.reason).toContain(p)
-    expect(onOrigin(repo)).toBeNull()
-  })
-
-  it('ST-15/AC-7: a prompt changed by one commit and changed back by the next is still refused', async () => {
-    const repo = makeHookRepo({ prompts: true })
-    writeFileSync(path.join(repo.work, '.claude', 'prompts', 'coder.md'), 'changed\n')
-    commitAll(repo, 'change')
-    writeFileSync(path.join(repo.work, '.claude', 'prompts', 'coder.md'), 'coder\n')
-    commitAll(repo, 'back')
-    expect((await pushBranch({ cwd: repo.work, branch: GPT_BRANCH, baseSha: repo.base })).status).toBe('prompt-change-refused')
-  })
-
-  it('ST-15/AC-7: commits already at the base do not count, and other .claude paths are pushed', async () => {
-    const repo = makeHookRepo({ prompts: true })
-    writeFileSync(path.join(repo.work, '.claude', 'prompts', 'coder.md'), 'applied by hand\n')
-    commitAll(repo, 'applied by hand')
-    const baseSha = git(repo.work, 'rev-parse', 'HEAD')
-    mkdirSync(path.join(repo.work, '.claude', 'prompts-notes'), { recursive: true })
-    writeFileSync(path.join(repo.work, '.claude', 'prompts-notes', 'n.md'), 'n')
-    writeFileSync(path.join(repo.work, '.claude', 'settings.json'), '{}')
-    commitAll(repo, 'other')
-    const push = await pushBranch({ cwd: repo.work, branch: GPT_BRANCH, baseSha })
     expect(push.status).toBe('pushed')
     expect(onOrigin(repo)).toBe(push.headSha)
   })
 
-  it('ST-15/AC-7: dispatchCoder returns prompt-change-refused for a claude session, opens no pull request and keeps the commits', async () => {
+  it('ST-108/AC-1: dispatchCoder pushes a claude session\'s prompt edit and opens its pull request', async () => {
     const world = makeWorld()
     const { result, gh } = await dispatch(world, ({ cwd }) => {
       finishStory(cwd)
@@ -2677,15 +2664,12 @@ describe('ST-15/AC-7: nothing under .claude/prompts/ is pushed', () => {
       git(cwd, 'commit', '-q', '-m', 'edit the prompt')
       return block()
     })
-    expect(result.status).toBe('prompt-change-refused')
-    expect(result.paths).toEqual(['.claude/prompts/coder.md'])
-    expect(result.reason).toContain('.claude/prompts/coder.md')
-    expect(pulls(gh)).toHaveLength(0)
-    remoteClaimOnly(world)
-    expect(gitOk(world.repoDir, 'rev-parse', '--verify', '--quiet', `refs/heads/${GPT_BRANCH}`)).not.toBeNull()
+    expect(result.status).toBe('opened')
+    expect(pulls(gh)).toHaveLength(1)
+    expect(git(world.origin, 'log', '--format=%s', '-1', `refs/heads/${GPT_BRANCH}`, '--', '.claude/prompts/coder.md')).toBe('edit the prompt')
   })
 
-  it('ST-15/AC-7: a Codex session\'s edit of a prompt, which the sandbox allows, is committed and then refused', async () => {
+  it('ST-108/AC-1: dispatchCoder commits and pushes a Codex session\'s prompt edit and opens its pull request', async () => {
     const world = makeWorld()
     const { result, gh } = await dispatchCodex(world, ({ cwd }) => {
       leaveWork(cwd)
@@ -2693,13 +2677,12 @@ describe('ST-15/AC-7: nothing under .claude/prompts/ is pushed', () => {
       writeFileSync(path.join(cwd, '.claude', 'prompts', 'coder.md'), 'mine')
       return block()
     })
-    expect(result.status).toBe('prompt-change-refused')
-    expect(pulls(gh)).toHaveLength(0)
-    remoteClaimOnly(world)
-    expect(git(world.repoDir, 'log', '--format=%s', `refs/heads/${GPT_BRANCH}`).split('\n')[0]).toBe('Do the thing')
+    expect(result.status).toBe('opened')
+    expect(pulls(gh)).toHaveLength(1)
+    expect(git(world.origin, 'log', '--format=%s', '-1', `refs/heads/${GPT_BRANCH}`, '--', '.claude/prompts/coder.md')).toBe('Do the thing')
   })
 
-  it('ST-15/AC-7: retryStory returns it and replaces no pull request; the tip on origin does not move', async () => {
+  it('ST-108/AC-1: retryStory pushes a prompt edit and replaces the pull request body', async () => {
     const world = makeRetryWorld()
     const { result, gh } = await retry(world, ({ cwd }) => {
       mkdirSync(path.join(cwd, '.claude', 'prompts'), { recursive: true })
@@ -2708,78 +2691,9 @@ describe('ST-15/AC-7: nothing under .claude/prompts/ is pushed', () => {
       git(cwd, 'commit', '-q', '-m', 'edit the prompt')
       return block()
     })
-    expect(result.status).toBe('prompt-change-refused')
-    expect(patches(gh)).toHaveLength(0)
-    expect(remoteTipOf(world)).toBe(world.tip)
-  })
-
-  it('ST-15/AC-7: a retry on a branch where the prompt edit is already at the base still pushes', async () => {
-    const world = makeRetryWorld()
-    mkdirSync(path.join(world.seed, '.claude', 'prompts'), { recursive: true })
-    writeFileSync(path.join(world.seed, '.claude', 'prompts', 'coder.md'), 'applied by hand')
-    git(world.seed, 'add', '.')
-    git(world.seed, 'commit', '-q', '-m', 'apply the proposed prompt edit')
-    git(world.seed, 'push', '-q', 'origin', RETRY_BRANCH)
-    const { result } = await retry(world, ({ cwd }) => { commitWork(cwd); return block() })
     expect(result.status).toBe('retried')
-  })
-
-  describe('merge commits', () => {
-    const SIDE = 'side'
-    const commitFile = (repo, name, text = name) => {
-      writeFileSync(path.join(repo.work, name), text)
-      commitAll(repo, `add ${name}`)
-    }
-    const promptFile = (repo) => path.join(repo.work, '.claude', 'prompts', 'coder.md')
-
-    it('ST-15/AC-7: a prompt change made only in a merge commit resolution is refused', async () => {
-      const repo = makeHookRepo({ prompts: true })
-      git(repo.work, 'checkout', '-q', '-b', SIDE, repo.base)
-      commitFile(repo, 'side.txt')
-      git(repo.work, 'checkout', '-q', GPT_BRANCH)
-      commitFile(repo, 'own.txt')
-      git(repo.work, 'merge', '--no-commit', '--no-ff', SIDE)
-      writeFileSync(promptFile(repo), 'changed in the resolution\n')
-      git(repo.work, 'add', '-A')
-      git(repo.work, '-c', 'core.hooksPath=NUL', 'commit', '-q', '-m', 'merge side')
-      const push = await pushBranch({ cwd: repo.work, branch: GPT_BRANCH, baseSha: repo.base })
-      expect(push.status).toBe('prompt-change-refused')
-      expect(push.paths).toEqual(['.claude/prompts/coder.md'])
-      expect(onOrigin(repo)).toBeNull()
-    })
-
-    it('ST-15/AC-7: a prompt change on a side branch merged into the story branch is refused', async () => {
-      const repo = makeHookRepo({ prompts: true })
-      git(repo.work, 'checkout', '-q', '-b', SIDE, repo.base)
-      writeFileSync(promptFile(repo), 'changed on the side\n')
-      commitAll(repo, 'side prompt')
-      git(repo.work, 'checkout', '-q', GPT_BRANCH)
-      commitFile(repo, 'own.txt')
-      git(repo.work, '-c', 'core.hooksPath=NUL', 'merge', '--no-ff', '-q', '-m', 'merge side', SIDE)
-      const push = await pushBranch({ cwd: repo.work, branch: GPT_BRANCH, baseSha: repo.base })
-      expect(push.status).toBe('prompt-change-refused')
-      expect(push.paths).toEqual(['.claude/prompts/coder.md'])
-      expect(onOrigin(repo)).toBeNull()
-    })
-
-    it('ST-15/AC-7: merging a base that holds a prompt change, with no prompt change of its own, still pushes', async () => {
-      const repo = makeHookRepo({ prompts: true })
-      git(repo.work, 'checkout', '-q', 'main')
-      writeFileSync(promptFile(repo), 'applied by hand on main\n')
-      commitAll(repo, 'prompt on main')
-      git(repo.work, 'push', '-q', '--no-verify', 'origin', 'main')
-      git(repo.work, 'checkout', '-q', GPT_BRANCH)
-      commitFile(repo, 'own.txt')
-      git(repo.work, '-c', 'core.hooksPath=NUL', 'merge', '--no-ff', '-q', '-m', 'merge main', 'origin/main')
-      const push = await pushBranch({ cwd: repo.work, branch: GPT_BRANCH, baseSha: repo.base })
-      expect(push.status).toBe('pushed')
-      expect(onOrigin(repo)).toBe(push.headSha)
-    })
-  })
-
-  it('ST-15/AC-7: the CLI exits 1 for it: it is not among the non-failures', () => {
-    const line = SOURCE.match(/const NON_FAILURES = \[(.*)\]/)[1]
-    expect(line).not.toContain('prompt-change-refused')
+    expect(patches(gh)).toHaveLength(1)
+    expect(remoteTipOf(world)).not.toBe(world.tip)
   })
 })
 
