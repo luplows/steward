@@ -60,9 +60,10 @@
  *   nextLandingScanAt  when the landing scan is next due; only with a cadence of its own
  *   landingCandidates  [{ repo, number, headSha }] the latest landing scan found; only with
  *                    discovery
- *   awaitingManualLanding  [{ repo, number, headSha, paths }] the latest landing scan's candidates
- *                    whose attempt returned `protected-paths`: each changes the protected paths
- *                    `paths` names, and lands only by `steward land <pr-number>` (ST-106). A new
+ *   awaitingManualLanding  [{ repo, number, headSha, paths, landCommand }] the latest landing
+ *                    scan's candidates whose attempt returned `protected-paths`: each changes the
+ *                    protected paths `paths` names, and lands only by `landCommand`,
+ *                    `steward land <pr-number>` (ST-106). A new
  *                    landing scan's attempts replace it. Only with `landing.attempt`
  *   lastOutcome      { repo, number, headSha, status, counted?, reason?, at } of the latest review
  *   landingActive    { repo, number, headSha } of the landing attempt under way, or null; only
@@ -473,7 +474,7 @@ export async function scheduleReviews({
       // head is unknown (null), never the scan's.
       const pilotHead = typeof result.headSha === 'string' && result.headSha !== '' ? result.headSha : null
       if (result.status === 'protected-paths') {
-        awaitingManual = [...awaitingManual, { repo, number, headSha: pilotHead ?? headSha, paths: result.paths }]
+        awaitingManual = [...awaitingManual, { repo, number, headSha: pilotHead ?? headSha, paths: result.paths, landCommand: `steward land ${number}` }]
         report({ awaitingManualLanding: awaitingManual })
       }
       lastLanding({

@@ -347,7 +347,7 @@ function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, 
   }
   if (awaitingManualLanding?.length > 0) {
     lines.push('Pull requests waiting for a manual landing, as they change protected paths:')
-    for (const waiting of awaitingManualLanding) lines.push(`  ${pull(waiting)}: ${waiting.paths.join(', ')}; lands only by steward land ${waiting.number}`)
+    for (const waiting of awaitingManualLanding) lines.push(`  ${pull(waiting)}: ${waiting.paths.join(', ')}; lands only by ${waiting.landCommand}`)
   }
   if (lastLanding) {
     const { status: ended, triggers, reason, at, discoveredHeadSha } = lastLanding

@@ -1412,7 +1412,8 @@ describe('ST-84: the coordinator requests bounded unattended landing and reports
       land: async ({ number }) => (number === 1 ? { status: 'protected-paths', pr: 1, headSha: HEAD, paths, triggers: 0 } : MERGED(2)),
     })
     await until(() => lastLanding(h)?.number === 2)
-    const waiting = [{ repo: A, number: 1, headSha: HEAD, paths }]
+    // --json says how it lands, as the text does (AC-8).
+    const waiting = [{ repo: A, number: 1, headSha: HEAD, paths, landCommand: 'steward land 1' }]
     expect(recordOf(h).awaitingManualLanding).toEqual(waiting)
     // The last landing attempt is shown as it was.
     expect(lastLanding(h)).toMatchObject({ number: 2, status: 'merged' })
