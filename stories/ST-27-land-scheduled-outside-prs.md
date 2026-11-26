@@ -57,10 +57,9 @@ A first sketch, to be settled with the Open questions below.
 - Who is reviewed: `scripts/dispatch/writer-prs.mjs` skips a pull request
   whose author is not honoured, with the outcome `outsider`, and `loop.mjs`
   runs it. ST-25's rotation command does the same (its AC-3 and AC-6), which is
-  why this story depends on it, and until then the controller follows the same
-  rule by hand (`docs/controller.md`, "A rotation"). `review.mjs` itself does
+  why this story depends on it. `review.mjs` itself does
   not check the author, so a crew member can already have one reviewed by
-  naming it, and the verdict counts, since ATC posts it under the crew member's
+  naming it, and the verdict counts, since steward posts it under the crew member's
   credential.
 - Reviewing a pull request runs its code: `review.mjs` installs its dependencies
   in the reviewer's checkout (`install.mjs`, `npm ci`, install scripts

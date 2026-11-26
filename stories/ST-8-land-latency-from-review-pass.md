@@ -57,7 +57,7 @@ records a wait of seconds.
 - **CI finishing after the review.** `mergeable_state` stays `blocked` until
   required checks pass, so where CI finishes after the gate,
   `sinceReviewSeconds` includes that wait too. A rotation reviews a pull
-  request without waiting for its CI (`docs/controller.md`, "A rotation"), so
+  request without waiting for its CI (`scripts/dispatch/rotation.mjs`, step 3), so
   this can happen.
 - Changing when or how often the runway is started.
 

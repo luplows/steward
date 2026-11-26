@@ -35,7 +35,7 @@ one backstop for every story, with no special case for any of them.
       - its outcome. One other than `completed` gives `session-failed`, as
         today;
       - its final report, which supplies the PR block (`prText`), `draft` and
-        `findPromptChange`;
+        `findPromptChange` (renamed `findProposedEdit` by ST-108);
       - `pushBranch` run again.
 
       From there the dispatcher continues exactly as it does after a first
