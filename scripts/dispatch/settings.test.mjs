@@ -76,7 +76,6 @@ describe('readSettings', () => {
     expect(settings).toEqual({
       repo: 'luplows/steward',
       setup: { command: 'npm ci', timeoutMinutes: 5 },
-      check: { command: 'npm run check', timeoutMinutes: 10 },
       landWhen: 'all-checks',
       land: true,
       unitLinks: ['file'],
@@ -166,14 +165,16 @@ describe('ST-29: inspectAfterHours', () => {
     expect((await readSettings(REPO_ROOT)).inspectAfterHours).toBe(24)
     const page = readFileSync(path.join(REPO_ROOT, 'docs', 'settings.md'), 'utf8')
     const copy = JSON.parse(page.match(/## This repository's file\s+```json\n([\s\S]*?)```/)[1])
-    expect(copy).toEqual(JSON.parse(readFileSync(path.join(REPO_ROOT, 'steward.config.json'), 'utf8')))
+    // This repository's own file keeps the retired `check` until it upgrades (ST-105); the page does not show it.
+    const { check: _retired, ...own } = JSON.parse(readFileSync(path.join(REPO_ROOT, 'steward.config.json'), 'utf8'))
+    expect(copy).toEqual(own)
     expect(page).toMatch(/\| `inspectAfterHours` \| A positive integer \|.*\| Asked; default 24\. \|/)
   })
 })
 
 describe('ST-18: the review side settings keys', () => {
-  const COMMAND_KEYS = ['setup', 'check']
-  const NEW_KEYS = ['setup', 'check', 'landWhen', 'land', 'unitLinks', 'rulesFile', 'inspectAfterHours']
+  const COMMAND_KEYS = ['setup']
+  const NEW_KEYS = ['setup', 'landWhen', 'land', 'unitLinks', 'rulesFile', 'inspectAfterHours']
 
   async function readBack(settings) {
     return withTempProject(async (dir) => {
@@ -185,7 +186,6 @@ describe('ST-18: the review side settings keys', () => {
   it('ST-18/AC-1: a valid value for each new key is read back unchanged', async () => {
     const settings = fixtureSettings({
       setup: { command: 'make deps', timeoutMinutes: 1 },
-      check: { command: 'make check', timeoutMinutes: 30 },
       landWhen: ['test', 'lint'],
       land: false,
       unitLinks: ['issue', 'file', 'other'],
@@ -205,6 +205,22 @@ describe('ST-18: the review side settings keys', () => {
 
   it.each(NEW_KEYS)('ST-18/AC-2: a missing %s names the file and the key', async (key) => {
     await expectRejected(withoutKey(key), `missing required key '${key}'`)
+  })
+
+  it.each([
+    ['a command', { command: 'make check', timeoutMinutes: 30 }],
+    ['null', null],
+    ['an invalid value', 'make check'],
+    ['an invalid object', { shell: true }],
+  ])('ST-105/AC-1: a file with check as %s is accepted, and the settings have no check', async (_name, check) => {
+    const settings = await readBack({ ...fixtureSettings(), check })
+    expect(settings).toEqual(fixtureSettings())
+    expect(settings).not.toHaveProperty('check')
+  })
+
+  it('ST-105/AC-1: a file without check is accepted, and an unknown key is still refused', async () => {
+    expect(await readBack(fixtureSettings())).not.toHaveProperty('check')
+    await expectRejected({ ...fixtureSettings(), checks: null }, "unrecognised key 'checks'")
   })
 
   it('ST-18/AC-2: an unknown top-level key names the file and the key', async () => {

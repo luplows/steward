@@ -6,7 +6,6 @@
 export const FIXTURE_SETTINGS = {
   repo: 'owner/repo',
   setup: { command: 'npm ci', timeoutMinutes: 5 },
-  check: { command: 'npm run check', timeoutMinutes: 10 },
   landWhen: 'all-checks',
   land: true,
   unitLinks: ['file'],

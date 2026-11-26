@@ -23,16 +23,24 @@ const USAGE_ROLES = ['coder', 'reviewer']
 const USAGE_WINDOWS = ['session', 'weekly']
 const UNIT_LINK_KINDS = ['issue', 'file', 'other']
 
-const ALLOWED_KEYS = [
+/** The keys a file must have. */
+const REQUIRED_KEYS = [
   'repo',
   'setup',
-  'check',
   'landWhen',
   'land',
   'unitLinks',
   'rulesFile',
   'inspectAfterHours',
 ]
+
+/**
+ * `check` was a setting until ST-105, and nothing ran it. A file that has it, with any value, is
+ * still accepted and the value is ignored; `upgrade` removes it.
+ */
+const RETIRED_KEYS = ['check']
+
+const ALLOWED_KEYS = [...REQUIRED_KEYS, ...RETIRED_KEYS]
 
 /** A non-empty array of distinct values, each passing `itemOk`. */
 function isDistinctArray(value, itemOk, { allowEmpty }) {
@@ -44,7 +52,7 @@ function isDistinctArray(value, itemOk, { allowEmpty }) {
   )
 }
 
-/** Validates a `setup` or `check` value: `null`, or { command, timeoutMinutes }. */
+/** Validates a `setup` value: `null`, or { command, timeoutMinutes }. */
 function validateCommand(filePath, name, value) {
   if (value === null) return null
   if (typeof value !== 'object' || Array.isArray(value)) {
@@ -115,7 +123,7 @@ export function validateUsageLimits(filePath, value) {
  * Reads and validates `<projectRoot>/steward.config.json`. Throws, naming the
  * file and the problem, on a missing file, invalid JSON, a missing key, an
  * invalid value, or any key beyond those listed in `docs/settings.md`
- * (inside a `setup` or `check` object too). Holds no default for any value --
+ * (inside a `setup` object too); a retired key (`check`) is accepted and ignored. Holds no default for any value --
  * a project without the file, or with an incomplete one, fails rather than
  * running with one assumed (ST-18).
  */
@@ -151,7 +159,7 @@ export async function readSettings(projectRoot) {
 
   const { repo } = data
 
-  for (const key of ALLOWED_KEYS) {
+  for (const key of REQUIRED_KEYS) {
     if (!(key in data)) {
       throw new Error(`${filePath}: missing required key '${key}'`)
     }
@@ -162,7 +170,6 @@ export async function readSettings(projectRoot) {
   }
 
   const setup = validateCommand(filePath, 'setup', data.setup)
-  const check = validateCommand(filePath, 'check', data.check)
 
   const { landWhen, land, unitLinks, rulesFile, inspectAfterHours } = data
   if (
@@ -193,5 +200,5 @@ export async function readSettings(projectRoot) {
     )
   }
 
-  return { repo, setup, check, landWhen, land, unitLinks, rulesFile, inspectAfterHours }
+  return { repo, setup, landWhen, land, unitLinks, rulesFile, inspectAfterHours }
 }

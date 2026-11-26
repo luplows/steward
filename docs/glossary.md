@@ -129,8 +129,9 @@ Where a file defines the thing, the entry names it, and the file is the authorit
 - **checklist** — the file of rules a flight is reviewed against: `REVIEW.md` in this repository,
   and in a project the file its settings name (`rulesFile`), read from `main`
   (`scripts/dispatch/review.mjs`). *Formerly: the rules file.*
-- **pre-flight check** — the `check` command in a project's settings, which a coder runs before its
-  work is pushed. *Formerly: the `check` command.*
+- **pre-flight check** — the checks a coder runs before its work is pushed, which the project's own
+  instructions name (its `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `README.md` or
+  `package.json`). *Formerly: the `check` command, a setting until ST-105.*
 - **setup** — the `setup` command in a project's settings, which prepares a fresh checkout before a
   coder session starts; nothing is installed before a review. `scripts/dispatch/install.mjs` runs
   it, within the time limit written beside it.

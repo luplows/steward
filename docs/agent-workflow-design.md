@@ -651,9 +651,9 @@ written (owner, 2026-10-11; Part 3, "Decided so far"). What `outline.md` ("The t
   findings. A pull request does not belong to a coder. Coder work always needs a unit.
 - **A coder claims its work with a claim commit**, as `claimPushArgs` in
   `scripts/dispatch/coder.mjs` does for a story.
-- **The coder session runs the project's pre-flight check** (`check`) before its work is pushed.
-  ATC does not run it again. **Planned (ST-105):** the pre-flight check is what the project's own
-  instructions name, and the `check` setting is retired ("Settings", Part 3).
+- **The coder session runs the project's pre-flight check** before its work is pushed. The check is
+  what the project's own instructions name; there is no `check` setting ("Settings", Part 3). ATC
+  does not run it again.
 - **The coder holds no GitHub credential and does not push.** ATC pushes its branch and opens its
   pull request (**Credential minimalism**, below).
 
@@ -2056,11 +2056,11 @@ shortened where it is long, so that it can be found there with its date.
 - **`setup` and `check`: one command each, run through the platform's shell.** Not chosen: an
   argument list run without a shell. What follows for `check` (the planning session, 2026-10-11):
   its program must be one the coder's allowlist admits, which today means `npm`, `npx` or `node`.
-  **Planned (ST-105):** the `check` setting is retired, since nothing runs it: the coder's
+  The `check` setting is retired (ST-105), since nothing runs it: the coder's
   pre-flight check is whatever the project's own instructions name. A file with `check` is still
-  accepted and the key ignored, `init` no longer writes it, and `upgrade` removes it, as its first
-  settings change (crew, 2026-11-25, after tower-workshop-paths found that setting `check` changed
-  nothing). Considered and not chosen: ATC running `check` itself after the coder's session, which
+  accepted and the key ignored (`readSettings`), `init` no longer writes it, and `upgrade` removes
+  it, as its first settings change (`MIGRATIONS`, `scripts/dispatch/upgrade.mjs`; crew, 2026-11-25,
+  after tower-workshop-paths found that setting `check` changed nothing). Considered and not chosen: ATC running `check` itself after the coder's session, which
   would reverse "The coder session runs the pre-flight check", above; and passing `check` into the
   coder's prompt, which keeps a setting only to restate what a project's instructions already say.
 - **Each command is written with its own time limit, as one value.** Considered and not chosen: a
@@ -2331,7 +2331,7 @@ shortened where it is long, so that it can be found there with its date.
   tower-workshop-paths keep their "Held until steward's coder works" until each is refined (owner,
   2026-10-12). The review side's design is in `outline.md`, "Defining steward" (Review, Land,
   Settings and The two sides), decided the same day; each part is built by the story named:
-  - The settings keys `setup`, `check`, `landWhen`, `land`, `unitLinks` and
+  - The settings keys `setup`, `landWhen`, `land`, `unitLinks` and
     `rulesFile`, each required, with no default in the code (`docs/settings.md`).
   - The project's `setup` command, within its time limit, in place of `npm ci`
     (`scripts/dispatch/install.mjs`).

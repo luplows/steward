@@ -16,19 +16,19 @@ pre-flight check is whatever my project's own instructions name.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `readSettings` (`scripts/dispatch/settings.mjs`) no longer requires `check`. When
+- [x] **AC-1** — `readSettings` (`scripts/dispatch/settings.mjs`) no longer requires `check`. When
       the file has it, with any value, it is accepted and ignored, and the settings it returns have
       no `check`. Every other key is validated as now, and any other key the file does not allow is
       still refused.
-- [ ] **AC-2** — `init` writes no `check` key in the `steward.config.json` it adds
+- [x] **AC-2** — `init` writes no `check` key in the `steward.config.json` it adds
       (`scripts/dispatch/init.mjs`).
-- [ ] **AC-3** — `upgrade` makes its first settings change: an entry in `MIGRATIONS`
+- [x] **AC-3** — `upgrade` makes its first settings change: an entry in `MIGRATIONS`
       (`scripts/dispatch/upgrade.mjs`) that removes `check` from a project's `steward.config.json`
       when it is there, and changes nothing else in the file. Its explanation, in the upgrade
       pull request's body, says that steward no longer reads `check`, and that the project's own
       instructions name the checks a coder runs. An upgrade of a project whose file has no `check`
       makes no settings change.
-- [ ] **AC-4** — The docs no longer describe a `check` setting, and say that the coder's pre-flight
+- [x] **AC-4** — The docs no longer describe a `check` setting, and say that the coder's pre-flight
       check is what the project's own instructions name (its `AGENTS.md`, `CLAUDE.md`,
       `CONTRIBUTING.md`, `README.md` or `package.json`): `docs/settings.md` (the keys table, the
       "`setup` and `check`" section, the example, and "flat apart from `setup` and `check`"),
@@ -36,9 +36,9 @@ pre-flight check is whatever my project's own instructions name.
       and the current passages of `docs/outline.md` and `docs/agent-workflow-design.md` that name
       the setting. `docs/settings.md` says that a file with `check` is still accepted, and that
       `upgrade` removes it.
-- [ ] **AC-5** — This story's **Planned** markers in `docs/agent-workflow-design.md` are removed,
+- [x] **AC-5** — This story's **Planned** markers in `docs/agent-workflow-design.md` are removed,
       and the passages are corrected wherever what was built differs.
-- [ ] **AC-6** — Tests, in the existing test files of `settings.mjs`, `init.mjs` and `upgrade.mjs`,
+- [x] **AC-6** — Tests, in the existing test files of `settings.mjs`, `init.mjs` and `upgrade.mjs`,
       cover:
       - a file without `check`, and files with `check` as `null`, as a valid command and as an
         invalid value, all accepted with no `check` in the result;

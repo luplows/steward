@@ -14,8 +14,8 @@
  * have a template for each. The templates are read from GitHub at each pin
  * (`github-read.mjs`), so nothing is shipped and any commit can be tried. It proposes the
  * templates at the target pin, filled as `init` fills them (`fillPin`), the project's other files
- * as they are, and the changes of `MIGRATIONS` to `steward.config.json`, of which there are none
- * yet. It validates the proposed result with the running package's own `readSettings` and
+ * as they are, and the changes of `MIGRATIONS` to `steward.config.json`, of which there is one
+ * (`ST-105-remove-check`). It validates the proposed result with the running package's own `readSettings` and
  * `validateRules`, so it must be run from steward installed at the target pin.
  *
  * It reads the project's files at the commit `main` names when it starts. It then clones the
@@ -101,9 +101,20 @@ const FLAGS = ['--to', '--ref', '--branch', '--pr-template']
  * in order. Each is `{ id, explanation, applies(config), migrate(config), decision?(config) }`:
  * `migrate` returns the new config (it may not change `land`), `explanation` says why the project's
  * file changes, and `decision`, when it returns text, says a decision of the project's own is
- * needed and that the upgrade made none. There is none yet: no release has needed one.
+ * needed and that the upgrade made none. None has a decision yet.
  */
-export const MIGRATIONS = []
+export const MIGRATIONS = [
+  {
+    id: 'ST-105-remove-check',
+    explanation:
+      "steward no longer reads `check`, so the key is removed. The project's own instructions (its `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, `README.md` or `package.json`) name the checks a coder runs.",
+    applies: (config) => Object.hasOwn(config, 'check'),
+    migrate: (config) => {
+      const { check: _removed, ...rest } = config
+      return rest
+    },
+  },
+]
 
 // ------------------------------------------------------------------ pure parts
 
