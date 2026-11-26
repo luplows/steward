@@ -2904,7 +2904,8 @@ shortened where it is long, so that it can be found there with its date.
     once its coder runs.
   - **The story prefix belongs to the story convention, which some projects will not have**
     `storyPrefix` leaves steward's settings, as decided on 2026-10-11 ("The outline's
-    reasoning", "Settings", above), and a settings file holding it is ignored as an unknown key (ST-110).
+    reasoning", "Settings", above), and a `storyPrefix` key in a settings file is ignored as an
+    unknown key (ST-110).
     Steward's story lint, story containment and queue are steward's own tooling, and read the
     prefix from a file of the convention's own, `stories/stories.json` (`{ "prefix": "ST" }`); a
     project with no story files has no such file. The engine's coder (`coder.mjs`, `story.mjs`,

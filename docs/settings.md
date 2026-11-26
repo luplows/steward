@@ -71,7 +71,8 @@ GitHub would merge in, and the runway's `--match-head-commit` merge.
 
 ## `setup`
 
-It is `null`, or an object with exactly these keys:
+It is `null`, or an object with these keys, both required. Any other key in it is ignored, as at
+the top level:
 
 - `command`: a non-empty string, run through the platform's shell. Point it at a script of the
   project's own (such as `npm run check`) rather than chaining commands, since only simple forms
