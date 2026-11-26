@@ -484,8 +484,10 @@ settles it.
 
 - **One file, `steward.config.json`, flat for now, apart from each command (below).** Steward's
   code holds no default for any key: `init` writes a starting value for each into the file, where
-  the project sees it, and a missing or unknown key is an error that names it, as `settings.mjs`
-  does today (owner, 2026-10-11, asked whether the time limits start with defaults: "I want to
+  the project sees it, and a missing key is an error that names it, as `settings.mjs`
+  does today, while an unknown key is ignored (crew, 2026-11-25, in place of the owner's decision
+  of 2026-10-11 that it is an error, so that a release can add a key without breaking the
+  coordinator at an older release) (owner, 2026-10-11, asked whether the time limits start with defaults: "I want to
   write in the limit, not store it in code"). Grouping other keys is left until the coder's keys
   make the groups clear.
 - **`storyPrefix` leaves steward's settings** (owner, 2026-10-11): the core does not depend on how

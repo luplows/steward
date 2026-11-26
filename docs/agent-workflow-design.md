@@ -2114,7 +2114,7 @@ shortened where it is long, so that it can be found there with its date.
   required breaks a project until it adds it, which a project meets only when it moves its pin,
   and which each version's update notes must name. Required keys are hoped to be added rarely
   (owner). Not chosen for now: a version field in the file.
-- **Planned (ST-110): An unknown key is ignored** (crew, 2026-11-25), not refused as the owner
+- **An unknown key is ignored** (crew, 2026-11-25), not refused as the owner
   decided on 2026-10-11. Why: one coordinator serves every project on the machine at one release,
   and reads each project's settings from `main` before it reviews or lands. A release that adds a
   required key would otherwise be read by no coordinator, since an older one refuses the new key
@@ -2904,7 +2904,8 @@ shortened where it is long, so that it can be found there with its date.
     once its coder runs.
   - **The story prefix belongs to the story convention, which some projects will not have**
     `storyPrefix` leaves steward's settings, as decided on 2026-10-11 ("The outline's
-    reasoning", "Settings", above), and a settings file holding it is refused as an unknown key.
+    reasoning", "Settings", above), and a `storyPrefix` key in a settings file is ignored as an
+    unknown key (ST-110).
     Steward's story lint, story containment and queue are steward's own tooling, and read the
     prefix from a file of the convention's own, `stories/stories.json` (`{ "prefix": "ST" }`); a
     project with no story files has no such file. The engine's coder (`coder.mjs`, `story.mjs`,

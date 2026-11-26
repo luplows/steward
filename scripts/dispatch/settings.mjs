@@ -23,7 +23,10 @@ const USAGE_ROLES = ['coder', 'reviewer']
 const USAGE_WINDOWS = ['session', 'weekly']
 const UNIT_LINK_KINDS = ['issue', 'file', 'other']
 
-/** The keys a file must have. */
+/**
+ * The keys a file must have. A key beyond these is ignored (ST-110), so that a release can add a
+ * key without breaking a steward at an older release.
+ */
 const REQUIRED_KEYS = [
   'repo',
   'setup',
@@ -33,14 +36,6 @@ const REQUIRED_KEYS = [
   'rulesFile',
   'inspectAfterHours',
 ]
-
-/**
- * `check` was a setting until ST-105, and nothing ran it. A file that has it, with any value, is
- * still accepted and the value is ignored; `upgrade` removes it.
- */
-const RETIRED_KEYS = ['check']
-
-const ALLOWED_KEYS = [...REQUIRED_KEYS, ...RETIRED_KEYS]
 
 /** A non-empty array of distinct values, each passing `itemOk`. */
 function isDistinctArray(value, itemOk, { allowEmpty }) {
@@ -59,11 +54,6 @@ function validateCommand(filePath, name, value) {
     throw new Error(
       `${filePath}: '${name}' must be null or an object with 'command' and 'timeoutMinutes', got ${JSON.stringify(value)}`,
     )
-  }
-  for (const key of Object.keys(value)) {
-    if (!COMMAND_KEYS.includes(key)) {
-      throw new Error(`${filePath}: unrecognised key '${name}.${key}'`)
-    }
   }
   for (const key of COMMAND_KEYS) {
     if (!(key in value)) {
@@ -122,8 +112,8 @@ export function validateUsageLimits(filePath, value) {
 /**
  * Reads and validates `<projectRoot>/steward.config.json`. Throws, naming the
  * file and the problem, on a missing file, invalid JSON, a missing key, an
- * invalid value, or any key beyond those listed in `docs/settings.md`
- * (inside a `setup` object too); a retired key (`check`) is accepted and ignored. Holds no default for any value --
+ * or an invalid value. A key it does not know is ignored, inside a `setup`
+ * object too (ST-110). Holds no default for any value --
  * a project without the file, or with an incomplete one, fails rather than
  * running with one assumed (ST-18).
  */
@@ -149,12 +139,6 @@ export async function readSettings(projectRoot) {
 
   if (data === null || typeof data !== 'object' || Array.isArray(data)) {
     throw new Error(`${filePath}: must be a JSON object`)
-  }
-
-  for (const key of Object.keys(data)) {
-    if (!ALLOWED_KEYS.includes(key)) {
-      throw new Error(`${filePath}: unrecognised key '${key}'`)
-    }
   }
 
   const { repo } = data
