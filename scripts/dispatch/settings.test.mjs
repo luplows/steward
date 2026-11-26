@@ -41,6 +41,14 @@ async function expectRejected(settings, fragment) {
   })
 }
 
+/** Reads `settings` back from a temp project. */
+async function readBack(settings) {
+  return withTempProject(async (dir) => {
+    writeConfig(dir, JSON.stringify(settings))
+    return readSettings(dir)
+  })
+}
+
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -123,16 +131,12 @@ describe('readSettings', () => {
     })
   })
 
-  it('OQ-135/AC-3 - throws naming the file and the problem when an extra key is present', async () => {
+  it('ST-110/AC-7: reads the file and ignores an extra key', async () => {
     await withTempProject(async (dir) => {
-      writeConfig(
-        dir,
-        JSON.stringify(fixtureSettings({ extra: 'nope' })),
-      )
-      const filePath = path.join(dir, 'steward.config.json')
-      const promise = readSettings(dir)
-      await expect(promise).rejects.toThrow(filePath)
-      await expect(promise).rejects.toThrow("unrecognised key 'extra'")
+      writeConfig(dir, JSON.stringify(fixtureSettings({ extra: 'nope' })))
+      const settings = await readSettings(dir)
+      expect(settings).toEqual(fixtureSettings())
+      expect(settings).not.toHaveProperty('extra')
     })
   })
 })
@@ -218,20 +222,22 @@ describe('ST-18: the review side settings keys', () => {
     expect(settings).not.toHaveProperty('check')
   })
 
-  it('ST-105/AC-1: a file without check is accepted, and an unknown key is still refused', async () => {
+  it('ST-110/AC-7: a file without check is accepted, and an unknown key is ignored', async () => {
     expect(await readBack(fixtureSettings())).not.toHaveProperty('check')
-    await expectRejected({ ...fixtureSettings(), checks: null }, "unrecognised key 'checks'")
+    const settings = await readBack({ ...fixtureSettings(), checks: null })
+    expect(settings).toEqual(fixtureSettings())
+    expect(settings).not.toHaveProperty('checks')
   })
 
-  it('ST-18/AC-2: an unknown top-level key names the file and the key', async () => {
-    await expectRejected(fixtureSettings({ landing: true }), "unrecognised key 'landing'")
+  it('ST-110/AC-7: an unknown top-level key is read and is not in the settings returned', async () => {
+    const settings = await readBack(fixtureSettings({ landing: true }))
+    expect(settings).toEqual(fixtureSettings())
+    expect(settings).not.toHaveProperty('landing')
   })
 
-  it.each(COMMAND_KEYS)('ST-18/AC-2: an unknown key inside %s names its parent', async (key) => {
-    await expectRejected(
-      fixtureSettings({ [key]: { command: 'x', timeoutMinutes: 1, shell: 'sh' } }),
-      `unrecognised key '${key}.shell'`,
-    )
+  it.each(COMMAND_KEYS)('ST-110/AC-7: an unknown key inside %s is read and is not in the settings returned', async (key) => {
+    const settings = await readBack(fixtureSettings({ [key]: { command: 'x', timeoutMinutes: 1, shell: 'sh' } }))
+    expect(settings[key]).toEqual({ command: 'x', timeoutMinutes: 1 })
   })
 
   it.each(COMMAND_KEYS)('ST-18/AC-2: %s missing command or timeoutMinutes names the nested key', async (key) => {
@@ -298,9 +304,11 @@ describe('ST-18: the review side settings keys', () => {
 })
 
 describe('ST-34/AC-3: usageLimits left the project settings', () => {
-  it('ST-34/AC-3: refuses usageLimits as an unknown key', async () => {
+  it('ST-110/AC-7: reads a file that has usageLimits, and ignores it', async () => {
     const usageLimits = { coder: { session: 70, weekly: 75 }, reviewer: { session: 90, weekly: 90 } }
-    await expectRejected(fixtureSettings({ usageLimits }), "unrecognised key 'usageLimits'")
+    const settings = await readBack(fixtureSettings({ usageLimits }))
+    expect(settings).toEqual(fixtureSettings())
+    expect(settings).not.toHaveProperty('usageLimits')
   })
 
   it("ST-34/AC-3: this repository's steward.config.json has no usageLimits", async () => {
@@ -316,8 +324,10 @@ describe('ST-41/AC-1: storyPrefix left the project settings', () => {
     })
   })
 
-  it('ST-41/AC-1: refuses storyPrefix as an unknown key, naming it', async () => {
-    await expectRejected(fixtureSettings({ storyPrefix: 'ST' }), "unrecognised key 'storyPrefix'")
+  it('ST-110/AC-7: reads a file that has storyPrefix, and ignores it', async () => {
+    const settings = await readBack(fixtureSettings({ storyPrefix: 'ST' }))
+    expect(settings).toEqual(fixtureSettings())
+    expect(settings).not.toHaveProperty('storyPrefix')
   })
 
   it("ST-41/AC-1: this repository's steward.config.json has no storyPrefix", async () => {

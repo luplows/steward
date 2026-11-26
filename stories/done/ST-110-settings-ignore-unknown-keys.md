@@ -16,17 +16,17 @@ an older release, such as the one coordinator that serves all my projects.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — `readSettings` (`scripts/dispatch/settings.mjs`) accepts a file with a top-level
+- [x] **AC-1** — `readSettings` (`scripts/dispatch/settings.mjs`) accepts a file with a top-level
       key it does not know, and ignores the key: the settings it returns hold only the keys it
       knows. It no longer refuses an unknown key.
-- [ ] **AC-2** — The same holds inside `setup`: an unknown key there is accepted and ignored
+- [x] **AC-2** — The same holds inside `setup`: an unknown key there is accepted and ignored
       (`validateCommand`).
-- [ ] **AC-3** — `RETIRED_KEYS` is removed, since `check` is now an unknown key like any other.
+- [x] **AC-3** — `RETIRED_KEYS` is removed, since `check` is now an unknown key like any other.
       A file with `check` is still accepted and the settings have no `check`, as ST-105 made them,
       and `upgrade`'s migration `ST-105-remove-check` still removes it.
-- [ ] **AC-4** — Every key `readSettings` knows is still required, and is still validated as now:
+- [x] **AC-4** — Every key `readSettings` knows is still required, and is still validated as now:
       a missing key and a value of the wrong form are each refused, naming the file and the key.
-- [ ] **AC-5** — The docs say what is valid now:
+- [x] **AC-5** — The docs say what is valid now:
       - `docs/settings.md`'s list at the top: an unknown key is ignored, not an error; the
         bullet about `check` says it is ignored as any unknown key is; and `usageLimits` in this
         file is ignored, not refused.
@@ -39,10 +39,10 @@ an older release, such as the one coordinator that serves all my projects.
         2026-11-25.
       - `docs/agent-workflow-design.md`'s one passage that says an unknown key is refused, on
         `storyPrefix` ("is refused as an unknown key"), is corrected.
-- [ ] **AC-6** — This story's **Planned** marker in `docs/agent-workflow-design.md`, "Settings"
+- [x] **AC-6** — This story's **Planned** marker in `docs/agent-workflow-design.md`, "Settings"
       ("An unknown key is ignored"), is removed, and the passage is corrected wherever what was
       built differs.
-- [ ] **AC-7** — Tests, in `scripts/dispatch/settings.test.mjs`, replace each test that expects an
+- [x] **AC-7** — Tests, in `scripts/dispatch/settings.test.mjs`, replace each test that expects an
       unknown key to be refused, and each asserts the file is read and the key is not in the
       settings returned. They are "OQ-135/AC-3 - throws naming the file and the problem when an
       extra key is present", "ST-105/AC-1: a file without check is accepted, and an unknown key is

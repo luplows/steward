@@ -7,18 +7,21 @@ decisions behind the keys are in [`outline.md`](outline.md), "Defining steward",
 "Settings".
 
 - Every key is required. Steward's code holds no default for any of them.
-- A missing key, an unknown key, or a value of the wrong form is an error that names the file and
+- A missing key, or a value of the wrong form, is an error that names the file and
   the key with all its parents, for a key inside `setup` (for example
-  `setup.timeoutMinutes`).
-- A file with a `check` key is still accepted, with any value, and the key is ignored: steward no
-  longer reads it. `steward upgrade` removes it from a project's file. The coder's pre-flight check
+  `setup.timeoutMinutes`). An unknown key is ignored, not an error, inside `setup` too, so that a
+  release can add a key without breaking a steward at an older release.
+- A file with a `check` key is accepted, with any value, and the key is ignored as any unknown key
+  is: steward no longer reads it. `steward upgrade` removes it from a project's file. The coder's pre-flight check
   is what the project's own instructions name (its `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`,
   `README.md` or `package.json`).
-- A key that becomes required breaks a project until it adds the key.
+- A key that becomes required breaks a project until it adds the key. An upgrade then takes an
+  order: each project upgrades to the release first, while the coordinator still runs the older
+  release, which ignores the new key; the coordinator moves to the new release after.
 - The file is flat apart from `setup`.
 - What depends on the OS user rather than the project, the usage limits and each role's tool,
   model and effort, is not in this file. It is in the user config, described in
-  [`user-config.md`](user-config.md). A `usageLimits` key here is an unknown key.
+  [`user-config.md`](user-config.md). A `usageLimits` key here is ignored.
 
 ## Keys
 
