@@ -17,13 +17,13 @@ such a change from landing unattended.
 
 ## Acceptance criteria
 
-- [ ] **AC-1** — Steward no longer refuses to push a coder's branch whose commits touch
+- [x] **AC-1** — Steward no longer refuses to push a coder's branch whose commits touch
       `.claude/prompts/`, for every coder tool: `pushBranch` (`scripts/dispatch/coder.mjs`) loses
       the `prompt-change-refused` result, `promptPathsTouched` and `PROMPTS_DIR`, and pushes such a
       branch as any other. `dispatchCoder`, `retryStory` and `executeHandoff`
       (`scripts/dispatch/handoff-coder.mjs`) push it and go on as for any other branch.
       `git grep prompt-change-refused` finds nothing outside `stories/done/` and dated records.
-- [ ] **AC-2** — Both coder prompts, `.claude/prompts/coder.md` and
+- [x] **AC-2** — Both coder prompts, `.claude/prompts/coder.md` and
       `.claude/prompts/coder-handoff.md`, no longer say that the coder cannot edit anything under
       `.claude/prompts/`, nor that writes there are not refused by its sandbox but the rule is the
       same. In their place each says: when the coder's tool refuses an edit it needs, it puts that
@@ -32,7 +32,7 @@ such a change from landing unattended.
       and it leaves the acceptance criterion that depends on the change unticked and says so. Each
       says that a pending proposed edit is not work left undone. Neither prompt names a path the
       coder may not change.
-- [ ] **AC-3** — `findPromptChange` (`coder.mjs`) is generalized, not removed, and renamed
+- [x] **AC-3** — `findPromptChange` (`coder.mjs`) is generalized, not removed, and renamed
       `findProposedEdit`: it finds the `### Proposed edit` heading (at heading levels 2 to 4, as
       now) and names every file the diff's `diff --git a/`, `--- a/` and `+++ b/` lines name,
       whatever its path. `dispatchCoder` and `retryStory` report it as `proposedEdit`
@@ -41,17 +41,17 @@ such a change from landing unattended.
       It stays text only: nothing applies the diff. Kept rather than removed because it is the
       only notice steward gives whoever ran the coder that a person has a diff to apply, and the
       route it reports stays.
-- [ ] **AC-4** — The docs no longer describe the refusal: `README.md`'s list of `executeHandoff`'s
+- [x] **AC-4** — The docs no longer describe the refusal: `README.md`'s list of `executeHandoff`'s
       statuses, `docs/user-config.md`'s bullet on the Codex coder editing `.claude/prompts/`, and
       the comments of `coder.mjs` and `handoff-coder.mjs` that name `prompt-change-refused` or the
       `.claude/prompts/` rule.
-- [ ] **AC-5** — This story's **Planned** marker in `docs/agent-workflow-design.md`, "A spawned
+- [x] **AC-5** — This story's **Planned** marker in `docs/agent-workflow-design.md`, "A spawned
       session cannot edit `.claude/prompts/`", is removed, and that section is corrected to match:
       its heading, its paragraph scoping the observation to `.claude/prompts/coder.md`, its
       consequence that no coder can deliver a story that changes the prompts, and its account of
       what `coder.md` tells the coder. Every other copy of those claims in the document is
       corrected or marked as dated.
-- [ ] **AC-6** — Tests, in `scripts/dispatch/coder.test.mjs` and
+- [x] **AC-6** — Tests, in `scripts/dispatch/coder.test.mjs` and
       `scripts/dispatch/handoff-coder.test.mjs`:
       - the tests of the refusal (`describe('ST-15/AC-7: …')` in `coder.test.mjs`, and
         "ST-91/AC-6: a coder that changes .claude/prompts is refused, and its commit is kept" in

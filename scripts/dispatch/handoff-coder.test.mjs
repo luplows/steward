@@ -867,7 +867,7 @@ describe('ST-91/AC-6: failures are distinct, keep the coder\'s only copy, and ar
     rmSync(result.scratchLeft, { recursive: true, force: true })
   })
 
-  it('ST-91/AC-6: a coder that changes .claude/prompts is refused, and its commit is kept', async () => {
+  it('ST-108/AC-1: a coder that changes .claude/prompts is pushed as any other', async () => {
     const world = await makeWorld()
     const id = await approveFile(world)
     const { result } = await exec(world, id, ({ cwd }) => {
@@ -875,8 +875,8 @@ describe('ST-91/AC-6: failures are distinct, keep the coder\'s only copy, and ar
       commitWork(cwd, '.claude/prompts/x.md')
       return block()
     })
-    expect(result).toMatchObject({ status: 'prompt-change-refused', paths: ['.claude/prompts/x.md'] })
-    expect(result.retained.branch).toBe(branchOf(world))
+    expect(result.status).toBe('pushed')
+    expect(remoteBranch(world, branchOf(world))).toBe(result.headSha)
   })
 
   it('ST-91/AC-6: a failed setup is install-failed, with no model and nothing kept', async () => {

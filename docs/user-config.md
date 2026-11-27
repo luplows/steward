@@ -203,9 +203,9 @@ file that gives Codex to the reviewer alone may leave it out.
     section of its PR block, unchanged, else the title of the block, or `<story or handoff id>: the coder's
     work` when the block did not parse; and it, and the push that follows, run with git's hooks
     off, since the worktree may hold hook scripts the session could edit. A session that left nothing gives `nothing-committed`, as a Claude one does.
-  - It can edit files under `.claude/prompts/`, which the sandbox allows. For any tool, ATC pushes
-    nothing when the branch's commits beyond its base change one, and returns
-    `prompt-change-refused` with the paths. The commits stay on the local branch.
+  - It can edit files under `.claude/`, which the sandbox allows, and a Claude session cannot. For
+    any tool, ATC pushes such a change as any other (ST-108); a pull request that changes a
+    protected path, `.claude/` among them, lands only by hand (ST-106).
   - **It can read files outside its worktree**, such as `~/.codex/auth.json` and
     `~/.claude/.credentials.json`. What it copies into the worktree would be committed and pushed,
     and ATC does not check what the commit holds. Keeping a session from reading credentials is

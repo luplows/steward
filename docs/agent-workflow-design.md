@@ -640,13 +640,13 @@ the list is judged by `main`'s. The runway and the coordinator run a pinned rele
 own at v0.3.0), so the restriction takes effect for a project when it upgrades to the release that
 holds it; ST-108's removal of the coder's push refusal ships in the same release, never without it.
 
-Considered and not chosen: keeping a coder from changing protected paths at all, as steward keeps
-it from `.claude/prompts/` today, which leaves a unit that needs such a change to be finished by
-hand behind a restriction the coder works around (ST-108 removes that restriction); a list the
-project adjusts from the start, left to ST-107 so that the safeguard comes first; and skipping
-review of such a pull request, which would take the change out of the one place it is read. The
-crew's reason: a transparent review and a person's landing, rather than restrictions the coder
-works around.
+Considered and not chosen: keeping a coder from changing protected paths at all, as steward kept
+it from `.claude/prompts/` until ST-108, which leaves a unit that needs such a change to be
+finished by hand behind a restriction the coder works around (ST-108 removed that restriction); a
+list the project adjusts from the start, left to ST-107 so that the safeguard comes first; and
+skipping review of such a pull request, which would take the change out of the one place it is
+read. The crew's reason: a transparent review and a person's landing, rather than restrictions
+the coder works around.
 
 `review-blocked` is applied automatically when a pull request reaches the round bound, by
 `review-gate.yml`, with the bound derived from the PR's own `block` verdicts rather than
@@ -1580,25 +1580,27 @@ shipped documentation instructing agents to do impossible things; both read perf
 | Network egress | unrestricted | policy-limited |
 | GitHub Actions runner | — | `gh` **is** present there |
 
-### A spawned session cannot edit `.claude/prompts/`
+### A spawned Claude session cannot edit `.claude/`
 
-**Claude Code refuses `Edit` and `Write` to `.claude/prompts/` from a spawned `claude -p` session**,
-as a sensitive path, with no approval surface to appeal to. Found when the OQ-63 coder tried to
-deliver its own story's AC-8 and could not; it read the refusal as a deliberate guard against a
-coder session rewriting its own spawn instructions, which is what it appears to be.
+**Claude Code refuses edits anywhere under `.claude/` from a spawned `claude -p` session**, as a
+sensitive path, with no approval surface to appeal to. Found when the OQ-63 coder tried to deliver
+its own story's AC-8 and could not; it read the refusal as a deliberate guard against a coder
+session rewriting its own spawn instructions, which is what it appears to be.
 
-**Scoped to what was actually observed.** The refusals seen were on
-`.claude/prompts/coder.md`, from a spawned session, for both `Edit` and `Write`. Whether the guard
-covers all of `.claude/` — `settings.json` especially, which would matter more — is untested and
-should not be assumed. Stating it wider than the evidence is the failure this whole section exists
-to record.
+**What was observed, and when.** The first refusals seen were on `.claude/prompts/coder.md`, for
+both `Edit` and `Write`, and this section then said that wider coverage was untested. On
+2026-11-25, in a scratch repository, a spawned `claude -p` session run with steward's coder flags
+(`--permission-mode acceptEdits`) was refused `Edit` anywhere under `.claude/` (`prompts/`,
+`skills/`, `agents/` and `settings.json`); an explicit `Edit(.claude/**)` allow rule did not lift
+the refusal; and `CLAUDE.md` at the repository's root was editable. So no supported setting lets a
+Claude coder write under `.claude/`. Handoff H-8 (ST-104) stopped with nothing committed, having
+changed every file its story names except the two prompts; no log of its session was kept, so the
+refusal is the likely cause, not a shown one. A Codex coder's sandbox allows such edits.
 
-The consequence is structural and easy to miss: **no coder can deliver a story that changes the
-prompts.** That is not rare: in steward, ST-4, ST-21, ST-22, ST-32 and ST-33 change `reviewer.md`,
-so each is built by hand (for ST-21 and ST-22, Part 3, "Decided so far"; for ST-4, ST-32 and ST-33,
-their own `blocked:`). A
-story whose acceptance criteria require prompt edits will be blocked on delivery no matter how well
-the coder performs.
+The consequence: **a Claude coder cannot deliver the part of a unit that changes `.claude/`.** That
+is not rare: in steward, ST-4, ST-21, ST-22, ST-32 and ST-33 change `reviewer.md`, so each was built
+by hand (for ST-21 and ST-22, Part 3, "Decided so far"; for ST-4, ST-32 and ST-33, their own
+`blocked:`), and ST-104 was finished by hand after H-8.
 
 **An interactive session is not restricted the same way.** The same edits succeed from a session a
 person is attached to. So the restriction is a property of the *spawn*, not of the file, which is
@@ -1606,47 +1608,38 @@ what makes the workaround legitimate rather than a bypass:
 
 > **The coder emits, the dispatcher writes.** The coder publishes the intended change as a diff in
 > its PR body, and whoever runs the coder applies it with `git apply`, by hand, in a separate,
-> attributed commit. For this relay the "dispatcher" in the name is always a person, never the
-> scripts of ATC (see below). Used for the first time in #112, where the diff applied cleanly.
+> attributed commit. For this relay the "dispatcher" in the name is always a person, never
+> steward's scripts (see below). Used for the first time in #112, where the diff applied cleanly.
 
 Until 2026-09-24 only this document described the relay, and `coder.md` did not. The OQ-52 coder
 (#137) was refused its `coder.md` edit and, following its prompt, took the write-and-exit route and
-set `blocked:`. `coder.md` now tells the coder to put a prompt edit in its PR body as a diff under
-`### Proposed prompt edit`, to leave the dependent AC unticked, and to finish the rest as normal.
+set `blocked:`. Both coder prompts now tell the coder that when its tool refuses an edit it needs,
+it puts the change in its PR body as a diff under `### Proposed edit`, commits the rest, leaves the
+dependent acceptance criterion unticked, and finishes the rest as normal (ST-108).
+`findProposedEdit` (`scripts/dispatch/coder.mjs`) reports such a diff, naming its files, and
+applies nothing.
 
-That is the same division of labour ATC already uses twice — the reviewer returns a verdict and ATC
-records it, and under OQ-63 the coder emits a PR body and ATC opens the PR. Prompt edits are the
-third instance, with one difference: **ATC does not automate this one**, whatever the principle's
-name suggests. OQ-70 considered applying the emitted diff automatically and rejected it on
-2026-09-19. That would mean a script taking patch text from a PR body written by the agent under
-review and applying it to the one directory that agent is forbidden to touch, and the paths it would
-check come from the same untrusted patch. So a story that changes a prompt stays partly manual,
-permanently: whoever runs the coder applies the diff by hand, in a separate, attributed commit
-(OQ-70, AC-7b).
+That is the same division of labour steward already uses twice — the reviewer returns a verdict and
+steward records it, and under OQ-63 the coder emits a PR body and steward opens the PR. Proposed
+edits are the third instance, with one difference: **steward does not automate this one**, whatever
+the principle's name suggests. OQ-70 considered applying the emitted diff automatically and rejected
+it on 2026-09-19. That would mean a script taking patch text from a PR body written by the agent
+under review and applying it, and the paths it would check come from the same untrusted patch. So a
+unit whose change a tool refuses stays partly manual: whoever runs the coder applies the diff by
+hand, in a separate, attributed commit (OQ-70, AC-7b).
 
-**Planned (ST-108)** **The coder is not restricted by path** (crew, 2026-11-25). Tested on
-2026-11-25 in a scratch repository: a spawned `claude -p` session, run with steward's coder flags
-(`--permission-mode acceptEdits`), is refused `Edit` anywhere under `.claude/` (`prompts/`,
-`skills/`, `agents/` and `settings.json`) as a sensitive path; an explicit `Edit(.claude/**)` allow
-rule does not lift the refusal; and `CLAUDE.md` at the repository's root is editable. So the guard
-is wider than the observation above, and no supported setting lets a Claude coder write there.
-Handoff H-8 (ST-104) stopped with nothing committed, having changed every file its story names
-except the two prompts; no log of its session was kept, so the refusal is the likely cause, not a
-shown one. The crew's decision: steward
-places no path restriction on the coder, and no longer refuses to push a branch that changes
-`.claude/prompts/`, for any coder tool; a coder changes any file its tool lets it. The safeguard is
-at landing, not coding: a change to a protected path is reviewed as any other and lands only by a
+**The coder is not restricted by path** (crew, 2026-11-25; ST-108). Steward refused to push a
+coder's branch whose commits changed `.claude/prompts/`, for any coder tool (ST-15/AC-7), and no
+longer does: a coder changes any file its tool lets it. The safeguard is at landing, not coding: a
+change to a protected path, `.claude/` among them, is reviewed as any other and lands only by a
 person's request (**Protected paths land only by hand**, "Merging", above). The diff route stays
-only where a tool refuses an edit: the coder puts that change in its PR body under
-`### Proposed edit`, as a unified diff `git apply` accepts, commits the rest, and leaves the
-acceptance criterion that depends on it unticked. This ships in the same release as the landing
-restriction, never before it: on a project, steward's own included, the coordinator and the
-runway run a pinned release, so both take effect when the project upgrades to it. A person still
-applies such a diff by hand, in a separate commit: OQ-70's decision against applying it
-automatically stands. Considered and not chosen: keeping the refusal, which stops even a Codex
-coder, whose sandbox lets it write the prompts, from delivering a unit that needs them, for the
-reason given under **Protected paths land only by hand**: a transparent review and a person's
-landing, rather than restrictions the coder works around.
+only where a tool refuses an edit. This ships in the same release as the landing restriction,
+never before it: on a project, steward's own included, the coordinator and the runway run a pinned
+release, so both take effect when the project upgrades to it. Considered and not chosen: keeping
+the refusal, which stops even a Codex coder, whose sandbox lets it write the prompts, from
+delivering a unit that needs them, for the reason given under **Protected paths land only by
+hand**: a transparent review and a person's landing, rather than restrictions the coder works
+around.
 
 ### `GH_TOKEN=""` does not remove a credential
 
@@ -2409,7 +2402,7 @@ shortened where it is long, so that it can be found there with its date.
   The rest read `ready` or `waiting`, which is the truth, and nothing dispatches them, since
   `loop.mjs` is not to be run on steward as it is configured (owner). ST-21 and ST-22 keep a
   `blocked:`, because each changes `.claude/prompts/reviewer.md`, which a spawned coder session
-  cannot edit (**A spawned session cannot edit `.claude/prompts/`**, above), so only a person can
+  cannot edit (**A spawned Claude session cannot edit `.claude/`**, above), so only a person can
   build them, which is the case `stories/README.md`'s rule on hand-built stories describes.
   Considered and not chosen: a short `blocked:` on every story, such as "Built by hand: steward
   has no coder yet"; and `null` on all of them, with that rule changed. The stories moved from
@@ -3734,7 +3727,8 @@ shortened where it is long, so that it can be found there with its date.
   the user's runs in it. That also drops the Windows sandbox mode, without which every command is
   refused, so the mode becomes a machine setting, `tools.codex.windowsSandbox`. Its temporary
   folder is its own, so that it cannot write to the rest of `%TEMP%`. **For any tool, the
-  dispatcher refuses to push a change under `.claude/prompts/`** (owner, 2026-11-04), because the
+  dispatcher refuses to push a change under `.claude/prompts/`** (owner, 2026-11-04; removed by
+  ST-108, crew, 2026-11-25), because the
   sandbox allows such an edit and the prompt is what a coder must not change for itself. The coder
   has been tried only on Windows, so another platform is refused until a trial there. **A limit
   this leaves:** such a session can read `~/.codex/auth.json` and `~/.claude/.credentials.json`,
@@ -3903,7 +3897,7 @@ is still open.
 
   A side effect worth having: in the workflow's repository the prompts need not live under
   `.claude/`, so a coder there could edit them directly, instead of through the emit-a-diff route
-  (**A spawned session cannot edit `.claude/prompts/`**, above).
+  (**A spawned Claude session cannot edit `.claude/`**, above).
 
   **This document** (proposed by the planning session, owner agreed to record it, 2026-10-07): it
   moves with the workflow and stays the workflow's design of record. At `66c578d` most of its 1,640

@@ -125,14 +125,13 @@ the diff, and the story file moved to `stories/done/`.
 - **Move the story file to `stories/done/` as part of this PR**, with
   `git mv`. Completion is that move; it is `REVIEW.md`, "Conformance to the
   unit", item 4, and it shows in your diff.
-- **You cannot edit anything under `.claude/prompts/`**, including this
-  prompt. Writes there are refused in a spawned session. That is expected and
-  is not a reason to block. When the story asks for such an edit, put it in
-  your PR body under a `### Proposed prompt edit` heading, as a unified diff
-  against the file as it is on your branch, in a `diff` code block, which
-  `git apply` will accept. Leave the AC that depends on it unticked and say so.
-  Whoever ran you applies the diff by hand in a separate commit and ticks the
-  AC. Everything else about the story, you finish as normal. A pending prompt
+- **If your tool refuses an edit the story needs**, that is expected and is
+  not a reason to block. Put the change in your PR body under a
+  `### Proposed edit` heading, as a unified diff against the file as it is on
+  your branch, in a `diff` code block, which `git apply` will accept. Commit
+  the rest. Leave the AC that depends on it unticked and say so. Whoever ran
+  you applies the diff by hand in a separate commit and ticks the AC.
+  Everything else about the story, you finish as normal. A pending proposed
   edit is not work left undone: if the rest is finished, say `ready`.
 
 ## Environment
@@ -194,10 +193,6 @@ The rules above and below are the same for you. These things differ:
   still running when you end it is stopped, and you are not told.
 - **A test that fails only under the sandbox** is reported in **Verification**
   with its output. Do not change the test or the code to get past it.
-- **Writes under `.claude/prompts/` are not refused by your sandbox**, but the
-  rule is the same: you cannot edit anything there, and a change goes in your PR
-  body as a `### Proposed prompt edit`. ATC refuses to push a branch whose
-  commits change a file there.
 
 ## Background commands end silently
 
