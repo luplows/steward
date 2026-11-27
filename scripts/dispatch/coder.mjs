@@ -151,31 +151,60 @@ export function findProposedEdit(body) {
 }
 
 /**
- * The paths one line of a unified diff names, as `git apply` reads them: the whole rest of a
- * `--- a/`, `+++ b/`, `rename from`/`to` or `copy from`/`to` line (up to a tab, which `diff -u`
- * puts before a timestamp), unquoted when git quoted it, and the one path of a `diff --git` line
- * whose two sides are the same, spaces and all. A `diff --git` line naming two different paths
- * names them on its other lines, so it adds nothing itself. `/dev/null` is no path.
+ * The paths one line of a unified diff names, as `git apply` reads them by default: the whole rest
+ * of a `---` or `+++` line (up to a tab, which `diff -u` puts before a timestamp) less its first
+ * component, `a/`, `b/` or any other, the whole rest of a `rename from`/`to` or `copy from`/`to`
+ * line, and both paths of a `diff --git` line, likewise less their first component, so that a
+ * patch with no other line naming its file, a mode change or a binary patch, still names it. Each
+ * is unquoted when git quoted it. An unquoted `diff --git` line whose sides differ and that has
+ * more than one space cannot be split; git writes `rename` or `copy` lines for such a patch, and
+ * those name its paths. `/dev/null` is no path.
  */
 function diffLinePaths(line) {
   const side = line.match(/^(?:--- |\+\+\+ )(.+)$/)
-  if (side) {
-    const name = unquotePath(side[1].split('\t')[0])
-    const m = name.match(/^[ab]\/(.+)$/)
-    return m ? [m[1]] : []
-  }
+  if (side) return withoutPrefix([unquotePath(side[1].split('\t')[0])])
   const moved = line.match(/^(?:rename|copy) (?:from|to) (.+)$/)
   if (moved) return [unquotePath(moved[1])]
   const header = line.match(/^diff --git (.+)$/)
-  if (header) {
-    const rest = header[1]
-    const length = (rest.length - 5) / 2
-    if (Number.isInteger(length) && length > 0 && rest.startsWith('a/')) {
-      const file = rest.slice(2, 2 + length)
-      if (rest.slice(2 + length) === ` b/${file}`) return [file]
-    }
+  return header ? withoutPrefix(headerSides(header[1]).map(unquotePath)) : []
+}
+
+/** `name` less its first component, as `git apply -p1` takes it, or null when it has none. */
+const stripFirst = (name) => name.match(/^[^/]+\/(.+)$/)?.[1] ?? null
+
+/** `names` less their first component, leaving out any that has none, `/dev/null` among them. */
+const withoutPrefix = (names) => names.map(stripFirst).filter((name) => name !== null)
+
+/** The end of the quoted name that starts at `text[start]`, the index of its closing `"`, or -1. */
+function quotedEnd(text, start) {
+  for (let i = start + 1; i < text.length; i++) {
+    if (text[i] === '\\') i++
+    else if (text[i] === '"') return i
   }
-  return []
+  return -1
+}
+
+/**
+ * The two names of a `diff --git` line's `rest`, as git wrote them, either quoted, or `[]` when
+ * they cannot be told apart.
+ */
+function headerSides(rest) {
+  if (rest.startsWith('"')) {
+    const end = quotedEnd(rest, 0)
+    return end !== -1 && rest[end + 1] === ' ' ? [rest.slice(0, end + 1), rest.slice(end + 2)] : []
+  }
+  if (rest.endsWith('"')) {
+    for (let at = rest.indexOf(' "'); at !== -1; at = rest.indexOf(' "', at + 1)) {
+      if (quotedEnd(rest, at + 1) === rest.length - 1) return [rest.slice(0, at), rest.slice(at + 1)]
+    }
+    return []
+  }
+  const spaces = [...rest.matchAll(/ /g)].map((m) => m.index)
+  for (const at of spaces) {
+    const [left, right] = [rest.slice(0, at), rest.slice(at + 1)]
+    if (stripFirst(left) !== null && stripFirst(left) === stripFirst(right)) return [left, right]
+  }
+  return spaces.length === 1 ? [rest.slice(0, spaces[0]), rest.slice(spaces[0] + 1)] : []
 }
 
 /** `text` as git wrote it, with git's C-style quoting (`"a/\\303\\251.md"`) undone. */

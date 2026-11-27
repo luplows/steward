@@ -745,6 +745,22 @@ describe('OQ-70/AC-7b, ST-108/AC-3: a proposed edit is reported, not applied', (
     expect(findProposedEdit(body)).toEqual({ pending: true, files: ['docs/Release Notes.md', 'old name.md', 'new name.md', 'été.md', 'new.md', 'plain.txt'] })
   })
 
+  it('ST-108/AC-3: a patch whose only line naming its file is diff --git names it, quoted or not', () => {
+    const only = (header, ...more) => findProposedEdit(['### Proposed edit', '', '```diff', header, ...more, '```'].join('\n')).files
+    // A mode change, quoted by git as its path is not ASCII.
+    expect(only(String.raw`diff --git "a/\303\251.sh" "b/\303\251.sh"`, 'old mode 100644', 'new mode 100755')).toEqual(['é.sh'])
+    // A binary patch of a path with spaces.
+    expect(only('diff --git a/img/my logo.png b/img/my logo.png', 'index 1111111..2222222 100644', 'GIT binary patch', 'literal 1', 'Kc${NkU;qFB0RR91', '')).toEqual(['img/my logo.png'])
+    // One side quoted, the other not.
+    expect(only(String.raw`diff --git "a/x\"y.sh" b/z.sh`, 'old mode 100644', 'new mode 100755')).toEqual(['x"y.sh', 'z.sh'])
+    expect(only(String.raw`diff --git a/z.sh "b/x\"y.sh"`, 'old mode 100644', 'new mode 100755')).toEqual(['z.sh', 'x"y.sh'])
+    // Two different unquoted paths that split in only one place.
+    expect(only('diff --git a/old.sh b/new.sh', 'old mode 100644', 'new mode 100755')).toEqual(['old.sh', 'new.sh'])
+    // Prefixes other than a/ and b/, as diff.mnemonicPrefix writes them; git apply strips any.
+    expect(only('diff --git i/my file.sh w/my file.sh', 'old mode 100644', 'new mode 100755')).toEqual(['my file.sh'])
+    expect(only('diff --git c/x.md w/x.md', '--- c/x.md', '+++ w/x.md', '@@ -1 +1 @@', '-a', '+b')).toEqual(['x.md'])
+  })
+
   it('ST-108/AC-3: the old "Proposed prompt edit" heading is not read', () => {
     expect(findProposedEdit(promptBody.replace('### Proposed edit', '### Proposed prompt edit'))).toBeNull()
   })
