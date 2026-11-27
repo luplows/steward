@@ -11,6 +11,7 @@
  *   steward handoff show <id>
  *   steward handoff reapprove <id>
  *   steward handoff withdraw <id>
+ *   steward handoff dismiss <id>
  *
  * An approval pins the text it was given, exactly, with where it came from: for a file its path
  * and the full commit of `origin`'s `main` it was read at; for an Issue its number, title, body and
@@ -27,6 +28,11 @@
  * also return a handoff to `pending` or `held`. `stopped` and `interrupted` handoffs are not coded
  * again automatically, and no command here releases one: `add` refuses their source, and
  * `reapprove` and `withdraw` refuse them as they refuse `admitted` and `completed` ones.
+ *
+ * `dismiss` (ST-103) records `dismissedAt` on a completed, stopped or interrupted handoff, so that
+ * `steward coordinator status` no longer lists it. It changes nothing else: `list` and `show` still
+ * show it, marked, and what `add`, `reapprove`, `withdraw` and the coordinator do with it is as
+ * for an undismissed one.
  *
  * `selectHandoff` is the operation the coordinator (ST-93) calls to choose the next unit to code:
  * the oldest pending handoff that is eligible now. It admits nothing, claims no branch and starts
@@ -70,7 +76,9 @@ const HOLD_KEYS = ['reason', 'heldAt']
 const ADMISSION_KEYS = ['id', 'handoffId', 'version', 'repo', 'branch', 'admittedAt']
 const COMPLETION_KEYS = ['admissionId', 'at', 'branch', 'headSha', 'pr', 'draft']
 const STOP_KEYS = ['admissionId', 'at', 'outcome', 'reason', 'branch', 'headSha', 'pr', 'retained']
-const EXTRA_STATUSES = { hold: HOLD_STATUSES, admission: ['admitted'], completion: ['completed'], stop: ['stopped', 'interrupted'] }
+/** The statuses a crew member may dismiss, and so the only ones whose record may carry `dismissedAt`. */
+const DISMISSIBLE_STATUSES = ['completed', 'stopped', 'interrupted']
+const EXTRA_STATUSES = { hold: HOLD_STATUSES, admission: ['admitted'], completion: ['completed'], stop: ['stopped', 'interrupted'], dismissedAt: DISMISSIBLE_STATUSES }
 const RECORD_KEYS = ['id', 'order', 'repo', 'source', 'status', 'version', 'approvedAt', 'text', 'provenance', 'history']
 const HISTORY_KEYS = ['version', 'approvedAt', 'text', 'provenance']
 const COMMIT_RE = /^[0-9a-f]{40}$/
@@ -83,12 +91,14 @@ const USAGE = [
   '       steward handoff show <id>',
   '       steward handoff reapprove <id>',
   '       steward handoff withdraw <id>',
+  '       steward handoff dismiss <id>',
   '',
   'add         approves a file on the activated project\'s main, or one of its Issues, for coding',
   'list        the approvals, oldest first, and which are held or not eligible now (it writes no record)',
   'show        one approval: its complete approved text, version and source',
   'reapprove   reads the source again and approves its new text, keeping the ID and the place in order',
   'withdraw    stops a pending or held approval being selected; its history is kept',
+  'dismiss     leaves a completed, stopped or interrupted handoff out of `steward coordinator status`; nothing else changes',
 ].join('\n')
 
 /** Where the records are under `home`. */
@@ -226,7 +236,7 @@ export function readHandoffs(file) {
     const at = `record ${i + 1}`
     const extras = isObject(record) ? Object.keys(EXTRA_STATUSES).filter((key) => key in record) : []
     if (!sameKeys(record, [...RECORD_KEYS, ...extras])) {
-      throw bad(`${at} must have exactly ${RECORD_KEYS.join(', ')}, and \`hold\`, \`admission\`, \`completion\` or \`stop\` only as steward wrote them`)
+      throw bad(`${at} must have exactly ${RECORD_KEYS.join(', ')}, and \`hold\`, \`admission\`, \`completion\`, \`stop\` or \`dismissedAt\` only as steward wrote them`)
     }
     const idMatch = typeof record.id === 'string' ? ID_RE.exec(record.id) : null
     if (!Number.isSafeInteger(record.order) || record.order < 1 || idMatch === null || Number(idMatch[1]) !== record.order) {
@@ -251,6 +261,10 @@ export function readHandoffs(file) {
       }
       const why = problem(record)
       if (why !== null) throw bad(`${at}'s ${key} ${why}`)
+    }
+    if (extras.includes('dismissedAt')) {
+      if (!DISMISSIBLE_STATUSES.includes(record.status)) throw bad(`${at} is ${record.status} and cannot be dismissed, which only a ${DISMISSIBLE_STATUSES.join(', ')} handoff is`)
+      if (!isTimestamp(record.dismissedAt)) throw bad(`${at}'s dismissedAt must be the time it was dismissed`)
     }
     if (['stopped', 'interrupted'].includes(record.status) && !extras.includes('stop')) {
       throw bad(`${at} is ${record.status} and must say why and what is known, in \`stop\``)
@@ -460,7 +474,7 @@ const unknown = (id, handoffs) => {
   return `${id} is not a handoff. ${known.length === 0 ? 'None is approved yet.' : `The approved ones are ${known.join(', ')}.`} \`steward handoff list\` shows them.`
 }
 
-const line = (h) => `${h.id}  ${h.status}  v${h.version}  ${h.repo}  ${describeSource(h.source)}`
+const line = (h) => `${h.id}  ${h.status}  v${h.version}  ${h.repo}  ${describeSource(h.source)}${h.dismissedAt === undefined ? '' : `  dismissed ${h.dismissedAt}`}`
 
 const STATES = { pending: 'queued', admitted: 'running', completed: 'completed', stopped: 'stopped', interrupted: 'stopped', held: 'held' }
 
@@ -781,6 +795,7 @@ async function show(id, { homedir, out, err }) {
   out(`  order:     ${h.order}`)
   out(`  source:    ${describeSource(h.source)} of ${h.repo}`)
   out(`  version:   ${h.version} (approved ${h.approvedAt})`)
+  if (h.dismissedAt !== undefined) out(`  dismissed: ${h.dismissedAt}`)
   out(`  read at:   ${h.source.kind === 'file' ? `main ${h.provenance.commit}` : `Issue #${h.provenance.number}, title ${JSON.stringify(h.provenance.title)}, fingerprint ${h.provenance.fingerprint}`}`)
   out(`  earlier versions: ${h.history.length === 0 ? 'none' : h.history.map((e) => `v${e.version} (${e.approvedAt})`).join(', ')}`)
   for (const detail of codingLines(h, evidenceOf(homedir, out))) out(`  ${detail}`)
@@ -839,6 +854,27 @@ async function reapprove(id, ctx) {
   return 0
 }
 
+async function dismiss(id, { homedir, out, err, now }) {
+  const file = handoffsPath(homedir)
+  const done = updateHandoffs(file, (current) => {
+    const h = current.find((x) => x.id === id)
+    if (h === undefined) return { refuse: unknown(id, current) }
+    if (h.dismissedAt !== undefined) return { refuse: `${id} is already dismissed (${h.dismissedAt}). Nothing was changed.` }
+    if (!DISMISSIBLE_STATUSES.includes(h.status)) {
+      const why = OPEN_STATUSES.includes(h.status) ? ` \`steward handoff withdraw ${id}\` stops it being selected.` : ''
+      return { refuse: `${id} is ${h.status} and is not dismissed: only a completed, stopped or interrupted handoff is.${why} Nothing was changed.` }
+    }
+    return { handoffs: current.map((x) => (x === h ? { ...h, dismissedAt: now().toISOString() } : x)), result: h }
+  })
+  if (!done.ok) {
+    err(done.reason)
+    return 1
+  }
+  const h = done.result
+  out(`Dismissed ${id} (${h.status}): ${describeSource(h.source)} of ${h.repo}. \`steward coordinator status\` no longer lists it; \`steward handoff list\` and \`show\` still do. Nothing else was changed.`)
+  return 0
+}
+
 async function withdraw(id, { homedir, out, err }) {
   const file = handoffsPath(homedir)
   const done = updateHandoffs(file, (current) => {
@@ -873,6 +909,7 @@ export async function main(argv, { homedir = osHomedir(), out = console.log, err
     else if (command === 'show' && rest.length === 1) code = await show(rest[0], ctx)
     else if (command === 'reapprove' && rest.length === 1) code = await reapprove(rest[0], ctx)
     else if (command === 'withdraw' && rest.length === 1) code = await withdraw(rest[0], ctx)
+    else if (command === 'dismiss' && rest.length === 1) code = await dismiss(rest[0], ctx)
     if (code !== null) return code
   } catch (error) {
     err(error.message)

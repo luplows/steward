@@ -8,6 +8,16 @@
  *   steward coordinator status [--json]  whether it is running, stopping or stopped, and what it is
  *                                        doing
  *   steward coordinator stop             ask it to admit no more work, and to exit once idle
+ *   steward coordinator dismiss <owner/name> <number> [<head>]
+ *                                        leave that pull request's failed reviews, or the one of
+ *                                        that head, out of `status`
+ *
+ * `dismiss` (ST-103) is the crew's note that it has dealt with a failed review its own way. It
+ * records the dismissal in the crew's own file, `dismissed-reviews.json`, which the coordinator
+ * never writes, and leaves `reviews.json` to the coordinator alone. It reads no GitHub. It only
+ * hides: what is reviewed is unchanged. `status` also leaves out, with no dismissal, a failed head
+ * of a pull request whose later head the coordinator has started reviewing since. `steward handoff
+ * dismiss` hides a finished handoff.
  *
  * The coordinator is a detached process, `coordinator.mjs run <home> <minutes> [<landing-minutes>]`,
  * which `start` launches; `run` is not for people. Its record is
@@ -71,6 +81,8 @@ import { scheduleReviews } from './coordinator-scheduler.mjs'
 import { codeNextHandoff, interruptAdmissions } from './handoff-coding.mjs'
 import { codingReport, codingState, describeSource, evidencePath, handoffsPath, keptWhere, readEvidence, readHandoffs, reportLines } from './handoff.mjs'
 import { classifyResult, interruptRunning, readReviews, reviewsPath } from './review-admission.mjs'
+import { FULL_HEAD_SHA } from './review-eligibility.mjs'
+import { REPO_RE } from './settings.mjs'
 import { readStateFile, writeStateFile } from './state-file.mjs'
 import { readUserConfig, stateDir } from './user-config.mjs'
 
@@ -82,12 +94,15 @@ const USAGE = [
   'usage: steward coordinator start',
   '       steward coordinator status [--json]',
   '       steward coordinator stop',
+  '       steward coordinator dismiss <owner/name> <number> [<head>]',
   '',
   'start   starts this OS user\'s coordinator in the background; it keeps running after this',
   '        terminal closes',
   'status  says whether it is running, stopping or stopped, and what it is doing; --json gives the',
   '        same as JSON',
   'stop    asks it to admit no more work and to exit once the work it admitted has finished',
+  'dismiss leaves a pull request\'s failed reviews, or the one of <head>, out of `status`; what is',
+  '        reviewed does not change',
 ].join('\n')
 
 /** Where the coordinator's record, and a stop request for it, are under `homedir`. */
@@ -222,10 +237,53 @@ function describe(homedir) {
   return { status: state === 'stopping' ? 'stopping' : 'running', pid, startedAt, ...fields }
 }
 
+/** Whether `entry` of the record of reviews is a model-consuming failure, not reviewed again automatically. */
+const isFailedReview = (entry) => entry.state === 'ended' && classifyResult(entry.result) === 'model-consuming-failure'
+
+const sameHead = (a, b) => a.repo === b.repo && a.number === b.number && a.headSha === b.headSha
+
+/**
+ * The failed reviews in `reviews` that may still need the crew: each failed head of a pull request
+ * of which the record has no other head whose review started after that failure ended. Once a later
+ * head is being reviewed, the failed one needs nothing (ST-103).
+ */
+const outstandingFailures = (reviews) => reviews.filter((entry) => isFailedReview(entry) && !reviews.some((other) =>
+  other.repo === entry.repo && other.number === entry.number && other.headSha !== entry.headSha && other.startedAt > entry.endedAt))
+
+/** Where the crew's dismissals of failed reviews are under `homedir` (ST-103). Only `dismiss` writes it. */
+export const dismissalsPath = (homedir) => path.join(stateDir({ homedir }), 'dismissed-reviews.json')
+
+/**
+ * The dismissals in `file`, `{ "dismissals": [{ repo, number, headSha, dismissedAt }, ...] }`: `[]`
+ * when there is no file. Throws, naming the file and what is wrong, on anything else.
+ */
+function readDismissals(file) {
+  const bad = (what) => new Error(`${file} is malformed: ${what}. Fix or remove it.`)
+  let data
+  try {
+    data = readStateFile(file)
+  } catch (error) {
+    throw error instanceof SyntaxError ? bad(`it is not valid JSON (${error.message})`) : error
+  }
+  if (data === undefined) return []
+  if (data === null || typeof data !== 'object' || Object.keys(data).join() !== 'dismissals' || !Array.isArray(data.dismissals)) {
+    throw bad('it must be an object whose only key, "dismissals", is a list')
+  }
+  data.dismissals.forEach((d, i) => {
+    const ok = d !== null && typeof d === 'object' && typeof d.repo === 'string' && REPO_RE.test(d.repo) &&
+      Number.isSafeInteger(d.number) && d.number > 0 && typeof d.headSha === 'string' && FULL_HEAD_SHA.test(d.headSha) &&
+      typeof d.dismissedAt === 'string'
+    if (!ok) throw bad(`entry ${i + 1} is not a dismissal steward wrote`)
+  })
+  return data.dismissals
+}
+
 /**
  * The heads the record of reviews counts as model-consuming failures, which are not reviewed again
- * automatically: `{ failedHeads }`, or `{ reviewsProblem }` when it cannot be read, or nothing when
- * there are none. Reads only.
+ * automatically, that still need the crew: no later head has been reviewed since and the crew has
+ * not dismissed them (ST-103). `{ failedHeads }`, or `{ reviewsProblem }` when the record cannot be
+ * read, or nothing when there are none, with `dismissalsProblem` when the dismissals cannot be
+ * read, and none is then left out. Reads only.
  */
 function failedHeads(homedir) {
   let reviews
@@ -234,9 +292,16 @@ function failedHeads(homedir) {
   } catch (error) {
     return { reviewsProblem: error.message }
   }
-  const failed = reviews.filter((entry) => entry.state === 'ended' && classifyResult(entry.result) === 'model-consuming-failure')
+  let dismissals = []
+  let dismissalsProblem
+  try {
+    dismissals = readDismissals(dismissalsPath(homedir))
+  } catch (error) {
+    dismissalsProblem = error.message
+  }
+  const failed = outstandingFailures(reviews).filter((entry) => !dismissals.some((d) => sameHead(d, entry)))
     .map(({ repo, number, headSha, endedAt, result }) => ({ repo, number, headSha, status: result.status, endedAt }))
-  return failed.length > 0 ? { failedHeads: failed } : {}
+  return { ...(failed.length > 0 ? { failedHeads: failed } : {}), ...(dismissalsProblem ? { dismissalsProblem } : {}) }
 }
 
 /**
@@ -255,6 +320,7 @@ function codingWork(homedir) {
   }
   const coding = { queued: [], running: [], completed: [], stopped: [], held: [] }
   for (const h of handoffs) {
+    if (h.dismissedAt !== undefined) continue
     const state = codingState(h)
     if (state !== null) coding[state].push(codingReport(h, evidence))
   }
@@ -331,7 +397,7 @@ async function start({ homedir, env, spawnFn, pollMs, waitMs, out, err }) {
 }
 
 /** The lines `status` adds to its first, for the fields in `result`. */
-function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, nextLandingScanAt, landingCandidates, awaitingManualLanding, active, landingActive, lastLanding, lastOutcome, usage, recordsProblem, projectProblems, landingProblems, failedHeads: failed, reviewsProblem, codingActive, lastCoding, codingProblem, coding, handoffsProblem }) {
+function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, nextLandingScanAt, landingCandidates, awaitingManualLanding, active, landingActive, lastLanding, lastOutcome, usage, recordsProblem, projectProblems, landingProblems, failedHeads: failed, reviewsProblem, dismissalsProblem, codingActive, lastCoding, codingProblem, coding, handoffsProblem }) {
   const pull = ({ repo, number, headSha }) => `${repo} pull request #${number}, head ${headSha ?? 'unknown'}`
   const lines = []
   if (intervalMinutes !== undefined) lines.push(`Scan interval: ${intervalMinutes} minutes.`)
@@ -379,6 +445,7 @@ function statusLines({ intervalMinutes, landingScanIntervalMinutes, nextScanAt, 
     for (const head of failed) lines.push(`  ${pull(head)}: ${head.status}, at ${head.endedAt}`)
   }
   if (reviewsProblem) lines.push(`The record of reviews cannot be read: ${reviewsProblem}`)
+  if (dismissalsProblem) lines.push(`The dismissed reviews cannot be read, so none is left out: ${dismissalsProblem}`)
   if (handoffsProblem) lines.push(`The approved handoffs cannot be read: ${handoffsProblem}`)
   for (const [state, list] of Object.entries(coding ?? {})) {
     for (const entry of list) {
@@ -404,6 +471,35 @@ function status(json, { homedir, out }) {
     out(`running: the coordinator is process ${pid}, started ${startedAt}. To stop it: steward coordinator stop`)
   }
   for (const line of statusLines(result)) out(line)
+  return 0
+}
+
+/**
+ * Dismisses (ST-103) the failed reviews `status` lists for `repo` pull request `number`, or only
+ * the one of `headSha` when given, by adding them to the crew's dismissals file. Reads
+ * `reviews.json` and never writes it. The same write drops each earlier dismissal `status` would
+ * no longer list anyway, so the file holds only what would otherwise be shown.
+ */
+function dismissReviews(repo, numberText, headSha, { homedir, now, out, err }) {
+  const number = Number(numberText)
+  if (!REPO_RE.test(repo) || !/^[1-9][0-9]*$/.test(numberText) || !Number.isSafeInteger(number) || (headSha !== undefined && !FULL_HEAD_SHA.test(headSha))) {
+    err(`${[repo, numberText, headSha].filter((a) => a !== undefined).join(' ')}: give the repository as owner/name, the pull request as its number and a head, if any, as its full SHA, as \`status\` shows it. Nothing was changed.`)
+    return 1
+  }
+  const outstanding = outstandingFailures(readReviews(reviewsPath(homedir)))
+  const file = dismissalsPath(homedir)
+  const dismissals = readDismissals(file)
+  const which = headSha === undefined ? `${repo} pull request #${number}` : `${repo} pull request #${number}, head ${headSha}`
+  const listed = outstanding.filter((entry) => entry.repo === repo && entry.number === number &&
+    (headSha === undefined || entry.headSha === headSha) && !dismissals.some((d) => sameHead(d, entry)))
+  if (listed.length === 0) {
+    err(`\`steward coordinator status\` lists no failed review of ${which}, so there is nothing to dismiss. Nothing was changed.`)
+    return 1
+  }
+  const dismissedAt = now().toISOString()
+  const kept = dismissals.filter((d) => outstanding.some((entry) => sameHead(entry, d)))
+  writeStateFile(file, { dismissals: [...kept, ...listed.map((entry) => ({ repo, number, headSha: entry.headSha, dismissedAt }))] })
+  out(`Dismissed ${listed.length} failed review${listed.length === 1 ? '' : 's'} of ${which}. \`steward coordinator status\` no longer lists ${listed.length === 1 ? 'it' : 'them'}; what is reviewed is unchanged.`)
   return 0
 }
 
@@ -457,14 +553,15 @@ async function run(homedir, intervalMinutes, landingMinutes) {
  * config's path is read from), `spawnFn` (`spawn` from `node:child_process`), the polling interval,
  * how long to wait for an acknowledgment, and the output are injectable.
  */
-export async function main(argv, { homedir = osHomedir(), env = process.env, spawnFn = spawn, pollMs = 100, waitMs = WAIT_MS, out = console.log, err = console.error } = {}) {
+export async function main(argv, { homedir = osHomedir(), env = process.env, spawnFn = spawn, pollMs = 100, waitMs = WAIT_MS, out = console.log, err = console.error, now = () => new Date() } = {}) {
   const [command, ...rest] = argv
-  const ctx = { homedir, env, spawnFn, pollMs, waitMs, out, err }
+  const ctx = { homedir, env, spawnFn, pollMs, waitMs, out, err, now }
   try {
     if (command === 'start' && rest.length === 0) return await start(ctx)
     if (command === 'status' && rest.length === 0) return status(false, ctx)
     if (command === 'status' && rest.length === 1 && rest[0] === '--json') return status(true, ctx)
     if (command === 'stop' && rest.length === 0) return await stop(ctx)
+    if (command === 'dismiss' && (rest.length === 2 || rest.length === 3)) return dismissReviews(rest[0], rest[1], rest[2], ctx)
     if (command === 'run' && (rest.length === 2 || rest.length === 3)) return await run(rest[0], Number(rest[1]), rest.length === 3 ? Number(rest[2]) : undefined)
   } catch (error) {
     err(error.message)
