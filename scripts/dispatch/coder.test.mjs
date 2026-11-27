@@ -735,13 +735,24 @@ describe('OQ-70/AC-7b, ST-108/AC-3: a proposed edit is reported, not applied', (
     }
   })
 
+  it('ST-108/AC-3: every file the diff names is named whole, spaces, quoting, moves and new files included', () => {
+    const body = ['### Proposed edit', '', '```diff',
+      'diff --git a/docs/Release Notes.md b/docs/Release Notes.md', '--- a/docs/Release Notes.md', '+++ b/docs/Release Notes.md', '@@ -1 +1 @@', '-a', '+b',
+      'diff --git a/old name.md b/new name.md', 'similarity index 100%', 'rename from old name.md', 'rename to new name.md',
+      String.raw`diff --git "a/\303\251t\303\251.md" "b/\303\251t\303\251.md"`, String.raw`--- "a/\303\251t\303\251.md"`, String.raw`+++ "b/\303\251t\303\251.md"`, '@@ -1 +1 @@', '-a', '+b',
+      'diff --git a/new.md b/new.md', 'new file mode 100644', '--- /dev/null', '+++ b/new.md', '@@ -0,0 +1 @@', '+a',
+      '--- a/plain.txt\t2026-11-26 10:00:00', '+++ b/plain.txt\t2026-11-26 10:01:00', '```'].join('\n')
+    expect(findProposedEdit(body)).toEqual({ pending: true, files: ['docs/Release Notes.md', 'old name.md', 'new name.md', 'été.md', 'new.md', 'plain.txt'] })
+  })
+
   it('ST-108/AC-3: the old "Proposed prompt edit" heading is not read', () => {
     expect(findProposedEdit(promptBody.replace('### Proposed edit', '### Proposed prompt edit'))).toBeNull()
   })
 
   it('OQ-70/AC-7b: no code path in the module writes to .claude/ or invokes git apply', () => {
     expect(SOURCE).not.toMatch(/['"`]apply['"`]/)
-    expect(SOURCE).not.toMatch(/\b(writeFile|writeFileSync|appendFile|appendFileSync|copyFile|cp|cpSync|rename|renameSync)\b/)
+    // A call, or a name in an import list; the words alone appear in comments and in the diff parser.
+    expect(SOURCE).not.toMatch(/\b(writeFile|writeFileSync|appendFile|appendFileSync|copyFile|cp|cpSync|rename|renameSync)\b(?=\s*[(,}])/)
     // The one mention of `.claude` is the read of the prompt template.
     const mentions = SOURCE.split('\n').filter((l) => l.includes("'.claude'"))
     expect(mentions).toEqual(["const CODER_PROMPT = path.join(ENGINE_ROOT, '.claude', 'prompts', 'coder.md')"])

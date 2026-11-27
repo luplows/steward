@@ -145,10 +145,57 @@ export function findProposedEdit(body) {
   const files = new Set()
   for (const line of lines.slice(at + 1)) {
     if (/^#{1,3}\s/.test(line)) break
-    const m = line.match(/^(?:diff --git a\/|\+\+\+ b\/|--- a\/)(\S+)/)
-    if (m) files.add(m[1])
+    for (const file of diffLinePaths(line)) files.add(file)
   }
   return { pending: true, files: [...files] }
+}
+
+/**
+ * The paths one line of a unified diff names, as `git apply` reads them: the whole rest of a
+ * `--- a/`, `+++ b/`, `rename from`/`to` or `copy from`/`to` line (up to a tab, which `diff -u`
+ * puts before a timestamp), unquoted when git quoted it, and the one path of a `diff --git` line
+ * whose two sides are the same, spaces and all. A `diff --git` line naming two different paths
+ * names them on its other lines, so it adds nothing itself. `/dev/null` is no path.
+ */
+function diffLinePaths(line) {
+  const side = line.match(/^(?:--- |\+\+\+ )(.+)$/)
+  if (side) {
+    const name = unquotePath(side[1].split('\t')[0])
+    const m = name.match(/^[ab]\/(.+)$/)
+    return m ? [m[1]] : []
+  }
+  const moved = line.match(/^(?:rename|copy) (?:from|to) (.+)$/)
+  if (moved) return [unquotePath(moved[1])]
+  const header = line.match(/^diff --git (.+)$/)
+  if (header) {
+    const rest = header[1]
+    const length = (rest.length - 5) / 2
+    if (Number.isInteger(length) && length > 0 && rest.startsWith('a/')) {
+      const file = rest.slice(2, 2 + length)
+      if (rest.slice(2 + length) === ` b/${file}`) return [file]
+    }
+  }
+  return []
+}
+
+/** `text` as git wrote it, with git's C-style quoting (`"a/\\303\\251.md"`) undone. */
+function unquotePath(text) {
+  if (!(text.length >= 2 && text.startsWith('"') && text.endsWith('"'))) return text
+  const bytes = []
+  const escapes = { a: 7, b: 8, t: 9, n: 10, v: 11, f: 12, r: 13, '"': 34, '\\': 92 }
+  const inner = Buffer.from(text.slice(1, -1), 'utf8')
+  for (let i = 0; i < inner.length; i++) {
+    if (inner[i] !== 92) { bytes.push(inner[i]); continue }
+    const next = String.fromCharCode(inner[i + 1])
+    if (/[0-7]/.test(next)) {
+      bytes.push(parseInt(inner.subarray(i + 1, i + 4).toString('latin1'), 8))
+      i += 3
+    } else {
+      bytes.push(escapes[next] ?? inner[i + 1])
+      i += 1
+    }
+  }
+  return Buffer.from(bytes).toString('utf8')
 }
 
 const BRANCH_NAME = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/
