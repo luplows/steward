@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { coordinatorPath, isRunning, main, readRecord, runCoordinator, stopRequestPath } from './coordinator.mjs'
+import { coordinatorPath, dismissalsPath, isRunning, main, readRecord, runCoordinator, stopRequestPath } from './coordinator.mjs'
 import { handoffRecord, writeHandoffs } from './handoff-fixture.mjs'
 import { handoffsPath, main as handoffMain, readHandoffs } from './handoff.mjs'
 import { projectsPath } from './project.mjs'
@@ -880,18 +880,24 @@ describe('ST-103: dismissing finished handoffs and failed reviews leaves them ou
     expect(await statusOf(home)).toEqual({ status: 'stopped' })
   })
 
-  it('ST-103/AC-5, AC-6, AC-8: dismiss records the time on every failed review of that pull request, says how many, and status leaves them out', async () => {
+  const dismissals = (home) => JSON.parse(readFileSync(dismissalsPath(home), 'utf8')).dismissals
+  const at = (minute) => `2026-11-01T09:${String(minute).padStart(2, '0')}:00.000Z`
+
+  it('ST-103/AC-5, AC-6, AC-8: dismiss notes every failed review of that pull request in its own file, says how many, and status leaves them out', async () => {
     const home = freshHome()
     const other = failed({ number: 8 })
     seedReviews(home, { reviews: [failed(), failed({ headSha: 'b'.repeat(40) }), other, endedEntry({ number: 7, headSha: 'c'.repeat(40) })] })
+    const reviewsBefore = readFileSync(reviewsPath(home), 'utf8')
     expect((await statusOf(home)).failedHeads).toHaveLength(3)
     const result = await run(['dismiss', 'crew/client', '7'], home, { now: () => new Date('2026-11-26T10:00:00.000Z') })
     expect(result.code).toBe(0)
     expect(result.out).toContain('Dismissed 2 failed reviews of crew/client pull request #7')
-    const entries = readReviews(reviewsPath(home))
-    expect(entries.filter((e) => e.dismissedAt === '2026-11-26T10:00:00.000Z').map((e) => [e.number, e.headSha[0]])).toEqual([[7, 'a'], [7, 'b']])
-    expect(entries.find((e) => e.number === 8)).toEqual(other)
-    expect(entries.find((e) => e.headSha === 'c'.repeat(40))).not.toHaveProperty('dismissedAt')
+    expect(dismissals(home)).toEqual([
+      { repo: 'crew/client', number: 7, headSha: 'a'.repeat(40), dismissedAt: '2026-11-26T10:00:00.000Z' },
+      { repo: 'crew/client', number: 7, headSha: 'b'.repeat(40), dismissedAt: '2026-11-26T10:00:00.000Z' },
+    ])
+    // The coordinator's record is left alone.
+    expect(readFileSync(reviewsPath(home), 'utf8')).toBe(reviewsBefore)
     expect((await statusOf(home)).failedHeads.map((h) => h.number)).toEqual([8])
     expect((await run(['status'], home)).out).not.toContain('pull request #7,')
     // A dismissal changes nothing about what is reviewed: the failed head still counts as failed.
@@ -899,30 +905,80 @@ describe('ST-103: dismissing finished handoffs and failed reviews leaves them ou
     expect(reviewEnding({ homedir: home, ...identity, headSha: 'd'.repeat(40) })).toBeNull()
   })
 
-  it('ST-103/AC-5, AC-8: with no failed review listed for the pull request, dismiss refuses and changes nothing', async () => {
+  it('ST-103/AC-5: given a head, dismiss notes only that head\'s failed review', async () => {
+    const home = freshHome()
+    seedReviews(home, { reviews: [failed(), failed({ headSha: 'b'.repeat(40) })] })
+    const result = await run(['dismiss', 'crew/client', '7', 'b'.repeat(40)], home)
+    expect(result.code).toBe(0)
+    expect(result.out).toContain(`Dismissed 1 failed review of crew/client pull request #7, head ${'b'.repeat(40)}.`)
+    expect(dismissals(home).map((d) => d.headSha)).toEqual(['b'.repeat(40)])
+    expect((await statusOf(home)).failedHeads.map((h) => h.headSha)).toEqual(['a'.repeat(40)])
+  })
+
+  it('ST-103/AC-6: with no dismissal, status leaves out a failed head once a later head of that pull request has started review', async () => {
+    const home = freshHome()
+    const later = { startedAt: at(30), endedAt: at(40) }
+    seedReviews(home, { reviews: [
+      failed({ startedAt: at(0), endedAt: at(10) }),
+      endedEntry({ number: 7, headSha: 'c'.repeat(40), ...later }),
+      failed({ number: 8, startedAt: at(0), endedAt: at(10) }),
+      // A review of another head that started before the failure ended does not hide it.
+      endedEntry({ number: 8, headSha: 'c'.repeat(40), startedAt: at(5), endedAt: at(8) }),
+    ] })
+    expect((await statusOf(home)).failedHeads.map((h) => h.number)).toEqual([8])
+    // The head is still not reviewed again automatically.
+    expect(reviewEnding({ homedir: home, ...identity })).toBe('model-consuming-failure')
+    expect((await run(['dismiss', 'crew/client', '7'], home)).code).toBe(1)
+  })
+
+  it('ST-103/AC-5: each dismiss drops earlier dismissals that status would no longer list', async () => {
+    const home = freshHome()
+    seedReviews(home, { reviews: [failed({ startedAt: at(0), endedAt: at(10) }), failed({ number: 8 })] })
+    await run(['dismiss', 'crew/client', '7'], home)
+    expect(dismissals(home).map((d) => d.number)).toEqual([7])
+    seedReviews(home, { reviews: [
+      failed({ startedAt: at(0), endedAt: at(10) }), failed({ number: 8 }),
+      runningEntry({ headSha: 'c'.repeat(40), startedAt: at(30) }),
+    ] })
+    await run(['dismiss', 'crew/client', '8'], home)
+    expect(dismissals(home).map((d) => d.number)).toEqual([8])
+  })
+
+  it('ST-103/AC-5, AC-8: with no failed review listed for the pull request or head, dismiss refuses and changes nothing', async () => {
     const home = freshHome()
     seedReviews(home, { reviews: [failed(), endedEntry({ number: 9 })] })
-    const before = readFileSync(reviewsPath(home), 'utf8')
-    for (const argv of [['dismiss', 'crew/client', '9'], ['dismiss', 'crew/client', '99'], ['dismiss', 'other/repo', '7']]) {
+    for (const argv of [['dismiss', 'crew/client', '9'], ['dismiss', 'crew/client', '99'], ['dismiss', 'other/repo', '7'], ['dismiss', 'crew/client', '7', 'b'.repeat(40)]]) {
       const result = await run(argv, home)
       expect(result.code).toBe(1)
       expect(result.err).toContain('lists no failed review of')
     }
+    expect(existsSync(dismissalsPath(home))).toBe(false)
     await run(['dismiss', 'crew/client', '7'], home)
-    const dismissed = readFileSync(reviewsPath(home), 'utf8')
+    const dismissed = readFileSync(dismissalsPath(home), 'utf8')
     const again = await run(['dismiss', 'crew/client', '7'], home)
     expect(again.code).toBe(1)
-    expect(readFileSync(reviewsPath(home), 'utf8')).toBe(dismissed)
-    expect(before).not.toBe(dismissed)
+    expect(readFileSync(dismissalsPath(home), 'utf8')).toBe(dismissed)
   })
 
-  it('ST-103/AC-5: a repository or number that is not one is a refusal, and dismiss with other arguments is a usage error', async () => {
+  it('ST-103/AC-6: dismissals that cannot be read leave nothing out of status, and say so', async () => {
+    const home = freshHome()
+    seedReviews(home, { reviews: [failed()] })
+    seedFile(dismissalsPath(home), 'not json')
+    const json = await statusOf(home)
+    expect(json.failedHeads).toHaveLength(1)
+    expect(json.dismissalsProblem).toContain('is malformed')
+    expect((await run(['status'], home)).out).toContain('The dismissed reviews cannot be read, so none is left out: ')
+    expect((await run(['dismiss', 'crew/client', '7'], home)).code).toBe(1)
+  })
+
+  it('ST-103/AC-5: a repository, number or head that is not one is a refusal, and dismiss with other arguments is a usage error', async () => {
     const home = freshHome()
     seedReviews(home, { reviews: [failed()] })
     expect((await run(['dismiss', 'crew/client', 'seven'], home)).code).toBe(1)
     expect((await run(['dismiss', 'client', '7'], home)).code).toBe(1)
+    expect((await run(['dismiss', 'crew/client', '7', 'abc1234'], home)).code).toBe(1)
     const usage = await run(['dismiss', 'crew/client'], home)
     expect(usage.code).toBe(2)
-    expect(usage.err).toContain('steward coordinator dismiss <owner/name> <number>')
+    expect(usage.err).toContain('steward coordinator dismiss <owner/name> <number> [<head>]')
   })
 })

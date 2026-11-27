@@ -29,12 +29,16 @@ failed reviews whose pull requests were long since landed or settled by hand.
 - [x] **AC-4** — Dismissing a handoff does not release its source: `handoff add`, `reapprove` and
       `withdraw` treat a dismissed handoff as they treat it undismissed, and the coordinator never
       selects it.
-- [x] **AC-5** — `steward coordinator dismiss <owner/name> <number>` dismisses every failed review
-      that `status` lists for that pull request ("Not reviewed again automatically"), recording the
-      time on each of those entries in `reviews.json`, with the write `reviews.json` already uses. It
-      says how many it dismissed, and refuses, changing nothing, when there is none. It reads only
-      the local records: no GitHub read or write.
-- [x] **AC-6** — `status` leaves dismissed failed reviews out of that list, in text and in `--json`.
+- [x] **AC-5** — `steward coordinator dismiss <owner/name> <number> [<head>]` dismisses every
+      failed review that `status` lists for that pull request ("Not reviewed again automatically"),
+      or only the one of `<head>`, recording each with its time in a file of the crew's own,
+      `dismissed-reviews.json`, which the coordinator never writes; it never writes `reviews.json`.
+      The same write drops each earlier dismissal `status` would no longer list. It says how many it
+      dismissed, and refuses, changing nothing, when there is none. It reads only the local records:
+      no GitHub read or write.
+- [x] **AC-6** — `status` leaves dismissed failed reviews out of that list, in text and in `--json`,
+      and, with no dismissal, a failed head of a pull request a later head of which has started
+      review since.
       A dismissal changes nothing about what is reviewed: a new head of that pull request is
       reviewed as now, and a head whose review failed is still not reviewed again automatically.
 - [x] **AC-7** — `README.md` documents both commands where it describes `handoff` and the

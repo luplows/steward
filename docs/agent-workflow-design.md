@@ -766,16 +766,20 @@ run is not recoded after restart: a `start` that finds a coordinator gone marks 
 `admitted` as `interrupted`, resuming nothing, killing nothing and removing nothing. A published
 pull request completes the handoff; a failure, or a pushed branch with no pull request, stops it
 with the branch, head, pull request and kept work known. No command releases a stopped or
-interrupted handoff; its recoding is the crew's to arrange. The crew can dismiss
-a completed, stopped or interrupted handoff (`steward handoff dismiss <id>`), and a pull request's
-failed reviews (`steward coordinator dismiss <owner/name> <number>`), so that
-`coordinator status` no longer lists them; a dismissal records its time on the entry, hides it only,
-releases no source and changes nothing the coordinator selects, admits, reviews or lands (crew,
-2026-11-25, after the 0.3.0 release review's status listed five finished entries). Surviving evidence and a specific crew
-action are shown in `coordinator status` and `handoff list`, without dedicated notifications,
-whether or not a coordinator is running. No general concurrent scheduler, automatic fixer or
-exceptional process reconciliation is required for this initial slice; ST-85 holds that later
-boundary. Considered but not chosen for 0.3: automatic selection from the ready story queue,
+interrupted handoff; its recoding is the crew's to arrange. `coordinator status` lists what needs
+the crew. A failed review stops being listed by itself once a later head of its pull request has
+started review. A dismissal is the crew's note that it has dealt with an entry its own way: `steward
+handoff dismiss <id>` dismisses a completed, stopped or interrupted handoff, recording its time on
+the handoff, and `steward coordinator dismiss <owner/name> <number> [<head>]` a pull request's
+failed reviews, or one head's, in the crew's own `dismissed-reviews.json`, never in the
+coordinator's `reviews.json`, dropping as it writes the dismissals `status` would no longer list. A
+dismissal hides an entry only, releases no source and changes nothing the coordinator selects,
+admits, reviews or lands (crew, 2026-11-25, after the 0.3.0 release review's status listed five
+finished entries; its own file and the later head, crew, 2026-11-26). Surviving evidence and a
+specific crew action are shown in `coordinator status` and `handoff list`, without dedicated
+notifications, whether or not a coordinator is running. No general concurrent scheduler, automatic
+fixer or exceptional process reconciliation is required for this initial slice; ST-85 holds that
+later boundary. Considered but not chosen for 0.3: automatic selection from the ready story queue,
 reapproval moving to the back of FIFO, mandatory historical-snapshot review, active change
 monitoring, automatic restart retries, and separate alert infrastructure.
 
